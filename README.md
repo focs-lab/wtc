@@ -43,7 +43,16 @@ git clone --recurse-submodules https://github.com/focs-lab/wtc
 cd wtc
 ```
 
-The quickest way in is the prebuilt toolchain image, which is what CI uses:
+The quickest way in is the prebuilt toolchain image, which is what CI uses. It
+is a private package, because this organization does not allow public ones, so
+sign in to the registry once. Any token with `read:packages` will do:
+
+```sh
+gh auth refresh -h github.com -s read:packages
+gh auth token | docker login ghcr.io -u "$(gh api user -q .login)" --password-stdin
+```
+
+Then:
 
 ```sh
 # <pin> is the first twelve characters of the pinned llvm revision:
@@ -61,7 +70,9 @@ cmake --build build
 cmake --build build --target check-wtc
 ```
 
-On Apple Silicon add `--platform linux/amd64`; the image is x86-64 only.
+On Apple Silicon add `--platform linux/amd64`; the image is x86-64 only. If the
+pull is denied, you are either not signed in or not a member of the
+organization; `docs/toolchain.md` covers both.
 
 To build the toolchain yourself instead, follow `docs/toolchain.md`. It carries
 the exact flags, the measured time, memory and disk it took, and the one

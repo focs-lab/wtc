@@ -5,8 +5,12 @@ on:
     branches: [main]
   pull_request:
 
+# The toolchain image is private, because this organization forbids public
+# packages. `packages: read` lets each job's own short-lived token pull it,
+# so no long-lived personal token is stored as a secret anywhere.
 permissions:
   contents: read
+  packages: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -75,6 +79,14 @@ jobs:
             echo "::error::Repository variable WTC_TOOLCHAIN_IMAGE is not set."
             echo "::error::Publish a toolchain image and set it. See docs/toolchain.md."
             exit 1; }
+      # GITHUB_ACTOR and the job token come from the runner environment rather
+      # than through `${{ }}`, so neither is ever spliced into a shell command.
+      # GHCR ignores the username and authenticates on the token alone; it is
+      # passed because docker login requires one.
+      - name: Sign in to the registry
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
       - id: pick
         env:
           IMAGE_BASE: ${{ vars.WTC_TOOLCHAIN_IMAGE }}
@@ -83,8 +95,8 @@ jobs:
           rev=$(git rev-parse HEAD:llvm)
           echo "rev=$rev"                                >> "$GITHUB_OUTPUT"
           echo "image=${IMAGE_BASE}:llvm-${rev:0:12}"     >> "$GITHUB_OUTPUT"
-      # `docker manifest inspect` answers "denied" both for an image that was
-      # never pushed and for one whose package is private. Naming only the
+      # `docker manifest inspect` answers the same way for an image that was
+      # never pushed and for one this repository may not read. Naming only the
       # first sends someone off to rebuild a toolchain that already exists.
       - name: A toolchain image must exist and be readable
         env:
@@ -93,8 +105,9 @@ jobs:
         run: |
           docker manifest inspect "$IMAGE" >/dev/null || {
             echo "::error::Cannot read $IMAGE for llvm pin $REV."
-            echo "::error::Either no image was pushed for this pin, or the package"
-            echo "::error::is private. Check both. See docs/toolchain.md."
+            echo "::error::Either no image was pushed for this pin, or this"
+            echo "::error::repository has not been granted read access to the"
+            echo "::error::package. Check both. See docs/toolchain.md."
             exit 1; }
 
   build:
@@ -103,6 +116,14 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: ${{ needs.toolchain.outputs.image }}
+      # Container setup happens before any step, so it cannot reuse the login
+      # the previous job performed and needs the credentials given here.
+      # Untested for pull requests from forks: such a run gets a token scoped
+      # to the fork, and whether it may read this package is unknown because
+      # no fork exists yet. Both maintainers push branches to this repository.
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - name: The image matches the pin

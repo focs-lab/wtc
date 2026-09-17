@@ -39,9 +39,9 @@ permanent execution surface on a shared research machine.
 
 ## Decision
 
-CI runs on GitHub-hosted runners. The toolchain is a public image in the GitHub
-Container Registry, built on a machine with cores to spare and published once
-per pin move.
+CI runs on GitHub-hosted runners. The toolchain is a private image in the
+GitHub Container Registry, built on a machine with cores to spare and published
+once per pin move.
 
 The image tag is derived from the submodule pin, not configured separately:
 `git rev-parse HEAD:llvm` gives the revision, and the workflow refuses to run
@@ -53,6 +53,32 @@ The Dockerfile compiles nothing. It copies in a tree staged with `DESTDIR`.
 Compiling inside the container would put the whole build under the container
 runtime's memory cap, which is both smaller than the machine's and the harder
 one to recover from when it is exceeded.
+
+## The image is private, and the workflow authenticates
+
+This was not a choice. The record first said *public*, on the assumption that a
+private package would be unusable. The organization settles it: public and
+internal visibility are both disabled by administrators, and private is the
+only option offered. The assumption was wrong anyway.
+
+So both jobs that touch the registry sign in, each with the token GitHub mints
+for that job and throws away after it. `packages: read` in the workflow's
+permissions block is the whole configuration. No personal access token is
+stored as a repository secret, which is the outcome worth having regardless of
+what the organization allows: a stored token outlives the person who made it,
+carries whatever scopes they happened to grant, and is invisible in a diff.
+
+One manual grant is still required, once per package: a package published from
+a workstation with a personal token is linked to no repository, and a workflow
+token is refused no matter what the permissions block says. The Dockerfile now
+carries `org.opencontainers.image.source`, which links the package to this
+repository and gives the registry somewhere to inherit permissions from, but
+the grant itself is a setting, not a label. `docs/toolchain.md` names it.
+
+The cost of private is storage: private packages count against the
+organization's quota where public ones are free, at 377 MiB per pin measured.
+Transfer into Actions is free either way, so the pull is not the expense. The
+practical rule is to delete the old version when the pin moves.
 
 ## Two defaults that stop the suite from running
 
@@ -78,10 +104,18 @@ against it.
 
 ## Consequences
 
-Fork pull requests get the full build, which a self-hosted runner could never
-have allowed. Nothing runs on the lab server on anyone else's behalf. The cost
-is one manual publish step whenever the pin moves, and the workflow makes
-forgetting it a loud failure rather than a confusing one.
+Nothing runs on the lab server on anyone else's behalf. The cost is one manual
+publish step whenever the pin moves, and the workflow makes forgetting it a
+loud failure rather than a confusing one.
+
+Fork pull requests are the open question the private image introduces. A run
+triggered from a fork gets a token scoped to the fork, and whether that token
+may read this package is untested, because no fork exists yet. Both maintainers
+push branches to this repository, so nothing is blocked today. If an outside
+contributor ever appears and the build job cannot pull the image, the shim job
+still gives them a real check, and the fix is a decision to make then: grant
+public visibility at the organization level, or run the build on the
+maintainers' own branch after review. Do not reach for a stored token.
 
 Revisit if CI time on hosted runners becomes the bottleneck, which would mean
 the project grew a great deal, or if the image outgrows a hosted runner's disk.

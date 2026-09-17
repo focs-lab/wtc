@@ -11,6 +11,13 @@
 #
 # Expects the image to be built already; see docs/toolchain.md.
 #
+# Do the one-time package grant BEFORE the first run of this script, not
+# after. The last step pushes the branch, which starts a CI run at once, and
+# that run cannot pull the image until the grant exists. The package settings
+# page is reachable as soon as the package exists, so the grant does not have
+# to wait for anything here. The note this script prints at the end repeats
+# the link, for the case where you are reading it too late.
+#
 set -euo pipefail
 
 ok()   { printf '  \033[32m+\033[0m %s\n' "$*"; }
@@ -49,21 +56,15 @@ ok "$WHO, области: $SCOPES"
 step "0. Проверка"
 [ -z "$(git status --porcelain)" ] || die "рабочее дерево не чистое"
 docker image inspect "$IMG" >/dev/null 2>&1 || die "образ $IMG не собран, см. docs/toolchain.md"
-ok "$SLUG, ветка $BRANCH, пин ${REV:0:12}"
+# Без метки source пакет не привязан к репозиторию, и токен задачи его не
+# прочитает. Образ, собранный старым Dockerfile, выглядит целым и молча даёт
+# неработающий CI, поэтому проверяем здесь, а не после отправки.
+SRC=$(docker image inspect "$IMG" --format '{{index .Config.Labels "org.opencontainers.image.source"}}')
+[ "$SRC" = "https://github.com/$SLUG" ] \
+  || die "образ без метки source=https://github.com/$SLUG (получено: '${SRC:-нет}'), пересоберите: docs/toolchain.md"
+ok "$SLUG, ветка $BRANCH, пин ${REV:0:12}, метка связи на месте"
 
-step "1. Ветка"
-git push --set-upstream origin "$BRANCH"
-ok "опубликована"
-
-step "2. Pull request"
-if gh pr view "$BRANCH" --json url --jq .url >/dev/null 2>&1; then
-  skip "уже открыт: $(gh pr view "$BRANCH" --json url --jq .url)"
-else
-  gh pr create --base main --head "$BRANCH" --fill
-  ok "открыт: $(gh pr view "$BRANCH" --json url --jq .url)"
-fi
-
-step "3. Образ"
+step "1. Образ"
 # Отправляем всегда. Проверка "уже есть" по имени тега не работала бы до входа
 # в реестр, а после входа была бы вредна: тег выводится из пина, и образ,
 # пересобранный на том же пине с другими флагами, не отправился бы вовсе.
@@ -74,21 +75,44 @@ docker logout ghcr.io >/dev/null 2>&1 || true
 trap - EXIT
 ok "$IMG отправлен, учётные данные docker убраны"
 
-step "4. Переменная репозитория"
+step "2. Переменная репозитория"
 gh variable set WTC_TOOLCHAIN_IMAGE -R "$SLUG" -b "ghcr.io/$ORG/wtc-toolchain"
 ok "выставлена, без тега: тег CI выводит из пина сам"
 
+# Образ и переменная идут ПЕРВЫМИ, ветка после. Обратный порядок один раз уже
+# обошёлся зря потраченным прогоном: отправка ветки запускает CI немедленно, и
+# он падал на пустой переменной, которую скрипт выставлял секундой позже.
+step "3. Ветка"
+git push --set-upstream origin "$BRANCH"
+ok "опубликована"
+
+step "4. Pull request"
+if gh pr view "$BRANCH" --json url --jq .url >/dev/null 2>&1; then
+  skip "уже открыт: $(gh pr view "$BRANCH" --json url --jq .url)"
+else
+  gh pr create --base main --head "$BRANCH" --fill
+  ok "открыт: $(gh pr view "$BRANCH" --json url --jq .url)"
+fi
+
 step "Осталось руками"
 cat <<NOTE
-  Пакет создаётся приватным, а приватный образ роняет КАЖДЫЙ прогон CI
-  одинаково и до первого шага. Переведите его в публичные:
+  Один раз на пакет: выдать этому репозиторию доступ на чтение. Пакет,
+  отправленный личным токеном, не привязан ни к одному репозиторию, и токен
+  задачи получает отказ независимо от прав в рабочем процессе.
 
     https://github.com/orgs/$ORG/packages/container/wtc-toolchain/settings
-    Danger Zone -> Change visibility -> Public
+    Manage Actions access -> Add repository -> ${SLUG#*/} -> Role: Read
 
-  Проверка без учётных данных:
-    docker logout ghcr.io && docker manifest inspect $IMG
+  Публичным пакет сделать нельзя: в организации эта видимость отключена
+  администраторами. Это и не нужно, CI входит в реестр своим токеном.
+
+  После выдачи доступа перезапустить последний прогон:
+
+    gh run rerun "\$(gh run list -R $SLUG -L 1 --json databaseId --jq '.[0].databaseId')" -R $SLUG
 
   Когда "Build and test" впервые пройдёт зелёной, добавьте её в
   tools/branch-protection.json и примените: tools/protect-main.sh --apply
+
+  Когда пин llvm сдвинется, удалите старую версию образа на той же странице
+  настроек: приватные версии занимают квоту организации, ~377 МиБ каждая.
 NOTE

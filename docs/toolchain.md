@@ -87,7 +87,7 @@ host needs root.
 
 `llvm-lit` has **no install rule** in llvm-project, so lit is carried in from
 the source tree and installed into the image with pip. Skip this and CMake
-warns rather than fails, and `check-wtc` silently runs zero tests.
+warns rather than fails, and `check-wtc` then fails on a missing command.
 
 ## Publishing the image
 
@@ -107,17 +107,40 @@ gh auth token | docker login ghcr.io -u "$(gh api user -q .login)" --password-st
 docker push "$IMG"
 ```
 
-Then **make the package public**. Registry packages are private by default and
-the free quota for a private one is far too small; a private image fails every
-CI run identically at container setup, before any step runs. Verify without
-credentials:
+### The package stays private
 
-```sh
-docker logout ghcr.io
-docker manifest inspect "$IMG" >/dev/null && echo "public: ok"
+This organization forbids public and internal packages, so the only available
+visibility is private. That is not a problem: CI authenticates. Both jobs that
+touch the registry sign in with the token GitHub mints for the job itself, so
+there is no long-lived credential in a secret anywhere.
+
+What a private package does need is **one grant, once**. A package published
+from a laptop with a personal token belongs to nobody in particular, and a
+workflow token is refused. Grant this repository read access:
+
+```
+https://github.com/orgs/focs-lab/packages/container/wtc-toolchain/settings
+  Manage Actions access -> Add repository -> wtc -> Role: Read
 ```
 
-Finally point CI at it, image name only, no tag. The workflow derives the tag
+The `org.opencontainers.image.source` label in the Dockerfile links the package
+to the repository, which is what gives the registry a repository to inherit
+permissions from. The label is necessary and not sufficient; the grant above is
+the part that actually opens the door, and it survives every later push.
+
+Private packages count against the organization's storage quota, where public
+ones are free. Transfer into GitHub Actions is free either way, so the pull
+itself costs nothing. The size is worth knowing before the first surprise:
+
+| image | size |
+|---|---|
+| uncompressed, as it lands in the runner | 1.3 GiB |
+| compressed, as the registry stores it | 377 MiB |
+
+One tag per llvm pin, so two pins already approach the smallest free quota.
+**Delete the old version when the pin moves**, in the same settings page.
+
+Point CI at it, image name only, no tag. The workflow derives the tag
 from the submodule pin, so the two cannot drift:
 
 ```sh
