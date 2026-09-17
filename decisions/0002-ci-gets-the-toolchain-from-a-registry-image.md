@@ -54,19 +54,27 @@ Compiling inside the container would put the whole build under the container
 runtime's memory cap, which is both smaller than the machine's and the harder
 one to recover from when it is exceeded.
 
-## Two flags that are off by default and break testing silently
+## Two defaults that stop the suite from running
 
-Both were found by building rather than by reading, and both produce a green
-CI that has tested nothing:
+Both were found by building rather than by reading:
 
 - `LLVM_INSTALL_UTILS` defaults to OFF, so `FileCheck`, `not` and `count` are
   never installed. Every test uses `FileCheck`.
-- `llvm-lit` has no install rule at all. Without `LLVM_EXTERNAL_LIT` pointing
-  at a real one, CMake emits a warning rather than an error and `check-wtc`
-  runs zero tests.
+- `llvm-lit` has no install rule at all, so an install tree ships none.
+  `LLVM_EXTERNAL_LIT` has to name a real one, and an empty value is
+  indistinguishable from an unset one.
 
-The workflow therefore asserts that the suite was not empty. Four lines of YAML
-stand between this project and a year of misplaced confidence in a green badge.
+An earlier version of this record said both fail *silently*. That was wrong and
+the overstatement mattered, because it sent the workflow's guards to the wrong
+door: lit treats a missing `FileCheck` as fatal, and a missing lit makes
+`check-wtc` fail on a command that is not there. Both are loud.
+
+The guard that was actually needed was elsewhere and was missing: the test step
+took its exit status from a pipe and could not fail at all, and the check meant
+to catch that asserted only that tests had been discovered, which lit prints on
+failing runs too. Both are fixed, and the lesson is worth more than the fix:
+a guard is worth exactly as much as the failure you have actually reproduced
+against it.
 
 ## Consequences
 

@@ -4,7 +4,7 @@
 /install/
 /output/
 /stage/
-*.log
+/*.log
 
 # Editors and OS
 /.vscode/
