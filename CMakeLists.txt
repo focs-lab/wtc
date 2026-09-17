@@ -32,6 +32,10 @@ include(HandleLLVMOptions)
 # Default lit options, and put all our tools (wtc-opt, etc.) in a
 # canonical build/bin so lit.cfg.py can find them via LLVM_TOOLS_DIR-style
 # substitution, matching mlir/examples/standalone's layout.
+# Without this, llvm_add_tool marks wtc-opt EXCLUDE_FROM_ALL and a plain
+# `cmake --build build` silently produces libraries and no tool.
+set(LLVM_BUILD_TOOLS ON)
+
 set(LLVM_LIT_ARGS "-sv" CACHE STRING "Default options for lit")
 set(LLVM_RUNTIME_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/bin)
 set(LLVM_LIBRARY_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/lib)

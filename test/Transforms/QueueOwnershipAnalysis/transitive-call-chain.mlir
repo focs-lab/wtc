@@ -51,7 +51,7 @@ module {
   }
 
   cir.func @main() {
-    %q = cir.alloca !s32i, !cir.ptr<!s32i>, ["q"] {alignment = 4 : i64}
+    %q = cir.alloca "q" align(4) : !cir.ptr<!s32i>
     %p = cir.get_global @f1 : !cir.ptr<!cir.func<(!cir.ptr<!s32i>)>>
     cir.call @spawn(%p, %q) : (!cir.ptr<!cir.func<(!cir.ptr<!s32i>)>>, !cir.ptr<!s32i>) -> ()
     %c = cir.get_global @consumer_wrapper : !cir.ptr<!cir.func<(!cir.ptr<!s32i>)>>
