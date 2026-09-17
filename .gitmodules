@@ -1,3 +1,4 @@
 [submodule "llvm"]
 	path = llvm
 	url = https://github.com/focs-lab/llvm-project-wtc.git
+	branch = wtc/main

@@ -46,6 +46,8 @@ cd wtc
 The quickest way in is the prebuilt toolchain image, which is what CI uses:
 
 ```sh
+# <pin> is the first twelve characters of the pinned llvm revision:
+#   git rev-parse HEAD:llvm
 docker run --rm -it -v "$PWD:/src" -w /src \
   ghcr.io/focs-lab/wtc-toolchain:llvm-<pin>
 
@@ -54,8 +56,7 @@ cmake -G Ninja -S . -B build \
   -DMLIR_DIR=/opt/llvm/lib/cmake/mlir \
   -DLLVM_DIR=/opt/llvm/lib/cmake/llvm \
   -DClang_DIR=/opt/llvm/lib/cmake/clang \
-  -DLLVM_EXTERNAL_LIT="$(command -v lit)" \
-  -DCMAKE_BUILD_RPATH=/opt/llvm/lib
+  -DLLVM_EXTERNAL_LIT="$(command -v lit)"
 cmake --build build
 cmake --build build --target check-wtc
 ```
@@ -63,8 +64,8 @@ cmake --build build --target check-wtc
 On Apple Silicon add `--platform linux/amd64`; the image is x86-64 only.
 
 To build the toolchain yourself instead, follow `docs/toolchain.md`. It carries
-the exact flags, the measured time, memory and disk it took, and the three
-defaults that silently break testing if you leave them out.
+the exact flags, the measured time, memory and disk it took, and the one
+default that has to be overridden or the test suite cannot run at all.
 
 Two things to know either way. Build the toolchain outside `llvm/`, or the
 submodule shows up permanently dirty, because the superproject's ignore rules
@@ -75,7 +76,6 @@ than its core count.
 
 ```
 llvm/         llvm-project, pinned; a submodule on our fork's wtc/main
-build-llvm/   where LLVM is built; ignored, never inside llvm/
 mlir/         the dialect, the passes and wtc-opt
 shim/         the wtc:: headers a user program includes
 runtime/      specialised implementations the compiler substitutes in
@@ -83,6 +83,9 @@ benchmarks/   workloads and measurements
 test/         lit tests
 decisions/    why the project is built the way it is
 docs/         motivation, glossary, audit, related work
+docker/       the toolchain image CI and contributors build against
+tools/        publishing the toolchain, applying the branch policy
+.github/      the workflow and the review rules
 ```
 
 ## Contributing

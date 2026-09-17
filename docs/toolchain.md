@@ -34,11 +34,14 @@ cmake -G Ninja -S llvm/llvm -B build-llvm \
 cmake --build build-llvm -j<jobs>
 ```
 
-Four of those flags are load-bearing and easy to leave out.
+Four of those flags are easy to leave out and each costs something, but only
+the first breaks testing.
 
 `LLVM_INSTALL_UTILS` is **off by default**, and without it `FileCheck`, `not`
 and `count` are never installed. Every test in this repository uses
-`FileCheck`.
+`FileCheck`, and lit registers it as a fatal requirement, so the suite fails
+loudly rather than skipping quietly. Loudly is the good case; it still means
+nobody can run a test.
 
 `BUILD_SHARED_LIBS` is what makes the result small enough to ship. Static
 archives, and every tool relinking them, are the bulk of a default install.
@@ -133,16 +136,25 @@ cmake -G Ninja -S . -B build \
   -DMLIR_DIR=/opt/llvm/lib/cmake/mlir \
   -DLLVM_DIR=/opt/llvm/lib/cmake/llvm \
   -DClang_DIR=/opt/llvm/lib/cmake/clang \
-  -DLLVM_EXTERNAL_LIT="$(command -v lit)" \
-  -DCMAKE_BUILD_RPATH=/opt/llvm/lib
+  -DLLVM_EXTERNAL_LIT="$(command -v lit)"
 cmake --build build
 cmake --build build --target check-wtc
 ```
 
-`CMAKE_BUILD_RPATH` is needed because the test configuration passes only
-`HOME`, `INCLUDE`, `LIB`, `TMP` and `TEMP` through to the environment, so
-`LD_LIBRARY_PATH` does not reach `wtc-opt` under lit. With shared libraries and
-no RPATH, every test fails on a missing `.so`.
+`LLVM_EXTERNAL_LIT` is required and easy to get wrong. `llvm-lit` has no
+install rule in llvm-project, so an install tree does not ship one, and an
+empty value is indistinguishable from an unset one: CMake falls back to a path
+that does not exist, warns once, and the failure surfaces much later. If `lit`
+is not on `PATH`, `$(command -v lit)` expands to nothing and you get exactly
+that. The CI workflow therefore checks for `lit` before configuring.
+
+Nothing needs to be said about library search paths. The test configuration
+passes only `HOME`, `INCLUDE`, `LIB`, `TMP` and `TEMP` through, so
+`LD_LIBRARY_PATH` never reaches `wtc-opt` under lit; the project's own
+`CMakeLists.txt` handles this by setting an install rpath built from
+`LLVM_LIBRARY_DIR`, which is correct both against a build tree and against an
+installed one. Passing `-DCMAKE_BUILD_RPATH` on the command line, which this
+document used to recommend, defeats that.
 
 Against a local build tree rather than the image, point the three `_DIR`
-variables at `build-llvm/lib/cmake/...` instead.
+variables at `build-llvm/lib/cmake/...` instead. Nothing else changes.

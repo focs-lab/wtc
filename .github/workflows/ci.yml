@@ -109,6 +109,11 @@ jobs:
         env:
           REV: ${{ needs.toolchain.outputs.rev }}
         run: test "$WTC_LLVM_REV" = "$REV"
+      # An empty LLVM_EXTERNAL_LIT is indistinguishable from an unset one:
+      # CMake falls back to a path that install trees never ship, warns once,
+      # and the failure surfaces much later and further away. Fail here.
+      - name: lit must be on PATH
+        run: command -v lit
       - name: Configure
         run: |
           cmake -G Ninja -S . -B build \
@@ -116,8 +121,7 @@ jobs:
             -DMLIR_DIR=/opt/llvm/lib/cmake/mlir \
             -DLLVM_DIR=/opt/llvm/lib/cmake/llvm \
             -DClang_DIR=/opt/llvm/lib/cmake/clang \
-            -DLLVM_EXTERNAL_LIT="$(command -v lit)" \
-            -DCMAKE_BUILD_RPATH=/opt/llvm/lib
+            -DLLVM_EXTERNAL_LIT="$(command -v lit)"
       - name: Build
         run: cmake --build build
       - name: wtc-opt exists
