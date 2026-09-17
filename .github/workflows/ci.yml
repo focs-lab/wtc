@@ -124,6 +124,14 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+    # A container job's default shell is `sh`, not `bash`: GitHub runs steps as
+    # `sh -e {0}` here and as `bash -e {0}` on the runner itself. On Ubuntu `sh`
+    # is dash, which has no `pipefail` at all, so the test step below died on
+    # its own guard. Naming bash once for the job keeps every step in this
+    # workflow under one shell instead of two that differ by where they run.
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - name: The image matches the pin
@@ -148,8 +156,12 @@ jobs:
       - name: wtc-opt exists
         run: test -x build/bin/wtc-opt
       # Without pipefail the step takes tee's exit status, which is always
-      # zero, and a failing suite reports green. GitHub's default shell is
-      # `bash -e`, not `bash -eo pipefail`.
+      # zero, and a failing suite reports green. Neither default shell enables
+      # it: the runner's `bash -e` has it off, and a container's `sh -e` has no
+      # such option to enable. GitHub's own `shell: bash` above does turn it on,
+      # so this line is redundant today and stays anyway: it is one line, it
+      # states the requirement where the pipe is, and it survives someone
+      # changing the shell back.
       - name: Test
         run: |
           set -o pipefail
