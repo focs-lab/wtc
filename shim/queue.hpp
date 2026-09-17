@@ -40,7 +40,7 @@ public:
     queue(const queue&) = delete;
     queue& operator=(const queue&) = delete;
 
-    queue(queue&&) = operator delete;
+    queue(queue&&) = delete;
     queue& operator=(queue&&) = delete;
 
     ~queue() {

@@ -7,12 +7,13 @@ target_link_libraries(wtc-opt
   MLIRWTC
   MLIRWTCTransforms
 
-  /Users/zwezeya/Development/llvm-project/build-cir/lib/libMLIRCIR.a
-  /Users/zwezeya/Development/llvm-project/build-cir/lib/libMLIRCIRInterfaces.a
+  # ClangIR, exported by the Clang package
+  MLIRCIR
+  MLIRCIRInterfaces
 
-  /Users/zwezeya/Development/llvm-project/build-cir/lib/libclangAST.a
-  /Users/zwezeya/Development/llvm-project/build-cir/lib/libclangBasic.a
-  /Users/zwezeya/Development/llvm-project/build-cir/lib/libclangLex.a
+  clangAST
+  clangBasic
+  clangLex
 
   MLIRIR
   MLIRParser
