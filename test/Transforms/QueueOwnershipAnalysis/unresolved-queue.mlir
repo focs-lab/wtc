@@ -1,4 +1,4 @@
-// RUN: cosynth-opt %s --queue-ownership-analysis | FileCheck %s
+// RUN: wtc-opt %s --queue-ownership-analysis | FileCheck %s
 
 // producer's queue arrives as a function parameter, but it's spawned via the
 // zero-argument spawn() overload -- so its thread context resolves fine
@@ -11,14 +11,14 @@
 module {
   cir.global "private" external @v : !s32i
 
-  cir.func @spawn(%fn: !cir.ptr<!cir.func<(!cir.ptr<!s32i>)>>) [#cir.annotation<"cosynth_thread_spawn">] {
+  cir.func @spawn(%fn: !cir.ptr<!cir.func<(!cir.ptr<!s32i>)>>) [#cir.annotation<"wtc_thread_spawn">] {
     cir.return
   }
 
   cir.func @producer(%queue: !cir.ptr<!s32i>) {
     %value = cir.get_global @v : !cir.ptr<!s32i>
-    %qcast = builtin.unrealized_conversion_cast %queue : !cir.ptr<!s32i> to !cosynth.queue<!s32i>
-    "cosynth.queue_push"(%qcast, %value) : (!cosynth.queue<!s32i>, !cir.ptr<!s32i>) -> ()
+    %qcast = builtin.unrealized_conversion_cast %queue : !cir.ptr<!s32i> to !wtc.queue<!s32i>
+    "wtc.queue_push"(%qcast, %value) : (!wtc.queue<!s32i>, !cir.ptr<!s32i>) -> ()
     cir.return
   }
 

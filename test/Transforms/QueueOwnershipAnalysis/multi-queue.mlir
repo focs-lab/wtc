@@ -1,4 +1,4 @@
-// RUN: cosynth-opt %s --queue-ownership-analysis | FileCheck %s
+// RUN: wtc-opt %s --queue-ownership-analysis | FileCheck %s
 
 // Two independent queues in the same module, classified independently:
 // q1 is SPSC (one producer, one consumer), q2 is MPMC (two producers, two
@@ -11,52 +11,52 @@ module {
   cir.global "private" external @q2 : !s32i
   cir.global "private" external @v : !s32i
 
-  cir.func @spawn(%fn: !cir.ptr<!cir.func<()>>) [#cir.annotation<"cosynth_thread_spawn">] {
+  cir.func @spawn(%fn: !cir.ptr<!cir.func<()>>) [#cir.annotation<"wtc_thread_spawn">] {
     cir.return
   }
 
   cir.func @q1_producer() {
     %queue = cir.get_global @q1 : !cir.ptr<!s32i>
     %value = cir.get_global @v : !cir.ptr<!s32i>
-    %qcast = builtin.unrealized_conversion_cast %queue : !cir.ptr<!s32i> to !cosynth.queue<!s32i>
-    "cosynth.queue_push"(%qcast, %value) : (!cosynth.queue<!s32i>, !cir.ptr<!s32i>) -> ()
+    %qcast = builtin.unrealized_conversion_cast %queue : !cir.ptr<!s32i> to !wtc.queue<!s32i>
+    "wtc.queue_push"(%qcast, %value) : (!wtc.queue<!s32i>, !cir.ptr<!s32i>) -> ()
     cir.return
   }
 
   cir.func @q1_consumer() {
     %queue = cir.get_global @q1 : !cir.ptr<!s32i>
-    %qcast = builtin.unrealized_conversion_cast %queue : !cir.ptr<!s32i> to !cosynth.queue<!s32i>
-    %popped = "cosynth.queue_pop"(%qcast) : (!cosynth.queue<!s32i>) -> !cir.ptr<!s32i>
+    %qcast = builtin.unrealized_conversion_cast %queue : !cir.ptr<!s32i> to !wtc.queue<!s32i>
+    %popped = "wtc.queue_pop"(%qcast) : (!wtc.queue<!s32i>) -> !cir.ptr<!s32i>
     cir.return
   }
 
   cir.func @q2_producer_a() {
     %queue = cir.get_global @q2 : !cir.ptr<!s32i>
     %value = cir.get_global @v : !cir.ptr<!s32i>
-    %qcast = builtin.unrealized_conversion_cast %queue : !cir.ptr<!s32i> to !cosynth.queue<!s32i>
-    "cosynth.queue_push"(%qcast, %value) : (!cosynth.queue<!s32i>, !cir.ptr<!s32i>) -> ()
+    %qcast = builtin.unrealized_conversion_cast %queue : !cir.ptr<!s32i> to !wtc.queue<!s32i>
+    "wtc.queue_push"(%qcast, %value) : (!wtc.queue<!s32i>, !cir.ptr<!s32i>) -> ()
     cir.return
   }
 
   cir.func @q2_producer_b() {
     %queue = cir.get_global @q2 : !cir.ptr<!s32i>
     %value = cir.get_global @v : !cir.ptr<!s32i>
-    %qcast = builtin.unrealized_conversion_cast %queue : !cir.ptr<!s32i> to !cosynth.queue<!s32i>
-    "cosynth.queue_push"(%qcast, %value) : (!cosynth.queue<!s32i>, !cir.ptr<!s32i>) -> ()
+    %qcast = builtin.unrealized_conversion_cast %queue : !cir.ptr<!s32i> to !wtc.queue<!s32i>
+    "wtc.queue_push"(%qcast, %value) : (!wtc.queue<!s32i>, !cir.ptr<!s32i>) -> ()
     cir.return
   }
 
   cir.func @q2_consumer_a() {
     %queue = cir.get_global @q2 : !cir.ptr<!s32i>
-    %qcast = builtin.unrealized_conversion_cast %queue : !cir.ptr<!s32i> to !cosynth.queue<!s32i>
-    %popped = "cosynth.queue_pop"(%qcast) : (!cosynth.queue<!s32i>) -> !cir.ptr<!s32i>
+    %qcast = builtin.unrealized_conversion_cast %queue : !cir.ptr<!s32i> to !wtc.queue<!s32i>
+    %popped = "wtc.queue_pop"(%qcast) : (!wtc.queue<!s32i>) -> !cir.ptr<!s32i>
     cir.return
   }
 
   cir.func @q2_consumer_b() {
     %queue = cir.get_global @q2 : !cir.ptr<!s32i>
-    %qcast = builtin.unrealized_conversion_cast %queue : !cir.ptr<!s32i> to !cosynth.queue<!s32i>
-    %popped = "cosynth.queue_pop"(%qcast) : (!cosynth.queue<!s32i>) -> !cir.ptr<!s32i>
+    %qcast = builtin.unrealized_conversion_cast %queue : !cir.ptr<!s32i> to !wtc.queue<!s32i>
+    %popped = "wtc.queue_pop"(%qcast) : (!wtc.queue<!s32i>) -> !cir.ptr<!s32i>
     cir.return
   }
 

@@ -1,10 +1,10 @@
-add_mlir_library(MLIRCosynthTransforms
+add_mlir_library(MLIRWTCTransforms
   LiftCIRToWTC.cpp
   LowerWTCToCIR.cpp
   QueueOwnershipAnalysis.cpp
   Utils.cpp
   LINK_LIBS PUBLIC
-  MLIRCosynth
+  MLIRWTC
   MLIRIR
   MLIRPass
   MLIRSupport

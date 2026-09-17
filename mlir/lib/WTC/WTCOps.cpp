@@ -1,7 +1,7 @@
-#include "WTC/CosynthOps.h"
+#include "WTC/WTCOps.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/OpImplementation.h"
 
 #define GET_OP_CLASSES
-#include "WTC/CosynthOps.cpp.inc"
+#include "WTC/WTCOps.cpp.inc"

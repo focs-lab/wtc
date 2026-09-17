@@ -1,4 +1,4 @@
-#include "WTC/CosynthDialect.h"
+#include "WTC/WTCDialect.h"
 #include "WTC/Transforms/Passes.h"
 
 #include "mlir/IR/DialectRegistry.h"
@@ -14,13 +14,13 @@ int main(int argc, char **argv) {
   mlir::registerAllDialects(registry);
   mlir::registerAllPasses();
 
-  registry.insert<mlir::cosynth::CosynthDialect>();
+  registry.insert<mlir::wtc::WTCDialect>();
   registry.insert<cir::CIRDialect>();
 
-  mlir::cosynth::registerLiftCIRToCosynthPass();
-  mlir::cosynth::registerLowerCosynthToCIRPass();
-  mlir::cosynth::registerQueueOwnershipAnalysisPass();
+  mlir::wtc::registerLiftCIRToWTCPass();
+  mlir::wtc::registerLowerWTCToCIRPass();
+  mlir::wtc::registerQueueOwnershipAnalysisPass();
 
   return mlir::asMainReturnCode(
-      mlir::MlirOptMain(argc, argv, "CoSynth optimizer driver\n", registry));
+      mlir::MlirOptMain(argc, argv, "wtc-opt: the Well-tempered Compiler optimizer driver\n", registry));
 }

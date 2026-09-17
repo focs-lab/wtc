@@ -3,13 +3,13 @@
 #include "clang/CIR/Dialect/IR/CIRDialect.h"
 #include "llvm/ADT/StringRef.h"
 
-namespace mlir::cosynth {
+namespace mlir::wtc {
     enum class SemanticOpKind {
         Unknown,
         ThreadSpawn
     };
 
-    bool isCosynthAnnotatedCall(cir::CallOp op, StringRef annotation);
+    bool isWTCAnnotatedCall(cir::CallOp op, StringRef annotation);
 
     SemanticOpKind getSemanticKind(cir::FuncOp funcOp);
 

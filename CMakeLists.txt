@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20.0)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
-project(cosynth-prototype LANGUAGES C CXX)
+project(wtc LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -25,7 +25,7 @@ include(AddLLVM)
 include(AddMLIR)
 include(HandleLLVMOptions)
 
-# Default lit options, and put all our tools (cosynth-opt, etc.) in a
+# Default lit options, and put all our tools (wtc-opt, etc.) in a
 # canonical build/bin so lit.cfg.py can find them via LLVM_TOOLS_DIR-style
 # substitution, matching mlir/examples/standalone's layout.
 set(LLVM_LIT_ARGS "-sv" CACHE STRING "Default options for lit")
@@ -33,8 +33,8 @@ set(LLVM_RUNTIME_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/bin)
 set(LLVM_LIBRARY_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/lib)
 set(MLIR_BINARY_DIR ${CMAKE_BINARY_DIR})
 
-set(COSYNTH_SOURCE_DIR ${PROJECT_SOURCE_DIR})
-set(COSYNTH_BINARY_DIR ${PROJECT_BINARY_DIR})
+set(WTC_SOURCE_DIR ${PROJECT_SOURCE_DIR})
+set(WTC_BINARY_DIR ${PROJECT_BINARY_DIR})
 
 # Includes from the MLIR installation
 include_directories(${LLVM_INCLUDE_DIRS})

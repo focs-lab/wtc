@@ -1,12 +1,12 @@
-add_mlir_dialect_library(MLIRCosynth
+add_mlir_dialect_library(MLIRWTC
   WTCDialect.cpp
   WTCOps.cpp
   WTCTypes.cpp
 
   DEPENDS
-  MLIRCosynthDialectIncGen
-  MLIRCosynthOpsIncGen
-  MLIRCosynthTypesIncGen
+  MLIRWTCDialectIncGen
+  MLIRWTCOpsIncGen
+  MLIRWTCTypesIncGen
 
   LINK_LIBS PUBLIC
   MLIRIR

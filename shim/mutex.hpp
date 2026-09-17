@@ -2,7 +2,7 @@
 
 #include <mutex>
 
-namespace concur {
+namespace wtc {
 
 class mutex {
 private:
@@ -15,12 +15,12 @@ public:
     mutex(const mutex&) = delete;
     mutex& operator=(const mutex&) = delete;
     
-    [[clang::annotate("cosynth_mutex_lock")]]
+    [[clang::annotate("wtc_mutex_lock")]]
     void lock() {
         impl.lock();
     }
 
-    [[clang::annotate("cosynth_mutex_unlock")]]
+    [[clang::annotate("wtc_mutex_unlock")]]
     void unlock() {
         impl.unlock();
     }

@@ -1,18 +1,18 @@
-#include "WTC/CosynthDialect.h"
-#include "WTC/CosynthOps.h"
-#include "WTC/CosynthTypes.h"
+#include "WTC/WTCDialect.h"
+#include "WTC/WTCOps.h"
+#include "WTC/WTCTypes.h"
 
 #include "mlir/IR/DialectImplementation.h"
 
 using namespace mlir;
-using namespace mlir::cosynth;
+using namespace mlir::wtc;
 
-#include "WTC/CosynthDialect.cpp.inc"
+#include "WTC/WTCDialect.cpp.inc"
 
-void CosynthDialect::initialize() {
+void WTCDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
-#include "WTC/CosynthOps.cpp.inc"
+#include "WTC/WTCOps.cpp.inc"
       >();
 
   registerTypes();

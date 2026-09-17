@@ -1,17 +1,17 @@
-#include "WTC/CosynthOps.h"
+#include "WTC/WTCOps.h"
 
 using namespace mlir;
-using namespace mlir::cosynth;
+using namespace mlir::wtc;
 
 #include "mlir/Pass/Pass.h"
 #include "clang/CIR/Dialect/IR/CIRDialect.h"
 
 #include "mlir/Transforms/DialectConversion.h"
 
-struct CosynthToCirConversionTarget : public ConversionTarget {
-    CosynthToCirConversionTarget(MLIRContext &ctx) : ConversionTarget(ctx) {
+struct WTCToCirConversionTarget : public ConversionTarget {
+    WTCToCirConversionTarget(MLIRContext &ctx) : ConversionTarget(ctx) {
         addLegalDialect<cir::CIRDialect>();
-        addIllegalDialect<CosynthDialect>();
+        addIllegalDialect<WTCDialect>();
     }
 };
 
@@ -128,25 +128,25 @@ struct LowerQueuePopPattern : public OpConversionPattern<QueuePopOp> {
     }
 };
 
-struct LowerCosynthToCIRPass
-    : public PassWrapper<LowerCosynthToCIRPass, OperationPass<ModuleOp>> {
-    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerCosynthToCIRPass)
+struct LowerWTCToCIRPass
+    : public PassWrapper<LowerWTCToCIRPass, OperationPass<ModuleOp>> {
+    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerWTCToCIRPass)
     
     StringRef getArgument() const final {
-        return "lower-cosynth-to-cir";
+        return "lower-wtc-to-cir";
     }
     StringRef getDescription() const final {
-        return "Lower Cosynth calls to the CIR";
+        return "Lower wtc dialect operations back down to CIR calls";
     }
 
     void getDependentDialects(DialectRegistry &registry) const override {
-        registry.insert<mlir::cosynth::CosynthDialect>();
+        registry.insert<mlir::wtc::WTCDialect>();
         registry.insert<cir::CIRDialect>();
     }
 
     void runOnOperation() override {
         MLIRContext *context = &getContext();
-        CosynthToCirConversionTarget conversionTarget(*context);
+        WTCToCirConversionTarget conversionTarget(*context);
         RewritePatternSet patterns(context);
         patterns.add<LowerMutexLockPattern>(context);
         patterns.add<LowerMutexUnlockPattern>(context);
@@ -159,8 +159,8 @@ struct LowerCosynthToCIRPass
     }
 };
 
-namespace mlir::cosynth {
-    void registerLowerCosynthToCIRPass() {
-        PassRegistration<LowerCosynthToCIRPass>();
+namespace mlir::wtc {
+    void registerLowerWTCToCIRPass() {
+        PassRegistration<LowerWTCToCIRPass>();
     }
 }

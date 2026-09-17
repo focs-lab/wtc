@@ -1,17 +1,17 @@
-#ifndef COSYNTH_DIALECT_TD
-#define COSYNTH_DIALECT_TD
+#ifndef WTC_DIALECT_TD
+#define WTC_DIALECT_TD
 
 include "mlir/IR/DialectBase.td"
 
-def Cosynth_Dialect : Dialect {
-    let name = "cosynth";
-    let summary = "Concurrency dialect for WP1 prototyping";
-    let description = [{A minimal dialect that gives MLIR first class knowledge of concurrency semantics.}];
-    let cppNamespace = "::mlir::cosynth";
+def WTC_Dialect : Dialect {
+    let name = "wtc";
+    let summary = "First-class concurrency primitives for the Well-tempered Compiler";
+    let description = [{A dialect that gives MLIR first-class knowledge of concurrency semantics: queues, locks and the threads that own them.}];
+    let cppNamespace = "::mlir::wtc";
     let useDefaultTypePrinterParser = 1;
     let extraClassDeclaration = [{
       void registerTypes();
     }];
 }
 
-#endif // COSYNTH_DIALECT_TD
+#endif // WTC_DIALECT_TD

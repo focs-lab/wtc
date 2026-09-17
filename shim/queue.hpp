@@ -3,7 +3,7 @@
 #include <memory>
 #include <mutex>
 
-namespace concur {
+namespace wtc {
 
 template <typename T>
 class queue {
@@ -34,7 +34,7 @@ private:
     }
 
 public:
-    [[clang::annotate("cosynth_queue_construction")]]
+    [[clang::annotate("wtc_queue_construction")]]
     queue() : head(new node), tail(head.get()) {}
 
     queue(const queue&) = delete;
@@ -47,13 +47,13 @@ public:
         
     }
 
-    [[clang::annotate("cosynth_queue_try_pop")]]
+    [[clang::annotate("wtc_queue_try_pop")]]
     std::shared_ptr<T> try_pop() {
         std::unique_ptr<node> old_head = pop_head();
         return old_head ? old_head->data : std::shared_ptr<T>();
     }
 
-    [[clang::annotate("cosynth_queue_push")]]
+    [[clang::annotate("wtc_queue_push")]]
     void push(const T& new_value) {
         std::shared_ptr<T> new_data(std::make_shared<T>(std::move(new_value))); 
         std::unique_ptr<node> p(new node);

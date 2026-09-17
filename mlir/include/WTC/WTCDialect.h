@@ -1,8 +1,8 @@
-#ifndef COSYNTH_COSYNTHDIALECT_H
-#define COSYNTH_COSYNTHDIALECT_H
+#ifndef WTC_WTCDIALECT_H
+#define WTC_WTCDIALECT_H
 
 #include "mlir/IR/Dialect.h"
 
-#include "WTC/CosynthDialect.h.inc"
+#include "WTC/WTCDialect.h.inc"
 
 #endif

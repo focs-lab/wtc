@@ -1,4 +1,4 @@
-// RUN: cosynth-opt %s --queue-ownership-analysis | FileCheck %s
+// RUN: wtc-opt %s --queue-ownership-analysis | FileCheck %s
 
 // The queue is bound at the spawn site, but the actual push happens several
 // ordinary-call layers deeper: spawn(f1, &q) -> f1 calls f2 -> f2 calls f3
@@ -13,14 +13,14 @@
 module {
   cir.global "private" external @v : !s32i
 
-  cir.func @spawn(%fn: !cir.ptr<!cir.func<(!cir.ptr<!s32i>)>>, %arg: !cir.ptr<!s32i>) [#cir.annotation<"cosynth_thread_spawn">] {
+  cir.func @spawn(%fn: !cir.ptr<!cir.func<(!cir.ptr<!s32i>)>>, %arg: !cir.ptr<!s32i>) [#cir.annotation<"wtc_thread_spawn">] {
     cir.return
   }
 
   cir.func @producer(%queue: !cir.ptr<!s32i>) {
     %value = cir.get_global @v : !cir.ptr<!s32i>
-    %qcast = builtin.unrealized_conversion_cast %queue : !cir.ptr<!s32i> to !cosynth.queue<!s32i>
-    "cosynth.queue_push"(%qcast, %value) : (!cosynth.queue<!s32i>, !cir.ptr<!s32i>) -> ()
+    %qcast = builtin.unrealized_conversion_cast %queue : !cir.ptr<!s32i> to !wtc.queue<!s32i>
+    "wtc.queue_push"(%qcast, %value) : (!wtc.queue<!s32i>, !cir.ptr<!s32i>) -> ()
     cir.return
   }
 
@@ -40,8 +40,8 @@ module {
   }
 
   cir.func @consumer(%queue: !cir.ptr<!s32i>) {
-    %qcast = builtin.unrealized_conversion_cast %queue : !cir.ptr<!s32i> to !cosynth.queue<!s32i>
-    %popped = "cosynth.queue_pop"(%qcast) : (!cosynth.queue<!s32i>) -> !cir.ptr<!s32i>
+    %qcast = builtin.unrealized_conversion_cast %queue : !cir.ptr<!s32i> to !wtc.queue<!s32i>
+    %popped = "wtc.queue_pop"(%qcast) : (!wtc.queue<!s32i>) -> !cir.ptr<!s32i>
     cir.return
   }
 

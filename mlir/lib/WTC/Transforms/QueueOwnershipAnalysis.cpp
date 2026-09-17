@@ -1,4 +1,4 @@
-#include "WTC/CosynthOps.h"
+#include "WTC/WTCOps.h"
 #include "WTC/Transforms/Utils.h"
 
 #include "clang/CIR/Dialect/IR/CIRDialect.h"
@@ -12,7 +12,7 @@
 #include "llvm/ADT/DenseMap.h"
 
 using namespace mlir;
-using namespace mlir::cosynth;
+using namespace mlir::wtc;
 
 struct QueueAccessInfo {
     llvm::SmallDenseSet<unsigned, 4> producers;
@@ -272,7 +272,7 @@ struct QueueOwnershipAnalysisPass
     }
 };
 
-namespace mlir::cosynth {
+namespace mlir::wtc {
     void registerQueueOwnershipAnalysisPass() {
         PassRegistration<QueueOwnershipAnalysisPass>();
     }

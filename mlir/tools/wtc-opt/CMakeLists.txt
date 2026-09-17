@@ -1,11 +1,11 @@
-add_mlir_tool(cosynth-opt
-  cosynth-opt.cpp
+add_mlir_tool(wtc-opt
+  wtc-opt.cpp
 )
 
-target_link_libraries(cosynth-opt
+target_link_libraries(wtc-opt
   PRIVATE
-  MLIRCosynth
-  MLIRCosynthTransforms
+  MLIRWTC
+  MLIRWTCTransforms
 
   /Users/zwezeya/Development/llvm-project/build-cir/lib/libMLIRCIR.a
   /Users/zwezeya/Development/llvm-project/build-cir/lib/libMLIRCIRInterfaces.a

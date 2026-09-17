@@ -1,9 +1,9 @@
 #include "WTC/Transforms/Passes.h"
 #include "WTC/Transforms/Utils.h"
-#include "WTC/CosynthOps.h"
+#include "WTC/WTCOps.h"
 
 using namespace mlir;
-using namespace mlir::cosynth;
+using namespace mlir::wtc;
 
 #include "clang/CIR/Dialect/IR/CIRDialect.h"
 
@@ -15,30 +15,30 @@ using namespace mlir::cosynth;
 
 #include "llvm/ADT/StringRef.h"
 
-struct CirToCosynthConversionTarget : public ConversionTarget {
-    CirToCosynthConversionTarget(MLIRContext &ctx) : ConversionTarget(ctx) {
-        addLegalDialect<CosynthDialect>();
+struct CirToWTCConversionTarget : public ConversionTarget {
+    CirToWTCConversionTarget(MLIRContext &ctx) : ConversionTarget(ctx) {
+        addLegalDialect<WTCDialect>();
         addLegalDialect<cir::CIRDialect>();
         addLegalOp<mlir::UnrealizedConversionCastOp>();
 
         addDynamicallyLegalOp<cir::CallOp>([](cir::CallOp op) {
-            return !isCosynthAnnotatedCall(op, "cosynth_mutex_lock") 
-                && !isCosynthAnnotatedCall(op, "cosynth_mutex_unlock")
-                && !isCosynthAnnotatedCall(op, "cosynth_queue_push")
-                && !isCosynthAnnotatedCall(op, "cosynth_queue_try_pop");
+            return !isWTCAnnotatedCall(op, "wtc_mutex_lock") 
+                && !isWTCAnnotatedCall(op, "wtc_mutex_unlock")
+                && !isWTCAnnotatedCall(op, "wtc_queue_push")
+                && !isWTCAnnotatedCall(op, "wtc_queue_try_pop");
         });
     }
 };
 
-class CirToCosynthTypeConverter : public TypeConverter {
+class CirToWTCTypeConverter : public TypeConverter {
 public:
-    CirToCosynthTypeConverter(MLIRContext *ctx) {
+    CirToWTCTypeConverter(MLIRContext *ctx) {
         addConversion([](Type t) { return t; });
         addConversion([ctx](cir::PointerType ptrTy) -> std::optional<Type> {
             auto recTy = mlir::dyn_cast<cir::RecordType>(ptrTy.getPointee());
             
             if (!recTy) return std::nullopt;
-            if (recTy.getName().getValue().trim("\"") == "concur::mutex") 
+            if (recTy.getName().getValue().trim("\"") == "wtc::mutex") 
                 return MutexType::get(ctx);
             
             return std::nullopt;
@@ -71,8 +71,8 @@ struct LiftMutexCallPattern : public OpConversionPattern<cir::CallOp> {
     ) const override {
         Value mutex = adaptor.getOperands()[0];
 
-        bool isLock = isCosynthAnnotatedCall(op, "cosynth_mutex_lock");
-        bool isUnlock = isCosynthAnnotatedCall(op, "cosynth_mutex_unlock");
+        bool isLock = isWTCAnnotatedCall(op, "wtc_mutex_lock");
+        bool isUnlock = isWTCAnnotatedCall(op, "wtc_mutex_unlock");
 
         if (!isLock && !isUnlock)
             return failure();
@@ -103,8 +103,8 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
         OpAdaptor adaptor,
         ConversionPatternRewriter &rewriter
     ) const override {
-        bool isPush = isCosynthAnnotatedCall(op, "cosynth_queue_push");
-        bool isPop = isCosynthAnnotatedCall(op, "cosynth_queue_try_pop");
+        bool isPush = isWTCAnnotatedCall(op, "wtc_queue_push");
+        bool isPop = isWTCAnnotatedCall(op, "wtc_queue_try_pop");
 
         if (!isPush && !isPop)
             return failure();
@@ -141,27 +141,27 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
     }
 };
 
-struct LiftToCosynthPass 
-    : public PassWrapper<LiftToCosynthPass, OperationPass<ModuleOp>> {
-    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LiftToCosynthPass)
+struct LiftToWTCPass 
+    : public PassWrapper<LiftToWTCPass, OperationPass<ModuleOp>> {
+    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LiftToWTCPass)
     
     StringRef getArgument() const final {
-        return "lift-cir-to-cosynth";
+        return "lift-cir-to-wtc";
     }
     StringRef getDescription() const final {
-        return "Lift CIR shim calls to the CoSynth dialect";
+        return "Lift calls into the wtc shim library up to wtc dialect operations";
     }
 
     void getDependentDialects(DialectRegistry &registry) const override {
-        registry.insert<mlir::cosynth::CosynthDialect>();
+        registry.insert<mlir::wtc::WTCDialect>();
         registry.insert<cir::CIRDialect>();
     }
 
     void runOnOperation() override {
         MLIRContext *context = &getContext();
 
-        CirToCosynthConversionTarget conversionTarget(*context);
-        CirToCosynthTypeConverter typeConverter(context);
+        CirToWTCConversionTarget conversionTarget(*context);
+        CirToWTCTypeConverter typeConverter(context);
         RewritePatternSet patterns(context);
 
         patterns.add<LiftMutexCallPattern>(typeConverter, context);
@@ -173,8 +173,8 @@ struct LiftToCosynthPass
     }
 };
 
-namespace mlir::cosynth {
-    void registerLiftCIRToCosynthPass() {
-        PassRegistration<LiftToCosynthPass>();
+namespace mlir::wtc {
+    void registerLiftCIRToWTCPass() {
+        PassRegistration<LiftToWTCPass>();
     }
 }

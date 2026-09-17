@@ -1,10 +1,10 @@
-#ifndef COSYNTH_TRANSFORMS_PASSES_H
-#define COSYNTH_TRANSFORMS_PASSES_H
+#ifndef WTC_TRANSFORMS_PASSES_H
+#define WTC_TRANSFORMS_PASSES_H
 
 #include "mlir/IR/BuiltinOps.h"
-namespace mlir::cosynth {
-    void registerLiftCIRToCosynthPass();
-    void registerLowerCosynthToCIRPass();
+namespace mlir::wtc {
+    void registerLiftCIRToWTCPass();
+    void registerLowerWTCToCIRPass();
     void registerQueueOwnershipAnalysisPass();
     void analyseQueues(ModuleOp module);
 }

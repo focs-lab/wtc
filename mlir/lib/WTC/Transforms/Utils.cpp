@@ -3,8 +3,8 @@
 #include "clang/CIR/Dialect/IR/CIRAttrs.h"
 #include "mlir/IR/BuiltinOps.h"
 
-namespace mlir::cosynth {
-    bool isCosynthAnnotatedCall(cir::CallOp op, StringRef annotation) {
+namespace mlir::wtc {
+    bool isWTCAnnotatedCall(cir::CallOp op, StringRef annotation) {
         auto calleeAttr = op.getCalleeAttr();
         if (!calleeAttr)
             return false;
@@ -42,7 +42,7 @@ namespace mlir::cosynth {
             if (!annotAttr) return SemanticOpKind::Unknown;
 
             StringRef name = annotAttr.getName().getValue();
-            if (name == "cosynth_thread_spawn") {
+            if (name == "wtc_thread_spawn") {
                 return SemanticOpKind::ThreadSpawn;
             }
         }

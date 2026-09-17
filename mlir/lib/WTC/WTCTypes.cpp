@@ -1,19 +1,19 @@
-#include "WTC/CosynthDialect.h"
-#include "WTC/CosynthTypes.h"
+#include "WTC/WTCDialect.h"
+#include "WTC/WTCTypes.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
-using namespace mlir::cosynth;
+using namespace mlir::wtc;
 
 #define GET_TYPEDEF_CLASSES
-#include "WTC/CosynthTypes.cpp.inc"
+#include "WTC/WTCTypes.cpp.inc"
 
-void CosynthDialect::registerTypes() {
+void WTCDialect::registerTypes() {
   addTypes<
 #define GET_TYPEDEF_LIST
-#include "WTC/CosynthTypes.cpp.inc"
+#include "WTC/WTCTypes.cpp.inc"
       >();
 }
