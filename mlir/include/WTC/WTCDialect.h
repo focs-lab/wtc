@@ -3,6 +3,6 @@
 
 #include "mlir/IR/Dialect.h"
 
-#include "Cosynth/CosynthDialect.h.inc"
+#include "WTC/CosynthDialect.h.inc"
 
 #endif

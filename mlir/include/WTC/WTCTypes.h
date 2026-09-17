@@ -4,6 +4,6 @@
 #include "mlir/IR/Types.h"
 
 #define GET_TYPEDEF_CLASSES
-#include "Cosynth/CosynthTypes.h.inc"
+#include "WTC/CosynthTypes.h.inc"
 
 #endif

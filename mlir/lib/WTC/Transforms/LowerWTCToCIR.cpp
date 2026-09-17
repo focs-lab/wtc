@@ -1,4 +1,4 @@
-#include "Cosynth/CosynthOps.h"
+#include "WTC/CosynthOps.h"
 
 using namespace mlir;
 using namespace mlir::cosynth;

@@ -1,1 +1,1 @@
-add_subdirectory(cosynth-opt)
+add_subdirectory(wtc-opt)

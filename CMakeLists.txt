@@ -50,4 +50,4 @@ include_directories(${PROJECT_BINARY_DIR}/mlir/include)
 add_definitions(${LLVM_DEFINITIONS})
 
 add_subdirectory(mlir)
-add_subdirectory(mlir/test)
+add_subdirectory(test)

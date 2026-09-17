@@ -1,4 +1,4 @@
-#include "Cosynth/Transforms/Utils.h"
+#include "WTC/Transforms/Utils.h"
 
 #include "clang/CIR/Dialect/IR/CIRAttrs.h"
 #include "mlir/IR/BuiltinOps.h"

@@ -1,5 +1,5 @@
-#include "Cosynth/CosynthDialect.h"
-#include "Cosynth/Transforms/Passes.h"
+#include "WTC/CosynthDialect.h"
+#include "WTC/Transforms/Passes.h"
 
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/InitAllDialects.h"

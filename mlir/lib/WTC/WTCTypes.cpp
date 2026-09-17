@@ -1,5 +1,5 @@
-#include "Cosynth/CosynthDialect.h"
-#include "Cosynth/CosynthTypes.h"
+#include "WTC/CosynthDialect.h"
+#include "WTC/CosynthTypes.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -9,11 +9,11 @@ using namespace mlir;
 using namespace mlir::cosynth;
 
 #define GET_TYPEDEF_CLASSES
-#include "Cosynth/CosynthTypes.cpp.inc"
+#include "WTC/CosynthTypes.cpp.inc"
 
 void CosynthDialect::registerTypes() {
   addTypes<
 #define GET_TYPEDEF_LIST
-#include "Cosynth/CosynthTypes.cpp.inc"
+#include "WTC/CosynthTypes.cpp.inc"
       >();
 }

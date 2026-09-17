@@ -1,6 +1,6 @@
-#include "Cosynth/Transforms/Passes.h"
-#include "Cosynth/Transforms/Utils.h"
-#include "Cosynth/CosynthOps.h"
+#include "WTC/Transforms/Passes.h"
+#include "WTC/Transforms/Utils.h"
+#include "WTC/CosynthOps.h"
 
 using namespace mlir;
 using namespace mlir::cosynth;

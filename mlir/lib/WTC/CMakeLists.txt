@@ -1,7 +1,7 @@
 add_mlir_dialect_library(MLIRCosynth
-  CosynthDialect.cpp
-  CosynthOps.cpp
-  CosynthTypes.cpp
+  WTCDialect.cpp
+  WTCOps.cpp
+  WTCTypes.cpp
 
   DEPENDS
   MLIRCosynthDialectIncGen
