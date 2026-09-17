@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -56,23 +59,42 @@ jobs:
   toolchain:
     name: Resolve toolchain image
     runs-on: ubuntu-24.04
-    if: vars.WTC_TOOLCHAIN_IMAGE != ''
     outputs:
       image: ${{ steps.pick.outputs.image }}
       rev:   ${{ steps.pick.outputs.rev }}
     steps:
       - uses: actions/checkout@v4
+      # A missing variable used to skip this job, which skipped `build` and
+      # left the run green. A green run that built nothing is the one outcome
+      # this workflow exists to prevent, so it fails instead.
+      - name: The toolchain image must be configured
+        env:
+          IMAGE_BASE: ${{ vars.WTC_TOOLCHAIN_IMAGE }}
+        run: |
+          test -n "$IMAGE_BASE" || {
+            echo "::error::Repository variable WTC_TOOLCHAIN_IMAGE is not set."
+            echo "::error::Publish a toolchain image and set it. See docs/toolchain.md."
+            exit 1; }
       - id: pick
+        env:
+          IMAGE_BASE: ${{ vars.WTC_TOOLCHAIN_IMAGE }}
         run: |
           set -euo pipefail
           rev=$(git rev-parse HEAD:llvm)
-          echo "rev=$rev"                                                 >> "$GITHUB_OUTPUT"
-          echo "image=${{ vars.WTC_TOOLCHAIN_IMAGE }}:llvm-${rev:0:12}"   >> "$GITHUB_OUTPUT"
-      - name: A toolchain image must exist for this pin
+          echo "rev=$rev"                                >> "$GITHUB_OUTPUT"
+          echo "image=${IMAGE_BASE}:llvm-${rev:0:12}"     >> "$GITHUB_OUTPUT"
+      # `docker manifest inspect` answers "denied" both for an image that was
+      # never pushed and for one whose package is private. Naming only the
+      # first sends someone off to rebuild a toolchain that already exists.
+      - name: A toolchain image must exist and be readable
+        env:
+          IMAGE: ${{ steps.pick.outputs.image }}
+          REV: ${{ steps.pick.outputs.rev }}
         run: |
-          docker manifest inspect "${{ steps.pick.outputs.image }}" >/dev/null || {
-            echo "::error::No toolchain image for llvm pin ${{ steps.pick.outputs.rev }}."
-            echo "::error::Build and push one before moving the pin. See docs/toolchain.md."
+          docker manifest inspect "$IMAGE" >/dev/null || {
+            echo "::error::Cannot read $IMAGE for llvm pin $REV."
+            echo "::error::Either no image was pushed for this pin, or the package"
+            echo "::error::is private. Check both. See docs/toolchain.md."
             exit 1; }
 
   build:
@@ -84,7 +106,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: The image matches the pin
-        run: test "$WTC_LLVM_REV" = "${{ needs.toolchain.outputs.rev }}"
+        env:
+          REV: ${{ needs.toolchain.outputs.rev }}
+        run: test "$WTC_LLVM_REV" = "$REV"
       - name: Configure
         run: |
           cmake -G Ninja -S . -B build \
@@ -98,8 +122,16 @@ jobs:
         run: cmake --build build
       - name: wtc-opt exists
         run: test -x build/bin/wtc-opt
+      # Without pipefail the step takes tee's exit status, which is always
+      # zero, and a failing suite reports green. GitHub's default shell is
+      # `bash -e`, not `bash -eo pipefail`.
       - name: Test
-        run: cmake --build build --target check-wtc 2>&1 | tee lit.log
-      - name: The suite must not be empty
+        run: |
+          set -o pipefail
+          cmake --build build --target check-wtc 2>&1 | tee lit.log
+      # lit prints the discovery line on failing runs too, so counting tests
+      # proves only that something ran. Assert the outcome as well.
+      - name: The suite ran and passed
         run: |
           grep -qE 'Total Discovered Tests: [1-9][0-9]*' lit.log
+          ! grep -qE '^ *(Failed|Unexpectedly Passed|Timed Out) *:' lit.log
