@@ -1,0 +1,17 @@
+Contributors to WTC, in the order they joined.
+
+Authorship of individual commits is recorded in git history and is the
+authoritative record. This file records roles, which git does not capture.
+
+  Alexey Paznikov <apaznikov>
+      Originator of the idea. Supervision, dialect semantics, the test
+      suite as specification, the runtime library of specialised
+      implementations, benchmarks, build and CI.
+
+  ZweZeya <ZweZeya>
+      The original prototype: the dialect, the CIR lifting and lowering
+      passes, and the queue ownership analysis. Diploma work.
+
+To be listed here, open a pull request adding yourself with a one-line
+description of what you own. Use Co-authored-by trailers on commits that
+are genuinely joint work.

@@ -1,0 +1,27 @@
+# Who must review what. GitHub requests these reviewers automatically.
+#
+# The rule is by layer, not by task: whoever does not own a directory
+# reviews it. That is the only mechanism keeping both of us current on
+# the other's half of the project.
+
+# Default: both.
+*                       @apaznikov @ZweZeya
+
+# Dialect, passes and the tool. Owned by the diploma work, reviewed by
+# the supervisor.
+/mlir/                  @apaznikov
+
+# Specification, implementations, measurements, infrastructure. Owned by
+# the supervisor, reviewed by the diploma student.
+/test/                  @ZweZeya
+/runtime/               @ZweZeya
+/benchmarks/            @ZweZeya
+/.github/               @ZweZeya
+
+# Decisions and docs: both, always.
+/decisions/             @apaznikov @ZweZeya
+/docs/                  @apaznikov @ZweZeya
+
+# The pinned LLVM revision moves only by deliberate, separate pull request.
+/llvm                   @apaznikov
+/.gitmodules            @apaznikov

@@ -1,6 +1,14 @@
-/.vscode/
+# Build trees
 /build/
+/build-*/
+/install/
 /output/
-/examples/
 
+# Editors and OS
+/.vscode/
+/.idea/
+.DS_Store
+*.swp
+
+# Personal scratch
 MY_NOTES.md

@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Cheap and green from day one: the shim is plain C++ and needs no
+  # toolchain of ours. This job exists so that "CI is green" means
+  # something before the heavy job can run at all.
+  shim:
+    name: Shim headers compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install compilers
+        run: sudo apt-get update && sudo apt-get install -y g++ clang
+      - name: Compile every shim header on its own
+        run: |
+          set -e
+          for h in shim/*.hpp; do
+            echo "== $h"
+            printf '#include "%s"\nint main(){}\n' "$(basename "$h")" > /tmp/tu.cpp
+            clang++ -std=c++17 -Ishim -fsyntax-only -Wall -Werror /tmp/tu.cpp
+            g++     -std=c++17 -Ishim -fsyntax-only -Wall \
+                    -Wno-attributes /tmp/tu.cpp
+          done
+      - name: Compile them together
+        run: |
+          cat > /tmp/all.cpp <<'CPP'
+          #include "queue.hpp"
+          #include "mutex.hpp"
+          #include "thread.hpp"
+          static void worker(void *) {}
+          int main() {
+            wtc::queue<int> q;
+            q.push(42);
+            auto got = q.try_pop();
+            wtc::mutex m;
+            m.lock();
+            m.unlock();
+            auto t = wtc::spawn(worker, nullptr);
+            t.join();
+            return got ? *got : 0;
+          }
+          CPP
+          clang++ -std=c++17 -Ishim -fsyntax-only -Wall -Werror /tmp/all.cpp
+
+  # The real thing. Needs a Clang built from the pinned ClangIR revision
+  # with CLANG_ENABLE_CIR=ON, which takes too long to build per run. Set
+  # the repository variable WTC_TOOLCHAIN_IMAGE to a container that has
+  # it installed under /opt/llvm, and this job starts running. Until
+  # then it is skipped rather than red. See docs/toolchain.md.
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    if: vars.WTC_TOOLCHAIN_IMAGE != ''
+    container:
+      image: ${{ vars.WTC_TOOLCHAIN_IMAGE }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: |
+          cmake -G Ninja -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DMLIR_DIR=/opt/llvm/lib/cmake/mlir \
+            -DLLVM_DIR=/opt/llvm/lib/cmake/llvm \
+            -DClang_DIR=/opt/llvm/lib/cmake/clang
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: cmake --build build --target check-wtc
