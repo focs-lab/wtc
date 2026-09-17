@@ -11,7 +11,8 @@ for that program rather than for the general case.
 
 ## Status
 
-Early. What exists today is one vertical slice, and it is not finished:
+Early. The project builds and its tests pass against the pinned toolchain, but
+what exists is one vertical slice and it is not finished:
 
 | Piece | State |
 | --- | --- |
@@ -40,37 +41,35 @@ own commits yet; it exists so that when it does, everyone can get them. See
 ```sh
 git clone --recurse-submodules https://github.com/focs-lab/wtc
 cd wtc
+```
 
-# 1. Build Clang, LLVM and MLIR with ClangIR enabled. Hours on a laptop,
-#    minutes on a machine with many cores. Prefer the prebuilt toolchain
-#    image if you have access to it; see docs/toolchain.md.
-cmake -G Ninja -S llvm/llvm -B build-llvm \
-  -DLLVM_ENABLE_PROJECTS="clang;mlir" \
-  -DCLANG_ENABLE_CIR=ON \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DLLVM_ENABLE_ASSERTIONS=ON \
-  -DLLVM_CCACHE_BUILD=ON
-cmake --build build-llvm
+The quickest way in is the prebuilt toolchain image, which is what CI uses:
 
-# 2. Build WTC against it.
+```sh
+docker run --rm -it -v "$PWD:/src" -w /src \
+  ghcr.io/focs-lab/wtc-toolchain:llvm-<pin>
+
 cmake -G Ninja -S . -B build \
-  -DMLIR_DIR=$PWD/build-llvm/lib/cmake/mlir \
-  -DLLVM_DIR=$PWD/build-llvm/lib/cmake/llvm \
-  -DClang_DIR=$PWD/build-llvm/lib/cmake/clang
+  -DCMAKE_BUILD_TYPE=Release \
+  -DMLIR_DIR=/opt/llvm/lib/cmake/mlir \
+  -DLLVM_DIR=/opt/llvm/lib/cmake/llvm \
+  -DClang_DIR=/opt/llvm/lib/cmake/clang \
+  -DLLVM_EXTERNAL_LIT="$(command -v lit)" \
+  -DCMAKE_BUILD_RPATH=/opt/llvm/lib
 cmake --build build
-
-# 3. Run the tests.
 cmake --build build --target check-wtc
 ```
 
-Two things about that first step. Build outside `llvm/`, as above, or the
-submodule shows up permanently dirty. And pick the job count deliberately: a
-Clang build with assertions needs roughly 2.5 GiB per job, so memory bounds it
-before core count does.
+On Apple Silicon add `--platform linux/amd64`; the image is x86-64 only.
 
-Budget the disk too. The checkout is a couple of gigabytes and a Release build
-with assertions is tens of gigabytes more. A Debug build of Clang and MLIR is
-far larger again and is rarely what you want here.
+To build the toolchain yourself instead, follow `docs/toolchain.md`. It carries
+the exact flags, the measured time, memory and disk it took, and the three
+defaults that silently break testing if you leave them out.
+
+Two things to know either way. Build the toolchain outside `llvm/`, or the
+submodule shows up permanently dirty, because the superproject's ignore rules
+do not reach inside it. And pick the job count from the machine's memory rather
+than its core count.
 
 ## Layout
 

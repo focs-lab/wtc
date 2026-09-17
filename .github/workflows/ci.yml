@@ -11,11 +11,11 @@ concurrency:
 
 jobs:
   # Cheap and green from day one: the shim is plain C++ and needs no
-  # toolchain of ours. This job exists so that "CI is green" means
-  # something before the heavy job can run at all.
+  # toolchain of ours. Pinned to a release rather than ubuntu-latest,
+  # because a required check must not move under us.
   shim:
     name: Shim headers compile
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Install compilers
@@ -51,27 +51,55 @@ jobs:
           CPP
           clang++ -std=c++17 -Ishim -fsyntax-only -Wall -Werror /tmp/all.cpp
 
-  # The real thing. Needs a Clang built from the pinned ClangIR revision
-  # with CLANG_ENABLE_CIR=ON, which takes too long to build per run. Set
-  # the repository variable WTC_TOOLCHAIN_IMAGE to a container that has
-  # it installed under /opt/llvm, and this job starts running. Until
-  # then it is skipped rather than red. See docs/toolchain.md.
-  build:
-    name: Build and test
-    runs-on: ubuntu-latest
+  # Which toolchain image this commit needs, derived from the submodule pin
+  # rather than configured separately. The two cannot drift apart.
+  toolchain:
+    name: Resolve toolchain image
+    runs-on: ubuntu-24.04
     if: vars.WTC_TOOLCHAIN_IMAGE != ''
-    container:
-      image: ${{ vars.WTC_TOOLCHAIN_IMAGE }}
+    outputs:
+      image: ${{ steps.pick.outputs.image }}
+      rev:   ${{ steps.pick.outputs.rev }}
     steps:
       - uses: actions/checkout@v4
+      - id: pick
+        run: |
+          set -euo pipefail
+          rev=$(git rev-parse HEAD:llvm)
+          echo "rev=$rev"                                                 >> "$GITHUB_OUTPUT"
+          echo "image=${{ vars.WTC_TOOLCHAIN_IMAGE }}:llvm-${rev:0:12}"   >> "$GITHUB_OUTPUT"
+      - name: A toolchain image must exist for this pin
+        run: |
+          docker manifest inspect "${{ steps.pick.outputs.image }}" >/dev/null || {
+            echo "::error::No toolchain image for llvm pin ${{ steps.pick.outputs.rev }}."
+            echo "::error::Build and push one before moving the pin. See docs/toolchain.md."
+            exit 1; }
+
+  build:
+    name: Build and test
+    needs: toolchain
+    runs-on: ubuntu-24.04
+    container:
+      image: ${{ needs.toolchain.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: The image matches the pin
+        run: test "$WTC_LLVM_REV" = "${{ needs.toolchain.outputs.rev }}"
       - name: Configure
         run: |
           cmake -G Ninja -S . -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DMLIR_DIR=/opt/llvm/lib/cmake/mlir \
             -DLLVM_DIR=/opt/llvm/lib/cmake/llvm \
-            -DClang_DIR=/opt/llvm/lib/cmake/clang
+            -DClang_DIR=/opt/llvm/lib/cmake/clang \
+            -DLLVM_EXTERNAL_LIT="$(command -v lit)" \
+            -DCMAKE_BUILD_RPATH=/opt/llvm/lib
       - name: Build
         run: cmake --build build
+      - name: wtc-opt exists
+        run: test -x build/bin/wtc-opt
       - name: Test
-        run: cmake --build build --target check-wtc
+        run: cmake --build build --target check-wtc 2>&1 | tee lit.log
+      - name: The suite must not be empty
+        run: |
+          grep -qE 'Total Discovered Tests: [1-9][0-9]*' lit.log
