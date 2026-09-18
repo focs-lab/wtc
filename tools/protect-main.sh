@@ -4,7 +4,14 @@
 # script. That file is the record: it is reviewable in a diff and it travels
 # with the repository, which a setting clicked in a web interface does not.
 #
-# Prints what would change and stops. Pass --apply to actually change it.
+# Prints what would change and stops. Pass --apply to show the same difference
+# and then apply it after a confirmation, so one invocation and one token are
+# enough; running it twice only asks for the token twice.
+#
+# Prompts read from the terminal rather than standard input where there is
+# one. Do not paste this and the next command as one block regardless: a
+# prompt consumes the line queued behind it, and the command you meant to run
+# becomes the answer to a question.
 #
 # Needs a token with admin rights on the repository. The inherited one is
 # tried first and is usually not it: on a host where several tools export
@@ -29,6 +36,12 @@ command -v jq >/dev/null || { echo "нужен jq"; exit 1; }
 [ -f "$POLICY" ] || { echo "нет файла $POLICY"; exit 1; }
 
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+# A prompt belongs to the person, not to whatever is piped in. Falls back to
+# standard input where there is no terminal, so the script stays testable.
+# Opening it is the test. `[ -r /dev/tty ]` only reads the permission bits of
+# the device node, which are the same whether or not this process has a
+# controlling terminal, so it answers yes in exactly the case that breaks.
+if { : < /dev/tty; } 2>/dev/null; then ASK=/dev/tty; else ASK=/dev/stdin; fi
 
 echo "репозиторий: $SLUG, ветка: $BRANCH"
 echo
@@ -51,7 +64,7 @@ fetch() {
 
 if ! fetch; then
   echo "унаследованный токен не подошёл: $WHY"
-  read -rsp "  токен с правами администратора (не сохраняется, не отображается): " TOK; echo
+  read -rsp "  токен с правами администратора (не сохраняется, не отображается): " TOK < "$ASK"; echo
   [ -n "$TOK" ] || { echo "пустой токен"; exit 1; }
   export GH_TOKEN="$TOK"
   fetch || { echo "и этот токен не подошёл: $WHY"; exit 1; }
@@ -84,6 +97,15 @@ if [ "$APPLY" != "--apply" ]; then
   echo "ничего не изменено. Чтобы применить: $0 --apply"
   exit 0
 fi
+
+read -rp "применить это к $SLUG:$BRANCH? [y/N] " YES < "$ASK"
+# The prompt is in Russian, so the Russian yes is accepted too. Anything
+# else, an empty answer included, declines: the safe answer is the one you
+# get by pressing return.
+case "$YES" in
+  y|Y|yes|Yes|д|Д|да|Да) ;;
+  *) echo "ничего не изменено"; exit 0 ;;
+esac
 
 gh api -X PUT "repos/$SLUG/branches/$BRANCH/protection" --input "$POLICY" >/dev/null
 echo "применено"
