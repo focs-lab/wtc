@@ -1,27 +1,36 @@
 # Who must review what. GitHub requests these reviewers automatically.
 #
-# The rule is by layer, not by task: whoever does not own a directory
-# reviews it. That is the only mechanism keeping both of us current on
-# the other's half of the project.
+# Every rule names both of us, and that is deliberate rather than lazy.
+# GitHub never counts a pull request author's own approval, so a rule naming
+# one person makes that person's own changes to that path unmergeable by
+# anyone, admins included. The pin bump mandated by README.md is the clearest
+# case: only the supervisor will ever author one, so naming only the
+# supervisor would make every pin bump a dead end.
+#
+# CODEOWNERS also cannot express "both must approve" — two names on a line
+# means any one of them satisfies the rule. Who reviews what is therefore a
+# convention, written below and in README.md, not a mechanism:
+#
+#   the dialect, the passes and the tool   the student writes, the supervisor reviews
+#   tests, runtime, benchmarks, CI         the supervisor writes, the student reviews
+#   decisions and docs                     whoever did not write it
+#
+# The point of the split is that whoever does not own a part is the one who
+# reads it. That only works if both of us keep to it; nothing here enforces it.
 
-# Default: both.
 *                       @apaznikov @ZweZeya
 
-# Dialect, passes and the tool. Owned by the diploma work, reviewed by
-# the supervisor.
-/mlir/                  @apaznikov
-
-# Specification, implementations, measurements, infrastructure. Owned by
-# the supervisor, reviewed by the diploma student.
-/test/                  @ZweZeya
-/runtime/               @ZweZeya
-/benchmarks/            @ZweZeya
-/.github/               @ZweZeya
-
-# Decisions and docs: both, always.
+/mlir/                  @apaznikov @ZweZeya
+/shim/                  @apaznikov @ZweZeya
+/test/                  @apaznikov @ZweZeya
+/runtime/               @apaznikov @ZweZeya
+/benchmarks/            @apaznikov @ZweZeya
+/docker/                @apaznikov @ZweZeya
+/.github/               @apaznikov @ZweZeya
 /decisions/             @apaznikov @ZweZeya
 /docs/                  @apaznikov @ZweZeya
 
-# The pinned LLVM revision moves only by deliberate, separate pull request.
-/llvm                   @apaznikov
-/.gitmodules            @apaznikov
+# The pinned LLVM revision still moves only by its own deliberate pull
+# request, per decisions/0001. That is a rule about how, not about who.
+/llvm                   @apaznikov @ZweZeya
+/.gitmodules            @apaznikov @ZweZeya

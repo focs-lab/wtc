@@ -18,5 +18,3 @@ mlir_tablegen(WTCTypes.h.inc -gen-typedef-decls -typedefs-dialect=wtc)
 mlir_tablegen(WTCTypes.cpp.inc -gen-typedef-defs -typedefs-dialect=wtc)
 
 add_public_tablegen_target(MLIRWTCTypesIncGen)
-
-add_subdirectory(Transforms)

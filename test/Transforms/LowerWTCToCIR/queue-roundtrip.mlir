@@ -6,8 +6,8 @@
 // with the exact original operands -- a faithful round trip.
 
 !s32i = !cir.int<s, 32>
-!queue_i32 = !cir.record<struct "wtc::queue<int>" {!cir.ptr<!s32i>}>
-!shared_ptr_i32 = !cir.record<struct "std::shared_ptr<int>" {!cir.ptr<!s32i>, !cir.ptr<!s32i>}>
+!queue_i32 = !cir.struct<"wtc::queue<int>" {data !cir.ptr<!s32i>}>
+!shared_ptr_i32 = !cir.struct<"std::shared_ptr<int>" {data !cir.ptr<!s32i>, data !cir.ptr<!s32i>}>
 
 module {
   cir.func private @_ZN3wtc5queueIiE4pushERKi(!cir.ptr<!queue_i32>, !cir.ptr<!s32i>) [#cir.annotation<"wtc_queue_push">]

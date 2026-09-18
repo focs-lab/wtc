@@ -30,8 +30,8 @@ module {
   }
 
   cir.func @main() {
-    %q1 = cir.alloca !s32i, !cir.ptr<!s32i>, ["q1"] {alignment = 4 : i64}
-    %q2 = cir.alloca !s32i, !cir.ptr<!s32i>, ["q2"] {alignment = 4 : i64}
+    %q1 = cir.alloca "q1" align(4) : !cir.ptr<!s32i>
+    %q2 = cir.alloca "q2" align(4) : !cir.ptr<!s32i>
     %p = cir.get_global @producer : !cir.ptr<!cir.func<(!cir.ptr<!s32i>)>>
     cir.call @spawn(%p, %q1) : (!cir.ptr<!cir.func<(!cir.ptr<!s32i>)>>, !cir.ptr<!s32i>) -> ()
     cir.call @spawn(%p, %q2) : (!cir.ptr<!cir.func<(!cir.ptr<!s32i>)>>, !cir.ptr<!s32i>) -> ()

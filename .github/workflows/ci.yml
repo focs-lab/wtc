@@ -5,17 +5,24 @@ on:
     branches: [main]
   pull_request:
 
+# The toolchain image is private, because this organization forbids public
+# packages. `packages: read` lets each job's own short-lived token pull it,
+# so no long-lived personal token is stored as a secret anywhere.
+permissions:
+  contents: read
+  packages: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   # Cheap and green from day one: the shim is plain C++ and needs no
-  # toolchain of ours. This job exists so that "CI is green" means
-  # something before the heavy job can run at all.
+  # toolchain of ours. Pinned to a release rather than ubuntu-latest,
+  # because a required check must not move under us.
   shim:
     name: Shim headers compile
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Install compilers
@@ -51,27 +58,117 @@ jobs:
           CPP
           clang++ -std=c++17 -Ishim -fsyntax-only -Wall -Werror /tmp/all.cpp
 
-  # The real thing. Needs a Clang built from the pinned ClangIR revision
-  # with CLANG_ENABLE_CIR=ON, which takes too long to build per run. Set
-  # the repository variable WTC_TOOLCHAIN_IMAGE to a container that has
-  # it installed under /opt/llvm, and this job starts running. Until
-  # then it is skipped rather than red. See docs/toolchain.md.
-  build:
-    name: Build and test
-    runs-on: ubuntu-latest
-    if: vars.WTC_TOOLCHAIN_IMAGE != ''
-    container:
-      image: ${{ vars.WTC_TOOLCHAIN_IMAGE }}
+  # Which toolchain image this commit needs, derived from the submodule pin
+  # rather than configured separately. The two cannot drift apart.
+  toolchain:
+    name: Resolve toolchain image
+    runs-on: ubuntu-24.04
+    outputs:
+      image: ${{ steps.pick.outputs.image }}
+      rev:   ${{ steps.pick.outputs.rev }}
     steps:
       - uses: actions/checkout@v4
+      # A missing variable used to skip this job, which skipped `build` and
+      # left the run green. A green run that built nothing is the one outcome
+      # this workflow exists to prevent, so it fails instead.
+      - name: The toolchain image must be configured
+        env:
+          IMAGE_BASE: ${{ vars.WTC_TOOLCHAIN_IMAGE }}
+        run: |
+          test -n "$IMAGE_BASE" || {
+            echo "::error::Repository variable WTC_TOOLCHAIN_IMAGE is not set."
+            echo "::error::Publish a toolchain image and set it. See docs/toolchain.md."
+            exit 1; }
+      # GITHUB_ACTOR and the job token come from the runner environment rather
+      # than through `${{ }}`, so neither is ever spliced into a shell command.
+      # GHCR ignores the username and authenticates on the token alone; it is
+      # passed because docker login requires one.
+      - name: Sign in to the registry
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - id: pick
+        env:
+          IMAGE_BASE: ${{ vars.WTC_TOOLCHAIN_IMAGE }}
+        run: |
+          set -euo pipefail
+          rev=$(git rev-parse HEAD:llvm)
+          echo "rev=$rev"                                >> "$GITHUB_OUTPUT"
+          echo "image=${IMAGE_BASE}:llvm-${rev:0:12}"     >> "$GITHUB_OUTPUT"
+      # `docker manifest inspect` answers the same way for an image that was
+      # never pushed and for one this repository may not read. Naming only the
+      # first sends someone off to rebuild a toolchain that already exists.
+      - name: A toolchain image must exist and be readable
+        env:
+          IMAGE: ${{ steps.pick.outputs.image }}
+          REV: ${{ steps.pick.outputs.rev }}
+        run: |
+          docker manifest inspect "$IMAGE" >/dev/null || {
+            echo "::error::Cannot read $IMAGE for llvm pin $REV."
+            echo "::error::Either no image was pushed for this pin, or this"
+            echo "::error::repository has not been granted read access to the"
+            echo "::error::package. Check both. See docs/toolchain.md."
+            exit 1; }
+
+  build:
+    name: Build and test
+    needs: toolchain
+    runs-on: ubuntu-24.04
+    container:
+      image: ${{ needs.toolchain.outputs.image }}
+      # Container setup happens before any step, so it cannot reuse the login
+      # the previous job performed and needs the credentials given here.
+      # Untested for pull requests from forks: such a run gets a token scoped
+      # to the fork, and whether it may read this package is unknown because
+      # no fork exists yet. Both maintainers push branches to this repository.
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    # A container job's default shell is `sh`, not `bash`: GitHub runs steps as
+    # `sh -e {0}` here and as `bash -e {0}` on the runner itself. On Ubuntu `sh`
+    # is dash, which has no `pipefail` at all, so the test step below died on
+    # its own guard. Naming bash once for the job keeps every step in this
+    # workflow under one shell instead of two that differ by where they run.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: The image matches the pin
+        env:
+          REV: ${{ needs.toolchain.outputs.rev }}
+        run: test "$WTC_LLVM_REV" = "$REV"
+      # An empty LLVM_EXTERNAL_LIT is indistinguishable from an unset one:
+      # CMake falls back to a path that install trees never ship, warns once,
+      # and the failure surfaces much later and further away. Fail here.
+      - name: lit must be on PATH
+        run: command -v lit
       - name: Configure
         run: |
           cmake -G Ninja -S . -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DMLIR_DIR=/opt/llvm/lib/cmake/mlir \
             -DLLVM_DIR=/opt/llvm/lib/cmake/llvm \
-            -DClang_DIR=/opt/llvm/lib/cmake/clang
+            -DClang_DIR=/opt/llvm/lib/cmake/clang \
+            -DLLVM_EXTERNAL_LIT="$(command -v lit)"
       - name: Build
         run: cmake --build build
+      - name: wtc-opt exists
+        run: test -x build/bin/wtc-opt
+      # Without pipefail the step takes tee's exit status, which is always
+      # zero, and a failing suite reports green. Neither default shell enables
+      # it: the runner's `bash -e` has it off, and a container's `sh -e` has no
+      # such option to enable. GitHub's own `shell: bash` above does turn it on,
+      # so this line is redundant today and stays anyway: it is one line, it
+      # states the requirement where the pipe is, and it survives someone
+      # changing the shell back.
       - name: Test
-        run: cmake --build build --target check-wtc
+        run: |
+          set -o pipefail
+          cmake --build build --target check-wtc 2>&1 | tee lit.log
+      # lit prints the discovery line on failing runs too, so counting tests
+      # proves only that something ran. Assert the outcome as well.
+      - name: The suite ran and passed
+        run: |
+          grep -qE 'Total Discovered Tests: [1-9][0-9]*' lit.log
+          ! grep -qE '^ *(Failed|Unexpectedly Passed|Timed Out) *:' lit.log

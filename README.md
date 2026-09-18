@@ -11,7 +11,8 @@ for that program rather than for the general case.
 
 ## Status
 
-Early. What exists today is one vertical slice, and it is not finished:
+Early. The project builds and its tests pass against the pinned toolchain, but
+what exists is one vertical slice and it is not finished:
 
 | Piece | State |
 | --- | --- |
@@ -40,43 +41,52 @@ own commits yet; it exists so that when it does, everyone can get them. See
 ```sh
 git clone --recurse-submodules https://github.com/focs-lab/wtc
 cd wtc
+```
 
-# 1. Build Clang, LLVM and MLIR with ClangIR enabled. Hours on a laptop,
-#    minutes on a machine with many cores. Prefer the prebuilt toolchain
-#    image if you have access to it; see docs/toolchain.md.
-cmake -G Ninja -S llvm/llvm -B build-llvm \
-  -DLLVM_ENABLE_PROJECTS="clang;mlir" \
-  -DCLANG_ENABLE_CIR=ON \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DLLVM_ENABLE_ASSERTIONS=ON \
-  -DLLVM_CCACHE_BUILD=ON
-cmake --build build-llvm
+The quickest way in is the prebuilt toolchain image, which is what CI uses. It
+is a private package, because this organization does not allow public ones, so
+sign in to the registry once. Any token with `read:packages` will do:
 
-# 2. Build WTC against it.
+```sh
+gh auth refresh -h github.com -s read:packages
+gh auth token | docker login ghcr.io -u "$(gh api user -q .login)" --password-stdin
+```
+
+Then:
+
+```sh
+# <pin> is the first twelve characters of the pinned llvm revision:
+#   git rev-parse HEAD:llvm
+docker run --rm -it -v "$PWD:/src" -w /src \
+  ghcr.io/focs-lab/wtc-toolchain:llvm-<pin>
+
 cmake -G Ninja -S . -B build \
-  -DMLIR_DIR=$PWD/build-llvm/lib/cmake/mlir \
-  -DLLVM_DIR=$PWD/build-llvm/lib/cmake/llvm \
-  -DClang_DIR=$PWD/build-llvm/lib/cmake/clang
+  -DCMAKE_BUILD_TYPE=Release \
+  -DMLIR_DIR=/opt/llvm/lib/cmake/mlir \
+  -DLLVM_DIR=/opt/llvm/lib/cmake/llvm \
+  -DClang_DIR=/opt/llvm/lib/cmake/clang \
+  -DLLVM_EXTERNAL_LIT="$(command -v lit)"
 cmake --build build
-
-# 3. Run the tests.
 cmake --build build --target check-wtc
 ```
 
-Two things about that first step. Build outside `llvm/`, as above, or the
-submodule shows up permanently dirty. And pick the job count deliberately: a
-Clang build with assertions needs roughly 2.5 GiB per job, so memory bounds it
-before core count does.
+On Apple Silicon add `--platform linux/amd64`; the image is x86-64 only. If the
+pull is denied, you are either not signed in or not a member of the
+organization; `docs/toolchain.md` covers both.
 
-Budget the disk too. The checkout is a couple of gigabytes and a Release build
-with assertions is tens of gigabytes more. A Debug build of Clang and MLIR is
-far larger again and is rarely what you want here.
+To build the toolchain yourself instead, follow `docs/toolchain.md`. It carries
+the exact flags, the measured time, memory and disk it took, and the one
+default that has to be overridden or the test suite cannot run at all.
+
+Two things to know either way. Build the toolchain outside `llvm/`, or the
+submodule shows up permanently dirty, because the superproject's ignore rules
+do not reach inside it. And pick the job count from the machine's memory rather
+than its core count.
 
 ## Layout
 
 ```
 llvm/         llvm-project, pinned; a submodule on our fork's wtc/main
-build-llvm/   where LLVM is built; ignored, never inside llvm/
 mlir/         the dialect, the passes and wtc-opt
 shim/         the wtc:: headers a user program includes
 runtime/      specialised implementations the compiler substitutes in
@@ -84,6 +94,9 @@ benchmarks/   workloads and measurements
 test/         lit tests
 decisions/    why the project is built the way it is
 docs/         motivation, glossary, audit, related work
+docker/       the toolchain image CI and contributors build against
+tools/        publishing the toolchain, applying the branch policy
+.github/      the workflow and the review rules
 ```
 
 ## Contributing

@@ -77,18 +77,75 @@ subsequent pass cannot read the result, so the pipeline stops exactly where
 specialisation would begin. Output order is also unstable, because the results
 are held in a hash map.
 
-## Two risks in the path from real C++
+## The path from real C++, measured
 
-Neither shows up today, because every test is hand-written IR.
+Until September 2026 every test was hand-written IR and the passes had never
+seen compiler output. They have now. What follows is measured, not predicted;
+each claim carries the command behind it. The material is the diploma author's
+own deleted example, recovered from git history, in which one queue is written
+and read by one thread each and a second is written and read by two each, so
+the correct verdict is known in advance.
 
-The shim functions are declared `inline`. At any optimisation level the call
-disappears along with the annotation the lifting pass looks for, so lifting
-only works at `-O0`.
+```
+clang++ -std=c++17 -I shim -fclangir -emit-cir queue_example.cpp -o qe.cir
+wtc-opt qe.cir --lift-cir-to-wtc
+```
 
-The spawn shim returns `std::thread` by value while the analysis expects a
-function pointer in operand zero. For a non-trivial return type the ABI
-generally inserts a hidden first argument for the return slot, which shifts
-every index. The tests use a spawn that returns void.
+### Annotations survive, at every optimisation level
+
+The earlier worry was that the shim functions, being `inline`, would be
+substituted away along with the annotations the lifting pass looks for. They
+are not. All four annotations are present on `cir.func` at `-O0` and at `-O1`,
+and all six calls to the spawn shim remain in both.
+
+The reason is structural rather than lucky: `-emit-cir` stops before LLVM IR,
+and inlining happens in the middle end afterwards. At `-O0` the functions carry
+`no_inline`, at `-O1` `inline_hint`, and in neither case has anything been
+substituted yet. This risk can be struck off.
+
+### Returning by value shifts every operand index
+
+This is the one that breaks everything, and it breaks in two places.
+
+`wtc::spawn` returns `std::thread` by value. A non-trivial return type is
+passed as a hidden first pointer argument, so the call is
+
+```
+cir.call @_ZN3wtc5spawnEPFvvE(%ret_slot, %fn) : (!cir.ptr<!rec_std..thread>, !cir.ptr<!cir.func<()>>) -> ()
+```
+
+The analysis reads operand zero expecting a `cir.get_global` naming the thread
+entry point. Operand zero is the return slot, so the lookup fails and the call
+is skipped. All six spawns are skipped, no thread ever gets an identifier, and
+the analysis prints nothing at all.
+
+`queue::try_pop` returns `std::shared_ptr<T>` by value, with the same
+consequence and one more: the CIR call now returns **void**, because the result
+travels through the hidden argument. The lifting pass calls `op.getResult()` on
+it, which on a zero-result operation is not a diagnostic but a segmentation
+fault. Lifting the queue example crashes inside `LiftQueueCallPattern`.
+
+`queue::push` is unaffected: it returns void already, so the queue really is
+operand zero there.
+
+### The mutex path works, start to finish
+
+With no return values in play, everything lines up. The record type is named
+exactly `wtc::mutex`, which is what the type converter compares against;
+the annotations are in place; `lock` and `unlock` take the mutex as operand
+zero and return void. Lifting the mutex example produces two dialect
+operations. That is the first time any part of this project has consumed real
+compiler output.
+
+### What this adds up to
+
+Half the pipeline is sound and the other half is blocked by one cause. Every
+queue-side failure traces to operands being read by fixed index when the
+calling convention put something else there. The shape of a fix is visible
+from here: read arguments through the interface that already accounts for
+this, and treat a call with no result as a case to handle rather than one to
+assume away. None of that is attempted in this document; it is the work, not
+the diagnosis.
 
 ## Infrastructure
 
