@@ -89,12 +89,18 @@ struct LowerQueuePushPattern : public OpConversionPattern<QueuePushOp> {
             adaptor.getQueue()
         ).getResult(0);
 
-        rewriter.replaceOpWithNewOp<cir::CallOp>(
-            op,
+
+        auto calleeFunc = SymbolTable::lookupNearestSymbolFrom<cir::FuncOp>(op, calleeAttr);
+        Type returnType = calleeFunc ? calleeFunc.getFunctionType().getReturnType() : Type{};
+
+        cir::CallOp::create(
+            rewriter,
+            op.getLoc(),
             calleeAttr,
-            /*returnType=*/Type{},
+            returnType,
             ValueRange{queueAsCir, adaptor.getValue()}
         );
+        rewriter.eraseOp(op);
 
         return success();
     }

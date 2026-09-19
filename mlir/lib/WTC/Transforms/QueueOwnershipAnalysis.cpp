@@ -17,6 +17,8 @@ using namespace mlir::wtc;
 struct QueueAccessInfo {
     llvm::SmallDenseSet<unsigned, 4> producers;
     llvm::SmallDenseSet<unsigned, 4> consumers;
+    llvm::SmallPtrSet<Operation *, 4> pushOps;
+    llvm::SmallPtrSet<Operation *, 4> popOps;
 };
 
 struct ThreadInstance {
@@ -216,8 +218,10 @@ struct QueueOwnershipAnalysisPass
             QueueAccessInfo &info = queueAccesses[root];
             if (isPush) {
                 info.producers.insert(inst.threadId);
+                info.pushOps.insert(op);
             } else {
                 info.consumers.insert(inst.threadId);
+                info.popOps.insert(op);
             }
 
             llvm::outs()
@@ -249,25 +253,26 @@ struct QueueOwnershipAnalysisPass
                 << "\n  producers: " << producerCount << "\n"
                 << "  consumers: " << consumerCount << "\n";
 
-            if (producerCount == 1 &&
-                consumerCount == 1) {
-                llvm::outs() << "  classification: SPSC\n";
+            StringRef classification;
+            if (producerCount == 1 && consumerCount == 1) {
+                classification = "SPSC";
+            } else if (producerCount > 1 && consumerCount == 1) {
+                classification = "MPSC";
+            } else if (producerCount == 1 && consumerCount > 1) {
+                classification = "SPMC";
+            } else if (producerCount > 1 && consumerCount > 1) {
+                classification = "MPMC";
+            } else {
+                classification = "UNKNOWN";
             }
-            else if (producerCount > 1 &&
-                    consumerCount == 1) {
-                llvm::outs() << "  classification: MPSC\n";
-            }
-            else if (producerCount == 1 &&
-                    consumerCount > 1) {
-                llvm::outs() << "  classification: SPMC\n";
-            }
-            else if (producerCount > 1 &&
-                    consumerCount > 1) {
-                llvm::outs() << "  classification: MPMC\n";
-            }
-            else {
-                llvm::outs() << "  classification: UNKNOWN\n";
-            }
+
+            llvm::outs() << "  classification: " << classification << "\n";
+
+            auto kindAttr = StringAttr::get(&getContext(), classification);
+            for (Operation *pushOp : info.pushOps)
+                pushOp->setAttr(kQueueKindAttrName, kindAttr);
+            for (Operation *popOp : info.popOps)
+                popOp->setAttr(kQueueKindAttrName, kindAttr);
         }
     }
 };

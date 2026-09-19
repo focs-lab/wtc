@@ -9,9 +9,16 @@ namespace mlir::wtc {
         ThreadSpawn
     };
 
+    inline constexpr StringRef kQueueKindAttrName = "wtc.queue_kind";
+
     bool isWTCAnnotatedCall(cir::CallOp op, StringRef annotation);
 
+    bool funcHasAnnotation(cir::FuncOp funcOp, StringRef annotation);
+
     SemanticOpKind getSemanticKind(cir::FuncOp funcOp);
+
+    Type deriveQueueElementTypeFromPush(cir::FuncOp pushFunc);
+    Type deriveQueueElementTypeFromPop(cir::FuncOp popFunc);
 
     // Walks backward from v through pass-through casts -- cir.cast and the
     // single-operand form of builtin.unrealized_conversion_cast -- to
