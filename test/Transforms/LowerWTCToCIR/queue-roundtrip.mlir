@@ -1,9 +1,11 @@
-// RUN: wtc-opt %s --lift-cir-to-wtc --lower-wtc-to-cir | FileCheck %s
+// RUN: wtc-opt %s --lift-cir-to-wtc --lower-wtc-to-cir --reconcile-unrealized-casts | FileCheck %s
 
 // Lifting a push/try_pop call to wtc.queue_push/queue_pop and then
 // lowering back, with no intervening transform to pick a specialized
 // implementation, should reconstruct calls to the exact original functions
-// with the exact original operands -- a faithful round trip.
+// with the exact original operands -- a faithful round trip. The casts the
+// two passes leave behind cancel under --reconcile-unrealized-casts, which
+// the real pipeline runs for the same reason.
 
 !s32i = !cir.int<s, 32>
 !queue_i32 = !cir.struct<"wtc::queue<int>" {data !cir.ptr<!s32i>}>

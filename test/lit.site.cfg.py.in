@@ -2,6 +2,7 @@
 
 config.llvm_tools_dir = lit_config.substitute("@LLVM_TOOLS_DIR@")
 config.wtc_obj_root = "@WTC_BINARY_DIR@"
+config.wtc_src_root = "@WTC_SOURCE_DIR@"
 config.llvm_shlib_ext = "@SHLIBEXT@"
 
 import lit.llvm

@@ -1,4 +1,4 @@
-// RUN: wtc-opt %s --queue-ownership-analysis | FileCheck %s
+// RUN: wtc-opt %s --queue-ownership-analysis 2>&1 >/dev/null | FileCheck %s
 
 // The queue is stack-allocated in main (not a global) and handed to both
 // worker functions as their sole parameter via spawn's context argument.
@@ -38,7 +38,4 @@ module {
   }
 }
 
-// CHECK: Queue
-// CHECK-NEXT: producers: 1
-// CHECK-NEXT: consumers: 1
-// CHECK-NEXT: classification: SPSC
+// CHECK: queue %q: spsc (producers: 1, consumers: 1)

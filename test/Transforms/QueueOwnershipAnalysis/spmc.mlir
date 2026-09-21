@@ -1,4 +1,4 @@
-// RUN: wtc-opt %s --queue-ownership-analysis | FileCheck %s
+// RUN: wtc-opt %s --queue-ownership-analysis 2>&1 >/dev/null | FileCheck %s
 
 // One producer thread, three consumer threads, one queue -> SPMC.
 
@@ -53,7 +53,4 @@ module {
   }
 }
 
-// CHECK: Queue @q
-// CHECK-NEXT: producers: 1
-// CHECK-NEXT: consumers: 3
-// CHECK-NEXT: classification: SPMC
+// CHECK: queue @q: spmc (producers: 1, consumers: many)

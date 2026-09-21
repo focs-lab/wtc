@@ -1,4 +1,5 @@
 #include "WTC/WTCDialect.h"
+#include "WTC/WTCAttrs.h"
 #include "WTC/WTCOps.h"
 #include "WTC/WTCTypes.h"
 
@@ -16,4 +17,5 @@ void WTCDialect::initialize() {
       >();
 
   registerTypes();
+  registerAttributes();
 }

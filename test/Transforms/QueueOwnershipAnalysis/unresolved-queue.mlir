@@ -1,4 +1,4 @@
-// RUN: wtc-opt %s --queue-ownership-analysis | FileCheck %s
+// RUN: wtc-opt %s --queue-ownership-analysis 2>&1 >/dev/null | FileCheck %s
 
 // producer's queue arrives as a function parameter, but it's spawned via the
 // zero-argument spawn() overload -- so its thread context resolves fine
@@ -29,6 +29,9 @@ module {
   }
 }
 
-// CHECK: THREAD T0
-// CHECK: Could not resolve queue instance for T0
-// CHECK-NOT: classification:
+// Nothing was bound to the parameter, so the access cannot be attributed to
+// any object. That is not silence and not a guess: the access is reported
+// unresolvable, every queue of its type is unknown, and no verdict claims
+// a producer count for a queue nobody could identify.
+// CHECK: queue access is unresolvable
+// CHECK-NOT: producers:

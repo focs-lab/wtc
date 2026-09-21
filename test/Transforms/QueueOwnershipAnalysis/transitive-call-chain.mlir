@@ -1,4 +1,4 @@
-// RUN: wtc-opt %s --queue-ownership-analysis | FileCheck %s
+// RUN: wtc-opt %s --queue-ownership-analysis 2>&1 >/dev/null | FileCheck %s
 
 // The queue is bound at the spawn site, but the actual push happens several
 // ordinary-call layers deeper: spawn(f1, &q) -> f1 calls f2 -> f2 calls f3
@@ -60,8 +60,5 @@ module {
   }
 }
 
-// CHECK-NOT: Could not resolve
-// CHECK: Queue
-// CHECK-NEXT: producers: 1
-// CHECK-NEXT: consumers: 1
-// CHECK-NEXT: classification: SPSC
+// CHECK-NOT: unresolvable
+// CHECK: queue %q: spsc (producers: 1, consumers: 1)
