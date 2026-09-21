@@ -205,14 +205,23 @@ practical and what previous attempts lacked.
 
 ## What exists today
 
-One slice, incomplete. The dialect has four operations and two types. Lifting
-and lowering round-trip on hand-written IR. An ownership analysis classifies
-queues by producer and consumer count and prints the result.
+One slice, and it now runs end to end. The dialect has four operations, two
+types and a topology attribute. Lifting reads what the compiler actually
+emits. The ownership analysis counts threads rather than spawn sites, resolves
+parameters by index through the call site, and answers `unknown` wherever it
+cannot be sure. A specialisation pass acts on that verdict by rewriting one
+constant: the topology tag a queue's constructor receives. `runtime/` holds
+the first specialised implementation, an unbounded wait-free ring, and the
+tests compile the original prototype program through the whole pipeline and
+run it.
 
-No transformation is implemented. Nothing is measured. The analysis has known
-unsound cases, listed in `audit.md`, and must not be built upon until they are
-closed.
+The unsound cases `audit.md` listed are closed, each with a test that would
+fail if it came back. What remains is written down there too, and the shape of
+it is that the analysis gives up safely rather than often: one translation
+unit, and a queue reached through a member or the heap is `unknown`.
 
-The next honest step is not another pass. It is to write a specialised ring
-buffer by hand, measure it against the general-purpose queue on a workload that
-matters, and find out how large the prize actually is.
+The next honest step was never another pass. It was to write the ring by hand
+and find out how large the prize is. That measurement is what `benchmarks/`
+exists for, and until its numbers are in `benchmarks/results/`, the size of
+the prize is still an open question and this document should not be read as
+claiming otherwise.

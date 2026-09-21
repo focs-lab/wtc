@@ -11,19 +11,26 @@ for that program rather than for the general case.
 
 ## Status
 
-Early. The project builds and its tests pass against the pinned toolchain, but
-what exists is one vertical slice and it is not finished:
+The pipeline runs end to end on real C++: the compiler proves that a queue has
+one producer thread and one consumer thread, rewrites that object's
+construction to use a wait-free ring, and the program still produces the same
+output. What is not yet known is how much that is worth, which is what the
+measurements under way are for.
 
 | Piece | State |
 | --- | --- |
-| `wtc` dialect: `mutex` and `queue<T>` types, `lock`, `unlock`, `queue_push`, `queue_pop` | defined; no verifiers, no memory-effect or progress semantics yet |
-| Lifting CIR calls into the dialect | works on hand-written IR; the C++ path is not yet exercised end to end |
-| Queue ownership analysis: SPSC / MPSC / SPMC / MPMC | prints a verdict; known to be wrong for a spawn inside a loop, for the main thread, and for functions taking more than one queue |
-| Lowering back to CIR | faithful round trip; crashes on operations that carry no source-type attribute |
-| Specialised implementations | none yet |
+| `wtc` dialect: `mutex` and `queue<T>` types, four operations, a topology attribute | the operations are still tagged calls; no memory ordering or progress semantics yet |
+| Lifting CIR calls into the dialect | reads operands through the calling convention, including calls with a hidden return slot; driven from C++ source by the tests |
+| Queue ownership analysis | thread instances by call string; a spawn in a loop is many threads, `main` is a thread, parameters resolve by index; whatever it cannot resolve is `unknown` |
+| Specialisation | rewrites the topology tag of every queue proved SPSC; anything unclear keeps the general-purpose implementation |
+| Lowering back to CIR | faithful, restores the original argument attributes, and leaves no attribute of ours behind |
+| Specialised implementations | `runtime/spsc_ring.hpp`, an unbounded wait-free ring, with its own tests |
+| Measurements | harness, five workloads and eleven baselines in `benchmarks/`; results under `benchmarks/results/` |
 
-`docs/audit.md` lists the known defects in full. Do not build anything on top of
-the analysis verdict until they are closed.
+The analysis assumes one translation unit. Queues reached through a member or
+the heap are `unknown` and keep the general-purpose implementation, which is
+the safe direction but not the useful one. `docs/audit.md` records what is
+closed and what is not.
 
 ## Building
 
@@ -90,12 +97,13 @@ llvm/         llvm-project, pinned; a submodule on our fork's wtc/main
 mlir/         the dialect, the passes and wtc-opt
 shim/         the wtc:: headers a user program includes
 runtime/      specialised implementations the compiler substitutes in
-benchmarks/   workloads and measurements
-test/         lit tests
+benchmarks/   workloads, baselines and measured results
+examples/     small programs the tests compile through the whole pipeline
+test/         lit tests, including .cpp tests that start from source
 decisions/    why the project is built the way it is
 docs/         motivation, glossary, audit, related work
 docker/       the toolchain image CI and contributors build against
-tools/        publishing the toolchain, applying the branch policy
+tools/        wtc-cc (the whole pipeline), publishing, branch policy
 .github/      the workflow and the review rules
 ```
 

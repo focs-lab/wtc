@@ -1,10 +1,62 @@
 # Known defects
 
-State as of September 2026, from a review of the prototype before it moved
-into this repository. Two items marked below have since been fixed; the rest
-are open.
+State as of September 2026. The first review was of the prototype before it
+moved into this repository; the sections below have since been worked
+through, and each one now says what became of it. A defect is only marked
+closed where a test would fail if it came back.
 
-Read the first section before building anything on top of the analysis.
+Read "Still open" at the end before building anything on top of a verdict.
+
+## Closed, with the test that keeps them closed
+
+| Defect | What closed it | Test |
+|---|---|---|
+| A spawn inside a loop counted as one thread | thread multiplicity: a site inside a loop, or in a function that runs more than once, stands for many threads | `test/Integration/spawn_loop.cpp` |
+| `main` was not a thread and its accesses were discarded | `main` and the functions global constructors run are thread roots | `test/Integration/main_pushes.cpp`, `unresolved-thread-context.mlir` |
+| A parameter index was ignored, so a two-queue function credited everything to the first | parameters resolve through the call site of the instance, by index | `test/Integration/two_queues_one_worker.cpp` |
+| Two queues on one thread through one function collapsed | same mechanism; there is no per-function cache to collapse them | `param-passed-multi-instance.mlir` |
+| An unresolved access was dropped, turning "I don't know" into "nobody" | an unresolvable access poisons the queue's type; every queue of it becomes unknown | `unresolved-queue.mlir`, `test/Integration/queue_via_struct.cpp` |
+| Function pointers and virtual calls were invisible | a function whose address is taken other than as a spawn entry is a root callable from any thread | covered by the same poison path |
+| The spawn entry had to be a bare `cir.get_global` | the operand is traced through casts | `test/Integration/*` (the real shape) |
+| Real `spawn` and `try_pop` were not understood at all | operands read through the calling convention; the hidden return slot is recognised | every `test/Integration` test |
+| `try_pop` on real output segfaulted | `queue_pop` has a return-slot form, and a verifier that insists on exactly one form | `test/Integration/queue_example.cpp` |
+| Lowering dereferenced an optional attribute and crashed | it diagnoses instead | `check-wtc` runs lowering over every analysis test |
+| The verdict went to standard output and nothing could read it | it is an attribute on the IR, plus remarks | all of the above |
+| Output order came from a hash map | insertion-ordered, and the two-queue test matches in order | `multi-queue.mlir` |
+| No end-to-end example from C++ source | `examples/`, `tools/wtc-cc`, and seven `.cpp` lit tests | the tests themselves |
+| A test used unordered matching that would accept swapped verdicts | ordered matching | `multi-queue.mlir` |
+
+Two infrastructure defects were fixed before the move into this repository:
+the build hard-coded one developer's home directory, and `shim/queue.hpp` did
+not compile under any compiler because its move constructor was written
+`= operator delete`.
+
+## Still open
+
+**One translation unit is assumed.** A second unit touching the same global
+queue is invisible. Nothing enforces this; `wtc-cc` compiles one file.
+
+**Queues reached through a member or the heap are `unknown`.** Tracing stops
+at a load that is not from a stack slot written once. That is the safe
+direction, and it is also the direction that gives up on a large class of
+real programs. `test/Integration/queue_via_struct.cpp` pins the current
+behaviour so that improving it is a visible change.
+
+**The dialect still says nothing CIR did not.** The operations carry no
+memory ordering, no progress guarantee and no linearisation point; the
+topology attribute is the first fact in the dialect that CIR did not already
+have. The static checks the vision describes need the rest.
+
+**The ring's block size was chosen by measurement, not derived.** Below a few
+thousand slots the ring has a slow regime; `runtime/spsc_ring.hpp` records
+what was measured and why the default is what it is.
+
+---
+
+# The original review
+
+What follows is the review as first written, kept because the reasoning
+matters and because the table above refers to it.
 
 ## The ownership analysis is unsound in three ways
 
@@ -156,6 +208,7 @@ Fixed before the move into this repository:
 - `shim/queue.hpp` did not compile under any compiler: the move constructor was
   written `= operator delete`.
 
-Still open: there is no end-to-end example from C++ source, the tests cover
-only cases the code already handles, and one test uses unordered matching that
-would accept two queues having their verdicts swapped.
+Those three were the sharpest observation in this document and all three are
+now closed: there is an end-to-end example from C++ source, the tests cover
+cases the code got wrong rather than only the cases it handled, and the
+unordered match is ordered. See the table at the top.
