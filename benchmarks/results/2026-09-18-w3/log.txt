@@ -1,0 +1,211 @@
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 782369) -- timing measurement
+W3 closed  orig_generic              1.16 Mrec/s  p50 3633388  p99 3738011  p99.9 3769870 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 782401) -- timing measurement
+W3 open    orig_generic              1.08 Mrec/s  p50 3748834  p99 4260156  p99.9 4300164 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 782599) -- timing measurement
+W3 closed  shim_generic              1.05 Mrec/s  p50 4032369  p99 4148867  p99.9 4178478 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 782706) -- timing measurement
+W3 open    shim_generic              1.01 Mrec/s  p50 4088023  p99 4204269  p99.9 4238062 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 782762) -- timing measurement
+W3 closed  shim_spsc                 2.65 Mrec/s  p50   2411  p99    6170  p99.9  398802 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 782787) -- timing measurement
+W3 open    shim_spsc                 2.00 Mrec/s  p50   1588  p99    2996  p99.9   12108 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 782814) -- timing measurement
+W3 closed  ring_sp                   2.57 Mrec/s  p50   2377  p99    5560  p99.9  335835 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 782835) -- timing measurement
+W3 open    ring_sp                   2.00 Mrec/s  p50   2320  p99    4145  p99.9   65377 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 782856) -- timing measurement
+W3 closed  ring_inline               7.31 Mrec/s  p50 608868  p99  665358  p99.9  768716 ns
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 782871) -- timing measurement
+W3 open    ring_inline               2.00 Mrec/s  p50    725  p99    1378  p99.9    4565 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 782895) -- timing measurement
+W3 closed  moodycamel_rw_sp          2.38 Mrec/s  p50   2263  p99    4749  p99.9  309051 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 782938) -- timing measurement
+W3 open    moodycamel_rw_sp          2.00 Mrec/s  p50   2031  p99    3611  p99.9    9056 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 782960) -- timing measurement
+W3 closed  rigtorp_sp                2.78 Mrec/s  p50   3009  p99    8167  p99.9  405254 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 782982) -- timing measurement
+W3 open    rigtorp_sp                2.00 Mrec/s  p50   1645  p99    3302  p99.9    9852 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783007) -- timing measurement
+W3 closed  orig_generic              1.12 Mrec/s  p50 3745269  p99 3852822  p99.9 3884695 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783069) -- timing measurement
+W3 open    orig_generic              1.15 Mrec/s  p50 3558013  p99 3640263  p99.9 3673088 ns
+machine-lock: released after 9s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783102) -- timing measurement
+W3 closed  shim_generic              1.08 Mrec/s  p50 3888433  p99 4002047  p99.9 4032725 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783138) -- timing measurement
+W3 open    shim_generic              1.04 Mrec/s  p50 4152226  p99 4273742  p99.9 4304023 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783175) -- timing measurement
+W3 closed  shim_spsc                 2.83 Mrec/s  p50   2265  p99    5872  p99.9  323508 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783210) -- timing measurement
+W3 open    shim_spsc                 2.00 Mrec/s  p50   1468  p99    2971  p99.9    9645 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783231) -- timing measurement
+W3 closed  ring_sp                   2.61 Mrec/s  p50   2501  p99    6572  p99.9  298328 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783292) -- timing measurement
+W3 open    ring_sp                   2.00 Mrec/s  p50   2277  p99    4095  p99.9   45187 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783316) -- timing measurement
+W3 closed  ring_inline               8.69 Mrec/s  p50 509417  p99  558620  p99.9  682571 ns
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783336) -- timing measurement
+W3 open    ring_inline               2.00 Mrec/s  p50    772  p99    1610  p99.9    5487 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783362) -- timing measurement
+W3 closed  moodycamel_rw_sp          2.40 Mrec/s  p50   2559  p99    5772  p99.9  351690 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783386) -- timing measurement
+W3 open    moodycamel_rw_sp          2.00 Mrec/s  p50   2234  p99    4041  p99.9   20492 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783408) -- timing measurement
+W3 closed  rigtorp_sp                2.71 Mrec/s  p50   2958  p99    7385  p99.9  395124 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783439) -- timing measurement
+W3 open    rigtorp_sp                2.00 Mrec/s  p50   1641  p99    3188  p99.9   26699 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783462) -- timing measurement
+W3 closed  orig_generic              1.03 Mrec/s  p50 4179113  p99 4339685  p99.9 4381197 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783511) -- timing measurement
+W3 open    orig_generic              0.88 Mrec/s  p50 4867649  p99 5036823  p99.9 5086996 ns
+machine-lock: released after 13s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783561) -- timing measurement
+W3 closed  shim_generic              1.06 Mrec/s  p50 4000145  p99 4142132  p99.9 4177545 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783595) -- timing measurement
+W3 open    shim_generic              1.03 Mrec/s  p50 4122237  p99 4254159  p99.9 4288463 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783628) -- timing measurement
+W3 closed  shim_spsc                 3.32 Mrec/s  p50   3243  p99   10223  p99.9  408720 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783646) -- timing measurement
+W3 open    shim_spsc                 2.00 Mrec/s  p50   1652  p99    3223  p99.9   49275 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783673) -- timing measurement
+W3 closed  ring_sp                   3.11 Mrec/s  p50   6646  p99   17801  p99.9  458993 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783692) -- timing measurement
+W3 open    ring_sp                   2.00 Mrec/s  p50   1408  p99    2890  p99.9    7331 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783719) -- timing measurement
+W3 closed  ring_inline               9.90 Mrec/s  p50 444087  p99  476465  p99.9  598320 ns
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783733) -- timing measurement
+W3 open    ring_inline               2.00 Mrec/s  p50    545  p99    1108  p99.9    4947 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783816) -- timing measurement
+W3 closed  moodycamel_rw_sp          3.23 Mrec/s  p50   5148  p99   16407  p99.9  418912 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783912) -- timing measurement
+W3 open    moodycamel_rw_sp          2.00 Mrec/s  p50   1986  p99    3725  p99.9   32273 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783966) -- timing measurement
+W3 closed  rigtorp_sp                3.10 Mrec/s  p50  19500  p99  133476  p99.9  701693 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 783992) -- timing measurement
+W3 open    rigtorp_sp                2.00 Mrec/s  p50   1797  p99    3687  p99.9   83773 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784011) -- timing measurement
+W3 closed  orig_generic              0.81 Mrec/s  p50 5345459  p99 5554578  p99.9 5612729 ns
+machine-lock: released after 14s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784053) -- timing measurement
+W3 open    orig_generic              0.73 Mrec/s  p50 5949283  p99 6169342  p99.9 6224959 ns
+machine-lock: released after 14s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784101) -- timing measurement
+W3 closed  shim_generic              1.13 Mrec/s  p50 3700480  p99 3810986  p99.9 3852991 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784135) -- timing measurement
+W3 open    shim_generic              1.12 Mrec/s  p50 3800361  p99 3922272  p99.9 3945313 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784179) -- timing measurement
+W3 closed  shim_spsc                 3.04 Mrec/s  p50  10349  p99   27337  p99.9  535602 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784202) -- timing measurement
+W3 open    shim_spsc                 2.00 Mrec/s  p50   1750  p99    3290  p99.9   35695 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784245) -- timing measurement
+W3 closed  ring_sp                   3.05 Mrec/s  p50   6069  p99   18212  p99.9  505533 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784266) -- timing measurement
+W3 open    ring_sp                   2.00 Mrec/s  p50   2117  p99    3830  p99.9   51271 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784297) -- timing measurement
+W3 closed  ring_inline               9.84 Mrec/s  p50 447188  p99  481512  p99.9  592123 ns
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784313) -- timing measurement
+W3 open    ring_inline               2.00 Mrec/s  p50    555  p99    1080  p99.9    4596 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784334) -- timing measurement
+W3 closed  moodycamel_rw_sp          3.35 Mrec/s  p50   8223  p99   21054  p99.9  379204 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784351) -- timing measurement
+W3 open    moodycamel_rw_sp          2.00 Mrec/s  p50   2261  p99    4034  p99.9   30875 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784378) -- timing measurement
+W3 closed  rigtorp_sp                2.80 Mrec/s  p50 321759  p99 1092110  p99.9 1315699 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784400) -- timing measurement
+W3 open    rigtorp_sp                2.00 Mrec/s  p50   1566  p99    3142  p99.9   18976 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784426) -- timing measurement
+W3 closed  orig_generic              0.91 Mrec/s  p50 4741471  p99 4887842  p99.9 4924848 ns
+machine-lock: released after 12s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784502) -- timing measurement
+W3 open    orig_generic              0.77 Mrec/s  p50 5694837  p99 5916116  p99.9 5979272 ns
+machine-lock: released after 14s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784549) -- timing measurement
+W3 closed  shim_generic              1.12 Mrec/s  p50 3689389  p99 3789125  p99.9 3819270 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784587) -- timing measurement
+W3 open    shim_generic              1.06 Mrec/s  p50 3980747  p99 4105804  p99.9 4137069 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784623) -- timing measurement
+W3 closed  shim_spsc                 3.04 Mrec/s  p50   8309  p99   20640  p99.9  486253 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784651) -- timing measurement
+W3 open    shim_spsc                 2.00 Mrec/s  p50   1342  p99    2805  p99.9   21121 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784672) -- timing measurement
+W3 closed  ring_sp                   3.05 Mrec/s  p50   8441  p99   20936  p99.9  480721 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784713) -- timing measurement
+W3 open    ring_sp                   2.00 Mrec/s  p50   1442  p99    2813  p99.9    8453 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784747) -- timing measurement
+W3 closed  ring_inline               9.85 Mrec/s  p50 446786  p99  479616  p99.9  595938 ns
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784761) -- timing measurement
+W3 open    ring_inline               2.00 Mrec/s  p50    535  p99    1088  p99.9    4746 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784786) -- timing measurement
+W3 closed  moodycamel_rw_sp          3.06 Mrec/s  p50  10930  p99   21937  p99.9  455121 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784804) -- timing measurement
+W3 open    moodycamel_rw_sp          2.00 Mrec/s  p50   2068  p99    3797  p99.9   22934 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784826) -- timing measurement
+W3 closed  rigtorp_sp                3.39 Mrec/s  p50  14177  p99   94789  p99.9  538827 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 784845) -- timing measurement
+W3 open    rigtorp_sp                2.00 Mrec/s  p50   1678  p99    3523  p99.9   37120 ns
+machine-lock: released after 6s (exit 0)
+distinct checksums across all W3 runs: 1 (must be 1)

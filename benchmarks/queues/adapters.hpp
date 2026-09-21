@@ -1,0 +1,195 @@
+#pragma once
+
+// One shape for every queue under test:
+//
+//   void push(const T&);
+//   bool try_pop(T& out);   // false when empty, never blocks
+//
+// Variants that store shared_ptr<T> (the shim, its original, the typical
+// developer's queue, and the library queues instantiated the same way) copy
+// *p into out on pop, so every variant pays one copy of T on the consumer
+// side and the comparison isolates the queue. Variants that store T inline
+// are the ceiling: they show what the shared_ptr in the API costs.
+//
+// Which variant a name maps to is in variant_names() at the bottom and is
+// the list the workloads dispatch over.
+
+#include <condition_variable>
+#include <memory>
+#include <mutex>
+#include <queue>
+#include <string>
+#include <vector>
+
+#include "queue.hpp"          // shim, via -I shim
+#include "generic_original.hpp"
+#include "spsc_ring.hpp"      // runtime, via -I runtime
+
+#include "readerwriterqueue.h"
+#include "concurrentqueue.h"
+#include "SPSCQueue.h"
+#include <boost/lockfree/spsc_queue.hpp>
+#include <boost/lockfree/queue.hpp>
+
+// oneTBB is the library docs/vision.md names by name, so it is worth having
+// when it is installed; it is a system package rather than a vendored
+// header, so the tree has to build without it too.
+#if defined(WTC_HAVE_TBB)
+#include <tbb/concurrent_queue.h>
+#endif
+
+namespace wtc_bench {
+
+// B0: the shim as shipped, tag generic.
+template <class T> struct shim_generic {
+    wtc::queue<T> q;
+    void push(const T& v) { q.push(v); }
+    bool try_pop(T& out) { auto p = q.try_pop(); if (!p) return false; out = *p; return true; }
+};
+
+// hand: the shim with the tag a human (or the compiler) set to spsc.
+template <class T> struct shim_spsc {
+    wtc::queue<T> q{wtc::topology::spsc};
+    void push(const T& v) { q.push(v); }
+    bool try_pop(T& out) { auto p = q.try_pop(); if (!p) return false; out = *p; return true; }
+};
+
+// B0-orig: the original file, before the tag existed.
+template <class T> struct orig_generic {
+    wtc_orig::queue<T> q;
+    void push(const T& v) { q.push(v); }
+    bool try_pop(T& out) { auto p = q.try_pop(); if (!p) return false; out = *p; return true; }
+};
+
+// B1: what a developer writes first.
+template <class T> struct std_mutex_queue {
+    std::mutex m;
+    std::queue<std::shared_ptr<T>> q;
+    void push(const T& v) {
+        auto p = std::make_shared<T>(v);
+        std::lock_guard<std::mutex> g(m);
+        q.push(std::move(p));
+    }
+    bool try_pop(T& out) {
+        std::shared_ptr<T> p;
+        {
+            std::lock_guard<std::mutex> g(m);
+            if (q.empty()) return false;
+            p = std::move(q.front());
+            q.pop();
+        }
+        out = *p;
+        return true;
+    }
+};
+
+// B2: moodycamel ReaderWriterQueue, same slot type as the shim ...
+template <class T> struct moodycamel_rw_sp {
+    moodycamel::ReaderWriterQueue<std::shared_ptr<T>> q{1024};
+    void push(const T& v) { q.enqueue(std::make_shared<T>(v)); }
+    bool try_pop(T& out) { std::shared_ptr<T> p; if (!q.try_dequeue(p)) return false; out = *p; return true; }
+};
+// ... and inline, the unbounded ceiling.
+template <class T> struct moodycamel_rw_inline {
+    moodycamel::ReaderWriterQueue<T> q{1024};
+    void push(const T& v) { q.enqueue(v); }
+    bool try_pop(T& out) { return q.try_dequeue(out); }
+};
+
+// B3: moodycamel ConcurrentQueue, the general-purpose lock-free library.
+template <class T> struct moodycamel_cq_sp {
+    moodycamel::ConcurrentQueue<std::shared_ptr<T>> q;
+    void push(const T& v) { q.enqueue(std::make_shared<T>(v)); }
+    bool try_pop(T& out) { std::shared_ptr<T> p; if (!q.try_dequeue(p)) return false; out = *p; return true; }
+};
+
+// B4: Rigtorp SPSCQueue, bounded; push spins when full, which the workloads'
+// in-flight throttle keeps from happening.
+template <class T> struct rigtorp_sp {
+    rigtorp::SPSCQueue<std::shared_ptr<T>> q{65536};
+    void push(const T& v) { q.push(std::make_shared<T>(v)); }
+    bool try_pop(T& out) { auto* p = q.front(); if (!p) return false; out = **p; q.pop(); return true; }
+};
+template <class T> struct rigtorp_inline {
+    rigtorp::SPSCQueue<T> q{65536};
+    void push(const T& v) { q.push(v); }
+    bool try_pop(T& out) { auto* p = q.front(); if (!p) return false; out = *p; q.pop(); return true; }
+};
+
+// B5: boost::lockfree::spsc_queue, bounded ring.
+template <class T> struct boost_spsc_sp {
+    boost::lockfree::spsc_queue<std::shared_ptr<T>, boost::lockfree::capacity<65536>> q;
+    void push(const T& v) { auto p = std::make_shared<T>(v); while (!q.push(p)) {} }
+    bool try_pop(T& out) { std::shared_ptr<T> p; if (!q.pop(p)) return false; out = *p; return true; }
+};
+// B5': boost::lockfree::queue, the classic Michael-Scott MPMC. Its element
+// must be trivially copyable, so it carries an owning raw pointer.
+template <class T> struct boost_ms_queue {
+    boost::lockfree::queue<T*> q{65536};
+    void push(const T& v) { T* p = new T(v); while (!q.push(p)) {} }
+    bool try_pop(T& out) { T* p; if (!q.pop(p)) return false; out = *p; delete p; return true; }
+    ~boost_ms_queue() { T* p; while (q.pop(p)) delete p; }
+};
+
+#if defined(WTC_HAVE_TBB)
+// B6: oneTBB's unbounded multi-producer multi-consumer queue. Its interface
+// is already push/try_pop, so nothing is adapted away.
+template <class T> struct onetbb_cq_sp {
+    tbb::concurrent_queue<std::shared_ptr<T>> q;
+    void push(const T& v) { q.push(std::make_shared<T>(v)); }
+    bool try_pop(T& out) { std::shared_ptr<T> p; if (!q.try_pop(p)) return false; out = *p; return true; }
+};
+#endif
+
+// ceiling: our own ring with T inline and blocks of 65536 slots, which is
+// the footprint of the flat 64K-entry ring a person writes for exactly this
+// case (rigtorp_inline is that ring). Not what the compiler emits.
+template <class T> struct ring_inline {
+    wtc::rt::spsc_ring<T, 65536> q;
+    void push(const T& v) { q.push(v); }
+    bool try_pop(T& out) { return q.try_pop(out); }
+};
+// and our ring with shared_ptr slots but without the shim's tag branch, to
+// price the branch itself.
+template <class T> struct ring_sp {
+    wtc::rt::spsc_ring<std::shared_ptr<T>> q;
+    void push(const T& v) { q.push(std::make_shared<T>(v)); }
+    bool try_pop(T& out) { std::shared_ptr<T> p; if (!q.try_pop(p)) return false; out = *p; return true; }
+};
+
+inline const std::vector<std::string>& variant_names() {
+    static const std::vector<std::string> v = {
+        "shim_generic", "shim_spsc", "orig_generic", "std_mutex",
+        "moodycamel_rw_sp", "moodycamel_rw_inline", "moodycamel_cq_sp",
+        "rigtorp_sp", "rigtorp_inline", "boost_spsc_sp", "boost_ms_queue",
+        "ring_inline", "ring_sp",
+#if defined(WTC_HAVE_TBB)
+        "onetbb_cq_sp",
+#endif
+    };
+    return v;
+}
+
+// Dispatch by name: calls f.template operator()<Adapter<T>>().
+template <class T, class F>
+bool with_variant(const std::string& name, F&& f) {
+    if (name == "shim_generic")          { f.template run<shim_generic<T>>(); return true; }
+    if (name == "shim_spsc")             { f.template run<shim_spsc<T>>(); return true; }
+    if (name == "orig_generic")          { f.template run<orig_generic<T>>(); return true; }
+    if (name == "std_mutex")             { f.template run<std_mutex_queue<T>>(); return true; }
+    if (name == "moodycamel_rw_sp")      { f.template run<moodycamel_rw_sp<T>>(); return true; }
+    if (name == "moodycamel_rw_inline")  { f.template run<moodycamel_rw_inline<T>>(); return true; }
+    if (name == "moodycamel_cq_sp")      { f.template run<moodycamel_cq_sp<T>>(); return true; }
+    if (name == "rigtorp_sp")            { f.template run<rigtorp_sp<T>>(); return true; }
+    if (name == "rigtorp_inline")        { f.template run<rigtorp_inline<T>>(); return true; }
+    if (name == "boost_spsc_sp")         { f.template run<boost_spsc_sp<T>>(); return true; }
+    if (name == "boost_ms_queue")        { f.template run<boost_ms_queue<T>>(); return true; }
+    if (name == "ring_inline")           { f.template run<ring_inline<T>>(); return true; }
+    if (name == "ring_sp")               { f.template run<ring_sp<T>>(); return true; }
+#if defined(WTC_HAVE_TBB)
+    if (name == "onetbb_cq_sp")          { f.template run<onetbb_cq_sp<T>>(); return true; }
+#endif
+    return false;
+}
+
+}

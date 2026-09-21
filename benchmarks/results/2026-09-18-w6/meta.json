@@ -1,0 +1,11 @@
+{
+  "leg": "w6", "date": "2026-09-18T20:36:07Z",
+  "git_sha": "a778ce08b69123243c1c690aa8a4e8df05000b23", "git_dirty": true,
+  "kernel": "6.8.0-40-generic",
+  "cpu_model": "Intel(R) Xeon(R) w9-3495X",
+  "sockets": "1", "numa_nodes": "1",
+  "allowed_cpus": "4,5",
+  "smt_control": "on",
+  "build": "compiler=Clang 18.1.3;build_type=Release;march=native;sanitize=;check=OFF;",
+  "reps": 5
+}
