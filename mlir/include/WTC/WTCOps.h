@@ -4,6 +4,7 @@
 #include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/OpDefinition.h"
 
+#include "WTC/WTCAttrs.h"
 #include "WTC/WTCDialect.h"
 #include "WTC/WTCTypes.h"
 

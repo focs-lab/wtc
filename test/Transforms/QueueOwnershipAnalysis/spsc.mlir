@@ -1,4 +1,4 @@
-// RUN: wtc-opt %s --queue-ownership-analysis | FileCheck %s
+// RUN: wtc-opt %s --queue-ownership-analysis 2>&1 >/dev/null | FileCheck %s
 
 // One producer thread, one consumer thread, one queue -> SPSC.
 
@@ -35,7 +35,4 @@ module {
   }
 }
 
-// CHECK: Queue @q
-// CHECK-NEXT: producers: 1
-// CHECK-NEXT: consumers: 1
-// CHECK-NEXT: classification: SPSC
+// CHECK: queue @q: spsc (producers: 1, consumers: 1)

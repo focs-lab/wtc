@@ -1,4 +1,4 @@
-// RUN: wtc-opt %s --queue-ownership-analysis | FileCheck %s
+// RUN: wtc-opt %s --queue-ownership-analysis 2>&1 >/dev/null | FileCheck %s
 
 // The same producer/consumer functions are each spawned twice, bound to two
 // DIFFERENT stack-allocated queues at their respective spawn call sites. A
@@ -43,5 +43,6 @@ module {
 }
 
 // Two independent SPSC queues, not one shared MPMC queue.
-// CHECK-COUNT-2: classification: SPSC
-// CHECK-NOT: classification: MPMC
+// CHECK: queue %q1: spsc (producers: 1, consumers: 1)
+// CHECK: queue %q2: spsc (producers: 1, consumers: 1)
+// CHECK-NOT: mpmc

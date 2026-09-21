@@ -1,4 +1,4 @@
-// RUN: wtc-opt %s --queue-ownership-analysis | FileCheck %s
+// RUN: wtc-opt %s --queue-ownership-analysis 2>&1 >/dev/null | FileCheck %s
 
 // A queue_push with a resolvable queue root, but whose enclosing function
 // was never spawned as a thread entry point, should be skipped with a
@@ -29,5 +29,7 @@ module {
   }
 }
 
-// CHECK: Could not resolve thread context for orphan
-// CHECK-NOT: classification:
+// main calls orphan directly, so orphan runs on the main thread, which is a
+// thread like any other. An earlier version discarded this push with a
+// message, which turned "main pushes too" into "nobody pushes".
+// CHECK: queue @q: spsc (producers: 1, consumers: 0)

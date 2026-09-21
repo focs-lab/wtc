@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+#
+# The whole pipeline, one C++ file to one executable:
+#
+#   clang++ -fclangir -emit-cir        C++ -> CIR, with the shim's annotations
+#   wtc-opt                            lift, analyse, specialise, lower
+#   cir-translate --cir-to-llvmir      CIR -> LLVM IR
+#   clang++                            LLVM IR -> executable
+#
+#   wtc-cc [options] file.cpp -o prog
+#
+# Options of its own (everything else goes to both clang invocations):
+#   --keep DIR         keep the intermediate .cir/.ll files in DIR
+#   --no-specialize    run the analysis but leave every tag alone (the
+#                      "generic" build of an unmodified source)
+#   --force-spsc SYMS  tag these global queues spsc regardless of the verdict
+#                      (negative control; pass a comma-separated list)
+#   --toolchain DIR    where clang++, wtc-opt, cir-translate live (default:
+#                      wtc-opt from the build tree next to this repo, the
+#                      rest from PATH)
+#
+# The data-layout line cir-translate prints does not match the target's
+# string byte for byte and clang refuses the module; it is dropped and clang
+# supplies the target default, which is the same layout spelled its own way.
+set -euo pipefail
+
+HERE=$(cd "$(dirname "$0")" && pwd)
+ROOT=$(cd "$HERE/.." && pwd)
+
+KEEP=""; SPECIALIZE=1; FORCE=""; TOOLCHAIN=""; OUT="a.out"; SRC=""; PASSTHRU=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --keep) KEEP=$2; shift 2 ;;
+    --no-specialize) SPECIALIZE=0; shift ;;
+    --force-spsc) FORCE=$2; shift 2 ;;
+    --toolchain) TOOLCHAIN=$2; shift 2 ;;
+    -o) OUT=$2; shift 2 ;;
+    *.cpp|*.cc|*.cxx) SRC=$1; shift ;;
+    *) PASSTHRU+=("$1"); shift ;;
+  esac
+done
+[ -n "$SRC" ] || { echo "wtc-cc: no source file" >&2; exit 2; }
+
+find_tool() { # name, candidates...
+  local name=$1; shift
+  for c in "$@"; do [ -x "$c" ] && { echo "$c"; return; }; done
+  command -v "$name" || { echo "wtc-cc: cannot find $name" >&2; exit 2; }
+}
+# clang++ and cir-translate come from the LLVM toolchain; wtc-opt from this
+# repository's build tree. WTC_OPT in the environment overrides the latter,
+# which is how the lit tests point at the build they are testing.
+if [ -n "$TOOLCHAIN" ]; then
+  CLANGXX="$TOOLCHAIN/bin/clang++"; CIRTR="$TOOLCHAIN/bin/cir-translate"
+else
+  CLANGXX=$(find_tool clang++ "$ROOT/build-llvm/bin/clang++" /opt/llvm/bin/clang++)
+  CIRTR=$(find_tool cir-translate "$ROOT/build-llvm/bin/cir-translate" /opt/llvm/bin/cir-translate)
+fi
+WTCOPT=${WTC_OPT:-$(find_tool wtc-opt "$ROOT/build/bin/wtc-opt")}
+
+WORK=${KEEP:-$(mktemp -d)}
+mkdir -p "$WORK"
+[ -n "$KEEP" ] || trap 'rm -rf "$WORK"' EXIT
+base=$(basename "${SRC%.*}")
+
+"$CLANGXX" -std=c++17 -I"$ROOT/shim" -fclangir -emit-cir "${PASSTHRU[@]}" "$SRC" -o "$WORK/$base.cir"
+
+PASSES="--lift-cir-to-wtc --queue-ownership-analysis"
+if (( SPECIALIZE )); then
+  if [ -n "$FORCE" ]; then PASSES="$PASSES --wtc-specialize=force-spsc=$FORCE"; else PASSES="$PASSES --wtc-specialize"; fi
+fi
+PASSES="$PASSES --lower-wtc-to-cir --reconcile-unrealized-casts"
+# shellcheck disable=SC2086
+"$WTCOPT" "$WORK/$base.cir" $PASSES -o "$WORK/$base.wtc.cir"
+
+"$CIRTR" --cir-to-llvmir "$WORK/$base.wtc.cir" -o "$WORK/$base.raw.ll"
+sed '/^target datalayout/d' "$WORK/$base.raw.ll" > "$WORK/$base.ll"
+
+"$CLANGXX" "${PASSTHRU[@]}" "$WORK/$base.ll" -o "$OUT" -pthread

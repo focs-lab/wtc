@@ -9,8 +9,10 @@ def WTC_Dialect : Dialect {
     let description = [{A dialect that gives MLIR first-class knowledge of concurrency semantics: queues, locks and the threads that own them.}];
     let cppNamespace = "::mlir::wtc";
     let useDefaultTypePrinterParser = 1;
+    let useDefaultAttributePrinterParser = 1;
     let extraClassDeclaration = [{
       void registerTypes();
+      void registerAttributes();
     }];
 }
 

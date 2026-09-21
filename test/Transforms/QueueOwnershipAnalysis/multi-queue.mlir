@@ -1,4 +1,4 @@
-// RUN: wtc-opt %s --queue-ownership-analysis | FileCheck %s
+// RUN: wtc-opt %s --queue-ownership-analysis 2>&1 >/dev/null | FileCheck %s
 
 // Two independent queues in the same module, classified independently:
 // q1 is SPSC (one producer, one consumer), q2 is MPMC (two producers, two
@@ -77,11 +77,7 @@ module {
   }
 }
 
-// CHECK-DAG: Queue @q1
-// CHECK-DAG: producers: 1
-// CHECK-DAG: consumers: 1
-// CHECK-DAG: classification: SPSC
-// CHECK-DAG: Queue @q2
-// CHECK-DAG: producers: 2
-// CHECK-DAG: consumers: 2
-// CHECK-DAG: classification: MPMC
+// Ordered rather than unordered matching: the two verdicts must land on the
+// right queues, and matching them in any order would accept them swapped.
+// CHECK: queue @q1: spsc (producers: 1, consumers: 1)
+// CHECK: queue @q2: mpmc (producers: many, consumers: many)
