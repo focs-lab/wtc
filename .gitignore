@@ -14,3 +14,6 @@
 
 # Personal scratch
 MY_NOTES.md
+
+# Smoke legs run unreserved and are not results.
+/benchmarks/results/*-smoke/
