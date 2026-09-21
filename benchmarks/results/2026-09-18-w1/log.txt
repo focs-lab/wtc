@@ -1,0 +1,630 @@
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 738126) -- timing measurement
+W1 shim_generic           E64   spin      0.98 Mops/s
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 738510) -- timing measurement
+W1 shim_generic           E64   spin      0.97 Mops/s
+machine-lock: released after 21s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 739893) -- timing measurement
+W1 orig_generic           E8    spin      1.07 Mops/s
+machine-lock: released after 19s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 740206) -- timing measurement
+W1 shim_generic           E8    spin      1.09 Mops/s
+machine-lock: released after 19s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 740653) -- timing measurement
+W1 shim_spsc              E8    spin      3.51 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 741232) -- timing measurement
+W1 ring_sp                E8    spin      3.86 Mops/s
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 741632) -- timing measurement
+W1 ring_inline            E8    spin     51.06 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 741861) -- timing measurement
+W1 std_mutex              E8    spin      1.37 Mops/s
+machine-lock: released after 15s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 743171) -- timing measurement
+W1 moodycamel_rw_sp       E8    spin      3.43 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 744128) -- timing measurement
+W1 moodycamel_rw_inline   E8    spin     16.82 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 744304) -- timing measurement
+W1 moodycamel_cq_sp       E8    spin      3.05 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 745096) -- timing measurement
+W1 rigtorp_sp             E8    spin      4.26 Mops/s
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 745828) -- timing measurement
+W1 rigtorp_inline         E8    spin    309.67 Mops/s
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 745882) -- timing measurement
+W1 boost_spsc_sp          E8    spin      2.69 Mops/s
+machine-lock: released after 8s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 746461) -- timing measurement
+W1 boost_ms_queue         E8    spin      1.71 Mops/s
+machine-lock: released after 12s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 747280) -- timing measurement
+W1 orig_generic           E64   spin      1.24 Mops/s
+machine-lock: released after 16s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 748296) -- timing measurement
+W1 shim_generic           E64   spin      1.13 Mops/s
+machine-lock: released after 18s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 748601) -- timing measurement
+W1 shim_spsc              E64   spin      3.31 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 748620) -- timing measurement
+W1 ring_sp                E64   spin      3.24 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 748639) -- timing measurement
+W1 ring_inline            E64   spin    149.42 Mops/s
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 748649) -- timing measurement
+W1 std_mutex              E64   spin      1.51 Mops/s
+machine-lock: released after 14s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 749373) -- timing measurement
+W1 moodycamel_rw_sp       E64   spin      2.96 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 749874) -- timing measurement
+W1 moodycamel_rw_inline   E64   spin     10.52 Mops/s
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 750324) -- timing measurement
+W1 moodycamel_cq_sp       E64   spin      2.54 Mops/s
+machine-lock: released after 8s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 750945) -- timing measurement
+W1 rigtorp_sp             E64   spin      4.14 Mops/s
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 751315) -- timing measurement
+W1 rigtorp_inline         E64   spin    140.22 Mops/s
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 751437) -- timing measurement
+W1 boost_spsc_sp          E64   spin      2.49 Mops/s
+machine-lock: released after 8s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 752594) -- timing measurement
+W1 boost_ms_queue         E64   spin      1.87 Mops/s
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 753820) -- timing measurement
+W1 orig_generic           E256  spin      1.36 Mops/s
+machine-lock: released after 15s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 755009) -- timing measurement
+W1 shim_generic           E256  spin      1.33 Mops/s
+machine-lock: released after 15s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 755884) -- timing measurement
+W1 shim_spsc              E256  spin      2.65 Mops/s
+machine-lock: released after 8s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 756656) -- timing measurement
+W1 ring_sp                E256  spin      3.55 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 756674) -- timing measurement
+W1 ring_inline            E256  spin     42.37 Mops/s
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 756684) -- timing measurement
+W1 std_mutex              E256  spin      2.08 Mops/s
+machine-lock: released after 9s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 756743) -- timing measurement
+W1 moodycamel_rw_sp       E256  spin      2.96 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 756994) -- timing measurement
+W1 moodycamel_rw_inline   E256  spin      9.01 Mops/s
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 757012) -- timing measurement
+W1 moodycamel_cq_sp       E256  spin      1.91 Mops/s
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 757043) -- timing measurement
+W1 rigtorp_sp             E256  spin      3.74 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 757064) -- timing measurement
+W1 rigtorp_inline         E256  spin     49.81 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 757084) -- timing measurement
+W1 boost_spsc_sp          E256  spin      2.26 Mops/s
+machine-lock: released after 9s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 757267) -- timing measurement
+W1 boost_ms_queue         E256  spin      1.65 Mops/s
+machine-lock: released after 12s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 757910) -- timing measurement
+W1 orig_generic           E8    spin      1.19 Mops/s
+machine-lock: released after 17s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 758047) -- timing measurement
+W1 shim_generic           E8    spin      1.16 Mops/s
+machine-lock: released after 17s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 758107) -- timing measurement
+W1 shim_spsc              E8    spin      3.84 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 758124) -- timing measurement
+W1 ring_sp                E8    spin      3.54 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 758148) -- timing measurement
+W1 ring_inline            E8    spin     36.85 Mops/s
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 758161) -- timing measurement
+W1 std_mutex              E8    spin      1.37 Mops/s
+machine-lock: released after 15s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 758201) -- timing measurement
+W1 moodycamel_rw_sp       E8    spin      4.01 Mops/s
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 758365) -- timing measurement
+W1 moodycamel_rw_inline   E8    spin     17.66 Mops/s
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 758375) -- timing measurement
+W1 moodycamel_cq_sp       E8    spin      3.05 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 758597) -- timing measurement
+W1 rigtorp_sp             E8    spin      4.29 Mops/s
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 758613) -- timing measurement
+W1 rigtorp_inline         E8    spin    285.31 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 758623) -- timing measurement
+W1 boost_spsc_sp          E8    spin      2.79 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 758651) -- timing measurement
+W1 boost_ms_queue         E8    spin      1.92 Mops/s
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 758690) -- timing measurement
+W1 orig_generic           E64   spin      1.18 Mops/s
+machine-lock: released after 17s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 758737) -- timing measurement
+W1 shim_generic           E64   spin      1.23 Mops/s
+machine-lock: released after 16s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 758984) -- timing measurement
+W1 shim_spsc              E64   spin      3.11 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 759004) -- timing measurement
+W1 ring_sp                E64   spin      3.59 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 759024) -- timing measurement
+W1 ring_inline            E64   spin    148.16 Mops/s
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 759034) -- timing measurement
+W1 std_mutex              E64   spin      1.31 Mops/s
+machine-lock: released after 16s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 759095) -- timing measurement
+W1 moodycamel_rw_sp       E64   spin      3.44 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 759131) -- timing measurement
+W1 moodycamel_rw_inline   E64   spin     10.30 Mops/s
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 759144) -- timing measurement
+W1 moodycamel_cq_sp       E64   spin      2.57 Mops/s
+machine-lock: released after 8s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 759167) -- timing measurement
+W1 rigtorp_sp             E64   spin      3.61 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 759200) -- timing measurement
+W1 rigtorp_inline         E64   spin    136.93 Mops/s
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 759210) -- timing measurement
+W1 boost_spsc_sp          E64   spin      2.80 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 759423) -- timing measurement
+W1 boost_ms_queue         E64   spin      2.00 Mops/s
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 759456) -- timing measurement
+W1 orig_generic           E256  spin      2.02 Mops/s
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 759548) -- timing measurement
+W1 shim_generic           E256  spin      1.56 Mops/s
+machine-lock: released after 13s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 759683) -- timing measurement
+W1 shim_spsc              E256  spin      3.02 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 759732) -- timing measurement
+W1 ring_sp                E256  spin      2.81 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 759753) -- timing measurement
+W1 ring_inline            E256  spin     48.15 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 759771) -- timing measurement
+W1 std_mutex              E256  spin      1.98 Mops/s
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 759927) -- timing measurement
+W1 moodycamel_rw_sp       E256  spin      3.03 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 759952) -- timing measurement
+W1 moodycamel_rw_inline   E256  spin      8.48 Mops/s
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 760019) -- timing measurement
+W1 moodycamel_cq_sp       E256  spin      2.01 Mops/s
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 760404) -- timing measurement
+W1 rigtorp_sp             E256  spin      3.33 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 760441) -- timing measurement
+W1 rigtorp_inline         E256  spin     51.55 Mops/s
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 760451) -- timing measurement
+W1 boost_spsc_sp          E256  spin      2.19 Mops/s
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 760482) -- timing measurement
+W1 boost_ms_queue         E256  spin      1.65 Mops/s
+machine-lock: released after 12s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 760535) -- timing measurement
+W1 orig_generic           E8    spin      1.21 Mops/s
+machine-lock: released after 17s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 760584) -- timing measurement
+W1 shim_generic           E8    spin      1.08 Mops/s
+machine-lock: released after 18s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 760646) -- timing measurement
+W1 shim_spsc              E8    spin      3.17 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 760667) -- timing measurement
+W1 ring_sp                E8    spin      3.57 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 760891) -- timing measurement
+W1 ring_inline            E8    spin     36.16 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 760901) -- timing measurement
+W1 std_mutex              E8    spin      1.45 Mops/s
+machine-lock: released after 14s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 760938) -- timing measurement
+W1 moodycamel_rw_sp       E8    spin      3.29 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 760959) -- timing measurement
+W1 moodycamel_rw_inline   E8    spin     19.27 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 760972) -- timing measurement
+W1 moodycamel_cq_sp       E8    spin      3.03 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 761212) -- timing measurement
+W1 rigtorp_sp             E8    spin      3.78 Mops/s
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 761281) -- timing measurement
+W1 rigtorp_inline         E8    spin    281.52 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 761291) -- timing measurement
+W1 boost_spsc_sp          E8    spin      2.81 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 761314) -- timing measurement
+W1 boost_ms_queue         E8    spin      1.70 Mops/s
+machine-lock: released after 12s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 761360) -- timing measurement
+W1 orig_generic           E64   spin      1.18 Mops/s
+machine-lock: released after 17s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 761423) -- timing measurement
+W1 shim_generic           E64   spin      1.04 Mops/s
+machine-lock: released after 20s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 761620) -- timing measurement
+W1 shim_spsc              E64   spin      3.27 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 761640) -- timing measurement
+W1 ring_sp                E64   spin      3.18 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 761661) -- timing measurement
+W1 ring_inline            E64   spin    147.29 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 761671) -- timing measurement
+W1 std_mutex              E64   spin      1.41 Mops/s
+machine-lock: released after 14s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 761821) -- timing measurement
+W1 moodycamel_rw_sp       E64   spin      3.16 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 762006) -- timing measurement
+W1 moodycamel_rw_inline   E64   spin     10.54 Mops/s
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 762019) -- timing measurement
+W1 moodycamel_cq_sp       E64   spin      2.53 Mops/s
+machine-lock: released after 8s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 762046) -- timing measurement
+W1 rigtorp_sp             E64   spin      4.40 Mops/s
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 762063) -- timing measurement
+W1 rigtorp_inline         E64   spin    140.56 Mops/s
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 762076) -- timing measurement
+W1 boost_spsc_sp          E64   spin      2.61 Mops/s
+machine-lock: released after 8s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 762292) -- timing measurement
+W1 boost_ms_queue         E64   spin      2.16 Mops/s
+machine-lock: released after 9s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 762325) -- timing measurement
+W1 orig_generic           E256  spin      1.62 Mops/s
+machine-lock: released after 13s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 762372) -- timing measurement
+W1 shim_generic           E256  spin      1.51 Mops/s
+machine-lock: released after 13s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 762409) -- timing measurement
+W1 shim_spsc              E256  spin      2.72 Mops/s
+machine-lock: released after 8s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 762433) -- timing measurement
+W1 ring_sp                E256  spin      3.05 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 762457) -- timing measurement
+W1 ring_inline            E256  spin     46.77 Mops/s
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 762471) -- timing measurement
+W1 std_mutex              E256  spin      2.03 Mops/s
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 762499) -- timing measurement
+W1 moodycamel_rw_sp       E256  spin      2.99 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 762523) -- timing measurement
+W1 moodycamel_rw_inline   E256  spin      8.99 Mops/s
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 762733) -- timing measurement
+W1 moodycamel_cq_sp       E256  spin      2.05 Mops/s
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 762785) -- timing measurement
+W1 rigtorp_sp             E256  spin      3.55 Mops/s
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 762809) -- timing measurement
+W1 rigtorp_inline         E256  spin     50.09 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 762830) -- timing measurement
+W1 boost_spsc_sp          E256  spin      2.34 Mops/s
+machine-lock: released after 9s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 762891) -- timing measurement
+W1 boost_ms_queue         E256  spin      1.74 Mops/s
+machine-lock: released after 12s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 762950) -- timing measurement
+W1 orig_generic           E8    spin      1.15 Mops/s
+machine-lock: released after 17s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 762998) -- timing measurement
+W1 shim_generic           E8    spin      1.16 Mops/s
+machine-lock: released after 18s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 763058) -- timing measurement
+W1 shim_spsc              E8    spin      3.49 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 763074) -- timing measurement
+W1 ring_sp                E8    spin      3.42 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 763098) -- timing measurement
+W1 ring_inline            E8    spin     38.19 Mops/s
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 763111) -- timing measurement
+W1 std_mutex              E8    spin      1.37 Mops/s
+machine-lock: released after 15s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 763293) -- timing measurement
+W1 moodycamel_rw_sp       E8    spin      3.47 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 763313) -- timing measurement
+W1 moodycamel_rw_inline   E8    spin     14.11 Mops/s
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 763326) -- timing measurement
+W1 moodycamel_cq_sp       E8    spin      3.10 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 763351) -- timing measurement
+W1 rigtorp_sp             E8    spin      4.24 Mops/s
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 763370) -- timing measurement
+W1 rigtorp_inline         E8    spin    289.46 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 763380) -- timing measurement
+W1 boost_spsc_sp          E8    spin      2.54 Mops/s
+machine-lock: released after 8s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 763407) -- timing measurement
+W1 boost_ms_queue         E8    spin      1.86 Mops/s
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 763474) -- timing measurement
+W1 orig_generic           E64   spin      1.14 Mops/s
+machine-lock: released after 18s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 763756) -- timing measurement
+W1 shim_generic           E64   spin      1.08 Mops/s
+machine-lock: released after 18s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 763809) -- timing measurement
+W1 shim_spsc              E64   spin      3.53 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 763829) -- timing measurement
+W1 ring_sp                E64   spin      3.59 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 763851) -- timing measurement
+W1 ring_inline            E64   spin    145.75 Mops/s
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 763861) -- timing measurement
+W1 std_mutex              E64   spin      1.28 Mops/s
+machine-lock: released after 16s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 763914) -- timing measurement
+W1 moodycamel_rw_sp       E64   spin      2.94 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 763939) -- timing measurement
+W1 moodycamel_rw_inline   E64   spin     11.21 Mops/s
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 763953) -- timing measurement
+W1 moodycamel_cq_sp       E64   spin      2.60 Mops/s
+machine-lock: released after 8s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 763979) -- timing measurement
+W1 rigtorp_sp             E64   spin      3.67 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 764203) -- timing measurement
+W1 rigtorp_inline         E64   spin    135.66 Mops/s
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 764213) -- timing measurement
+W1 boost_spsc_sp          E64   spin      2.91 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 764233) -- timing measurement
+W1 boost_ms_queue         E64   spin      1.93 Mops/s
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 764267) -- timing measurement
+W1 orig_generic           E256  spin      1.65 Mops/s
+machine-lock: released after 12s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 764313) -- timing measurement
+W1 shim_generic           E256  spin      1.63 Mops/s
+machine-lock: released after 13s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 764381) -- timing measurement
+W1 shim_spsc              E256  spin      2.67 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 764406) -- timing measurement
+W1 ring_sp                E256  spin      3.15 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 764432) -- timing measurement
+W1 ring_inline            E256  spin     47.65 Mops/s
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 764473) -- timing measurement
+W1 std_mutex              E256  spin      1.86 Mops/s
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 764504) -- timing measurement
+W1 moodycamel_rw_sp       E256  spin      2.69 Mops/s
+machine-lock: released after 8s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 764676) -- timing measurement
+W1 moodycamel_rw_inline   E256  spin      9.32 Mops/s
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 764689) -- timing measurement
+W1 moodycamel_cq_sp       E256  spin      1.98 Mops/s
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 764927) -- timing measurement
+W1 rigtorp_sp             E256  spin      3.21 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 764946) -- timing measurement
+W1 rigtorp_inline         E256  spin     51.49 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 764956) -- timing measurement
+W1 boost_spsc_sp          E256  spin      2.32 Mops/s
+machine-lock: released after 9s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 765006) -- timing measurement
+W1 boost_ms_queue         E256  spin      1.81 Mops/s
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 765042) -- timing measurement
+W1 orig_generic           E8    spin      1.12 Mops/s
+machine-lock: released after 18s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 765291) -- timing measurement
+W1 shim_generic           E8    spin      1.20 Mops/s
+machine-lock: released after 17s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 765352) -- timing measurement
+W1 shim_spsc              E8    spin      3.74 Mops/s
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 765379) -- timing measurement
+W1 ring_sp                E8    spin      4.00 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 765456) -- timing measurement
+W1 ring_inline            E8    spin     34.09 Mops/s
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 765469) -- timing measurement
+W1 std_mutex              E8    spin      1.44 Mops/s
+machine-lock: released after 14s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 765509) -- timing measurement
+W1 moodycamel_rw_sp       E8    spin      3.68 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 765525) -- timing measurement
+W1 moodycamel_rw_inline   E8    spin     16.18 Mops/s
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 765538) -- timing measurement
+W1 moodycamel_cq_sp       E8    spin      3.06 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 765565) -- timing measurement
+W1 rigtorp_sp             E8    spin      4.18 Mops/s
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 765581) -- timing measurement
+W1 rigtorp_inline         E8    spin    352.80 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 765591) -- timing measurement
+W1 boost_spsc_sp          E8    spin      2.48 Mops/s
+machine-lock: released after 8s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 765617) -- timing measurement
+W1 boost_ms_queue         E8    spin      2.24 Mops/s
+machine-lock: released after 9s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 765663) -- timing measurement
+W1 orig_generic           E64   spin      1.19 Mops/s
+machine-lock: released after 17s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 765852) -- timing measurement
+W1 shim_generic           E64   spin      1.08 Mops/s
+machine-lock: released after 19s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 765902) -- timing measurement
+W1 shim_spsc              E64   spin      3.56 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 765925) -- timing measurement
+W1 ring_sp                E64   spin      3.71 Mops/s
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 765945) -- timing measurement
+W1 ring_inline            E64   spin    147.97 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 765958) -- timing measurement
+W1 std_mutex              E64   spin      1.43 Mops/s
+machine-lock: released after 14s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766011) -- timing measurement
+W1 moodycamel_rw_sp       E64   spin      3.88 Mops/s
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766071) -- timing measurement
+W1 moodycamel_rw_inline   E64   spin      9.28 Mops/s
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766241) -- timing measurement
+W1 moodycamel_cq_sp       E64   spin      2.46 Mops/s
+machine-lock: released after 9s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766268) -- timing measurement
+W1 rigtorp_sp             E64   spin      4.16 Mops/s
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766290) -- timing measurement
+W1 rigtorp_inline         E64   spin    139.47 Mops/s
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766300) -- timing measurement
+W1 boost_spsc_sp          E64   spin      2.29 Mops/s
+machine-lock: released after 9s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766326) -- timing measurement
+W1 boost_ms_queue         E64   spin      1.62 Mops/s
+machine-lock: released after 13s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766361) -- timing measurement
+W1 orig_generic           E256  spin      1.71 Mops/s
+machine-lock: released after 12s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766408) -- timing measurement
+W1 shim_generic           E256  spin      1.57 Mops/s
+machine-lock: released after 12s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766441) -- timing measurement
+W1 shim_spsc              E256  spin      2.85 Mops/s
+machine-lock: released after 8s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766464) -- timing measurement
+W1 ring_sp                E256  spin      3.02 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766690) -- timing measurement
+W1 ring_inline            E256  spin     48.09 Mops/s
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766701) -- timing measurement
+W1 std_mutex              E256  spin      2.04 Mops/s
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766729) -- timing measurement
+W1 moodycamel_rw_sp       E256  spin      3.14 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766755) -- timing measurement
+W1 moodycamel_rw_inline   E256  spin     10.49 Mops/s
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766769) -- timing measurement
+W1 moodycamel_cq_sp       E256  spin      1.88 Mops/s
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766813) -- timing measurement
+W1 rigtorp_sp             E256  spin      3.40 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766844) -- timing measurement
+W1 rigtorp_inline         E256  spin     50.36 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766854) -- timing measurement
+W1 boost_spsc_sp          E256  spin      2.34 Mops/s
+machine-lock: released after 8s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766885) -- timing measurement
+W1 boost_ms_queue         E256  spin      1.63 Mops/s
+machine-lock: released after 13s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766938) -- timing measurement
+W1 orig_generic           E64   yield      1.12 Mops/s
+machine-lock: released after 18s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 766986) -- timing measurement
+W1 shim_generic           E64   yield      1.08 Mops/s
+machine-lock: released after 18s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 767190) -- timing measurement
+W1 shim_spsc              E64   yield      4.04 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 767210) -- timing measurement
+W1 ring_inline            E64   yield    148.84 Mops/s
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 767221) -- timing measurement
+W1 orig_generic           E64   yield      1.07 Mops/s
+machine-lock: released after 19s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 767273) -- timing measurement
+W1 shim_generic           E64   yield      1.13 Mops/s
+machine-lock: released after 18s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 767322) -- timing measurement
+W1 shim_spsc              E64   yield      3.31 Mops/s
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 767342) -- timing measurement
+W1 ring_inline            E64   yield    148.43 Mops/s
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 767356) -- timing measurement
+W1 orig_generic           E64   yield      1.21 Mops/s
+machine-lock: released after 17s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 767606) -- timing measurement
+W1 shim_generic           E64   yield      1.15 Mops/s
+machine-lock: released after 18s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 767650) -- timing measurement
+W1 shim_spsc              E64   yield      3.83 Mops/s
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 767672) -- timing measurement
+W1 ring_inline            E64   yield    146.07 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 767685) -- timing measurement
+W1 shim_generic           E64   spin      1.08 Mops/s
+machine-lock: released after 18s (exit 0)

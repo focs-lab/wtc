@@ -1,0 +1,245 @@
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 811611) -- timing measurement
+W6 inline     slots 64     line 64       5.68 Mops/s
+W6 inline     slots 256    line 64       5.60 Mops/s
+W6 inline     slots 1024   line 64       5.77 Mops/s
+W6 inline     slots 4096   line 64       8.05 Mops/s
+W6 inline     slots 16384  line 64       8.14 Mops/s
+W6 inline     slots 256    line 128      5.20 Mops/s
+W6 inline     slots 4096   line 128      7.37 Mops/s
+W6 shared_ptr slots 256    line 64       2.62 Mops/s
+W6 shared_ptr slots 4096   line 64       2.52 Mops/s
+machine-lock: released after 38s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 811740) -- timing measurement
+W6 inline     slots 64     line 64       5.98 Mops/s
+W6 inline     slots 256    line 64       9.19 Mops/s
+W6 inline     slots 1024   line 64      47.05 Mops/s
+W6 inline     slots 4096   line 64      65.40 Mops/s
+W6 inline     slots 16384  line 64      62.59 Mops/s
+W6 inline     slots 256    line 128     68.12 Mops/s
+W6 inline     slots 4096   line 128     63.64 Mops/s
+W6 shared_ptr slots 256    line 64       3.13 Mops/s
+W6 shared_ptr slots 4096   line 64       3.23 Mops/s
+machine-lock: released after 20s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 811789) -- timing measurement
+W6 inline     slots 64     line 64       6.00 Mops/s
+W6 inline     slots 256    line 64      47.69 Mops/s
+W6 inline     slots 1024   line 64      65.81 Mops/s
+W6 inline     slots 4096   line 64      39.92 Mops/s
+W6 inline     slots 16384  line 64      69.67 Mops/s
+W6 inline     slots 256    line 128     62.92 Mops/s
+W6 inline     slots 4096   line 128     49.88 Mops/s
+W6 shared_ptr slots 256    line 64       3.18 Mops/s
+W6 shared_ptr slots 4096   line 64       3.48 Mops/s
+machine-lock: released after 18s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 814007) -- timing measurement
+W6 inline     slots 64     line 64       5.80 Mops/s
+W6 inline     slots 256    line 64       5.82 Mops/s
+W6 inline     slots 1024   line 64       5.99 Mops/s
+W6 inline     slots 4096   line 64       8.49 Mops/s
+W6 inline     slots 16384  line 64       8.45 Mops/s
+W6 inline     slots 256    line 128      5.69 Mops/s
+W6 inline     slots 4096   line 128     28.01 Mops/s
+W6 shared_ptr slots 256    line 64       3.20 Mops/s
+W6 shared_ptr slots 4096   line 64       3.25 Mops/s
+machine-lock: released after 32s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 814149) -- timing measurement
+W6 inline     slots 64     line 64       8.47 Mops/s
+W6 inline     slots 256    line 64      33.41 Mops/s
+W6 inline     slots 1024   line 64      41.00 Mops/s
+W6 inline     slots 4096   line 64      31.80 Mops/s
+W6 inline     slots 16384  line 64      38.21 Mops/s
+W6 inline     slots 256    line 128     33.85 Mops/s
+W6 inline     slots 4096   line 128     29.42 Mops/s
+W6 shared_ptr slots 256    line 64       3.28 Mops/s
+W6 shared_ptr slots 4096   line 64       3.88 Mops/s
+machine-lock: released after 18s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 814204) -- timing measurement
+W6 inline     slots 64     line 64       8.08 Mops/s
+W6 inline     slots 256    line 64      19.25 Mops/s
+W6 inline     slots 1024   line 64      18.97 Mops/s
+W6 inline     slots 4096   line 64      33.79 Mops/s
+W6 inline     slots 16384  line 64      24.63 Mops/s
+W6 inline     slots 256    line 128     36.10 Mops/s
+W6 inline     slots 4096   line 128     25.26 Mops/s
+W6 shared_ptr slots 256    line 64       3.89 Mops/s
+W6 shared_ptr slots 4096   line 64       3.56 Mops/s
+machine-lock: released after 19s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 814283) -- timing measurement
+W6 inline     slots 64     line 64       8.01 Mops/s
+W6 inline     slots 256    line 64      39.83 Mops/s
+W6 inline     slots 1024   line 64      30.95 Mops/s
+W6 inline     slots 4096   line 64      22.98 Mops/s
+W6 inline     slots 16384  line 64      23.85 Mops/s
+W6 inline     slots 256    line 128     51.78 Mops/s
+W6 inline     slots 4096   line 128     27.26 Mops/s
+W6 shared_ptr slots 256    line 64       3.96 Mops/s
+W6 shared_ptr slots 4096   line 64       3.43 Mops/s
+machine-lock: released after 17s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 814376) -- timing measurement
+W6 inline     slots 64     line 64       8.38 Mops/s
+W6 inline     slots 256    line 64      20.86 Mops/s
+W6 inline     slots 1024   line 64      41.51 Mops/s
+W6 inline     slots 4096   line 64      37.07 Mops/s
+W6 inline     slots 16384  line 64      22.29 Mops/s
+W6 inline     slots 256    line 128     29.54 Mops/s
+W6 inline     slots 4096   line 128     42.18 Mops/s
+W6 shared_ptr slots 256    line 64       3.83 Mops/s
+W6 shared_ptr slots 4096   line 64       3.74 Mops/s
+machine-lock: released after 17s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 814438) -- timing measurement
+W6 inline     slots 64     line 64       5.62 Mops/s
+W6 inline     slots 256    line 64      37.96 Mops/s
+W6 inline     slots 1024   line 64      19.41 Mops/s
+W6 inline     slots 4096   line 64      15.31 Mops/s
+W6 inline     slots 16384  line 64      17.20 Mops/s
+W6 inline     slots 256    line 128     18.79 Mops/s
+W6 inline     slots 4096   line 128     10.83 Mops/s
+W6 shared_ptr slots 256    line 64       3.38 Mops/s
+W6 shared_ptr slots 4096   line 64       3.52 Mops/s
+machine-lock: released after 23s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 814507) -- timing measurement
+W6 inline     slots 64     line 64       7.28 Mops/s
+W6 inline     slots 256    line 64      19.91 Mops/s
+W6 inline     slots 1024   line 64      14.17 Mops/s
+W6 inline     slots 4096   line 64      32.09 Mops/s
+W6 inline     slots 16384  line 64      16.29 Mops/s
+W6 inline     slots 256    line 128     17.81 Mops/s
+W6 inline     slots 4096   line 128     22.49 Mops/s
+W6 shared_ptr slots 256    line 64       3.71 Mops/s
+W6 shared_ptr slots 4096   line 64       3.58 Mops/s
+machine-lock: released after 20s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930378) -- timing measurement
+W6 inline     slots 64     line 64       5.91 Mops/s
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930394) -- timing measurement
+W6 inline     slots 256    line 64       5.13 Mops/s
+machine-lock: released after 12s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930420) -- timing measurement
+W6 inline     slots 1024   line 64       7.01 Mops/s
+machine-lock: released after 9s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930435) -- timing measurement
+W6 inline     slots 4096   line 64       7.34 Mops/s
+machine-lock: released after 8s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930484) -- timing measurement
+W6 inline     slots 16384  line 64       7.84 Mops/s
+machine-lock: released after 8s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930530) -- timing measurement
+W6 inline     slots 256    line 128      6.21 Mops/s
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930559) -- timing measurement
+W6 inline     slots 4096   line 128      8.84 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930570) -- timing measurement
+W6 shared_ptr slots 256    line 64       2.54 Mops/s
+machine-lock: released after 24s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930596) -- timing measurement
+W6 shared_ptr slots 4096   line 64       3.30 Mops/s
+machine-lock: released after 18s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930633) -- timing measurement
+W6 inline     slots 64     line 64       8.19 Mops/s
+machine-lock: released after 8s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930648) -- timing measurement
+W6 inline     slots 256    line 64      72.56 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930659) -- timing measurement
+W6 inline     slots 1024   line 64      61.52 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930669) -- timing measurement
+W6 inline     slots 4096   line 64      60.48 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930679) -- timing measurement
+W6 inline     slots 16384  line 64      57.13 Mops/s
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930689) -- timing measurement
+W6 inline     slots 256    line 128     57.68 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930699) -- timing measurement
+W6 inline     slots 4096   line 128     66.39 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930709) -- timing measurement
+W6 shared_ptr slots 256    line 64       3.25 Mops/s
+machine-lock: released after 19s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930751) -- timing measurement
+W6 shared_ptr slots 4096   line 64       3.29 Mops/s
+machine-lock: released after 18s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930784) -- timing measurement
+W6 inline     slots 64     line 64       8.82 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930799) -- timing measurement
+W6 inline     slots 256    line 64      45.62 Mops/s
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930843) -- timing measurement
+W6 inline     slots 1024   line 64      50.37 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930854) -- timing measurement
+W6 inline     slots 4096   line 64      60.48 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930864) -- timing measurement
+W6 inline     slots 16384  line 64      29.34 Mops/s
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930875) -- timing measurement
+W6 inline     slots 256    line 128     56.16 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930886) -- timing measurement
+W6 inline     slots 4096   line 128     33.44 Mops/s
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930902) -- timing measurement
+W6 shared_ptr slots 256    line 64       3.16 Mops/s
+machine-lock: released after 19s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930953) -- timing measurement
+W6 shared_ptr slots 4096   line 64       3.50 Mops/s
+machine-lock: released after 18s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930973) -- timing measurement
+W6 inline     slots 64     line 64       9.19 Mops/s
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 930996) -- timing measurement
+W6 inline     slots 256    line 64      52.67 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 931010) -- timing measurement
+W6 inline     slots 1024   line 64      55.59 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 931022) -- timing measurement
+W6 inline     slots 4096   line 64      65.71 Mops/s
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 931043) -- timing measurement
+W6 inline     slots 16384  line 64      58.64 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 931054) -- timing measurement
+W6 inline     slots 256    line 128     53.21 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 931064) -- timing measurement
+W6 inline     slots 4096   line 128     64.80 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 931074) -- timing measurement
+W6 shared_ptr slots 256    line 64       3.03 Mops/s
+machine-lock: released after 20s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 931446) -- timing measurement
+W6 shared_ptr slots 4096   line 64       3.39 Mops/s
+machine-lock: released after 18s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 931469) -- timing measurement
+W6 inline     slots 64     line 64       6.83 Mops/s
+machine-lock: released after 9s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 931504) -- timing measurement
+W6 inline     slots 256    line 64      60.59 Mops/s
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 931514) -- timing measurement
+W6 inline     slots 1024   line 64      52.03 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 931524) -- timing measurement
+W6 inline     slots 4096   line 64      56.92 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 931555) -- timing measurement
+W6 inline     slots 16384  line 64      61.93 Mops/s
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 931565) -- timing measurement
+W6 inline     slots 256    line 128     47.72 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 931579) -- timing measurement
+W6 inline     slots 4096   line 128     58.27 Mops/s
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 931589) -- timing measurement
+W6 shared_ptr slots 256    line 64       3.35 Mops/s
+machine-lock: released after 19s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 931678) -- timing measurement
+W6 shared_ptr slots 4096   line 64       3.53 Mops/s
+machine-lock: released after 17s (exit 0)

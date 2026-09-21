@@ -1,0 +1,91 @@
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 780531) -- timing measurement
+W3wtc generic      0.96 Mrec/s  p50 3273523924  p99 4293028015  p99.9 4309707889 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 780565) -- timing measurement
+W3wtc generic      0.95 Mrec/s  p50 3272129820  p99 4134423224  p99.9 4149268713 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 780624) -- timing measurement
+W3wtc hand         2.59 Mrec/s  p50   2226  p99    6024  p99.9  341285 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 780651) -- timing measurement
+W3wtc hand         2.00 Mrec/s  p50   1959  p99    3833  p99.9   10969 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 780672) -- timing measurement
+W3wtc compiler     2.79 Mrec/s  p50   2239  p99    7910  p99.9  351294 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 780697) -- timing measurement
+W3wtc compiler     2.00 Mrec/s  p50   1190  p99    2556  p99.9    6842 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 780722) -- timing measurement
+W3wtc generic      1.00 Mrec/s  p50 3282283456  p99 4334024896  p99.9 4355153730 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 780767) -- timing measurement
+W3wtc generic      1.00 Mrec/s  p50 2978341159  p99 3542853719  p99.9 3556658595 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 780817) -- timing measurement
+W3wtc hand         3.04 Mrec/s  p50   2828  p99   10069  p99.9  439837 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 780839) -- timing measurement
+W3wtc hand         2.00 Mrec/s  p50   1685  p99    3375  p99.9   34621 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 780861) -- timing measurement
+W3wtc compiler     3.05 Mrec/s  p50   2852  p99    9540  p99.9  432106 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 780882) -- timing measurement
+W3wtc compiler     2.00 Mrec/s  p50   1738  p99    3382  p99.9   42438 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 780906) -- timing measurement
+W3wtc generic      0.97 Mrec/s  p50 3397091199  p99 4240844100  p99.9 4256663579 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 780953) -- timing measurement
+W3wtc generic      1.00 Mrec/s  p50 2944129078  p99 3420936439  p99.9 3432309520 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 781001) -- timing measurement
+W3wtc hand         2.83 Mrec/s  p50   3207  p99   11622  p99.9  378171 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 781046) -- timing measurement
+W3wtc hand         2.00 Mrec/s  p50   1437  p99    3024  p99.9   12572 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 781082) -- timing measurement
+W3wtc compiler     3.07 Mrec/s  p50   3021  p99   10776  p99.9  399802 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 781099) -- timing measurement
+W3wtc compiler     2.00 Mrec/s  p50   1830  p99    3421  p99.9   28040 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 781123) -- timing measurement
+W3wtc generic      1.02 Mrec/s  p50 3388020889  p99 4339069493  p99.9 4350882213 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 781173) -- timing measurement
+W3wtc generic      0.90 Mrec/s  p50 3799477418  p99 5011043435  p99.9 5025589352 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 781209) -- timing measurement
+W3wtc hand         2.93 Mrec/s  p50   2992  p99   11077  p99.9  411214 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 781227) -- timing measurement
+W3wtc hand         2.00 Mrec/s  p50   1395  p99    2920  p99.9   19133 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 781248) -- timing measurement
+W3wtc compiler     3.37 Mrec/s  p50   2844  p99    9449  p99.9  386914 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 781270) -- timing measurement
+W3wtc compiler     2.00 Mrec/s  p50   1396  p99    2905  p99.9   10704 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 781305) -- timing measurement
+W3wtc generic      1.02 Mrec/s  p50 3234009735  p99 4024628612  p99.9 4034505039 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 781339) -- timing measurement
+W3wtc generic      0.93 Mrec/s  p50 3640330306  p99 4788813053  p99.9 4801508887 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 781368) -- timing measurement
+W3wtc hand         3.07 Mrec/s  p50   3061  p99   11492  p99.9  465262 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 781395) -- timing measurement
+W3wtc hand         2.00 Mrec/s  p50   1418  p99    2938  p99.9   10137 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 781417) -- timing measurement
+W3wtc compiler     3.23 Mrec/s  p50   2847  p99   11925  p99.9  479852 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 781445) -- timing measurement
+W3wtc compiler     2.00 Mrec/s  p50   1761  p99    3417  p99.9   20151 ns
+machine-lock: released after 6s (exit 0)
+distinct checksums across all runs: 2 (must be 1)

@@ -1,0 +1,60 @@
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 813141) -- timing measurement
+W2 pingpong  shim_generic           E64   @    0ns  p50    1155  p99    2045  p99.9    4546  p99.99     6857  max     32600 ns
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 813159) -- timing measurement
+W2 pingpong  shim_spsc              E64   @    0ns  p50     340  p99     475  p99.9     611  p99.99     3991  max     28229 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 813211) -- timing measurement
+W2 pingpong  ring_inline            E64   @    0ns  p50     261  p99     324  p99.9    1742  p99.99     3766  max     39071 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 813226) -- timing measurement
+W2 pingpong  moodycamel_rw_sp       E64   @    0ns  p50     393  p99     492  p99.9    1484  p99.99     3891  max     35591 ns
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 813236) -- timing measurement
+W2 pingpong  shim_generic           E64   @    0ns  p50    1264  p99    2323  p99.9    4641  p99.99     6607  max     35486 ns
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 813248) -- timing measurement
+W2 pingpong  shim_spsc              E64   @    0ns  p50     332  p99     465  p99.9     600  p99.99     3814  max     21446 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 813258) -- timing measurement
+W2 pingpong  ring_inline            E64   @    0ns  p50     277  p99     364  p99.9    1828  p99.99     3702  max    135063 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 813268) -- timing measurement
+W2 pingpong  moodycamel_rw_sp       E64   @    0ns  p50     326  p99     390  p99.9     486  p99.99     3792  max     21933 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 813284) -- timing measurement
+W2 pingpong  shim_generic           E64   @    0ns  p50    1427  p99    3652  p99.9    5042  p99.99     7291  max     45207 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 813294) -- timing measurement
+W2 pingpong  shim_spsc              E64   @    0ns  p50     348  p99     492  p99.9     647  p99.99     3861  max     20534 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 813304) -- timing measurement
+W2 pingpong  ring_inline            E64   @    0ns  p50     280  p99     419  p99.9    1801  p99.99     3720  max     23394 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 813314) -- timing measurement
+W2 pingpong  moodycamel_rw_sp       E64   @    0ns  p50     336  p99     417  p99.9     515  p99.99     3759  max     22818 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 813324) -- timing measurement
+W2 pingpong  shim_generic           E64   @    0ns  p50    1486  p99    3714  p99.9    5140  p99.99     7289  max     36145 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 813336) -- timing measurement
+W2 pingpong  shim_spsc              E64   @    0ns  p50     332  p99     468  p99.9     582  p99.99     3798  max     22242 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 813346) -- timing measurement
+W2 pingpong  ring_inline            E64   @    0ns  p50     196  p99     358  p99.9    1832  p99.99     3691  max    135064 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 813356) -- timing measurement
+W2 pingpong  moodycamel_rw_sp       E64   @    0ns  p50     372  p99     466  p99.9     582  p99.99     3806  max     15513 ns
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 813367) -- timing measurement
+W2 pingpong  shim_generic           E64   @    0ns  p50    1430  p99    3489  p99.9    5147  p99.99     6993  max     37637 ns
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 813381) -- timing measurement
+W2 pingpong  shim_spsc              E64   @    0ns  p50     349  p99     480  p99.9     660  p99.99     3804  max     22174 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 813404) -- timing measurement
+W2 pingpong  ring_inline            E64   @    0ns  p50     255  p99     342  p99.9     522  p99.99     3635  max     12900 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 813418) -- timing measurement
+W2 pingpong  moodycamel_rw_sp       E64   @    0ns  p50     392  p99     439  p99.9    1311  p99.99     3896  max     42808 ns
+machine-lock: released after 2s (exit 0)

@@ -1,0 +1,90 @@
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1071522) -- timing measurement
+W5 2P2C orig_generic              0.96 Mops/s  p50 9281014  p99 9476770  p99.9 9523113 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1071544) -- timing measurement
+W5 2P2C shim_generic              0.89 Mops/s  p50 9977081  p99 10178905  p99.9 10225502 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1071596) -- timing measurement
+W5 2P2C std_mutex                 1.02 Mops/s  p50 8541878  p99 8717991  p99.9 9340970 ns
+machine-lock: released after 8s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1071623) -- timing measurement
+W5 2P2C moodycamel_cq_sp          2.22 Mops/s  p50 4044394  p99 4335782  p99.9 4369441 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1071674) -- timing measurement
+W5 2P2C boost_ms_queue            1.67 Mops/s  p50   1877  p99    3843  p99.9    5215 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1071703) -- timing measurement
+W5 2P2C onetbb_cq_sp              2.81 Mops/s  p50 3167546  p99 3357263  p99.9 3448278 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1071734) -- timing measurement
+W5 2P2C orig_generic              1.03 Mops/s  p50 8651940  p99 8820080  p99.9 8897665 ns
+machine-lock: released after 8s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1071756) -- timing measurement
+W5 2P2C shim_generic              1.07 Mops/s  p50 8321706  p99 8506305  p99.9 8942604 ns
+machine-lock: released after 9s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1071802) -- timing measurement
+W5 2P2C std_mutex                 1.04 Mops/s  p50 8400721  p99 8555900  p99.9 8612080 ns
+machine-lock: released after 9s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1071865) -- timing measurement
+W5 2P2C moodycamel_cq_sp          2.24 Mops/s  p50 4006846  p99 4299389  p99.9 4333292 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1071918) -- timing measurement
+W5 2P2C boost_ms_queue            1.86 Mops/s  p50   1664  p99    3619  p99.9    4861 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1072239) -- timing measurement
+W5 2P2C onetbb_cq_sp              2.96 Mops/s  p50 3042681  p99 3100263  p99.9 3158637 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1072255) -- timing measurement
+W5 2P2C orig_generic              0.96 Mops/s  p50 9237962  p99 9417614  p99.9 9497822 ns
+machine-lock: released after 9s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1072291) -- timing measurement
+W5 2P2C shim_generic              0.97 Mops/s  p50 9182640  p99 9363551  p99.9 9407380 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1072326) -- timing measurement
+W5 2P2C std_mutex                 0.93 Mops/s  p50 9410171  p99 9606794  p99.9 9749303 ns
+machine-lock: released after 9s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1072344) -- timing measurement
+W5 2P2C moodycamel_cq_sp          2.15 Mops/s  p50 4164110  p99 4490183  p99.9 4526794 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1072358) -- timing measurement
+W5 2P2C boost_ms_queue            1.61 Mops/s  p50   1936  p99    4056  p99.9    5323 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1072389) -- timing measurement
+W5 2P2C onetbb_cq_sp              2.71 Mops/s  p50 3355250  p99 3422444  p99.9 3437141 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1072414) -- timing measurement
+W5 2P2C orig_generic              0.94 Mops/s  p50 9475463  p99 9739361  p99.9 9803492 ns
+machine-lock: released after 9s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1072456) -- timing measurement
+W5 2P2C shim_generic              0.90 Mops/s  p50 9992598  p99 10147259  p99.9 10205378 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1072473) -- timing measurement
+W5 2P2C std_mutex                 1.07 Mops/s  p50 8126700  p99 8290861  p99.9 9036506 ns
+machine-lock: released after 9s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1072485) -- timing measurement
+W5 2P2C moodycamel_cq_sp          2.19 Mops/s  p50 4084349  p99 4398779  p99.9 4426326 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1072502) -- timing measurement
+W5 2P2C boost_ms_queue            1.84 Mops/s  p50   1688  p99    3604  p99.9    4880 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1072522) -- timing measurement
+W5 2P2C onetbb_cq_sp              2.97 Mops/s  p50   1129  p99    3430  p99.9    7432 ns
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1072544) -- timing measurement
+W5 2P2C orig_generic              0.96 Mops/s  p50 9322400  p99 9638639  p99.9 9696296 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1072645) -- timing measurement
+W5 2P2C shim_generic              0.95 Mops/s  p50 9285177  p99 9695706  p99.9 10019163 ns
+machine-lock: released after 9s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1072746) -- timing measurement
+W5 2P2C std_mutex                 1.13 Mops/s  p50 7794234  p99 7953454  p99.9 8004242 ns
+machine-lock: released after 8s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1072811) -- timing measurement
+W5 2P2C moodycamel_cq_sp          2.49 Mops/s  p50 3595098  p99 3831822  p99.9 3855126 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1072829) -- timing measurement
+W5 2P2C boost_ms_queue            1.64 Mops/s  p50   1899  p99    3933  p99.9    5264 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 1073047) -- timing measurement
+W5 2P2C onetbb_cq_sp              3.07 Mops/s  p50 2787929  p99 2891277  p99.9 2969618 ns
+machine-lock: released after 4s (exit 0)
