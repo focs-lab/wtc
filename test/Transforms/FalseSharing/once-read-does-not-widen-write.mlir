@@ -2,9 +2,10 @@
 
 // main starts the worker that writes b, reads the whole struct once, writes
 // a once, and then keeps writing an element of a global array at an index
-// it loads, which the walk cannot place. The pair of a and b is possible:
-// main's thread has unplaced accesses. It vanished once, because the
-// 16-byte once-only read widened main's once-only write of a over b.
+// it loads. The pair of a and b is cold: a is written once, and main's
+// repeated write is placed on the array, not on @s. It vanished once,
+// because the 16-byte once-only read widened main's once-only write of a
+// over b, and overlapping bytes are never a pair.
 
 !s32i = !cir.int<s, 32>
 !s64i = !cir.int<s, 64>
@@ -58,5 +59,4 @@ module {
   }
 }
 
-// CHECK: possible false sharing in @s: 'a' and 'b'{{.*}}accesses it could not place
-// CHECK: false sharing: 0 definite, 1 possible, 0 cold
+// CHECK: false sharing: 0 definite, 0 possible, 1 cold{{.*}}0 field accesses on objects that could not be identified{{.*}}1 at array elements the analysis cannot tell apart

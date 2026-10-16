@@ -4,7 +4,9 @@
 // elements and hands the element to a call. The address escapes. The escape
 // check met the store first as the element's user, remembered the store as
 // seen, and skipped it when it met it again as the address's user, so the
-// slot passed as private and its pair came out cold.
+// slot passed as private: it must count as a slot whose address escapes,
+// not as one that never does. The pair on @s is cold either way: the
+// worker's store into its array is placed, on the array, at element 1.
 
 !s32i = !cir.int<s, 32>
 !s64i = !cir.int<s, 64>
@@ -62,5 +64,4 @@ module {
   }
 }
 
-// CHECK: possible false sharing in @s: 'a' and 'b'{{.*}}accesses it could not place
-// CHECK: false sharing: 0 definite, 1 possible, 0 cold{{.*}}0 on stack slots that never escape
+// CHECK: false sharing: 0 definite, 0 possible, 1 cold{{.*}}0 field accesses on objects that could not be identified, 0 on stack slots that never escape
