@@ -50,18 +50,16 @@ using namespace mlir::wtc;
 
 namespace {
 
-// Where an access lands: a root; the spawn loop whose every thread owns
-// one element of the root, when the access is through such an element;
-// and whether an element step on the way had an index the analysis
-// cannot read, in which case the offset is within an element nobody can
-// name.
+// Where an access lands: a root, and what its offset is relative to.
+// Absolute: the root's start. Relative: the start of the element a spawn
+// loop handed the thread (`&arr[i]`, i the loop's induction variable), so
+// which element depends on the thread. Unknown: the start of some element
+// of the root, at an index the analysis cannot read.
+enum class PlaceKind { Absolute, Relative, Unknown };
 struct PlaceKey {
     Operation *root = nullptr;
-    Operation *loop = nullptr;
-    bool unknownIndex = false;
-    bool operator==(const PlaceKey &o) const {
-        return root == o.root && loop == o.loop && unknownIndex == o.unknownIndex;
-    }
+    PlaceKind kind = PlaceKind::Absolute;
+    bool operator==(const PlaceKey &o) const { return root == o.root && kind == o.kind; }
 };
 
 } // namespace
@@ -69,10 +67,10 @@ struct PlaceKey {
 namespace llvm {
 template <> struct DenseMapInfo<PlaceKey> {
     // No operation lives at these addresses.
-    static PlaceKey getEmptyKey() { return {reinterpret_cast<Operation *>(uintptr_t(-1)), nullptr, false}; }
-    static PlaceKey getTombstoneKey() { return {reinterpret_cast<Operation *>(uintptr_t(-2)), nullptr, false}; }
+    static PlaceKey getEmptyKey() { return {reinterpret_cast<Operation *>(uintptr_t(-1)), PlaceKind::Absolute}; }
+    static PlaceKey getTombstoneKey() { return {reinterpret_cast<Operation *>(uintptr_t(-2)), PlaceKind::Absolute}; }
     static unsigned getHashValue(const PlaceKey &k) {
-        return static_cast<unsigned>(hash_combine(k.root, k.loop, k.unknownIndex));
+        return static_cast<unsigned>(hash_combine(k.root, static_cast<int>(k.kind)));
     }
     static bool isEqual(const PlaceKey &a, const PlaceKey &b) { return a == b; }
 };
@@ -119,6 +117,29 @@ struct FieldInfo {
     llvm::SmallSetVector<unsigned, 4> manyHotWriters;
     Operation *firstWrite = nullptr;
     Operation *firstAccess = nullptr;
+
+    // Takes another field's accesses as this field's: used when an access
+    // at a constant index is folded into the element it falls in.
+    void absorb(const FieldInfo &o) {
+        size = std::max(size, o.size);
+        if (name.empty() || name == "<whole>" || (o.name != "<whole>" && o.name.size() > name.size()))
+            name = o.name;
+        for (unsigned t : o.readers) readers.insert(t);
+        for (unsigned t : o.writers) writers.insert(t);
+        for (unsigned t : o.hotReaders) hotReaders.insert(t);
+        for (unsigned t : o.hotWriters) hotWriters.insert(t);
+        for (unsigned t : o.unknownRateReaders) unknownRateReaders.insert(t);
+        for (unsigned t : o.unknownRateWriters) unknownRateWriters.insert(t);
+        for (unsigned t : o.certain) certain.insert(t);
+        for (unsigned t : o.manyHotWriters) manyHotWriters.insert(t);
+        for (auto &kv : o.hotSize) { uint64_t &m = hotSize[kv.first]; m = std::max(m, kv.second); }
+        for (auto &kv : o.onceSize) { uint64_t &m = onceSize[kv.first]; m = std::max(m, kv.second); }
+        for (auto &kv : o.writeAt) writeAt.try_emplace(kv.first, kv.second);
+        for (auto &kv : o.hotWriteAt) hotWriteAt.try_emplace(kv.first, kv.second);
+        for (auto &kv : o.hotReadAt) hotReadAt.try_emplace(kv.first, kv.second);
+        if (!firstWrite) firstWrite = o.firstWrite;
+        if (!firstAccess) firstAccess = o.firstAccess;
+    }
 };
 
 // Offsets within one root object, in increasing order of discovery; sorted
@@ -168,8 +189,19 @@ private:
     // threads can meet on one line; at an element nobody can name, two
     // accesses may be on one element or on two.
     llvm::MapVector<PlaceKey, FieldMap> byRoot;
-    llvm::DenseMap<PlaceKey, uint64_t> perThreadElem;   // element size of a per-thread place
-    llvm::DenseMap<PlaceKey, uint64_t> unknownElem;     // element size at an index the analysis cannot read
+    // What the walk knows about a root whose elements were handed out by
+    // a spawn loop: the element's size (0 when two handles disagreed, and
+    // then the relative offsets mean nothing) and the threads that own an
+    // element alone (see Place::owner).
+    struct PerThread {
+        uint64_t elemSize = 0;
+        bool conflict = false;
+        llvm::SmallSet<unsigned, 4> owners;
+    };
+    llvm::DenseMap<Operation *, PerThread> perThread;
+    // The smallest element at an unknown index on the root: two accesses
+    // at unknown elements are at least this far apart when not on one.
+    llvm::DenseMap<Operation *, uint64_t> unknownElem;
     // Per root, the threads with a repeated access at an element of it the
     // analysis cannot name: such a thread may be touching the very field a
     // cold verdict on the root says it touches once.
@@ -191,6 +223,10 @@ private:
     // through a pointer the walk could not follow, so no pair involving it
     // is cold: unknown must not print as "costs nothing".
     llvm::DenseSet<unsigned> unresolvedThreads;
+    // Threads with a recurrence the walk visited but did not expand: what
+    // those calls reach is unseen, so such a thread may be hot-writing any
+    // field, and no pair is cold while one exists besides the once-writer.
+    llvm::DenseSet<unsigned> truncatedThreads;
     llvm::DenseSet<Operation *> stackLocalOps;   // slots that never leave their invocation
     llvm::DenseSet<Operation *> threadLocalOps;  // every thread has its own copy
     unsigned definite = 0, possible = 0;
@@ -213,8 +249,8 @@ private:
     // adds that many elements to the offset. Any other index names an
     // element the analysis cannot read: `unknown` is set, the offset is
     // within that element, and `unknownElemSize` is the size of the
-    // outermost such element, the one that decides what its neighbours
-    // are.
+    // smallest such element, the least two such accesses are apart when
+    // they are not on one.
     Value resolveMember(Value addr, const DataLayout &dl, uint64_t &offset,
                         std::string &path, bool &unknown, uint64_t &unknownElemSize) const {
         offset = 0;
@@ -243,13 +279,15 @@ private:
                 auto c = traceToLocalRoot(index).getDefiningOp<cir::ConstantOp>();
                 auto k = c ? dyn_cast<cir::IntAttr>(c.getValue()) : cir::IntAttr();
                 if (!k || k.getValue().isNegative() || k.getValue().getActiveBits() > 32) {
+                    // The smallest element on the way: two accesses at
+                    // unknown elements may be as close as that.
                     unknown = true;
-                    unknownElemSize = dl.getTypeSize(elem);
+                    const uint64_t sz = dl.getTypeSize(elem);
+                    unknownElemSize = unknownElemSize ? std::min(unknownElemSize, sz) : sz;
                     parts.push_back("[?]");
                 } else {
                     offset += k.getValue().getZExtValue() * dl.getTypeSize(elem);
-                    if (k.getValue().getZExtValue())
-                        parts.push_back("[" + std::to_string(k.getValue().getZExtValue()) + "]");
+                    parts.push_back("[" + std::to_string(k.getValue().getZExtValue()) + "]");
                 }
                 base = traceToLocalRoot(next);
             }
@@ -292,12 +330,8 @@ private:
         return Value();
     }
 
+    void foldPlaces();
     void report(const ThreadInstanceWalk &walk);
-
-    void noteUnresolved(Operation *op, const Instance &inst) {
-        unresolvedOps.insert(op);
-        unresolvedThreads.insert(inst.thread);
-    }
 
     // Whether an address is an array's first element, reached by letting the
     // array decay to a pointer with no step after it: `counts[0]`, or the
@@ -336,6 +370,18 @@ private:
         // the standard library's call graph back into the walk.
         Value t = traceToRoot(addr);
         Type ty;
+        // Through a pointer that came from elsewhere -- a parameter, a load,
+        // a call -- the pointee is what is there: the walk may still place
+        // it, as a heap object or a per-thread element, and a scalar
+        // element is the textbook per-thread counter.
+        if (isa<BlockArgument>(t) || isa_and_nonnull<cir::LoadOp, cir::CallOp>(t.getDefiningOp())) {
+            if (auto pt = dyn_cast<cir::PointerType>(t.getType())) {
+                Type pe = pt.getPointee();
+                if (isa<cir::RecordType, cir::IntType, cir::PointerType, cir::SingleType, cir::DoubleType>(pe))
+                    return Shape::Whole;
+            }
+            return Shape::None;
+        }
         if (auto gg = t.getDefiningOp<cir::GetGlobalOp>()) {
             // An alias may declare a type of its own; the object's is the
             // aliasee's.
@@ -424,7 +470,7 @@ private:
 void WTCFalseSharingDiagnosePass::runOnOperation() {
     module = getOperation();
     byRoot.clear();
-    perThreadElem.clear();
+    perThread.clear();
     unknownElem.clear();
     unknownIndexThreads.clear();
     unknownIndexOps.clear();
@@ -432,6 +478,7 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
     unresolvedOps.clear();
     stackLocalOps.clear();
     unresolvedThreads.clear();
+    truncatedThreads.clear();
     threadLocalOps.clear();
     definite = possible = coldPairs = unplacedPairs = 0;
 
@@ -454,6 +501,9 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
 
     walk.run(
         [&](Instance &inst) {
+            // A recurrence visited and not expanded: what its calls reach
+            // is not in the walk, so this thread may touch any object.
+            if (inst.truncated) { unresolvedThreads.insert(inst.thread); truncatedThreads.insert(inst.thread); }
             inst.func.walk([&](Operation *op) {
                 auto record = [&](Value addr, bool isWrite, Type valTy) {
                 const Shape shape = shapeOf(addr);
@@ -481,10 +531,10 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
                                         !inst.execUnknown;
                 bool siteKnown;
                 const Mult site = walk.siteMult(op, inst.func, siteKnown);
-                const bool repeated = !startup && !startupGuess &&
-                                      (manyAnyway || (siteKnown && site == Mult::Many));
-                const bool unknownRate = !startup && !repeated &&
-                                         (startupGuess || !siteKnown || inst.execUnknown);
+                bool repeated = !startup && !startupGuess &&
+                                (manyAnyway || (siteKnown && site == Mult::Many));
+                bool unknownRate = !startup && !repeated &&
+                                   (startupGuess || !siteKnown || inst.execUnknown);
                 auto unplaced = [&] {
                     unresolvedOps.insert(op);
                     if (repeated || unknownRate) unresolvedThreads.insert(inst.thread);
@@ -492,11 +542,9 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
 
                 uint64_t offset = 0;
                 std::string path;
-                Operation *root = nullptr;
-                Operation *loop = nullptr;
-                Type elem;
                 bool unknownIdx = false;
                 uint64_t unknownSize = 0;
+                Place place;
                 // A local array whose address never leaves its invocation:
                 // nobody else can be looking at it.
                 if (shape == Shape::Array)
@@ -512,16 +560,41 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
                     // output at all.
                     Value base = resolveMember(addr, dl, offset, path, unknownIdx, unknownSize);
                     if (!base) { unplaced(); return; }
-                    root = walk.resolvePlace(base, &inst, loop, elem);
+                    place = walk.resolvePlace(base, &inst);
                 } else {
                     // The whole object through a cast of its address: `*(long
-                    // *)&s`. Only a record is of interest; a scalar global has
-                    // no second field to pair with.
-                    root = walk.resolvePlace(addr, &inst, loop, elem);
-                    if (root && !isHeapRoot(root) && !loop && !isa<cir::RecordType>(rootType(root))) return;
+                    // *)&s`, or through a pointer the walk resolves. Of a
+                    // global or a slot only a record is of interest; a
+                    // scalar global has no second field to pair with.
+                    place = walk.resolvePlace(addr, &inst);
+                    if (place.root && !isHeapRoot(place.root) && !place.loop && !place.unknownIndex &&
+                        !isa<cir::RecordType>(rootType(place.root)))
+                        return;
                     path = "<whole>";
                 }
+                Operation *root = place.root;
                 if (!root) { unplaced(); return; }
+                // Element steps the walk read on the way to the root: a
+                // constant index at the spawn, `&args[1]`, is so many bytes
+                // in; an index it could not read makes the element unknown.
+                offset += place.offset;
+                if (place.unknownIndex) {
+                    unknownIdx = true;
+                    if (place.elem) {
+                        const uint64_t sz = dl.getTypeSize(place.elem);
+                        unknownSize = unknownSize ? std::min(unknownSize, sz) : sz;
+                    }
+                }
+                // With one element per thread, what repeats on the thread's
+                // own element is what repeats inside the thread: the loop
+                // that spawned it stands for many threads, one per element,
+                // not for many touches of this one.
+                if (place.loop && place.owner && !startup && !startupGuess) {
+                    bool wtKnown;
+                    const Mult wt = walk.multWithinThread(inst, wtKnown);
+                    repeated = (siteKnown && site == Mult::Many) || (wtKnown && wt == Mult::Many);
+                    unknownRate = !repeated && (!siteKnown || !wtKnown);
+                }
                 // A root declared with an incomplete record type (an opaque
                 // global the program only ever casts) has no layout to place
                 // fields in, and asking the data layout for one asserts.
@@ -535,17 +608,23 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
                     if (!addressEscapes(slot)) { stackLocalOps.insert(op); return; }
                 }
 
-                // Which element is not known, so neither is whose it is.
-                if (unknownIdx) loop = nullptr;
-                const PlaceKey key{root, loop, unknownIdx};
-                if (loop && elem && !isa<cir::VoidType, cir::FuncType>(elem))
-                    perThreadElem[key] = dl.getTypeSize(elem);
+                PlaceKind kind = PlaceKind::Absolute;
                 if (unknownIdx) {
+                    kind = PlaceKind::Unknown;
                     unknownIndexOps.insert(op);
                     if (repeated || unknownRate) unknownIndexThreads[root].insert(inst.thread);
-                    uint64_t &u = unknownElem[key];
-                    u = std::max(u, unknownSize);
+                    uint64_t &u = unknownElem[root];
+                    if (unknownSize) u = u ? std::min(u, unknownSize) : unknownSize;
+                } else if (place.loop) {
+                    kind = PlaceKind::Relative;
+                    PerThread &pt = perThread[root];
+                    const uint64_t sz = place.elem && !isa<cir::VoidType, cir::FuncType>(place.elem)
+                                            ? dl.getTypeSize(place.elem) : 0;
+                    if (!sz || (pt.elemSize && pt.elemSize != sz)) pt.conflict = true;
+                    else pt.elemSize = sz;
+                    if (place.owner) pt.owners.insert(inst.thread);
                 }
+                const PlaceKey key{root, kind};
                 FieldInfo &fi = byRoot[key][offset];
                 // The most specific name seen: a member's over the record's,
                 // and a record's over "<whole>".
@@ -609,17 +688,59 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
         if (auto slot = dyn_cast<cir::AllocaOp>(kv.first.root))
             if (!walk.runsOnce(slot->getParentOfType<cir::FuncOp>()))
                 multiInvocation.insert(kv.first.root);
-        // An allocation site that runs more than once -- in a loop, or in a
-        // function that runs more than once -- stands for many objects, and
-        // two threads on two of its fields may be on two objects.
-        if (auto call = dyn_cast<cir::CallOp>(kv.first.root)) {
-            auto f = call->getParentOfType<cir::FuncOp>();
-            if (!walk.runsOnce(f) || walk.siteMult(call, f) == Mult::Many)
-                multiInvocation.insert(kv.first.root);
-        }
+        // An allocation site that may run more than once -- in a loop, or
+        // in a function the call graph does not show to run once -- stands
+        // for many objects, and two threads on two of its fields may be on
+        // two objects. The site is the allocator call, often inside a
+        // wrapper that has no instance of its own, so the answer comes
+        // from the call graph rather than from the walk's instances.
+        if (isa<cir::CallOp>(kv.first.root) && !walk.siteRunsOnce(kv.first.root))
+            multiInvocation.insert(kv.first.root);
     }
+    foldPlaces();
     report(walk);
     markAllAnalysesPreserved();
+}
+
+// Brings the accesses on one root to one frame of reference. Where a spawn
+// loop handed out elements of a known size, an access at a constant index
+// -- main reading `args[0].sum` after the join, a worker touching
+// `args[1]` handed to it directly -- is in some element, at the offset
+// modulo the element size, and meets the per-thread accesses there. Where
+// the element size is not known, the per-thread accesses are at an element
+// nobody can name.
+void WTCFalseSharingDiagnosePass::foldPlaces() {
+    for (auto &kv : perThread) {
+        Operation *root = kv.first;
+        const PerThread &pt = kv.second;
+        const PlaceKey relative{root, PlaceKind::Relative};
+        auto rel = byRoot.find(relative);
+        if (rel == byRoot.end()) continue;
+        if (pt.conflict || !pt.elemSize) {
+            FieldMap &dst = byRoot[PlaceKey{root, PlaceKind::Unknown}];
+            for (auto &f : rel->second) dst[f.first].absorb(f.second);
+            byRoot.erase(relative);
+            continue;
+        }
+        auto abs = byRoot.find(PlaceKey{root, PlaceKind::Absolute});
+        if (abs == byRoot.end()) continue;
+        FieldMap &dst = byRoot[relative];
+        for (auto &f : abs->second) {
+            // The element's index is folded into the offset, so it leaves
+            // the name: `[0].head` is the element's `head`.
+            FieldInfo moved = f.second;
+            if (!moved.name.empty() && moved.name[0] == '[') {
+                const size_t close = moved.name.find(']');
+                if (close != std::string::npos) {
+                    moved.name = moved.name.substr(close + 1);
+                    if (!moved.name.empty() && moved.name[0] == '.') moved.name.erase(0, 1);
+                    if (moved.name.empty()) moved.name = "<whole>";
+                }
+            }
+            dst[f.first % pt.elemSize].absorb(moved);
+        }
+        byRoot.erase(PlaceKey{root, PlaceKind::Absolute});
+    }
 }
 
 void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
@@ -628,10 +749,12 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
 
     for (auto &[key, fields] : byRoot) {
         Operation *root = key.root;
-        Operation *loop = key.loop;
-        const bool unknownIndex = key.unknownIndex;
-        const uint64_t elemSize = loop ? perThreadElem.lookup(key) : 0;
-        const uint64_t unknownSize = unknownIndex ? unknownElem.lookup(key) : 0;
+        const bool relative = key.kind == PlaceKind::Relative;
+        const bool unknownIndex = key.kind == PlaceKind::Unknown;
+        const uint64_t elemSize = relative ? perThread.lookup(root).elemSize : 0;
+        const uint64_t unknownSize = unknownIndex ? unknownElem.lookup(root) : 0;
+        const llvm::SmallSet<unsigned, 4> noOwners;
+        const llvm::SmallSet<unsigned, 4> &owners = relative ? perThread.find(root)->second.owners : noOwners;
         auto hasUnknownIndex = [&](unsigned t) {
             auto it = unknownIndexThreads.find(root);
             return it != unknownIndexThreads.end() && it->second.count(t) > 0;
@@ -654,7 +777,7 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
             label = ((callee ? callee.getSymName() : StringRef("allocation")) + "() in @" +
                      call->getParentOfType<cir::FuncOp>().getSymName()).str();
         } else label = "<object>";
-        if (loop) label += " (one element per thread)";
+        if (relative) label += " (one element per thread)";
         if (unknownIndex) label += " (element not known)";
 
         // Where the object may start relative to a line. Two fields share a
@@ -682,6 +805,11 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
             // else the platform's guarantee for malloc.
             align = allocationAlignment(call).value_or(heapAlign);
         align = std::max<uint64_t>(align, 1);
+        // Where an element may start: at the array's alignment, stepped by
+        // the element size.
+        const uint64_t startStep = relative && elemSize ? std::gcd(align, elemSize)
+                                   : unknownIndex && unknownSize ? std::gcd(align, unknownSize)
+                                                                 : align;
         auto sharesAt = [&](uint64_t oa, uint64_t sa, uint64_t ob, uint64_t sb, uint64_t shift) {
             const uint64_t a0 = (oa + shift) / line, a1 = (oa + shift + std::max<uint64_t>(sa, 1) - 1) / line;
             const uint64_t b0 = (ob + shift) / line, b1 = (ob + shift + std::max<uint64_t>(sb, 1) - 1) / line;
@@ -703,11 +831,20 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
         auto geometry = [&](uint64_t ox, uint64_t sx, uint64_t oy, uint64_t sy,
                             unsigned &positions, unsigned &sharing) {
             positions = sharing = 0;
-            for (uint64_t shift = 0; shift < line; shift += std::min(align, line)) {
+            for (uint64_t shift = 0; shift < line; shift += std::min(startStep, line)) {
                 ++positions;
                 sharing += sharesAt(ox, sx, oy, sy, shift);
             }
             return sharing > 0;
+        };
+        // How the report names the positions: an object starts where its
+        // alignment lets it; an element where the array's alignment and
+        // the element size let it.
+        auto positionsText = [&](unsigned sharing, unsigned positions) {
+            std::string n = " in " + std::to_string(sharing) + " of the " + std::to_string(positions) + " positions ";
+            if (relative || (unknownIndex && unknownSize))
+                return n + "an element of " + std::to_string(relative ? elemSize : unknownSize) + " bytes may start at";
+            return n + "an object aligned to " + std::to_string(align) + " bytes may start at";
         };
 
         for (size_t i = 0; i < offsets.size(); ++i) {
@@ -795,6 +932,7 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
                 // make a pair possible; it cannot make one definite or cold.
                 // The reason is kept, so the remark can say which.
                 const char *why = nullptr;
+                bool contendSameThread = false;
                 auto mayContend = [&](const FieldInfo &x, uint64_t ox, const FieldInfo &y, uint64_t oy,
                                       Operation *&wx, Operation *&wy) {
                     for (const auto &xs : {x.hotWriters, x.unknownRateWriters})
@@ -803,11 +941,13 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
                                                     y.unknownRateWriters, y.unknownRateReaders})
                                 for (unsigned u : set) {
                                     // One thread standing for many on two fields of
-                                    // one element: with an element per thread, that
-                                    // is one thread, and no pair.
-                                    if (u == w && (!x.manyHotWriters.count(w) || loop)) continue;
+                                    // one element: when each of those threads owns
+                                    // its element alone, that is one thread, and no
+                                    // pair.
+                                    if (u == w && (!x.manyHotWriters.count(w) || owners.count(w))) continue;
                                     if (!lands(x, ox, w, true, y, oy, u)) continue;
                                     wx = pick(x, w); wy = pick(y, u);
+                                    contendSameThread = u == w;
                                     if (u == w)
                                         why = "by one thread that stands for many, which may be one "
                                               "thread on both fields or two";
@@ -857,8 +997,8 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
                                     if (!lands(x, ox, w, false, y, oy, u)) continue;
                                     // The report names the once-writer's own
                                     // store and the geometry of this very pair.
-                                    const bool unplacedHere = unresolvedThreads.count(w) > 0 ||
-                                                              hasUnknownIndex(w);
+                                    bool unplacedHere = unresolvedThreads.count(w) > 0 || hasUnknownIndex(w);
+                                    for (unsigned t : truncatedThreads) unplacedHere |= t != w;
                                     if ((unplacedHere && !unplaced) || (!unplacedHere && !any && !unplaced)) {
                                         wx = x.writeAt.lookup(w); wy = pick(y, u);
                                         chosenPositions = positions; chosenSharing = sharing;
@@ -877,27 +1017,29 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
 
                 const bool shareAll = sharing == positions;
                 std::string where;
-                if (!shareAll)
-                    where = (" in " + llvm::Twine(sharing) + " of the " + llvm::Twine(positions) +
-                             " positions an object aligned to " + llvm::Twine(align) +
-                             " bytes may start at").str();
+                if (!shareAll) where = positionsText(sharing, positions);
                 else if (unknownIndex && positions == 0)
                     where = " when the two land in neighbouring elements";
 
-                if (hit && onStack) {
-                    // The address was published, so two threads may be
-                    // looking at it -- but they may equally be looking at two
-                    // invocations, which are two objects. Not a claim.
+                // The address was published, so two threads may be looking
+                // at it -- but they may equally be looking at two
+                // invocations, or two allocations, which are two objects.
+                // Not a claim; said, rather than dropped, whenever the two
+                // sides are two threads. One thread standing for many on
+                // both fields of a slot is one invocation writing its own
+                // copy, and saying anything about it is noise: it is what
+                // libstdc++'s own locals produced on real output.
+                if (onStack && (hit || unplaced || (contend && !contendSameThread))) {
                     ++possible;
-                    Operation *at = a.firstWrite ? a.firstWrite : a.firstAccess;
-                    at->emitRemark()
-                        << "wtc: possible false sharing in " << label << ": '" << a.name
-                        << "' and '" << b.name << "' share one " << line << "-byte line" << where
-                        << (isHeapRoot(root)
-                                ? ", but the allocation runs more than once, so two threads "
-                                  "may be looking at two objects rather than one"
-                                : ", but the object is a stack slot whose address escapes, "
-                                  "so two threads may be looking at two invocations rather than one");
+                    Operation *at = whereA ? whereA : (a.firstWrite ? a.firstWrite : a.firstAccess);
+                    auto d = at->emitRemark() << "wtc: possible false sharing in " << label << ": '";
+                    if (oa == ob) d << a.name << "' of two elements may share one " << line << "-byte line";
+                    else d << a.name << "' and '" << b.name << "' share one " << line << "-byte line" << where;
+                    d << (isHeapRoot(root)
+                              ? ", but the allocation may run more than once, so two threads "
+                                "may be looking at two objects rather than one"
+                              : ", but the object is a stack slot whose address escapes, "
+                                "so two threads may be looking at two invocations rather than one");
                     continue;
                 }
                 if (hit) {
@@ -913,10 +1055,6 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
                         << "wtc: the other thread touches '" << b.name << "' here";
                     continue;
                 }
-                // On a stack slot, one thread writing both fields is one
-                // invocation writing its own copy, and saying anything about
-                // it is noise: it is what libstdc++'s own locals produced on
-                // real output.
                 if (contend && !onStack) {
                     ++possible;
                     auto d = whereA->emitRemark() << "wtc: possible false sharing in " << label << ": '";
@@ -950,49 +1088,57 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
         // With an element per thread, the elements of two neighbouring
         // threads are adjacent in memory, and the tail of one shares a line
         // with the head of the next unless the element is a multiple of a
-        // line and the array starts on one. The thread standing for many
-        // hot-writes field a of its own element and hot-touches field b;
-        // across the boundary that is two different threads, so the pair is
-        // definite: the loop is read as written, a loop, and one that runs
-        // once starts one thread and makes the pair moot rather than wrong.
-        // This is the shape of Phoenix's linear_regression and of
-        // memcached's threads[]: one struct per thread, allocated as an
-        // array.
-        if (loop && elemSize) {
+        // line and the array starts on one. A thread that owns its element
+        // alone (Place::owner: the loop steps by one and spawns every time,
+        // so both neighbours have a thread) hot-writes field a of its own
+        // element and hot-touches field b; across the boundary that is two
+        // different threads, so the pair is definite; with a once-only write
+        // of a it is cold, on the same terms as within an object. The loop
+        // is read as written, a loop; one that runs once starts one thread
+        // and makes the pair moot rather than wrong. This is the shape of
+        // Phoenix's linear_regression and of memcached's threads[]: one
+        // struct per thread, allocated as an array.
+        if (relative && elemSize && !owners.empty()) {
             auto pick = [](const FieldInfo &owner, unsigned t) -> Operation * {
                 if (Operation *o = owner.hotWriteAt.lookup(t)) return o;
                 return owner.hotReadAt.lookup(t);
             };
-            const uint64_t startStep = std::gcd(std::gcd(align, elemSize), line);
             for (uint64_t oa : offsets) {
                 for (uint64_t ob : offsets) {
                     const FieldInfo &a = fields[oa], &b = fields[ob];
                     unsigned w = 0;
-                    bool found = false;
-                    for (unsigned t : a.hotWriters)
-                        if (a.certain.count(t) && b.certain.count(t) &&
-                            (b.hotWriters.count(t) || b.hotReaders.count(t))) { w = t; found = true; break; }
-                    if (!found) continue;
-                    const uint64_t sa = sizeOf(a, w, true), sb = sizeOf(b, w, true);
+                    bool hot = false, once = false;
+                    for (unsigned t : a.writers) {
+                        if (!owners.count(t) || !a.certain.count(t) || !b.certain.count(t)) continue;
+                        if (!b.hotWriters.count(t) && !b.hotReaders.count(t)) continue;
+                        if (a.hotWriters.count(t)) { w = t; hot = true; break; }
+                        if (a.unknownRateWriters.count(t)) continue;
+                        if (unresolvedThreads.count(t) || hasUnknownIndex(t)) continue;
+                        if (!once) { w = t; once = true; }
+                    }
+                    if (!hot && !once) continue;
+                    const uint64_t sa = sizeOf(a, w, hot), sb = sizeOf(b, w, true);
+                    // Bytes the two accesses have in common are the same
+                    // data, not a layout question.
+                    if (overlap(oa, sa, elemSize + ob, sb)) continue;
                     unsigned positions = 0, sharing = 0;
-                    for (uint64_t shift = 0; shift < line; shift += startStep) {
+                    for (uint64_t shift = 0; shift < line; shift += std::min(startStep, line)) {
                         ++positions;
                         sharing += sharesAt(oa, sa, elemSize + ob, sb, shift);
                     }
                     if (!sharing) continue;
+                    if (!hot) { ++coldPairs; continue; }
                     std::string where;
-                    if (sharing != positions)
-                        where = (" in " + llvm::Twine(sharing) + " of the " + llvm::Twine(positions) +
-                                 " positions an element of " + llvm::Twine(elemSize) +
-                                 " bytes may start at").str();
+                    if (sharing != positions) where = positionsText(sharing, positions);
                     ++definite;
                     Operation *at = pick(a, w);
                     auto d = at->emitRemark()
                         << "wtc: false sharing in " << label << " across elements: '" << a.name
                         << "' (offset " << oa << ") of one element and '" << b.name << "' (offset "
-                        << ob << ") of the next are touched by the two threads that own them and "
-                           "share one " << line << "-byte line" << where
-                        << "; padding each element to a line removes it";
+                        << ob << ") of the next are touched by the two threads the spawn loop "
+                           "handed them to and share one " << line << "-byte line" << where
+                        << "; padding each element to a multiple of a line and aligning the "
+                           "array to a line removes it";
                     if (Operation *o = pick(b, w)) d.attachNote(o->getLoc())
                         << "wtc: the next element's '" << b.name << "' is touched here";
                 }
@@ -1003,15 +1149,30 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
     // Printed whenever a field access was seen, so that "nothing to report"
     // is a line in the output rather than an absence a test cannot tell from
     // the pass not having run.
+    // One operation may make two accesses (memcpy), each placed its own
+    // way; it is counted once, under the least that is known of it.
+    auto countExcept = [](const llvm::DenseSet<Operation *> &set,
+                          std::initializer_list<const llvm::DenseSet<Operation *> *> before) {
+        size_t n = 0;
+        for (Operation *op : set) {
+            bool earlier = false;
+            for (const auto *b : before) earlier |= b->count(op) > 0;
+            n += !earlier;
+        }
+        return n;
+    };
+    const size_t unknownIndexCount = countExcept(unknownIndexOps, {&unresolvedOps});
+    const size_t stackLocalCount = countExcept(stackLocalOps, {&unresolvedOps, &unknownIndexOps});
+    const size_t threadLocalCount = countExcept(threadLocalOps, {&unresolvedOps, &unknownIndexOps, &stackLocalOps});
     if (!byRoot.empty() || !unresolvedOps.empty() || !stackLocalOps.empty() ||
         !threadLocalOps.empty() || !unknownIndexOps.empty())
         module.emitRemark() << "wtc: false sharing: " << definite << " definite, " << possible
                             << " possible, " << coldPairs
                             << " cold (different threads, but one side touches the line once), "
                             << unresolvedOps.size() << " field accesses on objects that could not "
-                            << "be identified, " << stackLocalOps.size()
-                            << " on stack slots that never escape, " << threadLocalOps.size()
-                            << " on thread-local objects, " << unknownIndexOps.size()
+                            << "be identified, " << stackLocalCount
+                            << " on stack slots that never escape, " << threadLocalCount
+                            << " on thread-local objects, " << unknownIndexCount
                             << " at array elements the analysis cannot tell apart; " << walkInstances
                             << " function instances; " << unplacedPairs
                             << " of the possible pairs would be cold but for unplaced accesses";

@@ -59,4 +59,4 @@ module {
   }
 }
 
-// CHECK: false sharing: 0 definite, 0 possible, 1 cold{{.*}}0 field accesses on objects that could not be identified{{.*}}1 at array elements the analysis cannot tell apart
+// CHECK: false sharing: 0 definite, 0 possible, 1 cold{{.*}}, 0 field accesses on objects that could not be identified{{.*}}, 1 at array elements the analysis cannot tell apart

@@ -70,4 +70,4 @@ module {
 }
 
 // CHECK-NOT: false sharing in
-// CHECK: false sharing: 0 definite, 0 possible, 0 cold{{.*}}2 on thread-local objects
+// CHECK: false sharing: 0 definite, 0 possible, 0 cold{{.*}}, 2 on thread-local objects

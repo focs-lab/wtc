@@ -3,15 +3,18 @@
    Each worker bumps the head and the tail of its own element in a loop.
    At 40 bytes an element, the tail of one element and the head of the next
    share a cache line, and the two are owned by two different threads: that
-   is false sharing between neighbours, and padding each element to a line
-   removes it. Within one element there is one thread and no pair.
+   is false sharing between neighbours, and padding each element to a
+   multiple of a line and aligning the array to a line removes it. Within
+   one element there is one thread and no pair. Three pairs cross the
+   boundary: tail/head, head/head and tail/tail.
 
    RUN: %clang -std=gnu11 -fclangir -emit-cir %s -o %t.cir
    RUN: wtc-opt %t.cir --wtc-false-sharing-diagnose 2>&1 >/dev/null | FileCheck %s
 
-   CHECK: remark: wtc: false sharing in calloc() in @main (one element per thread) across elements: 'tail' (offset 32) of one element and 'head' (offset 0) of the next
    CHECK-NOT: remark: wtc: possible false sharing
-   CHECK: false sharing: {{[1-9][0-9]*}} definite, 0 possible, 0 cold
+   CHECK-NOT: (one element per thread): '
+   CHECK: remark: wtc: false sharing in calloc() in @main (one element per thread) across elements: 'tail' (offset 32) of one element and 'head' (offset 0) of the next are touched by the two threads the spawn loop handed them to and share one 64-byte line in 7 of the 8 positions an element of 40 bytes may start at; padding each element to a multiple of a line and aligning the array to a line removes it
+   CHECK: false sharing: 3 definite, 0 possible, 0 cold
 */
 #include <pthread.h>
 #include <stdlib.h>

@@ -220,10 +220,14 @@ static cir::CallOp allocationBehindImpl(cir::CallOp call, unsigned depth) {
     bool bad = false;
     callee.walk([&](cir::ReturnOp ret) {
         if (bad) return;
+        if (ret.getNumOperands() != 1) { bad = true; return; }
+        Value r = traceToRoot(ret.getOperand(0));
+        // A null handed back on the failure path reaches no field access.
+        if (auto c = r.getDefiningOp<cir::ConstantOp>())
+            if (auto cp = dyn_cast<cir::ConstPtrAttr>(c.getValue()))
+                if (cp.getValue().getValue().isZero()) return;
         cir::CallOp here;
-        if (ret.getNumOperands() == 1)
-            if (auto c = traceToRoot(ret.getOperand(0)).getDefiningOp<cir::CallOp>())
-                here = allocationBehindImpl(c, depth + 1);
+        if (auto c = r.getDefiningOp<cir::CallOp>()) here = allocationBehindImpl(c, depth + 1);
         if (!here || (site && site != here)) bad = true;
         else site = here;
     });

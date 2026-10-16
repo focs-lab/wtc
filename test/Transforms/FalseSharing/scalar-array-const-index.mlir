@@ -55,4 +55,4 @@ module {
 }
 
 // CHECK: wtc: false sharing in @counts: '[0]' (offset 0) and '[1]' (offset 8) are touched by different threads and share one 64-byte line
-// CHECK: false sharing: 1 definite, 0 possible, 0 cold{{.*}}0 field accesses on objects that could not be identified
+// CHECK: false sharing: 1 definite, 0 possible, 0 cold{{.*}}, 0 field accesses on objects that could not be identified

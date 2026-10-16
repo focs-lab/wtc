@@ -65,4 +65,4 @@ module {
 
 // CHECK-NOT: wtc: false sharing in
 // CHECK: possible false sharing in @arr: 'a' and 'b'{{.*}}accesses it could not place
-// CHECK: false sharing: 0 definite, 1 possible, 0 cold{{.*}}1 at array elements the analysis cannot tell apart{{.*}}1 of the possible pairs would be cold but for unplaced accesses
+// CHECK: false sharing: 0 definite, 1 possible, 0 cold{{.*}}, 1 at array elements the analysis cannot tell apart{{.*}}; 1 of the possible pairs would be cold but for unplaced accesses

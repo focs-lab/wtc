@@ -12,7 +12,6 @@
 !fnptr = !cir.ptr<!cir.func<()>>
 !fnptr2 = !cir.ptr<!cir.func<(!cir.ptr<!rec_S>)>>
 module {
-  cir.global external @tp = #cir.ptr<null> : !cir.ptr<!rec_S>
   cir.func private @calloc(!u64i, !u64i) -> !cir.ptr<!void>
   cir.func private @malloc(!u64i) -> !cir.ptr<!void>
   cir.func private @realloc(!cir.ptr<!void>, !u64i) -> !cir.ptr<!void>
@@ -37,38 +36,6 @@ module {
       %t = cir.const #cir.bool<true> : !cir.bool
       cir.condition(%t)
     } body {
-      %f = cir.get_member %p[1] {name = "b"} : !cir.ptr<!rec_S> -> !cir.ptr<!s64i>
-      %v = cir.const #cir.int<2> : !s64i
-      cir.store %v, %f : !s64i, !cir.ptr<!s64i>
-      cir.yield
-    } step {
-      cir.yield
-    }
-    cir.return
-  }
-  cir.func internal private @wa() {
-    cir.for : cond {
-      %t = cir.const #cir.bool<true> : !cir.bool
-      cir.condition(%t)
-    } body {
-      %tpp = cir.get_global @tp : !cir.ptr<!cir.ptr<!rec_S>>
-      %p = cir.load %tpp : !cir.ptr<!cir.ptr<!rec_S>>, !cir.ptr<!rec_S>
-      %f = cir.get_member %p[0] {name = "a"} : !cir.ptr<!rec_S> -> !cir.ptr<!s64i>
-      %v = cir.const #cir.int<1> : !s64i
-      cir.store %v, %f : !s64i, !cir.ptr<!s64i>
-      cir.yield
-    } step {
-      cir.yield
-    }
-    cir.return
-  }
-  cir.func internal private @wb() {
-    cir.for : cond {
-      %t = cir.const #cir.bool<true> : !cir.bool
-      cir.condition(%t)
-    } body {
-      %tpp = cir.get_global @tp : !cir.ptr<!cir.ptr<!rec_S>>
-      %p = cir.load %tpp : !cir.ptr<!cir.ptr<!rec_S>>, !cir.ptr<!rec_S>
       %f = cir.get_member %p[1] {name = "b"} : !cir.ptr<!rec_S> -> !cir.ptr<!s64i>
       %v = cir.const #cir.int<2> : !s64i
       cir.store %v, %f : !s64i, !cir.ptr<!s64i>

@@ -41,4 +41,4 @@ module {
 
 // CHECK-NOT: wtc: false sharing in
 // CHECK: possible false sharing in @counts (element not known): '<element>' of two elements may share one 64-byte line and is touched repeatedly, but which element each is at the analysis cannot read
-// CHECK: false sharing: 0 definite, 1 possible, 0 cold{{.*}}0 field accesses on objects that could not be identified{{.*}}1 at array elements the analysis cannot tell apart
+// CHECK: false sharing: 0 definite, 1 possible, 0 cold{{.*}}, 0 field accesses on objects that could not be identified{{.*}}, 1 at array elements the analysis cannot tell apart

@@ -58,5 +58,5 @@ module {
   }
 }
 
-// CHECK: wtc: false sharing in @s: 'cnt' (offset 0) and 'cnt[1]' (offset 8)
+// CHECK: wtc: false sharing in @s: 'cnt[0]' (offset 0) and 'cnt[1]' (offset 8)
 // CHECK: false sharing: 1 definite, 0 possible, 0 cold

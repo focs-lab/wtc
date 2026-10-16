@@ -1,3 +1,5 @@
+// RUN: wtc-opt %s --wtc-false-sharing-diagnose 2>&1 >/dev/null | FileCheck %s
+
 !s32i = !cir.int<s, 32>
 !s64i = !cir.int<s, 64>
 !u64i = !cir.int<u, 64>
@@ -5,7 +7,6 @@
 !rec_S = !cir.struct<"S" {data !s64i, data !s64i}>
 !fnptr = !cir.ptr<!cir.func<()>>
 !arr = !cir.array<!rec_S x 4>
-// RUN: wtc-opt %s --wtc-false-sharing-diagnose 2>&1 >/dev/null | FileCheck %s
 
 // A global array of structs. One thread writes arr[1].a, at offset 16, the
 // other arr[0].b, at offset 8: two elements, one line, definite. A step
@@ -59,5 +60,5 @@ module {
   }
 }
 
-// CHECK: wtc: false sharing in @arr: 'b' (offset 8) and '[1].a' (offset 16)
+// CHECK: wtc: false sharing in @arr: '[0].b' (offset 8) and '[1].a' (offset 16)
 // CHECK: false sharing: 1 definite, 0 possible, 0 cold

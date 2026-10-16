@@ -1,10 +1,11 @@
 // RUN: wtc-opt %s --wtc-false-sharing-diagnose 2>&1 >/dev/null | FileCheck %s
 
 // The allocation comes through a checked wrapper, the way Phoenix's CALLOC
-// and memcached's conn_new hand out objects: xcalloc calls calloc, checks
-// the result and returns it. Every return of the wrapper hands back the
-// one allocation in its body, so the call to the wrapper in main is the
-// object, named after the wrapper, and the pair is definite in it.
+// hands out objects: xcalloc calls calloc, checks the result and returns
+// it. Every return of the wrapper hands back the one allocation in its
+// body, so the wrapper's call in main is that allocation; the object is
+// named by the allocator call inside the wrapper, and the pair is definite
+// in it.
 
 !s32i = !cir.int<s, 32>
 !s64i = !cir.int<s, 64>
@@ -81,5 +82,5 @@ module {
   }
 }
 
-// CHECK: wtc: false sharing in xcalloc() in @main: 'a' (offset 0) and 'b' (offset 8)
+// CHECK: wtc: false sharing in calloc() in @xcalloc: 'a' (offset 0) and 'b' (offset 8)
 // CHECK: false sharing: 1 definite, 0 possible, 0 cold

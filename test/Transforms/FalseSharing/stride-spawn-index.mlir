@@ -69,5 +69,7 @@ module {
 }
 
 // CHECK-NOT: in @main (one element per thread): 'a'
-// CHECK: wtc: false sharing in calloc() in @main (one element per thread) across elements: 'e' (offset 32) of one element and 'a' (offset 0) of the next are touched by the two threads that own them and share one 64-byte line in 7 of the 8 positions
-// CHECK: false sharing: {{[1-9]}} definite, 0 possible, 0 cold{{.*}}0 field accesses on objects that could not be identified
+// CHECK: wtc: false sharing in calloc() in @main (one element per thread) across elements: 'a' (offset 0) of one element and 'a' (offset 0) of the next{{.*}}in 3 of the 8 positions
+// CHECK: wtc: false sharing in calloc() in @main (one element per thread) across elements: 'e' (offset 32) of one element and 'a' (offset 0) of the next are touched by the two threads the spawn loop handed them to and share one 64-byte line in 7 of the 8 positions an element of 40 bytes may start at; padding each element to a multiple of a line and aligning the array to a line removes it
+// CHECK: wtc: false sharing in calloc() in @main (one element per thread) across elements: 'e' (offset 32) of one element and 'e' (offset 32) of the next{{.*}}in 3 of the 8 positions
+// CHECK: false sharing: 3 definite, 0 possible, 0 cold{{.*}}, 0 field accesses on objects that could not be identified

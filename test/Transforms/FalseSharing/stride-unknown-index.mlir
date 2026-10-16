@@ -62,4 +62,4 @@ module {
 
 // CHECK-NOT: wtc: false sharing in
 // CHECK: possible false sharing in @arr (element not known): '[?].a' and '[?].b' share one 64-byte line and are touched repeatedly, but which element each is at the analysis cannot read, so the two may be on one element or on two
-// CHECK: false sharing: 0 definite, 1 possible, 0 cold{{.*}}0 field accesses on objects that could not be identified{{.*}}2 at array elements the analysis cannot tell apart
+// CHECK: false sharing: 0 definite, 1 possible, 0 cold{{.*}}, 0 field accesses on objects that could not be identified{{.*}}, 2 at array elements the analysis cannot tell apart

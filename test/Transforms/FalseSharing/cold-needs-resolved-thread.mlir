@@ -81,4 +81,4 @@ module {
 
 // CHECK-NOT: wtc: false sharing in
 // CHECK: possible false sharing in @s: 'a' and 'b'{{.*}}accesses it could not place
-// CHECK: false sharing: 0 definite, 1 possible, 0 cold{{.*}}1 field accesses on objects that could not be identified{{.*}}1 of the possible pairs would be cold but for unplaced accesses
+// CHECK: false sharing: 0 definite, 1 possible, 0 cold{{.*}}, 1 field accesses on objects that could not be identified{{.*}}; 1 of the possible pairs would be cold but for unplaced accesses

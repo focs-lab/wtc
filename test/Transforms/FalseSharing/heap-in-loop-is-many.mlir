@@ -72,5 +72,5 @@ module {
 }
 
 // CHECK-NOT: wtc: false sharing in
-// CHECK: possible false sharing in calloc() in @main: 'a' and 'b'{{.*}}allocation runs more than once
+// CHECK: possible false sharing in calloc() in @main: 'a' and 'b'{{.*}}allocation may run more than once
 // CHECK: false sharing: 0 definite, 1 possible, 0 cold
