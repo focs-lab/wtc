@@ -254,8 +254,15 @@ private:
         // the standard library's call graph back into the walk.
         Value t = traceToRoot(addr);
         Type ty;
-        if (auto gg = t.getDefiningOp<cir::GetGlobalOp>()) ty = gg.getType().getPointee();
-        else if (auto a = t.getDefiningOp<cir::AllocaOp>()) ty = a.getAllocaType();
+        if (auto gg = t.getDefiningOp<cir::GetGlobalOp>()) {
+            // An alias may declare a type of its own; the object's is the
+            // aliasee's.
+            auto g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr());
+            for (unsigned hop = 0; g && g.getAliasee() && hop < 8; ++hop)
+                g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(
+                    g, StringAttr::get(g.getContext(), *g.getAliasee()));
+            ty = g ? g.getSymType() : gg.getType().getPointee();
+        } else if (auto a = t.getDefiningOp<cir::AllocaOp>()) ty = a.getAllocaType();
         if (ty && isa<cir::RecordType>(ty)) return Shape::Whole;
         return Shape::None;
     }
@@ -307,14 +314,16 @@ private:
         while (!work.empty() && guard++ < 512) {
             Value v = work.pop_back_val();
             for (Operation *u : v.getUsers()) {
-                if (!seen.insert(u).second) continue;
-                if (isa<cir::LoadOp>(u)) continue;                  // reads the slot
+                // A store is judged per operand: the same store may hold
+                // the slot's address as its destination and, through another
+                // derived value, as the value stored, and only the second
+                // publishes it.
                 if (auto st = dyn_cast<cir::StoreOp>(u)) {
-                    // Storing *into* the slot is fine; storing the slot's own
-                    // address somewhere publishes it.
                     if (st.getValue() == v) return true;
                     continue;
                 }
+                if (!seen.insert(u).second) continue;
+                if (isa<cir::LoadOp>(u)) continue;                  // reads the slot
                 if (isa<cir::CastOp, cir::GetMemberOp, cir::GetElementOp, cir::PtrStrideOp>(u)) {
                     work.push_back(u->getResult(0));
                     continue;
@@ -447,8 +456,16 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
                 uint64_t size = 1;
                 if (valTy && !isa<cir::VoidType, cir::FuncType>(valTy)) size = dl.getTypeSize(valTy);
                 fi.size = std::max<uint64_t>(fi.size, size);
-                uint64_t &mine = (repeated || unknownRate) ? fi.hotSize[inst.thread] : fi.onceSize[inst.thread];
-                mine = std::max(mine, size);
+                // The once-only size is the size of the once-only *write*:
+                // the cold rule pairs a once-writer, and a once-only read of
+                // the whole record by the same thread must not widen it.
+                if (repeated || unknownRate) {
+                    uint64_t &mine = fi.hotSize[inst.thread];
+                    mine = std::max(mine, size);
+                } else if (isWrite) {
+                    uint64_t &mine = fi.onceSize[inst.thread];
+                    mine = std::max(mine, size);
+                }
                 if (!inst.speculative) fi.certain.insert(inst.thread);
                 if (isWrite) {
                     fi.writers.insert(inst.thread);

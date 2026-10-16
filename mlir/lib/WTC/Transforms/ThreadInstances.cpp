@@ -243,6 +243,12 @@ bool ThreadInstanceWalk::reachesOp(cir::FuncOp f, llvm::function_ref<bool(Operat
     return reachesCache_.lookup(f.getOperation());
 }
 
+bool ThreadInstanceWalk::hasIndirectCall(cir::FuncOp f) {
+    bool found = false;
+    f.walk([&](cir::CallOp call) { if (!lookupCallee(call)) found = true; });
+    return found;
+}
+
 bool ThreadInstanceWalk::isUnstructured(cir::FuncOp f) {
     auto it = unstructuredCache_.find(f.getOperation());
     if (it != unstructuredCache_.end()) return it->second;
@@ -372,6 +378,14 @@ const llvm::DenseSet<Operation *> &ThreadInstanceWalk::preSpawnOps(cir::FuncOp f
     auto it = preSpawnCache_.find(f.getOperation());
     if (it != preSpawnCache_.end()) return it->second;
     llvm::DenseSet<Operation *> pre;
+    // A function with a goto that cannot start a thread, nor call anything
+    // that can, runs entirely before any spawn of its own: every operation
+    // in it precedes one. Only where a goto and a spawn meet is the order
+    // unreadable, and that case is a guess the clients ask about.
+    if (isUnstructured(f) && !canSpawn(f) && !(indirectCallCanSpawn() && hasIndirectCall(f))) {
+        f.walk([&](Operation *op) { pre.insert(op); });
+        return preSpawnCache_[f.getOperation()] = std::move(pre);
+    }
     if (!isUnstructured(f)) {
         bool seen = false;
         f.walk<WalkOrder::PreOrder>([&](Operation *op) {
@@ -394,6 +408,10 @@ const llvm::DenseSet<Operation *> &ThreadInstanceWalk::preSpawnOps(cir::FuncOp f
                 if (!callee ? indirectCallCanSpawn()
                             : (getSemanticKind(callee) == SemanticOpKind::ThreadSpawn ||
                                (!callee.getBody().empty() && canSpawn(callee)))) {
+                    // The call itself is still before the spawn: what the
+                    // callee does before its own spawn is start-up too, and
+                    // the instance it creates reads that from this set.
+                    pre.insert(op);
                     seen = true;
                     return WalkResult::advance();
                 }
@@ -724,7 +742,16 @@ void ThreadInstanceWalk::run(llvm::function_ref<void(Instance &)> visit,
             // Each function's recurrence is expanded once in the whole walk:
             // unrolling every cycle once per path made the walk exponential
             // in the size of a mutually recursive group.
-            if (!expandedRecurrence_.insert(inst.func.getOperation()).second) { visit(inst); return; }
+            // Once per function, thread and phase: the walk is breadth-first,
+            // so keyed by function alone the one unrolling went to the
+            // shallowest recurrence, a start-up call, and a worker's
+            // recursive writes were never seen.
+            // A recurrence through a spawn starts a new thread each time, so
+            // keyed by thread it would unroll forever; once per function is
+            // right for it, since the chain of threads is one thing.
+            const bool viaSpawn = inst.site && getSemanticKind(lookupCallee(inst.site)) == SemanticOpKind::ThreadSpawn;
+            const uint64_t key = viaSpawn ? ~uint64_t(0) : ((uint64_t(inst.thread) << 1) | (inst.startup ? 1 : 0));
+            if (!expandedRecurrence_.insert({inst.func.getOperation(), key}).second) { visit(inst); return; }
         }
         expand(inst);
         visit(inst);

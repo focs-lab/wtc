@@ -212,6 +212,7 @@ public:
 
 private:
     bool isUnstructured(cir::FuncOp f);
+    bool hasIndirectCall(cir::FuncOp f);
     bool isRecursive(cir::FuncOp f);
     bool canSpawn(cir::FuncOp f);
     bool indirectCallCanSpawn();
@@ -235,7 +236,7 @@ private:
     llvm::DenseMap<Operation *, bool> recursiveCache_;
     bool recursiveComputed_ = false;
     llvm::DenseMap<unsigned, const Instance *> threadRoot_;   // the instance that began each thread
-    llvm::DenseSet<Operation *> expandedRecurrence_;           // functions whose recurrence was unrolled
+    llvm::DenseSet<std::pair<Operation *, uint64_t>> expandedRecurrence_;   // (function, thread/phase) unrolled once
     mutable llvm::DenseMap<Operation *, Value> globalStores_;  // pointer global -> its one stored value
     mutable bool globalStoresComputed_ = false;
     llvm::DenseMap<Operation *, bool> reachesCache_;
