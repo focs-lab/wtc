@@ -36,9 +36,28 @@ bool isWTCAnnotatedCall(cir::CallOp op, StringRef annotation) {
     return hasAnnotation(lookupCallee(op), annotation);
 }
 
+// Standard entry points that mean what the shim's annotations mean. Only
+// names with a settled meaning belong here: pthread_create starts a thread
+// in every C program that has one, and a program that defines its own
+// function with that name is already in trouble.
+//
+// libstdc++'s std::thread constructor is a template instantiated in the
+// translation unit, and it hands the callable to a bodiless
+// std::thread::_M_start_thread. Its entry cannot be resolved -- it travels
+// inside a heap-allocated state object -- but recognising the call matters
+// anyway: it is where the start-up phase ends, and without it every
+// program that uses std::thread looked as if it never started a thread.
+static SemanticOpKind kindByName(StringRef name) {
+    if (name == "pthread_create" || name == "thrd_create") return SemanticOpKind::ThreadSpawn;
+    if (name.contains("6thread15_M_start_thread")) return SemanticOpKind::ThreadSpawn;
+    return SemanticOpKind::Unknown;
+}
+
 SemanticOpKind getSemanticKind(cir::FuncOp funcOp) {
     if (!funcOp)
         return SemanticOpKind::Unknown;
+    if (SemanticOpKind k = kindByName(funcOp.getSymName()); k != SemanticOpKind::Unknown)
+        return k;
     auto annotations = funcOp.getAnnotationsAttr();
     if (!annotations)
         return SemanticOpKind::Unknown;
@@ -158,4 +177,20 @@ Value traceToRoot(Value v) {
     }
 }
 
+
+unsigned spawnEntryOperand(cir::CallOp op) {
+    cir::FuncOp callee = lookupCallee(op);
+    // pthread_create(pthread_t *thread, const pthread_attr_t *attr,
+    //                void *(*start)(void *), void *arg)
+    if (callee && callee.getSymName() == "pthread_create")
+        return firstRealOperand(op) + 2;
+    // thrd_create(thrd_t *thr, thrd_start_t func, void *arg)
+    if (callee && callee.getSymName() == "thrd_create")
+        return firstRealOperand(op) + 1;
+    return firstRealOperand(op);
+}
+
+unsigned spawnFirstArgOperand(cir::CallOp op) {
+    return spawnEntryOperand(op) + 1;
+}
 }
