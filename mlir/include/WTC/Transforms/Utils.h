@@ -6,8 +6,13 @@
 namespace mlir::wtc {
 
 // The shim functions, recognised by the annotation strings the headers in
-// shim/ carry. These strings are the whole recognition mechanism; there is
-// no matching on mangled names anywhere.
+// shim/ carry -- and the handful of standard entry points that mean the
+// same thing in code nobody wrote for us. A program that starts its threads
+// with pthread_create says exactly what wtc::spawn says; refusing to read
+// it would mean the analysis knows a program has threads but not where they
+// begin, which is what an amalgamated memcached showed: with no spawn in
+// sight, the start-up phase collapses and the option parsing pairs against
+// every worker.
 enum class SemanticOpKind {
     Unknown,
     ThreadSpawn,
@@ -37,6 +42,14 @@ bool hasSretArg(cir::CallOp op, unsigned idx);
 // 1 if operand 0 is a return slot, else 0: the index of the first operand
 // that is an argument the source program wrote.
 unsigned firstRealOperand(cir::CallOp op);
+
+// For a call that starts a thread: the operand holding the entry function,
+// and the operand holding the first argument passed to it. The two spellings
+// disagree -- wtc::spawn(entry, args...) puts the entry first, while
+// pthread_create(&tid, attr, entry, arg) puts it third -- so every caller
+// asks rather than assuming.
+unsigned spawnEntryOperand(cir::CallOp op);
+unsigned spawnFirstArgOperand(cir::CallOp op);
 
 // A function-typed operand (a thread entry point, say) traced through casts
 // to the cir.get_global that names it, resolved to the function. Null if
