@@ -409,9 +409,70 @@ bool ThreadInstanceWalk::spawnPrecedes(Operation *op, cir::FuncOp f) {
     return !preSpawnOps(f).count(op);
 }
 
+Value ThreadInstanceWalk::singleStoredGlobalValue(cir::GlobalOp g) const {
+    if (!globalStoresComputed_) {
+        globalStoresComputed_ = true;
+        // One pass over every use of every global: the stores through its
+        // address, and whether its address goes anywhere but a load.
+        llvm::DenseMap<Operation *, llvm::SmallVector<Value, 2>> stores;
+        llvm::DenseSet<Operation *> spoiled;
+        ModuleOp module = module_;   // a copy of the handle: walk is not const
+        module.walk([&](cir::GetGlobalOp gg) {
+            auto global = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr());
+            if (!global || !isa<cir::PointerType>(global.getSymType())) return;
+            Operation *key = global.getOperation();
+            llvm::SmallVector<Value, 4> work{gg.getResult()};
+            while (!work.empty()) {
+                Value p = work.pop_back_val();
+                for (OpOperand &use : p.getUses()) {
+                    Operation *u = use.getOwner();
+                    if (isa<cir::LoadOp>(u)) continue;
+                    if (auto st = dyn_cast<cir::StoreOp>(u)) {
+                        if (st.getAddr() == p) stores[key].push_back(st.getValue());
+                        else spoiled.insert(key);               // the address itself is stored
+                        continue;
+                    }
+                    if (auto c = dyn_cast<cir::CastOp>(u)) {
+                        if (c.getKind() == cir::CastKind::bitcast) { work.push_back(c.getResult()); continue; }
+                    }
+                    spoiled.insert(key);
+                }
+            }
+        });
+        for (auto &kv : stores)
+            if (kv.second.size() == 1 && !spoiled.count(kv.first)) globalStores_[kv.first] = kv.second[0];
+    }
+    // An initialiser other than null is a second value.
+    if (auto init = g.getInitialValue()) {
+        auto cp = dyn_cast<cir::ConstPtrAttr>(*init);
+        if (!cp || !cp.getValue().getValue().isZero()) return Value();
+    }
+    return globalStores_.lookup(g.getOperation());
+}
+
 Operation *ThreadInstanceWalk::resolveRoot(Value v, Instance *inst, unsigned depth) const {
     if (depth > 64 || !inst) return nullptr;
     Value t = traceToRoot(v);
+    // The object an allocator returned: the call is its identity.
+    if (auto call = t.getDefiningOp<cir::CallOp>())
+        return isAllocator(lookupCallee(call)) ? call.getOperation() : nullptr;
+    // A pointer loaded from a global the module writes exactly once: the
+    // loaded value is the one stored, wherever the load is. The stored
+    // value is resolved without an instance, since the storing function's
+    // instance is not this one: a global, an allocation, nothing else.
+    if (auto ld = t.getDefiningOp<cir::LoadOp>()) {
+        if (auto gg = traceToLocalRoot(ld.getAddr()).getDefiningOp<cir::GetGlobalOp>()) {
+            auto g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr());
+            if (Value stored = g ? singleStoredGlobalValue(g) : Value()) {
+                Value s = traceToRoot(stored);
+                if (auto call = s.getDefiningOp<cir::CallOp>())
+                    return isAllocator(lookupCallee(call)) ? call.getOperation() : nullptr;
+                if (auto sg = s.getDefiningOp<cir::GetGlobalOp>())
+                    return SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(sg, sg.getNameAttr()).getOperation();
+            }
+        }
+        return nullptr;
+    }
     if (auto gg = t.getDefiningOp<cir::GetGlobalOp>()) {
         auto g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr());
         // An alias has no storage of its own: the object is the aliasee's,

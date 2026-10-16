@@ -111,11 +111,19 @@ public:
     void run(llvm::function_ref<void(Instance &)> visit,
              llvm::function_ref<void(cir::FuncOp)> onRecursion);
 
-    // The root object a handle refers to -- a cir.global or a cir.alloca --
-    // resolved through the chain of call sites that created this instance.
-    // Null when the trail does not end at one, which the caller must treat
-    // as unresolved rather than as absent.
+    // The root object a handle refers to -- a cir.global, a cir.alloca, or
+    // the cir.call that allocated it -- resolved through the chain of call
+    // sites that created this instance, through a stack slot written once,
+    // and through a pointer-typed global written once (memcached's
+    // `threads = calloc(...)`). Null when the trail does not end at one,
+    // which the caller must treat as unresolved rather than as absent.
     Operation *resolveRoot(Value v, Instance *inst, unsigned depth = 0) const;
+
+    // The value stored into a pointer-typed global, when the module stores
+    // into it exactly once and only ever loads it otherwise; null when it
+    // is written twice (realloc, re-initialisation, `p = NULL` at shutdown)
+    // or its address goes anywhere else. Computed once per module.
+    Value singleStoredGlobalValue(cir::GlobalOp g) const;
 
     // The function a spawn starts, resolved the same way: through casts and
     // single-assignment slots to a named function, or, when the entry is a
@@ -228,6 +236,8 @@ private:
     bool recursiveComputed_ = false;
     llvm::DenseMap<unsigned, const Instance *> threadRoot_;   // the instance that began each thread
     llvm::DenseSet<Operation *> expandedRecurrence_;           // functions whose recurrence was unrolled
+    mutable llvm::DenseMap<Operation *, Value> globalStores_;  // pointer global -> its one stored value
+    mutable bool globalStoresComputed_ = false;
     llvm::DenseMap<Operation *, bool> reachesCache_;
     llvm::DenseMap<Operation *, llvm::DenseSet<Operation *>> preSpawnCache_;
     llvm::DenseMap<Operation *, bool> spawnsCache_;

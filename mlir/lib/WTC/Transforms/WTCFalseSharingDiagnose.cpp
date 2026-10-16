@@ -120,6 +120,12 @@ public:
         *this, "cache-line",
         llvm::cl::desc("Bytes in a cache line on the target (default 64)"),
         llvm::cl::init(64)};
+    // What malloc, calloc and new guarantee on the target: 16 on x86-64
+    // glibc. An allocation whose call names its alignment uses that instead.
+    Option<unsigned> heapAlign{
+        *this, "heap-align",
+        llvm::cl::desc("Alignment malloc guarantees on the target (default 16)"),
+        llvm::cl::init(16)};
 
     void runOnOperation() override;
 
@@ -160,11 +166,42 @@ private:
     // Returns the base value, or null if the address is not a member access.
     Value resolveMember(Value addr, const DataLayout &dl, uint64_t &offset,
                         std::string &path) const {
+        offset = 0;
+        llvm::SmallVector<std::string, 4> parts;
+        // Element steps with a constant index -- arr[2].f, s.counts[1] --
+        // add that many elements to the offset; any other index names an
+        // element the analysis cannot place, and the access stays unplaced.
+        // Returns false on such an index, or on an element of unknown size.
+        auto stepElements = [&](Value &base) {
+            for (unsigned steps = 0; steps < 16; ++steps) {
+                Value index, next;
+                Type elem;
+                if (auto ps = base.getDefiningOp<cir::PtrStrideOp>()) {
+                    index = ps.getStride(); next = ps.getBase();
+                    elem = cast<cir::PointerType>(ps.getBase().getType()).getPointee();
+                } else if (auto ge = base.getDefiningOp<cir::GetElementOp>()) {
+                    index = ge.getIndex(); next = ge.getBase();
+                    auto arr = dyn_cast<cir::ArrayType>(cast<cir::PointerType>(ge.getBase().getType()).getPointee());
+                    if (!arr) return false;
+                    elem = arr.getElementType();
+                } else {
+                    return true;
+                }
+                auto c = traceToLocalRoot(index).getDefiningOp<cir::ConstantOp>();
+                auto k = c ? dyn_cast<cir::IntAttr>(c.getValue()) : cir::IntAttr();
+                if (!k || k.getValue().isNegative() || k.getValue().getActiveBits() > 32) return false;
+                if (!elem || isa<cir::VoidType>(elem) || isa<cir::FuncType>(elem)) return false;
+                offset += k.getValue().getZExtValue() * dl.getTypeSize(elem);
+                if (k.getValue().getZExtValue())
+                    parts.push_back("[" + std::to_string(k.getValue().getZExtValue()) + "]");
+                base = traceToLocalRoot(next);
+            }
+            return false;
+        };
         Value cur = traceToLocalRoot(addr);
+        if (!stepElements(cur)) return Value();
         auto gm = cur.getDefiningOp<cir::GetMemberOp>();
         if (!gm) return Value();
-        offset = 0;
-        llvm::SmallVector<StringRef, 4> parts;
         unsigned guard = 0;
         while (gm && guard++ < 64) {
             auto ptrTy = dyn_cast<cir::PointerType>(gm.getAddr().getType());
@@ -172,13 +209,14 @@ private:
             auto rec = dyn_cast<cir::RecordType>(ptrTy.getPointee());
             if (!rec || rec.isIncomplete()) return Value();
             offset += rec.getElementOffset(dl, gm.getIndex());
-            parts.push_back(gm.getName());
+            parts.push_back(gm.getName().str());
             Value base = traceToLocalRoot(gm.getAddr());
+            if (!stepElements(base)) return Value();
             auto outer = base.getDefiningOp<cir::GetMemberOp>();
             if (!outer) {
                 for (auto it = parts.rbegin(); it != parts.rend(); ++it) {
-                    if (!path.empty()) path += ".";
-                    path += it->str();
+                    if (!path.empty() && (*it)[0] != '[') path += ".";
+                    path += *it;
                 }
                 return base;
             }
@@ -202,7 +240,10 @@ private:
         Value v = traceToLocalRoot(addr);
         bool array = false;
         for (unsigned guard = 0; guard < 64; ++guard) {
-            if (v.getDefiningOp<cir::GetMemberOp>()) return array ? Shape::Array : Shape::Member;
+            // A member reached through an element step, s.counts[1], is a
+            // member access: resolveMember reads the index, and refuses it
+            // when it is not a constant.
+            if (v.getDefiningOp<cir::GetMemberOp>()) return Shape::Member;
             if (auto ps = v.getDefiningOp<cir::PtrStrideOp>()) { array = true; v = traceToLocalRoot(ps.getBase()); continue; }
             if (auto ge = v.getDefiningOp<cir::GetElementOp>()) { array = true; v = traceToLocalRoot(ge.getBase()); continue; }
             break;
@@ -238,8 +279,13 @@ private:
         return Type();
     }
 
+    // A heap object has no declared type: the accesses say what it is, and
+    // the allocator says how it is aligned.
+    static bool isHeapRoot(Operation *root) { return isa<cir::CallOp>(root); }
+
     // Whether the data layout can size and align the object a root names.
     static bool hasLayout(Operation *root) {
+        if (isHeapRoot(root)) return true;
         Type ty = rootType(root);
         if (!ty) return false;
         auto rec = dyn_cast<cir::RecordType>(ty);
@@ -374,7 +420,7 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
                     // *)&s`. Only a record is of interest; a scalar global has
                     // no second field to pair with.
                     root = walk.resolveRoot(addr, &inst);
-                    if (root && !isa<cir::RecordType>(rootType(root))) return;
+                    if (root && !isHeapRoot(root) && !isa<cir::RecordType>(rootType(root))) return;
                     path = "<whole>";
                 }
                 if (!root) { unplaced(); return; }
@@ -442,10 +488,19 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
     // the slot may well have run once, from a function that called it
     // twice -- two calls, two slots -- and, the other way round, a worker
     // spawned in a loop touching main's slot does not multiply the slot.
-    for (auto &kv : byRoot)
+    for (auto &kv : byRoot) {
         if (auto slot = dyn_cast<cir::AllocaOp>(kv.first))
             if (!walk.runsOnce(slot->getParentOfType<cir::FuncOp>()))
                 multiInvocation.insert(kv.first);
+        // An allocation site that runs more than once -- in a loop, or in a
+        // function that runs more than once -- stands for many objects, and
+        // two threads on two of its fields may be on two objects.
+        if (auto call = dyn_cast<cir::CallOp>(kv.first)) {
+            auto f = call->getParentOfType<cir::FuncOp>();
+            if (!walk.runsOnce(f) || walk.siteMult(call, f) == Mult::Many)
+                multiInvocation.insert(kv.first);
+        }
+    }
     report(walk);
     markAllAnalysesPreserved();
 }
@@ -462,10 +517,17 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
         llvm::sort(offsets);
 
         std::string label;
-        const bool onStack = isa<cir::AllocaOp>(root) && multiInvocation.count(root);
+        // A slot of a function that runs more than once, or a heap object
+        // whose allocation runs more than once, is many objects: two threads
+        // on two fields of "it" may be on two of them.
+        const bool onStack = (isa<cir::AllocaOp>(root) || isHeapRoot(root)) && multiInvocation.count(root);
         if (auto g = dyn_cast<cir::GlobalOp>(root)) label = ("@" + g.getSymName()).str();
         else if (auto a = dyn_cast<cir::AllocaOp>(root)) label = ("%" + a.getName()).str();
-        else label = "<object>";
+        else if (auto call = dyn_cast<cir::CallOp>(root)) {
+            cir::FuncOp callee = lookupCallee(call);
+            label = ((callee ? callee.getSymName() : StringRef("allocation")) + "() in @" +
+                     call->getParentOfType<cir::FuncOp>().getSymName()).str();
+        } else label = "<object>";
 
         // Where the object may start relative to a line. Two fields share a
         // line only for some starting positions unless the object is
@@ -487,6 +549,10 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
             align = g.getAlignment().value_or(dl.getTypeABIAlignment(g.getSymType()));
         else if (auto a = dyn_cast<cir::AllocaOp>(root))
             align = a.getAlignment() ? a.getAlignment() : dl.getTypeABIAlignment(a.getAllocaType());
+        else if (auto call = dyn_cast<cir::CallOp>(root))
+            // What the allocator promises: the call's own alignment operand,
+            // else the platform's guarantee for malloc.
+            align = allocationAlignment(call).value_or(heapAlign);
         align = std::max<uint64_t>(align, 1);
         auto sharesAt = [&](uint64_t oa, uint64_t sa, uint64_t ob, uint64_t sb, uint64_t shift) {
             const uint64_t a0 = (oa + shift) / line, a1 = (oa + shift + std::max<uint64_t>(sa, 1) - 1) / line;
@@ -670,8 +736,11 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
                     at->emitRemark()
                         << "wtc: possible false sharing in " << label << ": '" << a.name
                         << "' and '" << b.name << "' share one " << line << "-byte line" << where
-                        << ", but the object is a stack slot whose address escapes, "
-                           "so two threads may be looking at two invocations rather than one";
+                        << (isHeapRoot(root)
+                                ? ", but the allocation runs more than once, so two threads "
+                                  "may be looking at two objects rather than one"
+                                : ", but the object is a stack slot whose address escapes, "
+                                  "so two threads may be looking at two invocations rather than one");
                     continue;
                 }
                 if (hit) {

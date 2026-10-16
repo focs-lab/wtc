@@ -203,6 +203,31 @@ unsigned spawnFirstArgOperand(cir::CallOp op) {
     return spawnEntryOperand(op) + 1;
 }
 
+bool isAllocator(cir::FuncOp f) {
+    if (!f) return false;
+    const StringRef n = f.getSymName();
+    return n == "malloc" || n == "calloc" || n == "aligned_alloc" || n == "memalign" ||
+           n == "posix_memalign" || n == "_Znwm" || n == "_Znam" ||
+           n == "_ZnwmSt11align_val_t" || n == "_ZnamSt11align_val_t";
+}
+
+std::optional<uint64_t> allocationAlignment(cir::CallOp call) {
+    cir::FuncOp callee = lookupCallee(call);
+    if (!callee) return std::nullopt;
+    const StringRef n = callee.getSymName();
+    unsigned idx;
+    if (n == "aligned_alloc" || n == "memalign") idx = firstRealOperand(call);
+    else if (n == "posix_memalign") idx = firstRealOperand(call) + 1;
+    else if (n == "_ZnwmSt11align_val_t" || n == "_ZnamSt11align_val_t") idx = firstRealOperand(call) + 1;
+    else return std::nullopt;
+    if (idx >= call.getNumOperands()) return std::nullopt;
+    if (auto c = call.getOperand(idx).getDefiningOp<cir::ConstantOp>())
+        if (auto a = dyn_cast<cir::IntAttr>(c.getValue()))
+            if (a.getValue().getActiveBits() <= 32 && a.getValue().getZExtValue() > 0)
+                return a.getValue().getZExtValue();
+    return std::nullopt;
+}
+
 void memoryAccesses(Operation *op, llvm::SmallVectorImpl<MemoryAccess> &out) {
     auto pointee = [](Value ptr) -> Type {
         if (auto pt = dyn_cast<cir::PointerType>(ptr.getType())) return pt.getPointee();
