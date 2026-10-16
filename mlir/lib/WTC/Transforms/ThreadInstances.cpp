@@ -573,7 +573,11 @@ Operation *ThreadInstanceWalk::resolveRoot(Value v, Instance *inst, unsigned dep
 Place ThreadInstanceWalk::resolvePlace(Value v, Instance *inst) const {
     Place place;
     place.root = resolveRootImpl(v, inst, 0, cir::CallOp(), &place);
-    if (!place.root) place = Place();
+    if (!place.root) {
+        const Unplaced why = place.cause;
+        place = Place();
+        place.cause = why;
+    }
     // An element step the walk could not read under a per-thread one: which
     // element is not known, so neither is whose it is.
     if (place.unknownIndex) { place.loop = nullptr; place.elem = Type(); place.owner = false; }
@@ -582,7 +586,11 @@ Place ThreadInstanceWalk::resolvePlace(Value v, Instance *inst) const {
 
 Operation *ThreadInstanceWalk::resolveRootImpl(Value v, Instance *inst, unsigned depth, cir::CallOp via,
                                                Place *place) const {
-    if (depth > 64 || !inst) return nullptr;
+    auto fail = [&](Unplaced why) -> Operation * {
+        if (place && place->cause == Unplaced::None) place->cause = why;
+        return nullptr;
+    };
+    if (depth > 64 || !inst) return fail(Unplaced::Other);
     Value t = traceToRoot(v);
     // An element step. A constant index is so many bytes in; the
     // induction variable of the loop that spawned this thread, at the
@@ -599,7 +607,7 @@ Operation *ThreadInstanceWalk::resolveRootImpl(Value v, Instance *inst, unsigned
             stepElem = arr.getElementType();
     }
     if (stepBase) {
-        if (!place || !stepElem || isa<cir::VoidType, cir::FuncType>(stepElem)) return nullptr;
+        if (!place || !stepElem || isa<cir::VoidType, cir::FuncType>(stepElem)) return fail(Unplaced::Other);
         const uint64_t elemSize = dataLayout().getTypeSize(stepElem);
         auto c = traceToLocalRoot(stepIndex).getDefiningOp<cir::ConstantOp>();
         auto k = c ? dyn_cast<cir::IntAttr>(c.getValue()) : cir::IntAttr();
@@ -631,7 +639,7 @@ Operation *ThreadInstanceWalk::resolveRootImpl(Value v, Instance *inst, unsigned
     // (siteRunsOnce), not from the wrapper's own loop structure alone.
     if (auto call = t.getDefiningOp<cir::CallOp>()) {
         cir::CallOp site = allocationBehind(call);
-        return site ? site.getOperation() : nullptr;
+        return site ? site.getOperation() : fail(Unplaced::CallResult);
     }
     // A pointer loaded from a global the module writes exactly once: the
     // loaded value is the one stored, wherever the load is. The stored
@@ -644,13 +652,18 @@ Operation *ThreadInstanceWalk::resolveRootImpl(Value v, Instance *inst, unsigned
                 Value s = traceToRoot(stored);
                 if (auto call = s.getDefiningOp<cir::CallOp>()) {
                     cir::CallOp site = allocationBehind(call);
-                    return site ? site.getOperation() : nullptr;
+                    return site ? site.getOperation() : fail(Unplaced::CallResult);
                 }
                 if (auto sg = s.getDefiningOp<cir::GetGlobalOp>())
                     return SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(sg, sg.getNameAttr()).getOperation();
+                return fail(Unplaced::Other);
             }
+            return fail(Unplaced::LoadedGlobal);
         }
-        return nullptr;
+        Value at = traceToLocalRoot(ld.getAddr());
+        if (at.getDefiningOp<cir::GetMemberOp>()) return fail(Unplaced::LoadedField);
+        if (at.getDefiningOp<cir::AllocaOp>()) return fail(Unplaced::LoadedSlot);
+        return fail(Unplaced::Other);
     }
     if (auto gg = t.getDefiningOp<cir::GetGlobalOp>()) {
         auto g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr());
@@ -660,14 +673,18 @@ Operation *ThreadInstanceWalk::resolveRootImpl(Value v, Instance *inst, unsigned
         for (unsigned hop = 0; g && g.getAliasee() && hop < 8; ++hop)
             g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(
                 g, StringAttr::get(g.getContext(), *g.getAliasee()));
-        return g ? g.getOperation() : nullptr;
+        return g ? g.getOperation() : fail(Unplaced::Other);
     }
     if (auto alloca = t.getDefiningOp<cir::AllocaOp>())
         return alloca.getOperation();
     auto arg = dyn_cast<BlockArgument>(t);
-    if (!arg) return nullptr;
-    if (!inst->site) return nullptr;                       // a root: nobody passed it
-    if (arg.getOwner() != &inst->func.getBody().front()) return nullptr;
+    if (!arg) {
+        if (auto c = t.getDefiningOp<cir::CastOp>())
+            if (c.getKind() == cir::CastKind::int_to_ptr) return fail(Unplaced::Integer);
+        return fail(Unplaced::Other);
+    }
+    if (!inst->site) return fail(Unplaced::RootParameter);   // a root: nobody passed it
+    if (arg.getOwner() != &inst->func.getBody().front()) return fail(Unplaced::Other);
     const unsigned i = arg.getArgNumber();
     cir::CallOp site = inst->site;
     unsigned idx;
@@ -677,7 +694,7 @@ Operation *ThreadInstanceWalk::resolveRootImpl(Value v, Instance *inst, unsigned
     } else {
         idx = i;
     }
-    if (idx >= site.getNumOperands()) return nullptr;
+    if (idx >= site.getNumOperands()) return fail(Unplaced::Other);
     // Only a spawn hands each thread its own element; through a plain call
     // the per-thread reading does not apply.
     const bool spawn = getSemanticKind(lookupCallee(site)) == SemanticOpKind::ThreadSpawn;

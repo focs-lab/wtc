@@ -101,8 +101,22 @@ struct Instance {
 // Where a handle points, as far as the walk can read it: a root (a
 // cir.global, a cir.alloca, or the allocator call that made the object)
 // and how the handle got there.
+// Why a handle could not be resolved to a root, for the summary's account
+// of what the analysis does not reach.
+enum class Unplaced {
+    None,
+    LoadedField,     // a pointer loaded from a field of another object
+    LoadedGlobal,    // a pointer loaded from a global written more than once, or named elsewhere
+    LoadedSlot,      // a pointer loaded from a stack slot written more than once
+    RootParameter,   // a parameter of a root instance: nobody passed it
+    CallResult,      // the result of a call that is not an allocation
+    Integer,         // cast from an integer
+    Other
+};
+
 struct Place {
     Operation *root = nullptr;
+    Unplaced cause = Unplaced::None;   // set when root is null
     // Bytes from the root to where the handle points, summed over element
     // steps with constant indices on the way: `&arr[2]` is 2 elements in.
     uint64_t offset = 0;

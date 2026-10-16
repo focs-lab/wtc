@@ -218,6 +218,8 @@ private:
     // follow, and counting it a thousand times made memcached's figure
     // 1.6 million, more than the program has operations.
     llvm::DenseSet<Operation *> unresolvedOps;
+    // Why, per unresolved operation: the least that is known of it.
+    llvm::DenseMap<Operation *, Unplaced> unresolvedWhy;
     // Threads with an access the analysis could not place. Such a thread
     // may be touching the very field a cold verdict says it touches once,
     // through a pointer the walk could not follow, so no pair involving it
@@ -332,6 +334,24 @@ private:
 
     void foldPlaces();
     void report(const ThreadInstanceWalk &walk);
+
+    // What the unidentified accesses are, by the reason the walk gave up:
+    // the account of what the analysis does not reach, so that the next
+    // thing to place is read off the summary rather than guessed.
+    std::string unplacedBreakdown() const {
+        if (unresolvedOps.empty()) return "";
+        unsigned n[8] = {};
+        for (Operation *op : unresolvedOps) ++n[static_cast<unsigned>(unresolvedWhy.lookup(op))];
+        n[static_cast<unsigned>(Unplaced::Other)] += n[static_cast<unsigned>(Unplaced::None)];
+        auto c = [&](Unplaced u) { return std::to_string(n[static_cast<unsigned>(u)]); };
+        return "; of the unidentified, " + c(Unplaced::LoadedField) +
+               " through a pointer loaded from a field, " + c(Unplaced::LoadedGlobal) +
+               " from a global written more than once or named elsewhere, " + c(Unplaced::LoadedSlot) +
+               " from a slot written more than once, " + c(Unplaced::RootParameter) +
+               " through a parameter nobody is seen to pass, " + c(Unplaced::CallResult) +
+               " from the result of a call that is not an allocation, " + c(Unplaced::Integer) +
+               " from an integer, " + c(Unplaced::Other) + " otherwise";
+    }
 
     // Whether an address is an array's first element, reached by letting the
     // array decay to a pointer with no step after it: `counts[0]`, or the
@@ -476,6 +496,7 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
     unknownIndexOps.clear();
     multiInvocation.clear();
     unresolvedOps.clear();
+    unresolvedWhy.clear();
     stackLocalOps.clear();
     unresolvedThreads.clear();
     truncatedThreads.clear();
@@ -535,8 +556,9 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
                                 (manyAnyway || (siteKnown && site == Mult::Many));
                 bool unknownRate = !startup && !repeated &&
                                    (startupGuess || !siteKnown || inst.execUnknown);
-                auto unplaced = [&] {
+                auto unplaced = [&](Unplaced why) {
                     unresolvedOps.insert(op);
+                    unresolvedWhy.try_emplace(op, why);
                     if (repeated || unknownRate) unresolvedThreads.insert(inst.thread);
                 };
 
@@ -559,7 +581,7 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
                     // per-thread counters in one array once produced no
                     // output at all.
                     Value base = resolveMember(addr, dl, offset, path, unknownIdx, unknownSize);
-                    if (!base) { unplaced(); return; }
+                    if (!base) { unplaced(Unplaced::Other); return; }
                     place = walk.resolvePlace(base, &inst);
                 } else {
                     // The whole object through a cast of its address: `*(long
@@ -573,7 +595,7 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
                     path = "<whole>";
                 }
                 Operation *root = place.root;
-                if (!root) { unplaced(); return; }
+                if (!root) { unplaced(place.cause); return; }
                 // Element steps the walk read on the way to the root: a
                 // constant index at the spawn, `&args[1]`, is so many bytes
                 // in; an index it could not read makes the element unknown.
@@ -598,7 +620,7 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
                 // A root declared with an incomplete record type (an opaque
                 // global the program only ever casts) has no layout to place
                 // fields in, and asking the data layout for one asserts.
-                if (!hasLayout(root)) { unplaced(); return; }
+                if (!hasLayout(root)) { unplaced(Unplaced::Other); return; }
                 // A thread-local global is one object per thread, so no two
                 // threads share its line. The walk hands every thread the
                 // same GlobalOp for it, which once made its fields a pair.
@@ -1175,7 +1197,8 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
                             << " on thread-local objects, " << unknownIndexCount
                             << " at array elements the analysis cannot tell apart; " << walkInstances
                             << " function instances; " << unplacedPairs
-                            << " of the possible pairs would be cold but for unplaced accesses";
+                            << " of the possible pairs would be cold but for unplaced accesses"
+                            << unplacedBreakdown();
 }
 
 } // namespace
