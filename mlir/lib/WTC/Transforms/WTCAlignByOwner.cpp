@@ -103,6 +103,8 @@ private:
         if (g.isDeclaration()) return "it is only declared here";
         if (g.getSection()) return "it sits in a named section";
         if (g.getTlsModelAttr()) return "it is thread-local";
+        if (g.getComdat()) return "it is in a comdat the linker may replace";
+        if (g.getAliasee()) return "it is an alias; the storage is the aliasee's";
         switch (g.getLinkage()) {
         case cir::GlobalLinkageKind::ExternalLinkage:
         case cir::GlobalLinkageKind::InternalLinkage:
@@ -167,10 +169,15 @@ void WTCAlignByOwnerPass::runOnOperation() {
                 // An access while the program starts cannot contend with a
                 // thread that does not exist yet; one that happens once
                 // moves the line once.
+                // Repeated means known to repeat. A rate the walk cannot tell
+                // (a goto in the function, or on the way to it) does not raise
+                // anything: this pass spends bytes on its answer.
+                bool known;
+                const Mult site = walk.siteMult(op, inst.func, known);
                 const bool repeated = !walk.inStartupPhase(op, inst) &&
-                                      (inst.threadMult == Mult::Many ||
-                                       inst.execMult == Mult::Many ||
-                                       walk.siteMult(op, inst.func) == Mult::Many);
+                                      (((inst.threadMult == Mult::Many ||
+                                         inst.execMult == Mult::Many) && !inst.execUnknown) ||
+                                       (known && site == Mult::Many));
                 if (!repeated) continue;
 
                 RootInfo &ri = globals[root];
@@ -210,12 +217,12 @@ void WTCAlignByOwnerPass::runOnOperation() {
         for (size_t j = i + 1; j < order.size(); ++j) {
             const RootInfo &a = globals[order[i]];
             const RootInfo &b = globals[order[j]];
-            auto contends = [](const RootInfo &x, const RootInfo &y) {
+            auto contends = [&](const RootInfo &x, const RootInfo &y) {
                 for (unsigned w : x.hotWriters) {
                     if (!x.certain.count(w)) continue;
                     for (const auto &set : {y.hotWriters, y.hotReaders})
                         for (unsigned u : set)
-                            if (u != w && y.certain.count(u)) return true;
+                            if (u != w && y.certain.count(u) && !walk.exclusive(w, u)) return true;
                 }
                 return false;
             };

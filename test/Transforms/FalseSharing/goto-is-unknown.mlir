@@ -61,5 +61,5 @@ module {
 }
 
 // CHECK-NOT: wtc: false sharing in
-// CHECK: possible false sharing in @s: 'a' and 'b'{{.*}}cannot rate
+// CHECK: possible false sharing in @s: 'a' and 'b'{{.*}}rate the analysis cannot tell
 // CHECK: false sharing: 0 definite, 1 possible, 0 cold

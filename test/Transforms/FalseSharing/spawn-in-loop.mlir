@@ -50,4 +50,4 @@ module {
 }
 
 // CHECK: possible false sharing in @s
-// CHECK: false sharing: 0 definite, 1 possible
+// CHECK: false sharing: 0 definite, 1 possible, 0 cold

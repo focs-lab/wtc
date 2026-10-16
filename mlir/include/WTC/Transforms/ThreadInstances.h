@@ -72,6 +72,14 @@ struct Instance {
     // same struct, and the analysis reports 176 findings that are all one
     // start-up phase.
     bool startup = false;
+    // True when the instance's Many is a guess: some call or spawn on its
+    // chain sits in a function whose control flow is unstructured, outside
+    // any loop, so the site could run once or many times, and nothing else
+    // on the chain is known to repeat. The multiplicities above keep the
+    // guess, so a client that must assume the worst reads Many; a client
+    // that would turn Many into a claim treats such an instance as neither
+    // once nor repeated.
+    bool execUnknown = false;
 };
 
 class ThreadInstanceWalk {
@@ -112,8 +120,13 @@ public:
     bool reachesOp(cir::FuncOp f, llvm::function_ref<bool(Operation *)> pred);
 
     // Many if the operation sits inside a loop of its function, or the
-    // function's control flow is not structured enough to tell.
+    // function's control flow is not structured enough to tell. The
+    // three-argument form also says which: `known` is false only when the
+    // answer is a guess, that is, the function has a goto and the operation
+    // is not inside a loop. A client that must assume the worst keeps the
+    // guess; a client that would turn it into a claim treats it as unknown.
     Mult siteMult(Operation *op, cir::FuncOp f);
+    Mult siteMult(Operation *op, cir::FuncOp f, bool &known);
 
     // Whether some call that can spawn a thread comes before this operation
     // in its function. An operation inside a loop that contains a spawn
@@ -154,6 +167,9 @@ public:
     // How many instances the walk created for f. A stack slot of f is one
     // object only if f ran once.
     unsigned instanceCount(cir::FuncOp f) const;
+    // Whether f has exactly one instance and that instance runs exactly
+    // once on exactly one thread. A slot of such a function is one object.
+    bool runsOnce(cir::FuncOp f) const;
 
     bool capExceeded() const { return capExceeded_; }
     unsigned cap() const { return cap_; }
@@ -173,7 +189,7 @@ private:
     bool indirectCallCanSpawn();
     const llvm::DenseSet<Operation *> &preSpawnOps(cir::FuncOp f);
     Instance &addInstance(Instance inst);
-    bool addIfRoom(Instance inst);
+    Instance *addIfRoom(Instance inst);
     void noteRemark(Operation *at, const llvm::Twine &msg);
     void addRootsForModule();
     void expand(Instance &inst);

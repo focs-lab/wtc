@@ -199,6 +199,18 @@ void memoryAccesses(Operation *op, llvm::SmallVectorImpl<MemoryAccess> &out) {
         if (auto pt = dyn_cast<cir::PointerType>(ptr.getType())) return pt.getPointee();
         return Type();
     };
+    // A libc memory call touches `len` bytes: an array of that many bytes
+    // when the length is a constant, else the pointee, which is at least
+    // what the call was written over.
+    auto lengthType = [&](Value len, Value ptr) -> Type {
+        if (auto c = len.getDefiningOp<cir::ConstantOp>())
+            if (auto n = dyn_cast<cir::IntAttr>(c.getValue()))
+                if (n.getValue().getActiveBits() <= 32 && n.getValue().getZExtValue() > 0)
+                    return cir::ArrayType::get(op->getContext(),
+                                               cir::IntType::get(op->getContext(), 8, false),
+                                               n.getValue().getZExtValue());
+        return pointee(ptr);
+    };
     if (auto ld = dyn_cast<cir::LoadOp>(op)) {
         out.push_back({ld.getAddr(), ld.getResult().getType(), false});
     } else if (auto st = dyn_cast<cir::StoreOp>(op)) {
@@ -221,6 +233,14 @@ void memoryAccesses(Operation *op, llvm::SmallVectorImpl<MemoryAccess> &out) {
     } else if (auto cp = dyn_cast<cir::CopyOp>(op)) {
         out.push_back({cp.getSrc(), pointee(cp.getSrc()), false});
         out.push_back({cp.getDst(), pointee(cp.getDst()), true});
+    } else if (auto ms = dyn_cast<cir::MemSetOp>(op)) {
+        out.push_back({ms.getDst(), lengthType(ms.getLen(), ms.getDst()), true});
+    } else if (auto mc = dyn_cast<cir::MemCpyOp>(op)) {
+        out.push_back({mc.getSrc(), lengthType(mc.getLen(), mc.getSrc()), false});
+        out.push_back({mc.getDst(), lengthType(mc.getLen(), mc.getDst()), true});
+    } else if (auto mm = dyn_cast<cir::MemMoveOp>(op)) {
+        out.push_back({mm.getSrc(), lengthType(mm.getLen(), mm.getSrc()), false});
+        out.push_back({mm.getDst(), lengthType(mm.getLen(), mm.getDst()), true});
     }
 }
 }

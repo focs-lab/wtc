@@ -18,8 +18,8 @@ which the analysis cannot tell. Two measurements under load do not overturn it,
 within what ten runs resolve: applying the verdict by hand gives throughput within
 0.7% of the original on every workload, with 95% intervals from -3.2% to
 +2.0%. What the analysis cannot see at all -- arrays indexed per class or
-per thread, and heap objects, 4,496 field accesses here -- was not
-examined, so this is not a claim that memcached has nothing to fix.
+per thread, and heap objects, 5,118 member and element accesses here --
+was not examined, so this is not a claim that memcached has nothing to fix.
 
 ## What was wrong, and what it is now
 
@@ -36,8 +36,8 @@ reviewed. Both columns are kept.
 | fields / objects | 675 / 856 (44% / 56%) | 761 / 898 (46% / 54%) | **828 / 795 (51% / 49%)** | the nesting tracker could not see Allman braces; then it ended a record at the `)` of `struct alignas(X) Name {`, which made every member of such a record an object: 23 sites in MySQL's `log0sys.h` and 8 elsewhere move to fields, and MySQL's 34 / 33 is 66 / 8 with the nine sites the second census found |
 | field annotations on one member | 648 of 675 (96%) | 687 of 761 (90%) | **747 of 828 (90%)** | two of the three ways the kernel writes a group were missed; `__cacheline_group_begin(x) ____cacheline_aligned` is a group too |
 | files with several field annotations | 300, at most 24 | 153, at most 17 | **165, at most 23** (`log0sys.h`) | recounted from each classification |
-| memcached pairs, amalgamated | 397 definite, 546 possible | 155 definite, 503 possible, 349 cold | **155 definite, 852 possible, 0 cold; 349 of the possible would be cold but for accesses the walk could not place** | the walk had stopped at 10,000 instances and never saw the workers; then "cold" stopped being claimed for a thread with unplaced accesses, which every memcached thread has |
-| field accesses the analysis cannot place | 6,956 | 4,493 | **4,496** | counted once per operation, not per call string; then atomic and bit-field accesses were counted at all |
+| memcached pairs, amalgamated | 397 definite, 546 possible | 155 definite, 503 possible, 349 cold | **155 definite, 852 possible, 0 cold; 349 of the possible would be cold but for accesses the walk could not place** (unchanged by the fourth round of fixes, over 153,147 instances now that a recursive call is walked once more) | the walk had stopped at 10,000 instances and never saw the workers; then "cold" stopped being claimed for a thread with unplaced accesses, which every memcached thread has |
+| field accesses the analysis cannot place | 6,956 | 4,493 | **5,118** | counted once per operation, not per call string; then atomic and bit-field accesses were counted at all (4,496); then accesses to array elements, to the whole of an object through a cast, and by memset and memcpy, none of which had been counted as accesses before |
 | memcached pairs, per file | 20 definite, 422 cold | 0 definite, 460 possible | **0 definite, 490 possible** | a placeholder thread gives no definite or cold verdict; then atomics and bit-field stores became accesses |
 | leveldb, per file | "none" | 0 | **0 pairs in the 11 files that compile** (2 refused: the Windows environment and a test helper) | the earlier 0 was a build artefact: all 13 files were refused, ten of them on a missing `LEVELDB_PLATFORM_POSIX`, the threaded ones among them |
 | globals `--wtc-align-by-owner` picks | 73, 4,254 B | 60, 3,489 B | **60, 3,489 B**, a different 60 | `stderr`, a libc declaration the pass must not touch, is out; `logger_gid`, written atomically, is in. The comparison point counted two declarations among its 141: 139 defined mutable globals, 7,778 B |
@@ -209,10 +209,10 @@ two things the review found are outside what the analysis reports:
   aligned to 16, so neighbouring slab classes share lines; `heads[]`,
   `tails[]` and `itemstats[]` are indexed per class and written under
   different locks; the item locks are a heap array; and the summary line
-  admits 4,496 member accesses on objects it could not identify, and
-  element accesses to scalar and pointer arrays (`heads[]`, `tails[]`,
-  `lru_locks[]`) it does not count at all. None of these was examined,
-  because nothing here reports them.
+  admits 5,118 accesses on objects it could not identify, element
+  accesses to arrays such as `heads[]`, `tails[]` and `lru_locks[]` among
+  them since the fourth round of fixes (they were not even counted before).
+  None of these was examined, because nothing here reports them.
 
 ## The measurements that test the review
 
@@ -355,7 +355,7 @@ does not cost what its verdict might suggest:
 - **Where an object starts.** "In *k* of 8 positions" treats the
   positions as equally likely; the real start is fixed by the linker and
   readable with `nm`.
-- **Arrays and heap objects**: 4,496 field accesses on memcached, the
+- **Arrays and heap objects**: 5,118 accesses on memcached, the
   per-thread statistics in the heap `threads[]` array and the atomic
   reference counts in items among them, all unidentified.
 - **The optimiser.** The analysis runs on ClangIR before `-O2`, which may

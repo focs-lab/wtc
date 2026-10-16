@@ -89,9 +89,9 @@ are both "repeated". Every memcached pair was decided by rate, by hand.
 
 **Objects it cannot name.** An element of an array, a heap object, a field
 reached through a pointer the walk cannot follow: counted as unidentified
-in every summary, never guessed at. On memcached that is 4,496 member
-accesses against 1,007 pairs; element accesses to scalar and pointer arrays
-are not counted at all.
+in every summary, never guessed at. On memcached that is 5,118 accesses
+against 1,007 pairs, element accesses to arrays included; which element is
+touched is not yet read.
 
 **Placement across objects** is the linker's and the allocator's. The
 analysis reports where fields lie within an object; which objects share a
