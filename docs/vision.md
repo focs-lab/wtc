@@ -233,5 +233,5 @@ verdict applied by hand did not overturn that reading: throughput within
 0.7% of the original on all four workloads, with 95% intervals from -3.2%
 to +2.0%, which cannot rule out a gain of about 2% -- and `corpus.md`
 says exactly how, including what the analysis cannot see:
-arrays, heap objects, locks, time and rate. What padding is worth in a
+pointers it cannot follow, locks, time and rate. What padding is worth in a
 given program is measured per program, not assumed.

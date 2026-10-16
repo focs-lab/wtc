@@ -10,16 +10,21 @@ where they were made, because a retraction that deletes what it retracts
 teaches nothing.
 
 **The result of this phase is negative, and narrower than it first looked.**
-On amalgamated memcached the analysis reports 155 definite and 852 possible
-pairs inside objects, all of them on five globals. Every one of those
-objects was read against the source, and no pair describes traffic that
-separating fields would remove: each is decided by how often one side runs,
-which the analysis cannot tell. Two measurements under load do not overturn it,
-within what ten runs resolve: applying the verdict by hand gives throughput within
-0.7% of the original on every workload, with 95% intervals from -3.2% to
-+2.0%. What the analysis cannot see at all -- arrays indexed per class or
-per thread, and heap objects, 5,106 member and element accesses here --
-was not examined, so this is not a claim that memcached has nothing to fix.
+On amalgamated memcached the analysis reports 156 definite and 1,335
+possible pairs. The definite pairs and 852 of the possible sit on five
+globals, every one of which was read against the source, and no pair there
+describes traffic that separating fields would remove: each is decided by
+how often one side runs, which the analysis cannot tell. Two measurements
+under load do not overturn it, within what ten runs resolve: applying the
+verdict by hand gives throughput within 0.7% of the original on every
+workload, with 95% intervals from -3.2% to +2.0%. The other 483 possible
+pairs sit at elements of arrays and heap objects -- the per-thread
+`threads[]` and `itemstats[]` among them -- which the analysis places since
+the October round on heap objects and elements (below) but cannot tell
+apart; they were not read. What it still cannot place, 4,377 accesses
+through pointers it cannot follow, the slab allocator's items and the
+per-connection state among them, was not examined either, so this is not a
+claim that memcached has nothing to fix.
 
 ## What was wrong, and what it is now
 
@@ -36,8 +41,8 @@ reviewed. Both columns are kept.
 | fields / objects | 675 / 856 (44% / 56%) | 761 / 898 (46% / 54%) | **828 / 795 (51% / 49%)** | the nesting tracker could not see Allman braces; then it ended a record at the `)` of `struct alignas(X) Name {`, which made every member of such a record an object: 23 sites in MySQL's `log0sys.h` and 8 elsewhere move to fields, and MySQL's 34 / 33 is 66 / 8 with the nine sites the second census found |
 | field annotations on one member | 648 of 675 (96%) | 687 of 761 (90%) | **747 of 828 (90%)** | two of the three ways the kernel writes a group were missed; `__cacheline_group_begin(x) ____cacheline_aligned` is a group too |
 | files with several field annotations | 300, at most 24 | 153, at most 17 | **165, at most 23** (`log0sys.h`) | recounted from each classification |
-| memcached pairs, amalgamated | 397 definite, 546 possible | 155 definite, 503 possible, 349 cold | **155 definite, 852 possible, 0 cold; 349 of the possible would be cold but for accesses the walk could not place** (unchanged by the fourth and fifth rounds of fixes; 136,673 instances, a recursive call being walked once more and functions that touch no record no longer walked) | the walk had stopped at 10,000 instances and never saw the workers; then "cold" stopped being claimed for a thread with unplaced accesses, which every memcached thread has |
-| field accesses the analysis cannot place | 6,956 | 4,493 | **5,106**, and 71 on stack slots that never escape | counted once per operation, not per call string; then atomic and bit-field accesses were counted at all (4,496); then accesses to array elements, to the whole of an object through a cast, and by memset and memcpy, none of which had been counted as accesses before; and a slot whose address never escapes is now told apart, which no slot ever was, since the escape check answered yes on every exit |
+| memcached pairs, amalgamated | 397 definite, 546 possible | 155 definite, 503 possible, 349 cold | **156 definite, 1,335 possible, 0 cold; 349 of the possible would be cold but for accesses the walk could not place** (155 / 852 / 0 after the fourth and fifth rounds of fixes, 136,673 instances; the heap-and-element round adds one definite pair on `slabclass[0]` and 483 possible pairs at elements the analysis cannot tell apart, 137,526 instances) | the walk had stopped at 10,000 instances and never saw the workers; then "cold" stopped being claimed for a thread with unplaced accesses, which every memcached thread has; then heap objects and array elements were placed at all |
+| field accesses the analysis cannot place | 6,956 | 4,493 | **4,377**, with 678 more at elements of arrays it places but cannot tell apart, and 71 on stack slots that never escape | counted once per operation, not per call string; then atomic and bit-field accesses were counted at all (4,496); then accesses to array elements, to the whole of an object through a cast, and by memset and memcpy, none of which had been counted as accesses before (5,106); and a slot whose address never escapes is now told apart, which no slot ever was, since the escape check answered yes on every exit; then heap objects, elements at constant and per-thread indices, and the whole of an object through a pointer the walk resolves were placed |
 | memcached pairs, per file | 20 definite, 422 cold | 0 definite, 460 possible | **0 definite, 490 possible** | a placeholder thread gives no definite or cold verdict; then atomics and bit-field stores became accesses |
 | leveldb, per file | "none" | 0 | **0 pairs in the 11 files that compile** (2 refused: the Windows environment and a test helper) | the earlier 0 was a build artefact: all 13 files were refused, ten of them on a missing `LEVELDB_PLATFORM_POSIX`, the threaded ones among them |
 | globals `--wtc-align-by-owner` picks | 73, 4,254 B | 60, 3,489 B | **60, 3,489 B**, a different 60 | `stderr`, a libc declaration the pass must not touch, is out; `logger_gid`, written atomically, is in. The comparison point counted two declarations among its 141: 139 defined mutable globals, 7,778 B |
@@ -155,10 +160,128 @@ of fixes and found by the second review.
 
 Several tests that passed whatever the pass did now check a summary line
 the pass always prints, and counts are anchored so that `0 definite` cannot
-match `10 definite`. One test compiles a program, transforms it, links,
+match `10 definite` -- the tail counts of the line by the separator before
+them, since the October audit found `{{.*}}1 field accesses` matching `11`. One test compiles a program, transforms it, links,
 runs it, and asks the running program where its two counters landed
 (`align_by_owner_runs.c`); before it, no test executed anything this
 project had changed.
+
+## Heap objects and array elements
+
+Until October the analysis placed a member access only when the base of
+its `cir.get_member` chain reached a global or a stack slot. Everything
+else -- an object `malloc` returned, an element `arr[i]`, the struct a
+thread was handed at `pthread_create` -- was counted as an access it could
+not identify, 5,106 of them on memcached against 1,007 pairs. The round of
+work recorded here places them, and says what is still not placed.
+
+**What is placed now.** A heap object is named by the allocator call that
+made it (`calloc() in @memcached_thread_init`), reached through a stack
+slot written once, a parameter resolved through the call chain, a pointer
+global the module stores exactly once and never names elsewhere, or a
+wrapper whose every return hands back one allocation (Phoenix's `CALLOC`,
+any checked `malloc`, with or without a `NULL` on its failure path). A
+`realloc`, a second store to the global, a `global_view` or an alias of it,
+and a pointer kept in a field of another object all refuse. Whether the
+allocation runs once is read from the call graph: once in `main`, or in a
+function called from one site that itself runs once. An element step with
+a constant index is so many bytes in. The element a spawn loop hands each
+thread, `pthread_create(..., &args[i])` with `i` the loop's own variable,
+is *one element per thread*: the thread's offsets are relative to its
+element, and when the loop steps by one, spawns on every iteration, is the
+only repetition around the spawn and sits in a function that runs once,
+neighbouring elements have neighbouring threads. Any other index is an
+element the analysis cannot read: the access is placed on its array,
+labelled *element not known*, and no pair there is more than possible.
+The alignment of a heap object is what the allocator promises -- 16 bytes
+for `malloc` and `calloc` on x86-64 glibc, settable with `--heap-align`,
+the operand of `aligned_alloc` and `memalign` when it is a constant -- and
+an element starts where the array's alignment and the element size let it.
+
+**Verdicts across elements.** With one element per thread, the tail of
+one thread's element and the head of the next thread's share a line unless
+the element is a multiple of a line and the array is line-aligned. A field
+hot-written by the owner of one element against a field the owner of the
+next hot-touches is definite; against a once-written field it is cold;
+padding each element to a multiple of a line *and* aligning the array to a
+line removes it, and the remark says so. Two fields of one element touched
+by its one owner are no pair. Where an element is not known, the same
+field pairs with itself -- on two neighbouring elements it sits on one
+line -- and two fields may be on one element or on two; both possible.
+
+**Phoenix.** The dynamic detectors' canonical example is Phoenix's
+`linear_regression`: one 64-byte results struct per thread, in a `calloc`'d
+array, hot-written by its thread. Built with `-DNDEBUG` (its `CHECK_ERROR`
+macro otherwise evaluates `pthread_create` twice, the second time on the
+failure path, and the analysis, which reads no conditions, then sees two
+threads on each element), the analysis reports 17 definite pairs across
+elements -- every pair of {`SX`, `SY`, `SXX`, `SYY`, `SXY`} hot-written by
+one thread against {`points`, `num_elems`, `SX`, ...} hot-touched by the
+next that can share a line given a 64-byte element aligned to 16, with the
+position counts the layout gives by hand, nothing more and nothing less --
+and places every access the workers make to that array; the 11 accesses it
+leaves unplaced are the workers' reads of `points[i]` through a pointer
+field and `main`'s `argv[]`. The other Phoenix programs that compile
+through ClangIR, with the same build:
+
+| program | definite | possible | cannot place | at elements not told apart |
+|---|---:|---:|---:|---:|
+| `linear_regression` | 17 | 0 | 11 | 9 |
+| `histogram` | 0 | 0 | 38 | 9 |
+| `kmeans` | 0 | 1 | 30 | 14 |
+| `matrix_multiply` | 0 | 1 | 18 | 1 |
+| `pca` | 0 | 1 | 8 | 21 |
+| `string_match` | 0 | 0 | 14 | 13 |
+| `word_count` | 0 | 21 | 31 | 51 |
+| PARSEC `streamcluster` | 0 | 10 | 215 | 28 |
+
+`histogram`'s known false sharing is between the three per-thread
+histograms each worker allocates for itself, neighbours by the allocator's
+choice, which the analysis does not model. `word_count`'s is on `use_len[]`
+and `length[]`, indexed by a thread id the spawn loop stores into each
+worker's argument struct, which the walk does not yet read through a field;
+its 21 possible pairs are on the argument structs, allocated one per
+iteration of the spawn loop, so "many objects". Neither is a finding yet.
+
+**memcached, recounted.** 156 definite and 1,335 possible pairs. The one
+new definite pair is `slabclass[0].slabs` against `slab_list`, written in
+`slabs_prefill_global` and read by the global page pool, now that
+`p = &slabclass[0]` resolves. The 483 new possible pairs are all at
+elements the analysis cannot tell apart: 295 on the heap `threads[]`
+(`calloc() in @memcached_thread_init`, the per-thread `stats` fields
+written by each worker at an index the walk does not read), 87 on
+`itemstats[]`, 55 on `crawlers[]`, 28 on `slabclass[]`, and 18 on eleven
+other arrays, one of them an allocation that may run more than once. None
+has been read against the source. 4,377 accesses remain unplaced, 678 are
+at elements not told apart, and 71 are on stack slots that never escape.
+The alignment pass is unchanged: it raises globals only.
+
+**The audit of this round.** Three independent readings of the five
+commits -- the walk, the diagnosis pass, and the claims in commit messages
+and tests -- found 33 defects, 11 each. The ones that could make a verdict
+false, each closed with a test that fails on the code before the fix: a
+thread spawned in a loop stands for many threads, and every access of it
+was "repeated", so a worker that wrote its element once was a sustained
+pair with its neighbour (what repeats on an owned element is what repeats
+inside the thread); "the two threads that own them" was said of a loop
+stepping by two, spawning under an `if`, nested in another loop, in a
+function that runs twice, or indexing with a value computed before it; a
+wrapper that returned its allocation and also stored it in a global gave
+the object two roots, and a hot write under one name let the pair under
+the other be cold; a `global_view` or an alias of a pointer global was a
+second way to write it that the single-store rule did not see; an entry
+handed to the spawn through an integer round trip was neither resolved
+nor a root, and its thread was lost; a recurrence the walk visits and does
+not expand reaches objects the expanded one did not, so its thread blocks
+cold. Missed findings closed in the same round: two spawn loops over one
+array never met, nor did `main`'s constant-index reads meet the per-thread
+accesses; a whole-object access through a pointer, `memset` of a heap
+object or `*me` of a per-thread counter, was dropped before placement;
+nested unknown steps judged neighbours by the outer element only; a pair
+on an allocation that may run more than once was dropped without trace.
+The claims audit also found the remark "padding each element to a line
+removes it" false on the very Phoenix case, since `calloc` aligns to 16,
+and two commit messages overstating what was placed; both are reworded.
 
 ## The review: every memcached object, read against the source
 
@@ -187,13 +310,16 @@ separately, and separation spares that fetch when the writers are disjoint.
 | `@settings` | 0 | 729 | **no.** Read on every request; written by `SIGHUP`, by administrative commands (`cache_memlimit`, `verbosity`, `slabs automove`, `lru` tuning, `stats detail`, `extstore`, `lru_crawler sleep` and `tocrawl`), by thread start and stop (`lru_crawler`, `lru_maintainer_thread`), by `flush_all`, a client command that sets `oldest_live`, and by the LRU maintainer's extstore automove, which writes `ext_global_pool_min` once per window from a file the amalgamation leaves out but every measured binary links in, and only with extstore enabled, which neither leg was. A workload issuing `flush_all` continuously would make one pair here matter; none that measures a cache does. |
 
 The counts in the table are from the passes as fixed in October: 155
-definite and 852 possible, of which 349 would have been "cold" before the
-rule that a thread with accesses the walk cannot place makes nothing cold.
-All of them sit on these five objects, so the reading covers every pair the
-analysis reports, the former cold ones included. So the first decision
-point of the plan, which lives outside the repository, is reached for the
-pairs the analysis reports: none survives. It is not reached for memcached as a whole, and
-two things the review found are outside what the analysis reports:
+definite and 852 possible on these five globals, of which 349 would have
+been "cold" before the rule that a thread with accesses the walk cannot
+place makes nothing cold. The reading covers every pair reported on a
+global, the former cold ones included; the pairs the later heap-and-element
+round adds -- one definite on `slabclass[0]`, 483 possible at elements the
+analysis cannot tell apart, listed in the section on heap objects and
+elements -- are not read here. So the first decision point of the plan,
+which lives outside the repository, is reached for the pairs on globals:
+none survives. It is not reached for memcached as a whole, and two things
+the review found are outside what this reading covers:
 
 - **One pair across objects.** `expanding` (`assoc.c:47`), read by every
   hash lookup, sits on the same line as `stats_state`, written on every
@@ -205,14 +331,15 @@ two things the review found are outside what the analysis reports:
   holds `lru_crawler_running`, at offset 640 of the grown struct), and moves
   other things as well (`primary_hashtable` leaves `cas_id`'s pair), so
   neither arm below is a single-variable test of this one pair.
-- **What the analysis does not model.** `lru_locks[]` holds 40-byte mutexes
+- **What this reading does not cover.** `lru_locks[]` holds 40-byte mutexes
   aligned to 16, so neighbouring slab classes share lines; `heads[]`,
   `tails[]` and `itemstats[]` are indexed per class and written under
-  different locks; the item locks are a heap array; and the summary line
-  admits 5,106 accesses on objects it could not identify, element
-  accesses to arrays such as `heads[]`, `tails[]` and `lru_locks[]` among
-  them since the fourth round of fixes (they were not even counted before).
-  None of these was examined, because nothing here reports them.
+  different locks; the item locks are a heap array. Since the heap-and-
+  element round the analysis places `itemstats[]`, `slabclass[]`,
+  `crawlers[]` and the heap `threads[]` at elements it cannot tell apart
+  and reports possible pairs there (483, none read); `heads[]`, `tails[]`
+  and `lru_locks[]` appear in no remark, and the summary still admits 4,377
+  accesses through pointers it cannot follow.
 
 ## The measurements that test the review
 
@@ -309,9 +436,10 @@ is excluded either.
 
 What these two legs do not show: a gain on a workload neither of them
 drives, such as continuous `flush_all` or a busy slab mover; anything about
-the arrays and heap objects the analysis does not report; and anything
-below about 2%, which ten repetitions on a host with frequency scaling
-cannot resolve.
+the pairs at array and heap elements the analysis reports as possible and
+this review did not read, or about the accesses it still cannot place; and
+anything below about 2%, which ten repetitions on a host with frequency
+scaling cannot resolve.
 
 The arm order was not balanced. Leg 1 seeded its shuffle from the
 repetition and workload names in a way that gave `get` and `set` the same
@@ -355,9 +483,14 @@ does not cost what its verdict might suggest:
 - **Where an object starts.** "In *k* of 8 positions" treats the
   positions as equally likely; the real start is fixed by the linker and
   readable with `nm`.
-- **Arrays and heap objects**: 5,106 accesses on memcached, the
-  per-thread statistics in the heap `threads[]` array and the atomic
-  reference counts in items among them, all unidentified.
+- **Pointers it cannot follow**: 4,377 accesses on memcached, the slab
+  allocator's items with their atomic reference counts and the state
+  reached through `conn->thread` among them. Heap objects are placed by
+  the call that allocated them and array elements by a constant index or
+  the spawn loop's own; an element at any other index is placed on its
+  array without knowing which element, and every pair there is at most
+  possible (483 on memcached). A `realloc`, a pointer global written twice,
+  a pointer stored in a field: not followed.
 - **The optimiser.** The analysis runs on ClangIR before `-O2`, which may
   keep a store in a register, hoist it, or merge it.
 - **Core placement.** Two threads on the two hardware threads of one core,
@@ -617,7 +750,7 @@ placeholder and no pair can be claimed.
 | codebase | scanned | refused | findings |
 |---|---:|---:|---:|
 | memcached, per file | 31 | 20 | 0 definite, 460 possible *(was 20 definite, 422 cold; 490 possible since the October fixes)* |
-| memcached, amalgamated | 1 | 0 | 155 definite, 503 possible, 349 cold *(was 397 definite, 546 possible; since the October fixes 155 definite, 852 possible, 0 cold)* |
+| memcached, amalgamated | 1 | 0 | 155 definite, 503 possible, 349 cold *(was 397 definite, 546 possible; since the October fixes 155 definite, 852 possible, 0 cold; since the heap-and-element round 156 definite, 1,335 possible)* |
 | libuv | 44 | 18 | 11 possible *(was 32 scanned, 1 possible; the recount scans `src/` and `src/unix/` whole)* |
 | leveldb | 28 | 13 | none *(was 11 scanned, 2 possible; the recount scans `db/`, `util/` and `table/` without tests; the 13 refusals were a missing platform define, see the top section)* |
 | redis | 0 | 3 | needs its vendored dependencies built first |
@@ -744,7 +877,9 @@ divide exactly along the rule the pass was built with: every global is
 `definite`, every stack slot is `possible`, because a slot is a different
 object in every invocation. *(From the truncated walk. Recounted 16
 October: 1,007 pairs on five globals, `@settings` among them with no
-definite pair; see the top section.)* The four globals:
+definite pair; after the heap-and-element round 1,491 pairs on 21 places,
+the 484 new ones all but one at elements the analysis cannot tell apart;
+see the top section.)* The four globals:
 
 | object | fields | edges | density | max degree |
 |---|---:|---:|---:|---:|
@@ -894,6 +1029,7 @@ here, so it is where the argument survives rather than where it is won.
 |---|---|---|
 | fields of one record (44%; 51% recounted) | **yes** | offsets are known at compile time, so the analysis says exactly which pairs share a line |
 | separate globals (56%; 49% recounted) | no | placement is the linker's; a flag gives the same guarantee for twice the memory |
+| fields of one heap object or array element | **yes**, since the heap-and-element round | the object is named by its allocating call and the element by its index or its thread; offsets within it are known as for a record |
 | separate heap objects | unmeasured | placement is the allocator's; nothing but the compiler reaches it |
 
 So the field case is the one where an analysis beats a flag, and after the

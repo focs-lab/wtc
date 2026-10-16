@@ -57,18 +57,35 @@ what was measured and why the default is what it is.
 ## The layout passes, October 2026
 
 `--wtc-false-sharing-diagnose` and `--wtc-align-by-owner` were reviewed
-three times after their numbers were taken on memcached, the third time on
-hand-written programs with known answers. Every defect found is closed with a test that fails on
-the code before the fix; the list, with the tests, is in `docs/corpus.md`.
-The ones that changed verdicts: the walk lost a thread spawned through a
-helper's local; a goto made every access in its function "repeated"; a
-thread-local global, a stack slot of a function called twice, two spawns in
-the two arms of an `if`, and overlapping byte ranges all gave `definite`;
-atomic read-modify-writes and bit-field stores were not memory accesses at
-all; a recursive function ran "once"; a thread with an access the walk could
-not place still made a pair cold, which on memcached was 349 pairs; and
-the alignment pass raised the alignment of declarations, sections,
-thread-local and weak globals.
+four times after their numbers were taken on memcached, the third and
+fourth times on hand-written programs with known answers. Every defect
+found is closed with a test that fails on the code before the fix; the
+list, with the tests, is in `docs/corpus.md`. The ones that changed
+verdicts: the walk lost a thread spawned through a helper's local; a goto
+made every access in its function "repeated"; a thread-local global, a
+stack slot of a function called twice, two spawns in the two arms of an
+`if`, and overlapping byte ranges all gave `definite`; atomic
+read-modify-writes and bit-field stores were not memory accesses at all; a
+recursive function ran "once"; a thread with an access the walk could not
+place still made a pair cold, which on memcached was 349 pairs; the
+alignment pass raised the alignment of declarations, sections,
+thread-local and weak globals; a goto in a caller, or in `main`, still
+made single writes hot; a once-only read of a whole record widened the
+same thread's once-only write; the escape check called every slot
+published; and the start-up phase ended at a spawning callee's call rather
+than inside it.
+
+The heap-and-element round of October (heap objects by allocating call,
+array elements by constant index or by the spawn loop's own, one element
+per thread, elements the analysis cannot tell apart) was reviewed the same
+way: 33 defects by three readings, the verdict-changing ones being a
+loop-spawned thread whose every access was "repeated" even on the element
+it owns alone, five ways a loop can hand an element to no thread or to
+several while the analysis claimed one thread per element, a heap object
+with two names and so two roots, a pointer global written through a
+`global_view` or an alias, an entry lost through an integer round trip,
+and a recurrence left unexpanded whose reach was treated as seen. All are
+closed in `docs/corpus.md`'s section on heap objects and elements.
 
 Still open for these passes, stated here and in `docs/corpus.md` rather
 than in the remarks themselves:
@@ -87,11 +104,17 @@ who writes, hand-offs and rate did.
 handler that runs a thousand times a second and one that runs once a day
 are both "repeated". Every memcached pair was decided by rate, by hand.
 
-**Objects it cannot name.** An element of an array, a heap object, a field
-reached through a pointer the walk cannot follow: counted as unidentified
-in every summary, never guessed at. On memcached that is 5,106 accesses
-against 1,007 pairs, element accesses to arrays included; which element is
-touched is not yet read.
+**Objects it cannot name.** A field reached through a pointer the walk
+cannot follow -- loaded from a field of another object, from a global
+written twice, from a `realloc` -- is counted as unidentified in every
+summary, never guessed at: 4,377 accesses on memcached against 1,491
+pairs. Heap objects are named by the call that allocated them and array
+elements by a constant index or the spawn loop's own; an element at any
+other index is placed on its array without knowing which, counted apart
+(678 on memcached), and every pair there is at most possible. Objects from
+two allocations are never neighbours to the analysis, whatever the
+allocator does: Phoenix `histogram`'s known false sharing, between the
+per-thread histograms each worker allocates, is out of its reach.
 
 **Placement across objects** is the linker's and the allocator's. The
 analysis reports where fields lie within an object; which objects share a
