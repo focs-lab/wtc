@@ -203,6 +203,57 @@ unsigned spawnFirstArgOperand(cir::CallOp op) {
     return spawnEntryOperand(op) + 1;
 }
 
+bool isAllocator(cir::FuncOp f) {
+    if (!f) return false;
+    const StringRef n = f.getSymName();
+    return n == "malloc" || n == "calloc" || n == "aligned_alloc" || n == "memalign" ||
+           n == "posix_memalign" || n == "_Znwm" || n == "_Znam" ||
+           n == "_ZnwmSt11align_val_t" || n == "_ZnamSt11align_val_t";
+}
+
+static cir::CallOp allocationBehindImpl(cir::CallOp call, unsigned depth) {
+    cir::FuncOp callee = lookupCallee(call);
+    if (!callee) return cir::CallOp();
+    if (isAllocator(callee)) return call;
+    if (callee.getBody().empty() || depth > 4) return cir::CallOp();
+    cir::CallOp site;
+    bool bad = false;
+    callee.walk([&](cir::ReturnOp ret) {
+        if (bad) return;
+        if (ret.getNumOperands() != 1) { bad = true; return; }
+        Value r = traceToRoot(ret.getOperand(0));
+        // A null handed back on the failure path reaches no field access.
+        if (auto c = r.getDefiningOp<cir::ConstantOp>())
+            if (auto cp = dyn_cast<cir::ConstPtrAttr>(c.getValue()))
+                if (cp.getValue().getValue().isZero()) return;
+        cir::CallOp here;
+        if (auto c = r.getDefiningOp<cir::CallOp>()) here = allocationBehindImpl(c, depth + 1);
+        if (!here || (site && site != here)) bad = true;
+        else site = here;
+    });
+    return bad ? cir::CallOp() : site;
+}
+
+cir::CallOp allocationBehind(cir::CallOp call) { return allocationBehindImpl(call, 0); }
+
+std::optional<uint64_t> allocationAlignment(cir::CallOp call) {
+    call = allocationBehind(call);
+    cir::FuncOp callee = call ? lookupCallee(call) : cir::FuncOp();
+    if (!callee) return std::nullopt;
+    const StringRef n = callee.getSymName();
+    unsigned idx;
+    if (n == "aligned_alloc" || n == "memalign") idx = firstRealOperand(call);
+    else if (n == "posix_memalign") idx = firstRealOperand(call) + 1;
+    else if (n == "_ZnwmSt11align_val_t" || n == "_ZnamSt11align_val_t") idx = firstRealOperand(call) + 1;
+    else return std::nullopt;
+    if (idx >= call.getNumOperands()) return std::nullopt;
+    if (auto c = call.getOperand(idx).getDefiningOp<cir::ConstantOp>())
+        if (auto a = dyn_cast<cir::IntAttr>(c.getValue()))
+            if (a.getValue().getActiveBits() <= 32 && a.getValue().getZExtValue() > 0)
+                return a.getValue().getZExtValue();
+    return std::nullopt;
+}
+
 void memoryAccesses(Operation *op, llvm::SmallVectorImpl<MemoryAccess> &out) {
     auto pointee = [](Value ptr) -> Type {
         if (auto pt = dyn_cast<cir::PointerType>(ptr.getType())) return pt.getPointee();

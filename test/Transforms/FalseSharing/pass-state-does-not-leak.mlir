@@ -200,6 +200,6 @@ module {
   }
 }
 
-// CHECK: false sharing: 0 definite, 1 possible, 0 cold{{.*}}1 field accesses on objects that could not be identified{{.*}}1 of the possible pairs
-// CHECK: false sharing: 0 definite, 0 possible, 0 cold{{.*}}0 field accesses on objects that could not be identified{{.*}}2 on thread-local objects{{.*}}0 of the possible pairs
-// CHECK: false sharing: 1 definite, 0 possible, 0 cold{{.*}}0 field accesses on objects that could not be identified{{.*}}0 on thread-local objects{{.*}}0 of the possible pairs
+// CHECK: false sharing: 0 definite, 1 possible, 0 cold{{.*}}, 1 field accesses on objects that could not be identified{{.*}}; 1 of the possible pairs
+// CHECK: false sharing: 0 definite, 0 possible, 0 cold{{.*}}, 0 field accesses on objects that could not be identified{{.*}}, 2 on thread-local objects{{.*}}; 0 of the possible pairs
+// CHECK: false sharing: 1 definite, 0 possible, 0 cold{{.*}}, 0 field accesses on objects that could not be identified{{.*}}, 0 on thread-local objects{{.*}}; 0 of the possible pairs

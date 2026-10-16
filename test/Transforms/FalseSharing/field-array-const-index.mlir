@@ -1,10 +1,10 @@
 // RUN: wtc-opt %s --wtc-false-sharing-diagnose 2>&1 >/dev/null | FileCheck %s
 
 // Two per-thread counters in one array field, s.cnt[0] and s.cnt[1], each
-// bumped by its own thread: the textbook case, and the pass printed nothing
-// for it, not even its summary, because an element access is not a member
-// access. Until elements are placed, such an access is counted as one the
-// analysis could not place, so the summary says what it is not seeing.
+// bumped by its own thread: the textbook case. The pass once printed
+// nothing for it, not even its summary, because an element access was not
+// a member access; then it counted the two as accesses it could not place;
+// now a constant index is an offset, and the pair is definite.
 
 !s64i = !cir.int<s, 64>
 !u64i = !cir.int<u, 64>
@@ -58,5 +58,5 @@ module {
   }
 }
 
-// CHECK-NOT: false sharing in
-// CHECK: false sharing: 0 definite, 0 possible, 0 cold{{.*}}2 field accesses on objects that could not be identified
+// CHECK: wtc: false sharing in @s: 'cnt[0]' (offset 0) and 'cnt[1]' (offset 8)
+// CHECK: false sharing: 1 definite, 0 possible, 0 cold

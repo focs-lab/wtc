@@ -186,6 +186,13 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
                 Value q = isa<QueuePushOp>(op) ? cast<QueuePushOp>(op).getQueue()
                                                : cast<QueuePopOp>(op).getQueue();
                 Operation *root = walk.resolveRoot(q, &inst);
+                // The walk now resolves a heap pointer to the call that
+                // allocated it. This pass has no notion of an allocation
+                // that runs once against one that runs many times, and a
+                // queue proved SPSC on the strength of one site that hands
+                // out many objects would be wrong; until it reasons about
+                // that, a heap queue stays unknown, as before.
+                if (root && isa<cir::CallOp>(root)) root = nullptr;
                 if (!root) { poison(op, "the queue object could not be identified"); return; }
                 RootInfo &info = roots[root];
                 SideInfo &side = isa<QueuePushOp>(op) ? info.producers : info.consumers;

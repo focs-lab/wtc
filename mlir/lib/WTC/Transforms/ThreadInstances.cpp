@@ -243,6 +243,12 @@ bool ThreadInstanceWalk::reachesOp(cir::FuncOp f, llvm::function_ref<bool(Operat
     return reachesCache_.lookup(f.getOperation());
 }
 
+bool ThreadInstanceWalk::hasIndirectCall(cir::FuncOp f) {
+    bool found = false;
+    f.walk([&](cir::CallOp call) { if (!lookupCallee(call)) found = true; });
+    return found;
+}
+
 bool ThreadInstanceWalk::isUnstructured(cir::FuncOp f) {
     auto it = unstructuredCache_.find(f.getOperation());
     if (it != unstructuredCache_.end()) return it->second;
@@ -372,6 +378,14 @@ const llvm::DenseSet<Operation *> &ThreadInstanceWalk::preSpawnOps(cir::FuncOp f
     auto it = preSpawnCache_.find(f.getOperation());
     if (it != preSpawnCache_.end()) return it->second;
     llvm::DenseSet<Operation *> pre;
+    // A function with a goto that cannot start a thread, nor call anything
+    // that can, runs entirely before any spawn of its own: every operation
+    // in it precedes one. Only where a goto and a spawn meet is the order
+    // unreadable, and that case is a guess the clients ask about.
+    if (isUnstructured(f) && !canSpawn(f) && !(indirectCallCanSpawn() && hasIndirectCall(f))) {
+        f.walk([&](Operation *op) { pre.insert(op); });
+        return preSpawnCache_[f.getOperation()] = std::move(pre);
+    }
     if (!isUnstructured(f)) {
         bool seen = false;
         f.walk<WalkOrder::PreOrder>([&](Operation *op) {
@@ -394,6 +408,10 @@ const llvm::DenseSet<Operation *> &ThreadInstanceWalk::preSpawnOps(cir::FuncOp f
                 if (!callee ? indirectCallCanSpawn()
                             : (getSemanticKind(callee) == SemanticOpKind::ThreadSpawn ||
                                (!callee.getBody().empty() && canSpawn(callee)))) {
+                    // The call itself is still before the spawn: what the
+                    // callee does before its own spawn is start-up too, and
+                    // the instance it creates reads that from this set.
+                    pre.insert(op);
                     seen = true;
                     return WalkResult::advance();
                 }
@@ -409,9 +427,231 @@ bool ThreadInstanceWalk::spawnPrecedes(Operation *op, cir::FuncOp f) {
     return !preSpawnOps(f).count(op);
 }
 
+Value ThreadInstanceWalk::singleStoredGlobalValue(cir::GlobalOp g) const {
+    if (!globalStoresComputed_) {
+        globalStoresComputed_ = true;
+        // One pass over every use of every global: the stores through its
+        // address, and whether its address goes anywhere but a load.
+        llvm::DenseMap<Operation *, llvm::SmallVector<Value, 2>> stores;
+        llvm::DenseSet<Operation *> spoiled;
+        ModuleOp module = module_;   // a copy of the handle: walk is not const
+        // A name used anywhere but in a cir.get_global -- a global_view in
+        // another global's initializer, an alias -- is a second way to the
+        // storage, and a store through it would not be seen below.
+        auto spoilName = [&](Operation *from, StringAttr name) {
+            if (auto g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(from, name))
+                spoiled.insert(g.getOperation());
+        };
+        if (auto uses = SymbolTable::getSymbolUses(module.getOperation()))
+            for (const SymbolTable::SymbolUse &use : *uses) {
+                if (isa<cir::GetGlobalOp>(use.getUser())) continue;
+                spoilName(use.getUser(), use.getSymbolRef().getRootReference());
+            }
+        module.walk([&](cir::GlobalOp g) {
+            if (auto alias = g.getAliasee()) spoilName(g, StringAttr::get(g.getContext(), *alias));
+            if (auto init = g.getInitialValue())
+                init->walk([&](SymbolRefAttr ref) { spoilName(g, ref.getRootReference()); });
+        });
+        module.walk([&](cir::GetGlobalOp gg) {
+            auto global = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr());
+            if (!global || !isa<cir::PointerType>(global.getSymType())) return;
+            Operation *key = global.getOperation();
+            llvm::SmallVector<Value, 4> work{gg.getResult()};
+            while (!work.empty()) {
+                Value p = work.pop_back_val();
+                for (OpOperand &use : p.getUses()) {
+                    Operation *u = use.getOwner();
+                    if (isa<cir::LoadOp>(u)) continue;
+                    if (auto st = dyn_cast<cir::StoreOp>(u)) {
+                        if (st.getAddr() == p) stores[key].push_back(st.getValue());
+                        else spoiled.insert(key);               // the address itself is stored
+                        continue;
+                    }
+                    if (auto c = dyn_cast<cir::CastOp>(u)) {
+                        if (c.getKind() == cir::CastKind::bitcast) { work.push_back(c.getResult()); continue; }
+                    }
+                    spoiled.insert(key);
+                }
+            }
+        });
+        for (auto &kv : stores)
+            if (kv.second.size() == 1 && !spoiled.count(kv.first)) globalStores_[kv.first] = kv.second[0];
+    }
+    // An initialiser other than null is a second value.
+    if (auto init = g.getInitialValue()) {
+        auto cp = dyn_cast<cir::ConstPtrAttr>(*init);
+        if (!cp || !cp.getValue().getValue().isZero()) return Value();
+    }
+    return globalStores_.lookup(g.getOperation());
+}
+
+static Operation *enclosingLoop(Operation *op, cir::FuncOp f) {
+    for (Operation *p = op->getParentOp(); p && p != f.getOperation(); p = p->getParentOp())
+        if (isa<cir::LoopOpInterface>(p)) return p;
+    return nullptr;
+}
+
+bool ThreadInstanceWalk::isInductionOf(Value index, Operation *loop, bool &unitStep) {
+    unitStep = false;
+    auto forOp = dyn_cast<cir::ForOp>(loop);
+    if (!forOp) return false;
+    // Through integer conversions to the load of a slot.
+    Value v = index;
+    for (unsigned guard = 0; guard < 16; ++guard) {
+        if (auto c = v.getDefiningOp<cir::CastOp>()) {
+            if (c.getKind() != cir::CastKind::integral) return false;
+            v = c.getSrc(); continue;
+        }
+        break;
+    }
+    auto ld = v.getDefiningOp<cir::LoadOp>();
+    if (!ld) return false;
+    auto slot = traceToLocalRoot(ld.getAddr()).getDefiningOp<cir::AllocaOp>();
+    if (!slot) return false;
+    Region &step = forOp.getStep();
+    bool stepped = false;
+    unitStep = true;
+    for (Operation *u : slot->getUsers()) {
+        if (isa<cir::LoadOp>(u)) continue;
+        auto st = dyn_cast<cir::StoreOp>(u);
+        if (!st || st.getValue() == slot.getResult()) return false;
+        if (step.isAncestor(u->getParentRegion())) {
+            // One step, by one: i++ or i--, or i += 1. Anything else, and
+            // the elements the loop hands out are not neighbours.
+            if (stepped) unitStep = false;
+            stepped = true;
+            auto loadsSlot = [&](Value x) {
+                auto l = traceToLocalRoot(x).getDefiningOp<cir::LoadOp>();
+                return l && traceToLocalRoot(l.getAddr()) == slot.getResult();
+            };
+            Value nv = st.getValue();
+            bool unit = false;
+            if (auto inc = nv.getDefiningOp<cir::IncOp>()) unit = loadsSlot(inc.getInput());
+            else if (auto dec = nv.getDefiningOp<cir::DecOp>()) unit = loadsSlot(dec.getInput());
+            else {
+                Value lhs, rhs;
+                if (auto add = nv.getDefiningOp<cir::AddOp>()) { lhs = add.getLhs(); rhs = add.getRhs(); }
+                else if (auto sub = nv.getDefiningOp<cir::SubOp>()) { lhs = sub.getLhs(); rhs = sub.getRhs(); }
+                if (rhs) {
+                    auto c = rhs.getDefiningOp<cir::ConstantOp>();
+                    auto k = c ? dyn_cast<cir::IntAttr>(c.getValue()) : cir::IntAttr();
+                    unit = k && k.getValue() == 1 && loadsSlot(lhs);
+                }
+            }
+            if (!unit) unitStep = false;
+            continue;
+        }
+        if (loop->isAncestor(u)) return false;        // written in the body or the condition
+    }
+    if (!stepped) unitStep = false;
+    return stepped;
+}
+
+// Whether every iteration of the loop reaches `op` once: op sits in the
+// loop's body under nothing but scopes, and the body has no early exit or
+// jump that could skip it on some iterations.
+static bool unconditionalInBody(Operation *op, cir::ForOp loop) {
+    for (Operation *p = op->getParentOp(); p != loop.getOperation(); p = p->getParentOp())
+        if (!p || !isa<cir::ScopeOp>(p)) return false;
+    if (!loop.getBody().isAncestor(op->getParentRegion())) return false;
+    bool jumps = false;
+    loop.getBody().walk([&](Operation *o) {
+        if (isa<cir::ContinueOp, cir::BreakOp, cir::GotoOp, cir::ReturnOp>(o)) jumps = true;
+    });
+    return !jumps;
+}
+
+const DataLayout &ThreadInstanceWalk::dataLayout() const {
+    if (!dataLayout_) dataLayout_.emplace(module_);
+    return *dataLayout_;
+}
+
 Operation *ThreadInstanceWalk::resolveRoot(Value v, Instance *inst, unsigned depth) const {
+    return resolveRootImpl(v, inst, depth, cir::CallOp(), nullptr);
+}
+
+Place ThreadInstanceWalk::resolvePlace(Value v, Instance *inst) const {
+    Place place;
+    place.root = resolveRootImpl(v, inst, 0, cir::CallOp(), &place);
+    if (!place.root) place = Place();
+    // An element step the walk could not read under a per-thread one: which
+    // element is not known, so neither is whose it is.
+    if (place.unknownIndex) { place.loop = nullptr; place.elem = Type(); place.owner = false; }
+    return place;
+}
+
+Operation *ThreadInstanceWalk::resolveRootImpl(Value v, Instance *inst, unsigned depth, cir::CallOp via,
+                                               Place *place) const {
     if (depth > 64 || !inst) return nullptr;
     Value t = traceToRoot(v);
+    // An element step. A constant index is so many bytes in; the
+    // induction variable of the loop that spawned this thread, at the
+    // spawn, means each thread the spawn starts gets its own element;
+    // anything else is some element of the array.
+    Value stepIndex, stepBase;
+    Type stepElem;
+    if (auto ps = t.getDefiningOp<cir::PtrStrideOp>()) {
+        stepIndex = ps.getStride(); stepBase = ps.getBase();
+        stepElem = cast<cir::PointerType>(ps.getBase().getType()).getPointee();
+    } else if (auto ge = t.getDefiningOp<cir::GetElementOp>()) {
+        stepIndex = ge.getIndex(); stepBase = ge.getBase();
+        if (auto arr = dyn_cast<cir::ArrayType>(cast<cir::PointerType>(ge.getBase().getType()).getPointee()))
+            stepElem = arr.getElementType();
+    }
+    if (stepBase) {
+        if (!place || !stepElem || isa<cir::VoidType, cir::FuncType>(stepElem)) return nullptr;
+        const uint64_t elemSize = dataLayout().getTypeSize(stepElem);
+        auto c = traceToLocalRoot(stepIndex).getDefiningOp<cir::ConstantOp>();
+        auto k = c ? dyn_cast<cir::IntAttr>(c.getValue()) : cir::IntAttr();
+        if (k && !k.getValue().isNegative() && k.getValue().getActiveBits() <= 32) {
+            place->offset += k.getValue().getZExtValue() * elemSize;
+            return resolveRootImpl(stepBase, inst, depth + 1, via, place);
+        }
+        Operation *loop = via ? enclosingLoop(via.getOperation(), inst->func) : nullptr;
+        bool unitStep = false;
+        if (loop && loop->isAncestor(t.getDefiningOp()) && isInductionOf(stepIndex, loop, unitStep)) {
+            place->loop = loop;
+            place->elem = stepElem;
+            // Neighbouring elements both have a thread only when the loop
+            // walks the array one element at a time, spawns on every
+            // iteration, and is the only repetition around the spawn.
+            auto forOp = dyn_cast<cir::ForOp>(loop);
+            place->owner = unitStep && forOp && unconditionalInBody(via.getOperation(), forOp) &&
+                           !enclosingLoop(loop, inst->func) && inst->execMult == Mult::One &&
+                           !inst->execUnknown && inst->threadMult == Mult::One && !inst->recurring;
+            return resolveRootImpl(stepBase, inst, depth + 1, cir::CallOp(), place);
+        }
+        place->unknownIndex = true;
+        return resolveRootImpl(stepBase, inst, depth + 1, cir::CallOp(), place);
+    }
+    // The object an allocator returned: the allocator call is its identity,
+    // behind any wrapper that hands it back -- the same object may also
+    // leave the wrapper by a global it stores, and two names for it must be
+    // one root. How many times it is made is read from the call graph
+    // (siteRunsOnce), not from the wrapper's own loop structure alone.
+    if (auto call = t.getDefiningOp<cir::CallOp>()) {
+        cir::CallOp site = allocationBehind(call);
+        return site ? site.getOperation() : nullptr;
+    }
+    // A pointer loaded from a global the module writes exactly once: the
+    // loaded value is the one stored, wherever the load is. The stored
+    // value is resolved without an instance, since the storing function's
+    // instance is not this one: a global, an allocation, nothing else.
+    if (auto ld = t.getDefiningOp<cir::LoadOp>()) {
+        if (auto gg = traceToLocalRoot(ld.getAddr()).getDefiningOp<cir::GetGlobalOp>()) {
+            auto g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr());
+            if (Value stored = g ? singleStoredGlobalValue(g) : Value()) {
+                Value s = traceToRoot(stored);
+                if (auto call = s.getDefiningOp<cir::CallOp>()) {
+                    cir::CallOp site = allocationBehind(call);
+                    return site ? site.getOperation() : nullptr;
+                }
+                if (auto sg = s.getDefiningOp<cir::GetGlobalOp>())
+                    return SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(sg, sg.getNameAttr()).getOperation();
+            }
+        }
+        return nullptr;
+    }
     if (auto gg = t.getDefiningOp<cir::GetGlobalOp>()) {
         auto g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr());
         // An alias has no storage of its own: the object is the aliasee's,
@@ -438,7 +678,49 @@ Operation *ThreadInstanceWalk::resolveRoot(Value v, Instance *inst, unsigned dep
         idx = i;
     }
     if (idx >= site.getNumOperands()) return nullptr;
-    return resolveRoot(site.getOperand(idx), inst->parent, depth + 1);
+    // Only a spawn hands each thread its own element; through a plain call
+    // the per-thread reading does not apply.
+    const bool spawn = getSemanticKind(lookupCallee(site)) == SemanticOpKind::ThreadSpawn;
+    return resolveRootImpl(site.getOperand(idx), inst->parent, depth + 1,
+                           spawn ? site : cir::CallOp(), place);
+}
+
+Mult ThreadInstanceWalk::multWithinThread(const Instance &inst, bool &known) {
+    known = true;
+    Mult m = Mult::One;
+    for (const Instance *p = &inst; p; p = p->parent) {
+        if (p->recurring) m = Mult::Many;
+        if (!p->site || !p->parent) break;
+        if (getSemanticKind(lookupCallee(p->site)) == SemanticOpKind::ThreadSpawn) break;   // the thread's entry
+        bool k;
+        cir::CallOp at = p->site;
+        const Mult site = siteMult(at.getOperation(), p->parent->func, k);
+        if (!k) known = false;
+        m = join(m, site);
+    }
+    return m;
+}
+
+bool ThreadInstanceWalk::siteRunsOnce(Operation *op, unsigned depth) {
+    auto f = op->getParentOfType<cir::FuncOp>();
+    if (!f || depth > 16) return false;
+    bool known;
+    if (siteMult(op, f, known) != Mult::One || !known) return false;
+    if (runsOnce(f)) return true;
+    if (f.getSymName() == "main") return true;
+    if (instanceCount(f) > 0) return false;     // the walk saw it run more than once
+    if (isAddressTaken(f, module_)) return false;
+    if (!callersComputed_) {
+        callersComputed_ = true;
+        ModuleOp module = module_;
+        module.walk([&](cir::CallOp call) {
+            if (cir::FuncOp callee = lookupCallee(call))
+                callers_[callee.getOperation()].push_back(call.getOperation());
+        });
+    }
+    auto it = callers_.find(f.getOperation());
+    if (it == callers_.end() || it->second.size() != 1) return false;
+    return siteRunsOnce(it->second.front(), depth + 1);
 }
 
 cir::FuncOp ThreadInstanceWalk::resolveEntry(Value v, Instance *inst, unsigned depth) const {
@@ -466,7 +748,13 @@ static bool flowsOnlyToSpawnEntry(Value v, unsigned depth) {
     if (depth > 8) return false;
     for (OpOperand &use : v.getUses()) {
         Operation *user = use.getOwner();
-        if (isa<cir::CastOp>(user)) {
+        if (auto c = dyn_cast<cir::CastOp>(user)) {
+            // The same casts traceToLocalRoot follows backwards: through an
+            // integer round trip the entry can no longer be resolved at the
+            // spawn, so it must count as an address taken, or the thread is
+            // lost on both sides.
+            if (c.getKind() != cir::CastKind::bitcast && c.getKind() != cir::CastKind::array_to_ptrdecay)
+                return false;
             if (!flowsOnlyToSpawnEntry(user->getResult(0), depth + 1)) return false;
             continue;
         }
@@ -663,7 +951,25 @@ void ThreadInstanceWalk::run(llvm::function_ref<void(Instance &)> visit,
             // Each function's recurrence is expanded once in the whole walk:
             // unrolling every cycle once per path made the walk exponential
             // in the size of a mutually recursive group.
-            if (!expandedRecurrence_.insert(inst.func.getOperation()).second) { visit(inst); return; }
+            // Once per function, thread and phase: the walk is breadth-first,
+            // so keyed by function alone the one unrolling went to the
+            // shallowest recurrence, a start-up call, and a worker's
+            // recursive writes were never seen.
+            // A recurrence through a spawn starts a new thread each time, so
+            // keyed by thread it would unroll forever; once per function is
+            // right for it, since the chain of threads is one thing.
+            const bool viaSpawn = inst.site && getSemanticKind(lookupCallee(inst.site)) == SemanticOpKind::ThreadSpawn;
+            const uint64_t key = viaSpawn ? ~uint64_t(0)
+                                          : ((uint64_t(inst.thread) << 2) | (inst.startup ? 2 : 0) |
+                                             (inst.startupUnknown ? 1 : 0));
+            if (!expandedRecurrence_.insert({inst.func.getOperation(), key}).second) {
+                // Visited, not expanded: what this recurrence's calls reach
+                // with its own arguments is not in the walk, and may be an
+                // object the expanded one did not touch.
+                inst.truncated = true;
+                visit(inst);
+                return;
+            }
         }
         expand(inst);
         visit(inst);

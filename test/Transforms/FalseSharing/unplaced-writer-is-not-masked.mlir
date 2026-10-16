@@ -98,4 +98,4 @@ module {
 
 // CHECK-NOT: wtc: false sharing in
 // CHECK: unplaced-writer-is-not-masked.mlir:70:5: remark: wtc: possible false sharing in @s: 'a' and 'b'{{.*}}accesses it could not place
-// CHECK: false sharing: 0 definite, 1 possible, 0 cold{{.*}}1 of the possible pairs would be cold but for unplaced accesses
+// CHECK: false sharing: 0 definite, 1 possible, 0 cold{{.*}}; 1 of the possible pairs would be cold but for unplaced accesses

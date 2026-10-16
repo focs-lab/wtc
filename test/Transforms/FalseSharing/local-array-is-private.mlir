@@ -61,4 +61,4 @@ module {
 }
 
 // CHECK-NOT: false sharing in
-// CHECK: false sharing: 0 definite, 0 possible, 1 cold{{.*}}0 field accesses on objects that could not be identified, 1 on stack slots that never escape
+// CHECK: false sharing: 0 definite, 0 possible, 1 cold{{.*}}, 0 field accesses on objects that could not be identified, 1 on stack slots that never escape

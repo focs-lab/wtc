@@ -73,6 +73,29 @@ struct MemoryAccess {
 // write that moves the line.
 void memoryAccesses(Operation *op, llvm::SmallVectorImpl<MemoryAccess> &out);
 
+// Whether a call allocates an object the program then owns: malloc,
+// calloc, aligned_alloc, memalign, operator new; posix_memalign is named
+// too, though its buffer leaves by an out-parameter and is not followed.
+// realloc is not one: its result replaces an older object, and the slot
+// that receives it has two stores anyway. Such a call is the root of the
+// object it returns, the way a cir.global or a cir.alloca is: an identity
+// for "the object allocated here", standing for every object the site
+// allocates when the site runs more than once.
+bool isAllocator(cir::FuncOp f);
+
+// The alignment the allocator guarantees for a site's result, when the
+// call says it: aligned_alloc, memalign and posix_memalign with a constant
+// alignment operand. Nothing for malloc, calloc and new, whose guarantee is
+// the platform's.
+std::optional<uint64_t> allocationAlignment(cir::CallOp call);
+
+// The allocator call a call hands back: the call itself when its callee is
+// an allocator, else the one allocator call every return of the callee's
+// body hands back, through further such wrappers (Phoenix's CALLOC, any
+// checked malloc, with or without a null on its failure path). Null when
+// the callee is neither, returns from two sites, or returns anything else.
+cir::CallOp allocationBehind(cir::CallOp call);
+
 // Walks backward from v through the casts under which it still names the
 // same object -- bitcast, array-to-pointer decay, and the single-operand
 // form of builtin.unrealized_conversion_cast -- to whatever value is no

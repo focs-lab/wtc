@@ -27,6 +27,7 @@
 #include "clang/CIR/Dialect/IR/CIRDialect.h"
 
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/Interfaces/DataLayoutInterfaces.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
@@ -91,6 +92,35 @@ struct Instance {
     // without passing a spawn, as far as the walk can tell, and that is a
     // guess.
     bool startupUnknown = false;
+    // True for a recurring instance that was visited but not expanded: what
+    // its calls reach is not in the walk. A client that would call a pair
+    // cold must not, on this thread, since the unseen calls may touch it.
+    bool truncated = false;
+};
+
+// Where a handle points, as far as the walk can read it: a root (a
+// cir.global, a cir.alloca, or the allocator call that made the object)
+// and how the handle got there.
+struct Place {
+    Operation *root = nullptr;
+    // Bytes from the root to where the handle points, summed over element
+    // steps with constant indices on the way: `&arr[2]` is 2 elements in.
+    uint64_t offset = 0;
+    // Set when the handle came through `&arr[i]` at a spawn inside a loop
+    // whose induction variable is i: the thread's accesses are within one
+    // element of the array, `elem`, at offsets relative to it, and which
+    // element it is depends on the thread.
+    Operation *loop = nullptr;
+    Type elem;
+    // With `loop`: the loop steps by one, spawns unconditionally, is the
+    // only repetition around the spawn, and the spawning instance runs
+    // once, so every element in the loop's range has exactly one thread
+    // and the threads of neighbouring elements both exist.
+    bool owner = false;
+    // Set when an element step on the way had an index the walk cannot
+    // read: the handle points into some element of the root, at an offset
+    // within it, and which element is not known.
+    bool unknownIndex = false;
 };
 
 class ThreadInstanceWalk {
@@ -111,11 +141,41 @@ public:
     void run(llvm::function_ref<void(Instance &)> visit,
              llvm::function_ref<void(cir::FuncOp)> onRecursion);
 
-    // The root object a handle refers to -- a cir.global or a cir.alloca --
-    // resolved through the chain of call sites that created this instance.
-    // Null when the trail does not end at one, which the caller must treat
-    // as unresolved rather than as absent.
+    // The root object a handle refers to -- a cir.global, a cir.alloca, or
+    // the cir.call that allocated it -- resolved through the chain of call
+    // sites that created this instance, through a stack slot written once,
+    // and through a pointer-typed global written once (memcached's
+    // `threads = calloc(...)`). Null when the trail does not end at one,
+    // which the caller must treat as unresolved rather than as absent.
     Operation *resolveRoot(Value v, Instance *inst, unsigned depth = 0) const;
+
+    // resolveRoot through element steps as well: a constant index adds to
+    // the offset, the spawn loop's induction variable makes the place
+    // per-thread, any other index makes the element unknown (see Place).
+    // A null root means unresolved, as for resolveRoot.
+    Place resolvePlace(Value v, Instance *inst) const;
+
+    // How many times the instance's function runs within its own thread:
+    // the sites on the chain from the thread's entry down to it, joined,
+    // with a recurrence counting as many. A thread spawned in a loop stands
+    // for many threads, and for a place each of those threads owns alone
+    // that multiplicity is spread over the elements, so what repeats on one
+    // element is only what repeats inside the thread. `known` is false
+    // when a site on the chain is a guess (a goto).
+    Mult multWithinThread(const Instance &inst, bool &known);
+
+    // Whether an operation runs at most once in the program, read from the
+    // call graph: not in a loop, in a function that runs once -- main, or a
+    // function called from exactly one site that itself runs once. The
+    // instance-based runsOnce answers only for functions the walk entered;
+    // an allocation in an init() that touches no field has no instance.
+    bool siteRunsOnce(Operation *op, unsigned depth = 0);
+
+    // The value stored into a pointer-typed global, when the module stores
+    // into it exactly once and only ever loads it otherwise; null when it
+    // is written twice (realloc, re-initialisation, `p = NULL` at shutdown)
+    // or its address goes anywhere else. Computed once per module.
+    Value singleStoredGlobalValue(cir::GlobalOp g) const;
 
     // The function a spawn starts, resolved the same way: through casts and
     // single-assignment slots to a named function, or, when the entry is a
@@ -204,12 +264,20 @@ public:
 
 private:
     bool isUnstructured(cir::FuncOp f);
+    bool hasIndirectCall(cir::FuncOp f);
     bool isRecursive(cir::FuncOp f);
     bool canSpawn(cir::FuncOp f);
     bool indirectCallCanSpawn();
     const llvm::DenseSet<Operation *> &preSpawnOps(cir::FuncOp f);
     Instance &addInstance(Instance inst);
     Instance *addIfRoom(Instance inst);
+    Operation *resolveRootImpl(Value v, Instance *inst, unsigned depth, cir::CallOp via,
+                               Place *place) const;
+    // Whether `index` is the induction variable of `loop`: a slot whose
+    // every store is either outside the loop or in its step region.
+    // `unitStep` is set when the step region advances it by exactly one.
+    static bool isInductionOf(Value index, Operation *loop, bool &unitStep);
+    const DataLayout &dataLayout() const;
     void noteRemark(Operation *at, const llvm::Twine &msg);
     void addRootsForModule();
     void expand(Instance &inst);
@@ -227,7 +295,12 @@ private:
     llvm::DenseMap<Operation *, bool> recursiveCache_;
     bool recursiveComputed_ = false;
     llvm::DenseMap<unsigned, const Instance *> threadRoot_;   // the instance that began each thread
-    llvm::DenseSet<Operation *> expandedRecurrence_;           // functions whose recurrence was unrolled
+    llvm::DenseSet<std::pair<Operation *, uint64_t>> expandedRecurrence_;   // (function, thread/phase) unrolled once
+    mutable llvm::DenseMap<Operation *, Value> globalStores_;  // pointer global -> its one stored value
+    mutable bool globalStoresComputed_ = false;
+    mutable std::optional<DataLayout> dataLayout_;
+    llvm::DenseMap<Operation *, llvm::SmallVector<Operation *, 2>> callers_;  // function -> direct call sites
+    bool callersComputed_ = false;
     llvm::DenseMap<Operation *, bool> reachesCache_;
     llvm::DenseMap<Operation *, llvm::DenseSet<Operation *>> preSpawnCache_;
     llvm::DenseMap<Operation *, bool> spawnsCache_;
