@@ -23,7 +23,7 @@ set -euo pipefail
 ok()   { printf '  \033[32m+\033[0m %s\n' "$*"; }
 skip() { printf '  \033[90m=\033[0m %s\n' "$*"; }
 step() { printf '\n\033[1m%s\033[0m\n' "$*"; }
-die()  { printf '\n\033[31mСТОП:\033[0m %s\n' "$*"; exit 1; }
+die()  { printf '\n\033[31mSTOP:\033[0m %s\n' "$*"; exit 1; }
 
 cd "$(git rev-parse --show-toplevel)"
 SLUG=$(git remote get-url origin | sed -E 's#(git@github\.com:|https://github\.com/)([^/]+/[^/.]+)(\.git)?#\2#')
@@ -32,87 +32,92 @@ BRANCH=$(git rev-parse --abbrev-ref HEAD)
 REV=$(git rev-parse HEAD:llvm)
 IMG="ghcr.io/$ORG/wtc-toolchain:llvm-${REV:0:12}"
 
-step "Токен"
-read -rsp "  classic-токен (repo + write:packages, не сохраняется): " TOK; echo
-[ -n "$TOK" ] || die "пустой токен"
+step "Token"
+read -rsp "  classic token (repo + write:packages, not stored): " TOK; echo
+[ -n "$TOK" ] || die "empty token"
 export GH_TOKEN="$TOK"
 unset GITHUB_TOKEN 2>/dev/null || true
-# credential.helper многозначен, и конфиг из окружения ДОПОЛНЯЕТ список.
-# Пустое значение первым сбрасывает всё унаследованное, иначе чужой помощник
-# ответит раньше нашего и запишет токен на диск.
+# credential.helper is multi-valued, and configuration from the environment
+# ADDS to the list. An empty value first clears everything inherited;
+# otherwise some other helper answers before ours and writes the token to
+# disk.
 export GIT_CONFIG_COUNT=2
 export GIT_CONFIG_KEY_0=credential.helper
 export GIT_CONFIG_VALUE_0=
 export GIT_CONFIG_KEY_1=credential.helper
 export GIT_CONFIG_VALUE_1='!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f'
-WHO=$(gh api user --jq .login) || die "токен не принят GitHub"
+WHO=$(gh api user --jq .login) || die "GitHub rejected the token"
 SCOPES=$(gh api -i user 2>/dev/null | sed -n 's/^[Xx]-[Oo][Aa]uth-[Ss]copes: //p' | tr -d '\r')
-[ -n "$SCOPES" ] || die "это fine-grained токен, нужен classic: https://github.com/settings/tokens"
+[ -n "$SCOPES" ] || die "this is a fine-grained token; a classic one is needed: https://github.com/settings/tokens"
 SC=",${SCOPES// /},"
-case "$SC" in *,repo,*) ;; *) die "нет области repo" ;; esac
-case "$SC" in *,write:packages,*) ;; *) die "нет области write:packages, образ не отправить" ;; esac
-ok "$WHO, области: $SCOPES"
+case "$SC" in *,repo,*) ;; *) die "the repo scope is missing" ;; esac
+case "$SC" in *,write:packages,*) ;; *) die "the write:packages scope is missing; the image cannot be pushed" ;; esac
+ok "$WHO, scopes: $SCOPES"
 
-step "0. Проверка"
-[ -z "$(git status --porcelain)" ] || die "рабочее дерево не чистое"
-docker image inspect "$IMG" >/dev/null 2>&1 || die "образ $IMG не собран, см. docs/toolchain.md"
-# Без метки source пакет не привязан к репозиторию, и токен задачи его не
-# прочитает. Образ, собранный старым Dockerfile, выглядит целым и молча даёт
-# неработающий CI, поэтому проверяем здесь, а не после отправки.
+step "0. Checks"
+[ -z "$(git status --porcelain)" ] || die "the working tree is not clean"
+docker image inspect "$IMG" >/dev/null 2>&1 || die "image $IMG is not built; see docs/toolchain.md"
+# Without the source label the package is tied to no repository, and the
+# job token cannot read it. An image built by the old Dockerfile looks whole
+# and silently yields a CI that does not work, so this is checked here, not
+# after the push.
 SRC=$(docker image inspect "$IMG" --format '{{index .Config.Labels "org.opencontainers.image.source"}}')
 [ "$SRC" = "https://github.com/$SLUG" ] \
-  || die "образ без метки source=https://github.com/$SLUG (получено: '${SRC:-нет}'), пересоберите: docs/toolchain.md"
-ok "$SLUG, ветка $BRANCH, пин ${REV:0:12}, метка связи на месте"
+  || die "image lacks the label source=https://github.com/$SLUG (got: '${SRC:-none}'); rebuild it: docs/toolchain.md"
+ok "$SLUG, branch $BRANCH, pin ${REV:0:12}, source label present"
 
-step "1. Образ"
-# Отправляем всегда. Проверка "уже есть" по имени тега не работала бы до входа
-# в реестр, а после входа была бы вредна: тег выводится из пина, и образ,
-# пересобранный на том же пине с другими флагами, не отправился бы вовсе.
+step "1. Image"
+# Always pushed. An "already there" check by tag name would not work before
+# logging in to the registry, and after logging in it would be harmful: the
+# tag is derived from the pin, so an image rebuilt on the same pin with other
+# flags would never be pushed at all.
 trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
 echo "$TOK" | docker login ghcr.io -u "$WHO" --password-stdin >/dev/null
 docker push "$IMG"
 docker logout ghcr.io >/dev/null 2>&1 || true
 trap - EXIT
-ok "$IMG отправлен, учётные данные docker убраны"
+ok "$IMG pushed, docker credentials removed"
 
-step "2. Переменная репозитория"
+step "2. Repository variable"
 gh variable set WTC_TOOLCHAIN_IMAGE -R "$SLUG" -b "ghcr.io/$ORG/wtc-toolchain"
-ok "выставлена, без тега: тег CI выводит из пина сам"
+ok "set, without a tag: CI derives the tag from the pin itself"
 
-# Образ и переменная идут ПЕРВЫМИ, ветка после. Обратный порядок один раз уже
-# обошёлся зря потраченным прогоном: отправка ветки запускает CI немедленно, и
-# он падал на пустой переменной, которую скрипт выставлял секундой позже.
-step "3. Ветка"
+# The image and the variable go FIRST, the branch after. The other order
+# once cost a wasted run: pushing the branch starts CI at once, and it failed
+# on the empty variable the script set a second later.
+step "3. Branch"
 git push --set-upstream origin "$BRANCH"
-ok "опубликована"
+ok "pushed"
 
 step "4. Pull request"
 if gh pr view "$BRANCH" --json url --jq .url >/dev/null 2>&1; then
-  skip "уже открыт: $(gh pr view "$BRANCH" --json url --jq .url)"
+  skip "already open: $(gh pr view "$BRANCH" --json url --jq .url)"
 else
   gh pr create --base main --head "$BRANCH" --fill
-  ok "открыт: $(gh pr view "$BRANCH" --json url --jq .url)"
+  ok "opened: $(gh pr view "$BRANCH" --json url --jq .url)"
 fi
 
-step "Осталось руками"
+step "Left to do by hand"
 cat <<NOTE
-  Один раз на пакет: выдать этому репозиторию доступ на чтение. Пакет,
-  отправленный личным токеном, не привязан ни к одному репозиторию, и токен
-  задачи получает отказ независимо от прав в рабочем процессе.
+  Once per package: grant this repository read access. A package pushed
+  with a personal token is tied to no repository, and the job token is
+  refused whatever the workflow's permissions say.
 
     https://github.com/orgs/$ORG/packages/container/wtc-toolchain/settings
     Manage Actions access -> Add repository -> ${SLUG#*/} -> Role: Read
 
-  Публичным пакет сделать нельзя: в организации эта видимость отключена
-  администраторами. Это и не нужно, CI входит в реестр своим токеном.
+  The package cannot be made public: the organization's administrators have
+  disabled that visibility. Nor is it needed; CI logs in to the registry
+  with its own token.
 
-  После выдачи доступа перезапустить последний прогон:
+  After granting access, rerun the last run:
 
     gh run rerun "\$(gh run list -R $SLUG -L 1 --json databaseId --jq '.[0].databaseId')" -R $SLUG
 
-  Когда "Build and test" впервые пройдёт зелёной, добавьте её в
-  tools/branch-protection.json и примените: tools/protect-main.sh --apply
+  When "Build and test" first passes, add it to
+  tools/branch-protection.json and apply: tools/protect-main.sh --apply
 
-  Когда пин llvm сдвинется, удалите старую версию образа на той же странице
-  настроек: приватные версии занимают квоту организации, ~377 МиБ каждая.
+  When the llvm pin moves, delete the old image version on the same settings
+  page: private versions count against the organization's quota, about
+  377 MiB each.
 NOTE

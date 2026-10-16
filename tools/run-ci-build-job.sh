@@ -26,7 +26,7 @@ REV=$(git rev-parse HEAD:llvm)
 IMG="${WTC_IMAGE:-ghcr.io/focs-lab/wtc-toolchain:llvm-${REV:0:12}}"
 
 docker image inspect "$IMG" >/dev/null 2>&1 \
-  || { echo "образ $IMG не собран, см. docs/toolchain.md" >&2; exit 1; }
+  || { echo "image $IMG is not built; see docs/toolchain.md" >&2; exit 1; }
 
 WORK=$(mktemp -d)
 # A container job runs as root, which is faithful and leaves root-owned files
@@ -62,7 +62,7 @@ def render(text):
         b = text.index("}}", a)
         key = text[a + 3:b].strip()
         if key not in CTX:
-            sys.exit(f"нет значения для ${{{{ {key} }}}}; допишите его в CTX")
+            sys.exit(f"no value for ${{{{ {key} }}}}; add it to CTX")
         out.append(text[i:a]); out.append(CTX[key]); i = b + 2
     return "".join(out)
 
@@ -77,13 +77,13 @@ default_shell = (job.get("defaults", {}).get("run", {}) or {}).get("shell")
 
 failed = 0
 for n, step in enumerate(job["steps"]):
-    name = step.get("name") or step.get("uses") or f"шаг {n}"
+    name = step.get("name") or step.get("uses") or f"step {n}"
     if "run" not in step:
-        print(f"  \033[90m=\033[0m {name} (пропуск: не run-шаг)")
+        print(f"  \033[90m=\033[0m {name} (skipped: not a run step)")
         continue
     shell = step.get("shell", default_shell)
     if shell not in SHELLS:
-        sys.exit(f"оболочка {shell!r} не описана в SHELLS")
+        sys.exit(f"shell {shell!r} is not described in SHELLS")
     path = os.path.join(work, "steps", f"{n}.sh")
     open(path, "w").write(render(step["run"]))
     env = []

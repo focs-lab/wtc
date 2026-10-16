@@ -12,8 +12,8 @@
 ## What is deliberately not here
 
 Grant applications are not committed to this repository. `vision.md` carries
-their technical content with the funding apparatus removed: no principal
-investigator, no institution, no budget, no staffing, no work packages, no
+their technical content with the funding apparatus removed: no funding
+roles, no institution, no budget, no staffing, no work packages, no
 timeline, no milestones, no impact section. If you need the applications
 themselves, they are held outside the repository.
 
