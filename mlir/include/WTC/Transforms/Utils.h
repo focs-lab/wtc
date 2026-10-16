@@ -56,6 +56,23 @@ unsigned spawnFirstArgOperand(cir::CallOp op);
 // the trail does not end at a named function.
 cir::FuncOp resolveFunctionOperand(Value v);
 
+// One address an operation reads or writes through: a plain load or store,
+// an atomic read-modify-write, exchange or compare-exchange, a bit-field
+// access, or either end of a cir.copy. `type` is what is read or written
+// there, which sizes the access. A review found both layout passes
+// accepting loads and stores only, so the textbook pair of atomic counters
+// -- two threads, two fetch-adds, one line -- was invisible to them.
+struct MemoryAccess {
+    Value addr;
+    Type type;
+    bool isWrite;
+};
+
+// Every address `op` touches, in `out`; nothing for an operation that
+// touches no memory. A read-modify-write counts as a write: it is the
+// write that moves the line.
+void memoryAccesses(Operation *op, llvm::SmallVectorImpl<MemoryAccess> &out);
+
 // Walks backward from v through pass-through casts -- cir.cast and the
 // single-operand form of builtin.unrealized_conversion_cast -- to whatever
 // value is no longer a cast. Purely local, single-value tracing.

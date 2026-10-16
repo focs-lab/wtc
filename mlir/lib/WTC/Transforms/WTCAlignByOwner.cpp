@@ -91,14 +91,6 @@ public:
     void runOnOperation() override;
 
 private:
-    static bool isMemoryAccess(Operation *op) { return isa<cir::LoadOp, cir::StoreOp>(op); }
-
-    static Value accessAddress(Operation *op, bool &isWrite) {
-        if (auto ld = dyn_cast<cir::LoadOp>(op)) { isWrite = false; return ld.getAddr(); }
-        isWrite = true;
-        return cast<cir::StoreOp>(op).getAddr();
-    }
-
     // Why a global's alignment must stay as it is, or null if it may move.
     // Raising it is only safe where this module owns the object outright:
     // on a declaration it promises an alignment the defining module never
@@ -148,7 +140,11 @@ void WTCAlignByOwnerPass::runOnOperation() {
     llvm::MapVector<Operation *, RootInfo> globals;
 
     ThreadInstanceWalk *self = nullptr;
-    auto touchesMemory = [](Operation *op) { return isMemoryAccess(op); };
+    auto touchesMemory = [](Operation *op) {
+        llvm::SmallVector<MemoryAccess, 2> accesses;
+        memoryAccesses(op, accesses);
+        return !accesses.empty();
+    };
     auto relevant = [&](cir::FuncOp f) { return self->reachesOp(f, touchesMemory); };
     ThreadInstanceWalk walk(module, relevant, maxInstances);
     self = &walk;
@@ -156,15 +152,17 @@ void WTCAlignByOwnerPass::runOnOperation() {
     walk.run(
         [&](Instance &inst) {
             inst.func.walk([&](Operation *op) {
-                if (!isMemoryAccess(op)) return;
-                bool isWrite = false;
-                Value obj = objectAddress(accessAddress(op, isWrite));
-                if (!obj) return;
+                llvm::SmallVector<MemoryAccess, 2> accesses;
+                memoryAccesses(op, accesses);
+                for (const MemoryAccess &ma : accesses) {
+                const bool isWrite = ma.isWrite;
+                Value obj = objectAddress(ma.addr);
+                if (!obj) continue;
                 Operation *root = walk.resolveRoot(obj, &inst);
                 // Only globals: a stack slot is a different object in every
                 // invocation, and a heap object's placement is the
                 // allocator's, not ours.
-                if (!root || !isa<cir::GlobalOp>(root)) return;
+                if (!root || !isa<cir::GlobalOp>(root)) continue;
 
                 // An access while the program starts cannot contend with a
                 // thread that does not exist yet; one that happens once
@@ -173,7 +171,7 @@ void WTCAlignByOwnerPass::runOnOperation() {
                                       (inst.threadMult == Mult::Many ||
                                        inst.execMult == Mult::Many ||
                                        walk.siteMult(op, inst.func) == Mult::Many);
-                if (!repeated) return;
+                if (!repeated) continue;
 
                 RootInfo &ri = globals[root];
                 if (!inst.speculative) ri.certain.insert(inst.thread);
@@ -183,6 +181,7 @@ void WTCAlignByOwnerPass::runOnOperation() {
                     if (!ri.firstHotWrite) ri.firstHotWrite = op;
                 } else {
                     ri.hotReaders.insert(inst.thread);
+                }
                 }
             });
         },

@@ -125,16 +125,6 @@ private:
     unsigned coldPairs = 0;   // different threads, but one side touches once
     size_t walkInstances = 0;
 
-    static bool isMemoryAccess(Operation *op) { return isa<cir::LoadOp, cir::StoreOp>(op); }
-
-    // The address a load or store works on, and whether it writes.
-    static Value accessAddress(Operation *op, bool &isWrite) {
-        if (auto ld = dyn_cast<cir::LoadOp>(op)) { isWrite = false; return ld.getAddr(); }
-        auto st = cast<cir::StoreOp>(op);
-        isWrite = true;
-        return st.getAddr();
-    }
-
     // Walks the chain of cir.get_member back to whatever the record sits in,
     // accumulating the byte offset. A member of a member contributes both
     // offsets, so a field nested two deep is placed correctly in its line.
@@ -229,10 +219,11 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
     // predicate the standard library's own call graph fills the worklist.
     ThreadInstanceWalk *self = nullptr;
     auto touchesMember = [](Operation *op) {
-        if (!isMemoryAccess(op)) return false;
-        bool w;
-        Value a = traceToLocalRoot(accessAddress(op, w));
-        return a && a.getDefiningOp<cir::GetMemberOp>() != nullptr;
+        llvm::SmallVector<MemoryAccess, 2> accesses;
+        memoryAccesses(op, accesses);
+        for (const MemoryAccess &ma : accesses)
+            if (traceToLocalRoot(ma.addr).getDefiningOp<cir::GetMemberOp>()) return true;
+        return false;
     };
     auto relevant = [&](cir::FuncOp f) { return self->reachesOp(f, touchesMember); };
     ThreadInstanceWalk walk(module, relevant, maxInstances);
@@ -241,9 +232,7 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
     walk.run(
         [&](Instance &inst) {
             inst.func.walk([&](Operation *op) {
-                if (!isMemoryAccess(op)) return;
-                bool isWrite = false;
-                Value addr = accessAddress(op, isWrite);
+                auto record = [&](Value addr, bool isWrite, Type valTy) {
                 uint64_t offset = 0;
                 std::string path;
                 // Tell "this is not a field access" from "this is a field
@@ -268,8 +257,6 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
                 FieldInfo &fi = byRoot[root][offset];
                 if (fi.name.empty()) fi.name = path;
                 if (!fi.firstAccess) fi.firstAccess = op;
-                const Type valTy = isWrite ? cast<cir::StoreOp>(op).getValue().getType()
-                                           : op->getResult(0).getType();
                 fi.size = std::max<uint64_t>(fi.size, dl.getTypeSize(valTy));
                 if (!inst.speculative) fi.certain.insert(inst.thread);
                 // An access in the start-up phase runs before any thread
@@ -296,6 +283,10 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
                         fi.hotReadAt.try_emplace(inst.thread, op);
                     }
                 }
+                };
+                llvm::SmallVector<MemoryAccess, 2> accesses;
+                memoryAccesses(op, accesses);
+                for (const MemoryAccess &ma : accesses) record(ma.addr, ma.isWrite, ma.type);
             });
         },
         [](cir::FuncOp) { /* recursion: the field map would be cyclic; skip the subtree */ });

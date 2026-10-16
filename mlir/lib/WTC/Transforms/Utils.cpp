@@ -193,4 +193,34 @@ unsigned spawnEntryOperand(cir::CallOp op) {
 unsigned spawnFirstArgOperand(cir::CallOp op) {
     return spawnEntryOperand(op) + 1;
 }
+
+void memoryAccesses(Operation *op, llvm::SmallVectorImpl<MemoryAccess> &out) {
+    auto pointee = [](Value ptr) -> Type {
+        if (auto pt = dyn_cast<cir::PointerType>(ptr.getType())) return pt.getPointee();
+        return Type();
+    };
+    if (auto ld = dyn_cast<cir::LoadOp>(op)) {
+        out.push_back({ld.getAddr(), ld.getResult().getType(), false});
+    } else if (auto st = dyn_cast<cir::StoreOp>(op)) {
+        out.push_back({st.getAddr(), st.getValue().getType(), true});
+    } else if (auto rmw = dyn_cast<cir::AtomicFetchOp>(op)) {
+        out.push_back({rmw.getPtr(), rmw.getVal().getType(), true});
+    } else if (auto x = dyn_cast<cir::AtomicXchgOp>(op)) {
+        out.push_back({x.getPtr(), x.getVal().getType(), true});
+    } else if (auto cx = dyn_cast<cir::AtomicCmpXchgOp>(op)) {
+        out.push_back({cx.getPtr(), cx.getDesired().getType(), true});
+    } else if (auto ts = dyn_cast<cir::AtomicTestAndSetOp>(op)) {
+        out.push_back({ts.getPtr(), pointee(ts.getPtr()), true});
+    } else if (auto cl = dyn_cast<cir::AtomicClearOp>(op)) {
+        out.push_back({cl.getPtr(), pointee(cl.getPtr()), true});
+    } else if (auto sb = dyn_cast<cir::SetBitfieldOp>(op)) {
+        // The whole storage unit is rewritten, whatever the field's width.
+        out.push_back({sb.getAddr(), pointee(sb.getAddr()), true});
+    } else if (auto gb = dyn_cast<cir::GetBitfieldOp>(op)) {
+        out.push_back({gb.getAddr(), pointee(gb.getAddr()), false});
+    } else if (auto cp = dyn_cast<cir::CopyOp>(op)) {
+        out.push_back({cp.getSrc(), pointee(cp.getSrc()), false});
+        out.push_back({cp.getDst(), pointee(cp.getDst()), true});
+    }
+}
 }
