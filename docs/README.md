@@ -5,6 +5,7 @@
 | `vision.md` | Why the project exists and the transformations it intends to perform |
 | `audit.md` | Known defects in the current code, as of September 2026 |
 | `glossary.md` | Every term and abbreviation used in this repository |
+| `corpus.md` | What people pad by hand, counted across 17 codebases |
 | `related-work.md` | Bibliography, with the papers themselves under `related-works/` |
 | `toolchain.md` | Building and sharing the ClangIR-enabled Clang the project needs |
 | `MLIR Concur.pptx` | Early presentation on the dialect design and motivating examples |
