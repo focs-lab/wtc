@@ -32,8 +32,8 @@ SLUG=$(git remote get-url origin | sed -E 's#(git@github\.com:|https://github\.c
 BRANCH=main
 APPLY=${1:-}
 
-command -v jq >/dev/null || { echo "нужен jq"; exit 1; }
-[ -f "$POLICY" ] || { echo "нет файла $POLICY"; exit 1; }
+command -v jq >/dev/null || { echo "jq is required"; exit 1; }
+[ -f "$POLICY" ] || { echo "no such file: $POLICY"; exit 1; }
 
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 # A prompt belongs to the person, not to whatever is piped in. Falls back to
@@ -43,7 +43,7 @@ TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 # controlling terminal, so it answers yes in exactly the case that breaks.
 if { : < /dev/tty; } 2>/dev/null; then ASK=/dev/tty; else ASK=/dev/stdin; fi
 
-echo "репозиторий: $SLUG, ветка: $BRANCH"
+echo "repository: $SLUG, branch: $BRANCH"
 echo
 
 CURRENT=""; WHY=""
@@ -55,7 +55,7 @@ fetch() {
   local body
   body=$(gh api "repos/$SLUG/branches/$BRANCH/protection" 2>/dev/null) \
     && { CURRENT=$body; return 0; }
-  WHY=$(jq -r '.message // "нет ответа"' <<<"${body:-{\}}" 2>/dev/null || echo "нет ответа")
+  WHY=$(jq -r '.message // "no answer"' <<<"${body:-{\}}" 2>/dev/null || echo "no answer")
   case "$WHY" in
     *"not protected"*|*"Branch not protected"*) CURRENT='{}'; return 0 ;;
     *) return 1 ;;
@@ -63,19 +63,19 @@ fetch() {
 }
 
 if ! fetch; then
-  echo "унаследованный токен не подошёл: $WHY"
-  read -rsp "  токен с правами администратора (не сохраняется, не отображается): " TOK < "$ASK"; echo
-  [ -n "$TOK" ] || { echo "пустой токен"; exit 1; }
+  echo "the inherited token was refused: $WHY"
+  read -rsp "  token with admin rights (not stored, not echoed): " TOK < "$ASK"; echo
+  [ -n "$TOK" ] || { echo "empty token"; exit 1; }
   export GH_TOKEN="$TOK"
-  fetch || { echo "и этот токен не подошёл: $WHY"; exit 1; }
+  fetch || { echo "this token was refused too: $WHY"; exit 1; }
   echo
 fi
 
 if [ "$CURRENT" = "{}" ] || [ "$(jq -r 'has("required_pull_request_reviews")' <<<"$CURRENT")" = "false" ]; then
-  echo "сейчас защиты нет"
+  echo "the branch is not protected now"
 else
-  # Только те поля, которыми управляет файл политики. Остальное GitHub
-  # добавляет от себя, и в разнице оно лишь мешает.
+  # Only the fields the policy file governs. GitHub adds the rest on its
+  # own, and in a diff they are noise.
   NORM='{required_status_checks: {strict: .required_status_checks.strict,
                                   contexts: .required_status_checks.contexts},
          enforce_admins: .enforce_admins.enabled,
@@ -85,30 +85,29 @@ else
   jq -S "$NORM" <<<"$CURRENT" > "$TMP/current.json"
   jq -S 'del(.restrictions)' "$POLICY"  > "$TMP/wanted.json"
   if diff -u "$TMP/current.json" "$TMP/wanted.json" > "$TMP/diff"; then
-    echo "политика уже совпадает с файлом, менять нечего"
+    echo "the policy already matches the file; nothing to change"
     exit 0
   fi
-  echo "расхождение (минус это то, что стоит сейчас):"
+  echo "difference (minus is what is set now):"
   sed 's/^/  /' "$TMP/diff"
 fi
 
 echo
 if [ "$APPLY" != "--apply" ]; then
-  echo "ничего не изменено. Чтобы применить: $0 --apply"
+  echo "nothing changed. To apply: $0 --apply"
   exit 0
 fi
 
-read -rp "применить это к $SLUG:$BRANCH? [y/N] " YES < "$ASK"
-# The prompt is in Russian, so the Russian yes is accepted too. Anything
-# else, an empty answer included, declines: the safe answer is the one you
-# get by pressing return.
+read -rp "apply this to $SLUG:$BRANCH? [y/N] " YES < "$ASK"
+# Anything but a yes, an empty answer included, declines: the safe answer
+# is the one you get by pressing return.
 case "$YES" in
-  y|Y|yes|Yes|д|Д|да|Да) ;;
-  *) echo "ничего не изменено"; exit 0 ;;
+  y|Y|yes|Yes) ;;
+  *) echo "nothing changed"; exit 0 ;;
 esac
 
 gh api -X PUT "repos/$SLUG/branches/$BRANCH/protection" --input "$POLICY" >/dev/null
-echo "применено"
+echo "applied"
 gh api "repos/$SLUG/branches/$BRANCH" --jq '"protected: " + (.protected|tostring)'
 gh api "repos/$SLUG/branches/$BRANCH/protection" \
-  --jq '"обязательные проверки: " + (.required_status_checks.contexts | join(", "))'
+  --jq '"required checks: " + (.required_status_checks.contexts | join(", "))'
