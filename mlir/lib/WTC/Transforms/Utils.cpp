@@ -107,7 +107,16 @@ Value traceToLocalRoot(Value v) {
         Operation* def = v.getDefiningOp();
         if (!def)
             return v;
+        // Only the casts under which the value still names the same object:
+        // a reinterpretation of the pointer, or an array decaying to a
+        // pointer to its first element. A pointer made from an integer
+        // names nothing the walk can vouch for, whatever the integer was
+        // made from, and following it once placed `(S *)(uintptr_t)p + k`
+        // on p's object.
         if (auto castOp = mlir::dyn_cast<cir::CastOp>(def)) {
+            const cir::CastKind kind = castOp.getKind();
+            if (kind != cir::CastKind::bitcast && kind != cir::CastKind::array_to_ptrdecay)
+                return v;
             v = castOp.getSrc();
             continue;
         }

@@ -73,9 +73,11 @@ struct MemoryAccess {
 // write that moves the line.
 void memoryAccesses(Operation *op, llvm::SmallVectorImpl<MemoryAccess> &out);
 
-// Walks backward from v through pass-through casts -- cir.cast and the
-// single-operand form of builtin.unrealized_conversion_cast -- to whatever
-// value is no longer a cast. Purely local, single-value tracing.
+// Walks backward from v through the casts under which it still names the
+// same object -- bitcast, array-to-pointer decay, and the single-operand
+// form of builtin.unrealized_conversion_cast -- to whatever value is no
+// longer such a cast. A pointer made from an integer stops the walk.
+// Purely local, single-value tracing.
 Value traceToLocalRoot(Value v);
 
 // traceToLocalRoot plus one more rule, the one real compiler output needs:
