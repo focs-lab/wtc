@@ -59,5 +59,5 @@ module {
   }
 }
 
-// CHECK: wtc: false sharing in @
+// CHECK: wtc: false sharing in @o: 'in.x' (offset 0) and 'in.y' (offset 8)
 // CHECK: false sharing: 1 definite, 0 possible, 0 cold

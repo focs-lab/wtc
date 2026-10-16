@@ -202,6 +202,8 @@ void memoryAccesses(Operation *op, llvm::SmallVectorImpl<MemoryAccess> &out) {
     // A libc memory call touches `len` bytes: an array of that many bytes
     // when the length is a constant, else the pointee, which is at least
     // what the call was written over.
+    // Behind the void* the call takes sits the pointer the program wrote,
+    // whose pointee is the least the call touches; failing that, one byte.
     auto lengthType = [&](Value len, Value ptr) -> Type {
         if (auto c = len.getDefiningOp<cir::ConstantOp>())
             if (auto n = dyn_cast<cir::IntAttr>(c.getValue()))
@@ -209,7 +211,10 @@ void memoryAccesses(Operation *op, llvm::SmallVectorImpl<MemoryAccess> &out) {
                     return cir::ArrayType::get(op->getContext(),
                                                cir::IntType::get(op->getContext(), 8, false),
                                                n.getValue().getZExtValue());
-        return pointee(ptr);
+        Type t = pointee(traceToLocalRoot(ptr));
+        if (!t || isa<cir::VoidType>(t) || isa<cir::FuncType>(t))
+            t = cir::IntType::get(op->getContext(), 8, false);
+        return t;
     };
     if (auto ld = dyn_cast<cir::LoadOp>(op)) {
         out.push_back({ld.getAddr(), ld.getResult().getType(), false});

@@ -80,6 +80,17 @@ struct Instance {
     // that would turn Many into a claim treats such an instance as neither
     // once nor repeated.
     bool execUnknown = false;
+    // True for an instance whose function already appears on its chain.
+    // The first such instance of each function is expanded once more, so
+    // that what the recursive call reaches is seen; later ones are not,
+    // which bounds the walk on a group of mutually recursive functions.
+    bool recurring = false;
+    // True when whether this instance runs before the first spawn cannot be
+    // read: a caller on the way has unstructured control flow and can
+    // spawn, so its spawn may come before or after the call. Reached
+    // without passing a spawn, as far as the walk can tell, and that is a
+    // guess.
+    bool startupUnknown = false;
 };
 
 class ThreadInstanceWalk {
@@ -149,6 +160,15 @@ public:
         return inst.startup && !spawnPrecedes(op, inst.func);
     }
 
+    // Whether the answer above is a guess: the instance was reached
+    // through, or sits in, a function with unstructured control flow that
+    // can spawn, so where its start-up phase ends cannot be read. A guess
+    // makes no definite verdict and no cold one.
+    bool startupUncertain(const Instance &inst) {
+        return inst.startupUnknown ||
+               (inst.startup && isUnstructured(inst.func) && canSpawn(inst.func));
+    }
+
     // Whether the function's control flow is structured enough for siteMult
     // to mean what it says. With a goto in the function, siteMult answers
     // Many so that clients which must assume the worst do; a client that
@@ -207,6 +227,7 @@ private:
     llvm::DenseMap<Operation *, bool> recursiveCache_;
     bool recursiveComputed_ = false;
     llvm::DenseMap<unsigned, const Instance *> threadRoot_;   // the instance that began each thread
+    llvm::DenseSet<Operation *> expandedRecurrence_;           // functions whose recurrence was unrolled
     llvm::DenseMap<Operation *, bool> reachesCache_;
     llvm::DenseMap<Operation *, llvm::DenseSet<Operation *>> preSpawnCache_;
     llvm::DenseMap<Operation *, bool> spawnsCache_;

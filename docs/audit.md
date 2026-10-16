@@ -89,7 +89,7 @@ are both "repeated". Every memcached pair was decided by rate, by hand.
 
 **Objects it cannot name.** An element of an array, a heap object, a field
 reached through a pointer the walk cannot follow: counted as unidentified
-in every summary, never guessed at. On memcached that is 5,118 accesses
+in every summary, never guessed at. On memcached that is 5,106 accesses
 against 1,007 pairs, element accesses to arrays included; which element is
 touched is not yet read.
 

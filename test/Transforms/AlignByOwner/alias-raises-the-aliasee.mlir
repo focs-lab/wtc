@@ -1,7 +1,10 @@
 // RUN: wtc-opt %s --wtc-align-by-owner 2>&1 | FileCheck %s
 
-// An alias has no storage of its own: raising its alignment moves nothing
-// and says "raised" about an object that did not move. It is left alone.
+// An alias has no storage of its own. The accesses through @g1 are
+// accesses to @real, so it is @real that pairs with @g2 and @real that is
+// raised; the alias keeps no alignment of its own. An earlier version made
+// the alias a root, raised it, and said "raised" about storage that had
+// not moved.
 
 !s64i = !cir.int<s, 64>
 !fnptr = !cir.ptr<!cir.func<()>>
@@ -47,5 +50,8 @@ module {
   }
 }
 
-// CHECK: left @g1 where it is: it is an alias
-// CHECK-NOT: raised the alignment of @g1
+// CHECK-DAG: raised the alignment of @real from 8 to 64
+// CHECK-DAG: raised the alignment of @g2 from 8 to 64
+// CHECK: align by owner: 2 globals raised
+// CHECK: @real = #cir.int<0> : !s64i {alignment = 64 : i64}
+// CHECK: @g1 alias(@real) : !s64i{{$}}

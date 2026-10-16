@@ -412,8 +412,16 @@ bool ThreadInstanceWalk::spawnPrecedes(Operation *op, cir::FuncOp f) {
 Operation *ThreadInstanceWalk::resolveRoot(Value v, Instance *inst, unsigned depth) const {
     if (depth > 64 || !inst) return nullptr;
     Value t = traceToRoot(v);
-    if (auto gg = t.getDefiningOp<cir::GetGlobalOp>())
-        return SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr()).getOperation();
+    if (auto gg = t.getDefiningOp<cir::GetGlobalOp>()) {
+        auto g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr());
+        // An alias has no storage of its own: the object is the aliasee's,
+        // and two names for one storage must be one root, or a pair split
+        // across the two names is missed.
+        for (unsigned hop = 0; g && g.getAliasee() && hop < 8; ++hop)
+            g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(
+                g, StringAttr::get(g.getContext(), *g.getAliasee()));
+        return g ? g.getOperation() : nullptr;
+    }
     if (auto alloca = t.getDefiningOp<cir::AllocaOp>())
         return alloca.getOperation();
     auto arg = dyn_cast<BlockArgument>(t);
@@ -604,8 +612,14 @@ void ThreadInstanceWalk::expand(Instance &inst) {
                                    (known && site == Mult::Many);
         if (Instance *child = addIfRoom({callee, inst.thread, inst.threadMult, m, call, &inst,
                                          inst.speculative,
-                                         inst.startup && !spawnPrecedes(call.getOperation(), f)}))
+                                         inst.startup && !spawnPrecedes(call.getOperation(), f)})) {
             child->execUnknown = !certainlyMany && (!known || inst.execUnknown);
+            // In an unstructured function that can spawn, "no spawn precedes
+            // this call" is a guess: the goto may jump over the spawn or
+            // back behind it.
+            child->startupUnknown = inst.startupUnknown ||
+                                    (inst.startup && isUnstructured(f) && canSpawn(f));
+        }
     });
 }
 
@@ -636,16 +650,20 @@ void ThreadInstanceWalk::run(llvm::function_ref<void(Instance &)> visit,
         // objects the outer call did not touch, and a worker that spawned
         // itself through a helper lost the helper's writes. The second
         // recurrence is visited and not expanded, which bounds the walk.
-        unsigned seen = 0;
+        bool seen = false;
         for (Instance *p = inst.parent; p; p = p->parent)
-            if (p->func == inst.func) ++seen;
+            if (p->func == inst.func) { seen = true; break; }
         if (seen) {
             onRecursion(inst.func);
+            inst.recurring = true;
             if (inst.site && getSemanticKind(lookupCallee(inst.site)) == SemanticOpKind::ThreadSpawn)
                 inst.threadMult = inst.execMult = Mult::Many;
             else
                 inst.execMult = Mult::Many;
-            if (seen >= 2) { visit(inst); return; }
+            // Each function's recurrence is expanded once in the whole walk:
+            // unrolling every cycle once per path made the walk exponential
+            // in the size of a mutually recursive group.
+            if (!expandedRecurrence_.insert(inst.func.getOperation()).second) { visit(inst); return; }
         }
         expand(inst);
         visit(inst);

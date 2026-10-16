@@ -174,7 +174,7 @@ void WTCAlignByOwnerPass::runOnOperation() {
                 // anything: this pass spends bytes on its answer.
                 bool known;
                 const Mult site = walk.siteMult(op, inst.func, known);
-                const bool repeated = !walk.inStartupPhase(op, inst) &&
+                const bool repeated = !walk.startupUncertain(inst) && !walk.inStartupPhase(op, inst) &&
                                       (((inst.threadMult == Mult::Many ||
                                          inst.execMult == Mult::Many) && !inst.execUnknown) ||
                                        (known && site == Mult::Many));
