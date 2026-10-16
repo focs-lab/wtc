@@ -88,6 +88,13 @@ bool isAllocator(cir::FuncOp f);
 // the platform's.
 std::optional<uint64_t> allocationAlignment(cir::CallOp call);
 
+// The allocator call a call hands back: the call itself when its callee is
+// an allocator, else the one allocator call every return of the callee's
+// body hands back, through further such wrappers (Phoenix's CALLOC, any
+// checked malloc). Null when the callee is neither, returns from two sites,
+// or returns anything else.
+cir::CallOp allocationBehind(cir::CallOp call);
+
 // Walks backward from v through the casts under which it still names the
 // same object -- bitcast, array-to-pointer decay, and the single-operand
 // form of builtin.unrealized_conversion_cast -- to whatever value is no

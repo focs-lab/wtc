@@ -211,8 +211,30 @@ bool isAllocator(cir::FuncOp f) {
            n == "_ZnwmSt11align_val_t" || n == "_ZnamSt11align_val_t";
 }
 
-std::optional<uint64_t> allocationAlignment(cir::CallOp call) {
+static cir::CallOp allocationBehindImpl(cir::CallOp call, unsigned depth) {
     cir::FuncOp callee = lookupCallee(call);
+    if (!callee) return cir::CallOp();
+    if (isAllocator(callee)) return call;
+    if (callee.getBody().empty() || depth > 4) return cir::CallOp();
+    cir::CallOp site;
+    bool bad = false;
+    callee.walk([&](cir::ReturnOp ret) {
+        if (bad) return;
+        cir::CallOp here;
+        if (ret.getNumOperands() == 1)
+            if (auto c = traceToRoot(ret.getOperand(0)).getDefiningOp<cir::CallOp>())
+                here = allocationBehindImpl(c, depth + 1);
+        if (!here || (site && site != here)) bad = true;
+        else site = here;
+    });
+    return bad ? cir::CallOp() : site;
+}
+
+cir::CallOp allocationBehind(cir::CallOp call) { return allocationBehindImpl(call, 0); }
+
+std::optional<uint64_t> allocationAlignment(cir::CallOp call) {
+    call = allocationBehind(call);
+    cir::FuncOp callee = call ? lookupCallee(call) : cir::FuncOp();
     if (!callee) return std::nullopt;
     const StringRef n = callee.getSymName();
     unsigned idx;

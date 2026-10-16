@@ -468,12 +468,71 @@ Value ThreadInstanceWalk::singleStoredGlobalValue(cir::GlobalOp g) const {
     return globalStores_.lookup(g.getOperation());
 }
 
+static Operation *enclosingLoop(Operation *op, cir::FuncOp f) {
+    for (Operation *p = op->getParentOp(); p && p != f.getOperation(); p = p->getParentOp())
+        if (isa<cir::LoopOpInterface>(p)) return p;
+    return nullptr;
+}
+
+bool ThreadInstanceWalk::isInductionOf(Value index, Operation *loop) {
+    auto forOp = dyn_cast<cir::ForOp>(loop);
+    if (!forOp) return false;
+    // Through integer conversions to the load of a slot.
+    Value v = index;
+    for (unsigned guard = 0; guard < 16; ++guard) {
+        if (auto c = v.getDefiningOp<cir::CastOp>()) {
+            if (c.getKind() != cir::CastKind::integral) return false;
+            v = c.getSrc(); continue;
+        }
+        break;
+    }
+    auto ld = v.getDefiningOp<cir::LoadOp>();
+    if (!ld) return false;
+    auto slot = traceToLocalRoot(ld.getAddr()).getDefiningOp<cir::AllocaOp>();
+    if (!slot) return false;
+    Region &step = forOp.getStep();
+    bool stepped = false;
+    for (Operation *u : slot->getUsers()) {
+        if (isa<cir::LoadOp>(u)) continue;
+        auto st = dyn_cast<cir::StoreOp>(u);
+        if (!st || st.getValue() == slot.getResult()) return false;
+        if (step.isAncestor(u->getParentRegion())) { stepped = true; continue; }
+        if (loop->isAncestor(u)) return false;        // written in the body or the condition
+    }
+    return stepped;
+}
+
 Operation *ThreadInstanceWalk::resolveRoot(Value v, Instance *inst, unsigned depth) const {
+    return resolveRootImpl(v, inst, depth, cir::CallOp(), nullptr, nullptr);
+}
+
+Operation *ThreadInstanceWalk::resolvePlace(Value v, Instance *inst, Operation *&perThreadLoop,
+                                            Type &elemType) const {
+    perThreadLoop = nullptr;
+    elemType = Type();
+    return resolveRootImpl(v, inst, 0, cir::CallOp(), &perThreadLoop, &elemType);
+}
+
+Operation *ThreadInstanceWalk::resolveRootImpl(Value v, Instance *inst, unsigned depth, cir::CallOp via,
+                                               Operation **loopOut, Type *elemOut) const {
     if (depth > 64 || !inst) return nullptr;
     Value t = traceToRoot(v);
-    // The object an allocator returned: the call is its identity.
+    // An element step by the induction variable of the loop that spawned
+    // this thread: each thread the spawn starts gets its own element.
+    if (auto ps = t.getDefiningOp<cir::PtrStrideOp>()) {
+        if (!loopOut || !via) return nullptr;
+        Operation *loop = enclosingLoop(via.getOperation(), inst->func);
+        if (!loop || !isInductionOf(ps.getStride(), loop)) return nullptr;
+        *loopOut = loop;
+        *elemOut = cast<cir::PointerType>(ps.getBase().getType()).getPointee();
+        return resolveRootImpl(ps.getBase(), inst, depth + 1, cir::CallOp(), nullptr, nullptr);
+    }
+    // The object an allocator returned: the call is its identity. A call
+    // to a wrapper that hands back one allocation is one object too, and
+    // the call to the wrapper, not the allocator call inside it, is what
+    // runs once or many times.
     if (auto call = t.getDefiningOp<cir::CallOp>())
-        return isAllocator(lookupCallee(call)) ? call.getOperation() : nullptr;
+        return allocationBehind(call) ? call.getOperation() : nullptr;
     // A pointer loaded from a global the module writes exactly once: the
     // loaded value is the one stored, wherever the load is. The stored
     // value is resolved without an instance, since the storing function's
@@ -484,7 +543,7 @@ Operation *ThreadInstanceWalk::resolveRoot(Value v, Instance *inst, unsigned dep
             if (Value stored = g ? singleStoredGlobalValue(g) : Value()) {
                 Value s = traceToRoot(stored);
                 if (auto call = s.getDefiningOp<cir::CallOp>())
-                    return isAllocator(lookupCallee(call)) ? call.getOperation() : nullptr;
+                    return allocationBehind(call) ? call.getOperation() : nullptr;
                 if (auto sg = s.getDefiningOp<cir::GetGlobalOp>())
                     return SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(sg, sg.getNameAttr()).getOperation();
             }
@@ -517,7 +576,11 @@ Operation *ThreadInstanceWalk::resolveRoot(Value v, Instance *inst, unsigned dep
         idx = i;
     }
     if (idx >= site.getNumOperands()) return nullptr;
-    return resolveRoot(site.getOperand(idx), inst->parent, depth + 1);
+    // Only a spawn hands each thread its own element; through a plain call
+    // the per-thread reading does not apply.
+    const bool spawn = getSemanticKind(lookupCallee(site)) == SemanticOpKind::ThreadSpawn;
+    return resolveRootImpl(site.getOperand(idx), inst->parent, depth + 1,
+                           spawn ? site : cir::CallOp(), loopOut, elemOut);
 }
 
 cir::FuncOp ThreadInstanceWalk::resolveEntry(Value v, Instance *inst, unsigned depth) const {

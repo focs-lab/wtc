@@ -119,6 +119,14 @@ public:
     // which the caller must treat as unresolved rather than as absent.
     Operation *resolveRoot(Value v, Instance *inst, unsigned depth = 0) const;
 
+    // resolveRoot, plus the one thing the walk can say about an element
+    // index that is not a constant: when the handle was passed to this
+    // thread at a spawn inside a loop, as `&arr[i]`, and `i` is that loop's
+    // induction variable, every thread the spawn starts gets a different
+    // element. `perThreadLoop` is then the loop and `elemType` the element;
+    // the root is the array's, and offsets are within one element.
+    Operation *resolvePlace(Value v, Instance *inst, Operation *&perThreadLoop, Type &elemType) const;
+
     // The value stored into a pointer-typed global, when the module stores
     // into it exactly once and only ever loads it otherwise; null when it
     // is written twice (realloc, re-initialisation, `p = NULL` at shutdown)
@@ -219,6 +227,11 @@ private:
     const llvm::DenseSet<Operation *> &preSpawnOps(cir::FuncOp f);
     Instance &addInstance(Instance inst);
     Instance *addIfRoom(Instance inst);
+    Operation *resolveRootImpl(Value v, Instance *inst, unsigned depth, cir::CallOp via,
+                               Operation **loopOut, Type *elemOut) const;
+    // Whether `index` is the induction variable of `loop`: a slot whose
+    // every store is either outside the loop or in its step region.
+    static bool isInductionOf(Value index, Operation *loop);
     void noteRemark(Operation *at, const llvm::Twine &msg);
     void addRootsForModule();
     void expand(Instance &inst);
