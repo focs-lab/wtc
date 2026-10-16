@@ -19,8 +19,153 @@ ThreadInstanceWalk::ThreadInstanceWalk(ModuleOp module,
 
 Instance &ThreadInstanceWalk::addInstance(Instance inst) {
     reachedFuncs_.insert(inst.func.getOperation());
+    // A function on a call-graph cycle runs again whenever it recurses, so
+    // its accesses repeat however the call that reached it was placed. The
+    // walk skips the recursive instance itself, and before this the
+    // function counted as running once, which made a pair it touched cold.
+    if (isRecursive(inst.func)) inst.execMult = Mult::Many;
     instances_.push_back(inst);
+    threadRoot_.try_emplace(inst.thread, &instances_.back());
     return instances_.back();
+}
+
+// Whether f can reach itself by direct calls. Computed for every function
+// at once from the direct call graph; indirect recursion goes through an
+// address-taken root, which already stands for many executions.
+bool ThreadInstanceWalk::isRecursive(cir::FuncOp f) {
+    if (!recursiveComputed_) {
+        recursiveComputed_ = true;
+        llvm::DenseMap<Operation *, llvm::SmallVector<Operation *, 4>> callees;
+        module_.walk([&](cir::FuncOp fn) {
+            if (fn.getBody().empty()) return;
+            fn.walk([&](cir::CallOp call) {
+                cir::FuncOp callee = lookupCallee(call);
+                if (callee && !callee.getBody().empty())
+                    callees[fn.getOperation()].push_back(callee.getOperation());
+            });
+        });
+        for (auto &kv : callees) {
+            llvm::DenseSet<Operation *> seen;
+            llvm::SmallVector<Operation *, 32> work(kv.second.begin(), kv.second.end());
+            bool reaches = false;
+            while (!work.empty() && !reaches) {
+                Operation *g = work.pop_back_val();
+                if (g == kv.first) { reaches = true; break; }
+                if (!seen.insert(g).second) continue;
+                for (Operation *c : callees.lookup(g)) work.push_back(c);
+            }
+            recursiveCache_[kv.first] = reaches;
+        }
+    }
+    return recursiveCache_.lookup(f.getOperation());
+}
+
+unsigned ThreadInstanceWalk::instanceCount(cir::FuncOp f) const {
+    unsigned n = 0;
+    for (const Instance &inst : instances_) n += inst.func == f;
+    return n;
+}
+
+bool ThreadInstanceWalk::runsOnce(cir::FuncOp f) const {
+    const Instance *only = nullptr;
+    for (const Instance &inst : instances_) {
+        if (inst.func != f) continue;
+        if (only) return false;
+        only = &inst;
+    }
+    return only && only->execMult == Mult::One && only->threadMult == Mult::One &&
+           !only->execUnknown;
+}
+
+// The chain of (region-holding op, region index) from the function body
+// down to op.
+static void regionPath(Operation *op, cir::FuncOp f,
+                       llvm::SmallVectorImpl<std::pair<Operation *, unsigned>> &path) {
+    for (Operation *p = op; p && p != f.getOperation(); p = p->getParentOp()) {
+        Region *r = p->getParentRegion();
+        Operation *holder = r ? r->getParentOp() : nullptr;
+        if (!holder || holder == f.getOperation()) break;
+        path.push_back({holder, r->getRegionNumber()});
+    }
+    std::reverse(path.begin(), path.end());
+}
+
+bool ThreadInstanceWalk::exclusive(unsigned threadA, unsigned threadB) const {
+    const Instance *a = threadRoot_.lookup(threadA), *b = threadRoot_.lookup(threadB);
+    if (!a || !b || !a->site || !b->site) return false;
+    // The nearest instance both descend from, and the child of it on each
+    // side: the two call sites to compare lie in that instance's function.
+    llvm::DenseMap<const Instance *, const Instance *> childOnA;
+    for (const Instance *i = a; i->parent; i = i->parent) childOnA[i->parent] = i;
+    const Instance *common = nullptr, *childB = nullptr;
+    for (const Instance *i = b; i->parent; i = i->parent)
+        if (childOnA.count(i->parent)) { common = i->parent; childB = i; break; }
+    if (!common) return false;
+    // An ancestor that runs more than once runs both arms, one per run.
+    if (common->execMult == Mult::Many || common->threadMult == Mult::Many || common->execUnknown)
+        return false;
+    const Instance *childA = childOnA.lookup(common);
+    cir::CallOp siteA = childA->site, siteB = childB->site;
+    Operation *ca = siteA.getOperation(), *cb = siteB.getOperation();
+    if (ca == cb) return false;
+    llvm::SmallVector<std::pair<Operation *, unsigned>, 8> pa, pb;
+    regionPath(ca, common->func, pa);
+    regionPath(cb, common->func, pb);
+
+    // A loop anywhere above the fork runs both arms, one per iteration.
+    auto underLoop = [](const auto &path, size_t upto) {
+        for (size_t j = 0; j <= upto && j < path.size(); ++j)
+            if (isa<cir::LoopOpInterface>(path[j].first)) return true;
+        return false;
+    };
+    auto lastOf = [](Operation *holder, unsigned region) -> Operation * {
+        if (region >= holder->getNumRegions()) return nullptr;
+        Region &r = holder->getRegion(region);
+        if (r.empty() || r.front().empty()) return nullptr;
+        return &r.front().back();
+    };
+    // The ancestor of op that sits in the same block as `anchor`, so that
+    // program order between the two can be read off the block.
+    auto siblingOf = [](Operation *op, Operation *anchor) -> Operation * {
+        for (Operation *p = op; p; p = p->getParentOp())
+            if (p->getBlock() == anchor->getBlock()) return p;
+        return nullptr;
+    };
+
+    size_t i = 0;
+    for (; i < pa.size() && i < pb.size(); ++i) {
+        if (pa[i].first != pb[i].first) {
+            // Two cases of one switch, each ending in a break, run one or the
+            // other; a case that falls through may run both.
+            auto caseA = dyn_cast<cir::CaseOp>(pa[i].first), caseB = dyn_cast<cir::CaseOp>(pb[i].first);
+            if (caseA && caseB && caseA->getParentOp() == caseB->getParentOp() &&
+                isa<cir::SwitchOp>(caseA->getParentOp())) {
+                Operation *ea = lastOf(caseA, 0), *eb = lastOf(caseB, 0);
+                if (ea && eb && isa<cir::BreakOp, cir::ReturnOp>(ea) &&
+                    isa<cir::BreakOp, cir::ReturnOp>(eb))
+                    return !underLoop(pa, i);
+            }
+            return false;
+        }
+        if (pa[i].second == pb[i].second) continue;
+        // Different regions of one op: only an if or a ternary runs exactly
+        // one of them, and only outside a loop.
+        return isa<cir::IfOp, cir::TernaryOp>(pa[i].first) && !underLoop(pa, i);
+    }
+    // One site sits under an if the other is not under. They exclude each
+    // other if that arm returns from the function and the other site comes
+    // after the if: `if (c) { spawn(w); return; } spawn(w);`.
+    const bool aDeeper = pa.size() > pb.size();
+    const auto &longer = aDeeper ? pa : pb;
+    Operation *other = aDeeper ? cb : ca;
+    if (i < longer.size() && isa<cir::IfOp>(longer[i].first) && !underLoop(longer, i)) {
+        Operation *ifOp = longer[i].first;
+        Operation *end = lastOf(ifOp, longer[i].second);
+        Operation *after = siblingOf(other, ifOp);
+        if (end && isa<cir::ReturnOp>(end) && after && after != ifOp && ifOp->isBeforeInBlock(after))
+            return true;
+    }
+    return false;
 }
 
 // Whether a spawn's entry operand is a parameter of the function it sits
@@ -61,7 +206,16 @@ bool ThreadInstanceWalk::reachesOp(cir::FuncOp f, llvm::function_ref<bool(Operat
                 if (getSemanticKind(callee) == SemanticOpKind::ThreadSpawn) {
                     const unsigned k = spawnEntryOperand(call);
                     if (k >= call.getNumOperands()) return;
-                    if (cir::FuncOp entry = resolveFunctionOperand(call.getOperand(k))) {
+                    // Resolved as expand() resolves it, through casts and a
+                    // single-assignment slot. With casts alone, a helper
+                    // that parks the entry in a local and spawns from it
+                    // looked irrelevant and was never expanded, and its
+                    // thread -- neither a root, since its address flows only
+                    // into a spawn, nor an orphan, since it is internal --
+                    // was lost without a word.
+                    cir::FuncOp entry = resolveFunctionOperand(call.getOperand(k));
+                    if (!entry) entry = resolveFunctionOperand(traceToRoot(call.getOperand(k)));
+                    if (entry) {
                         callers[entry.getOperation()].push_back(fn.getOperation());
                     } else if (entryComesFromParameter(call.getOperand(k))) {
                         // Which thread starts here depends on the caller.
@@ -102,11 +256,19 @@ bool ThreadInstanceWalk::isUnstructured(cir::FuncOp f) {
     return found;
 }
 
-Mult ThreadInstanceWalk::siteMult(Operation *op, cir::FuncOp f) {
-    if (isUnstructured(f)) return Mult::Many;
+Mult ThreadInstanceWalk::siteMult(Operation *op, cir::FuncOp f, bool &known) {
+    known = true;
+    // A loop is a loop whatever else the function does: an operation inside
+    // one repeats, goto or no goto.
     for (Operation *p = op->getParentOp(); p && p != f.getOperation(); p = p->getParentOp())
         if (isa<cir::LoopOpInterface>(p)) return Mult::Many;
+    if (isUnstructured(f)) { known = false; return Mult::Many; }
     return Mult::One;
+}
+
+Mult ThreadInstanceWalk::siteMult(Operation *op, cir::FuncOp f) {
+    bool known;
+    return siteMult(op, f, known);
 }
 
 // Whether an indirect call could reach a spawn at all: does this module
@@ -129,13 +291,27 @@ bool ThreadInstanceWalk::canSpawn(cir::FuncOp f) {
     return spawnsCache_.lookup(f.getOperation());
 }
 
+static bool flowsOnlyToSpawnEntry(Value v, unsigned depth);
+
+// Whether f may run somewhere the call graph does not show: its address is
+// taken, and not merely handed to a spawn as the thread's entry. One rule
+// for both askers. The indirect-call check used to count a spawn entry as
+// an address taken, so any worker that itself started a thread made every
+// indirect call in the module a possible spawn, and main's start-up loop
+// before its first function pointer paired against that worker.
 static bool isAddressTaken(cir::FuncOp f, ModuleOp module) {
     auto uses = SymbolTable::getSymbolUses(f, module.getOperation());
     if (!uses) return false;
     for (const SymbolTable::SymbolUse &use : *uses) {
-        auto call = dyn_cast<cir::CallOp>(use.getUser());
-        if (call && call.getCalleeAttr() == use.getSymbolRef()) continue;   // a direct call
-        return true;
+        Operation *user = use.getUser();
+        if (auto call = dyn_cast<cir::CallOp>(user)) {
+            if (call.getCalleeAttr() == use.getSymbolRef()) continue;    // a direct call
+            return true;
+        }
+        if (isa<QueuePushOp, QueuePopOp, LockOp, UnlockOp>(user)) continue; // fallback_impl
+        if (auto gg = dyn_cast<cir::GetGlobalOp>(user))
+            if (flowsOnlyToSpawnEntry(gg.getResult(), 0)) continue;
+        return true;                        // a global initializer, a vtable, anything else
     }
     return false;
 }
@@ -236,8 +412,16 @@ bool ThreadInstanceWalk::spawnPrecedes(Operation *op, cir::FuncOp f) {
 Operation *ThreadInstanceWalk::resolveRoot(Value v, Instance *inst, unsigned depth) const {
     if (depth > 64 || !inst) return nullptr;
     Value t = traceToRoot(v);
-    if (auto gg = t.getDefiningOp<cir::GetGlobalOp>())
-        return SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr()).getOperation();
+    if (auto gg = t.getDefiningOp<cir::GetGlobalOp>()) {
+        auto g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr());
+        // An alias has no storage of its own: the object is the aliasee's,
+        // and two names for one storage must be one root, or a pair split
+        // across the two names is missed.
+        for (unsigned hop = 0; g && g.getAliasee() && hop < 8; ++hop)
+            g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(
+                g, StringAttr::get(g.getContext(), *g.getAliasee()));
+        return g ? g.getOperation() : nullptr;
+    }
     if (auto alloca = t.getDefiningOp<cir::AllocaOp>())
         return alloca.getOperation();
     auto arg = dyn_cast<BlockArgument>(t);
@@ -324,6 +508,22 @@ static bool flowsOnlyToSpawnEntry(Value v, unsigned depth) {
     return true;
 }
 
+// The cap bounds every instance, roots included: an earlier version added
+// roots unchecked, so with a small cap the passes gave verdicts over more
+// instances than the cap allowed and never said they had given up.
+Instance *ThreadInstanceWalk::addIfRoom(Instance inst) {
+    if (instances_.size() >= cap_) { capExceeded_ = true; return nullptr; }
+    return &addInstance(std::move(inst));
+}
+
+// Remarks are held back until the walk is over: past the cap the passes
+// print one line and give up, and a page of remarks before it only buries
+// that line. One remark per operation, however many instances reach it.
+void ThreadInstanceWalk::noteRemark(Operation *at, const llvm::Twine &msg) {
+    if (!remarkedAt_.insert(at).second) return;
+    pendingRemarks_.emplace_back(at, msg.str());
+}
+
 void ThreadInstanceWalk::addRootsForModule() {
     // A global constructor that starts a thread ends the start-up phase
     // before main begins.
@@ -337,8 +537,8 @@ void ThreadInstanceWalk::addRootsForModule() {
     // main, once, on the main thread.
     if (auto mainFn = module_.lookupSymbol<cir::FuncOp>("main"))
         if (!mainFn.getBody().empty())
-            addInstance({mainFn, nextThread_++, Mult::One, Mult::One, nullptr, nullptr, false,
-                         !ctorSpawns});
+            addIfRoom({mainFn, nextThread_++, Mult::One, Mult::One, nullptr, nullptr, false,
+                       !ctorSpawns});
     const unsigned mainThread = nextThread_ ? 0 : nextThread_++;
 
     // Global constructors run once each, on the main thread, before main.
@@ -351,8 +551,8 @@ void ThreadInstanceWalk::addRootsForModule() {
             if (!ctor) continue;
             if (auto f = module_.lookupSymbol<cir::FuncOp>(ctor.getName()))
                 if (!f.getBody().empty())
-                    addInstance({f, mainThread, Mult::One, Mult::One, nullptr, nullptr, false,
-                                 !ctorSpawns});
+                    addIfRoom({f, mainThread, Mult::One, Mult::One, nullptr, nullptr, false,
+                               !ctorSpawns});
         }
     }
 
@@ -360,27 +560,10 @@ void ThreadInstanceWalk::addRootsForModule() {
     module_.walk([&](cir::FuncOp f) {
         if (f.getBody().empty()) return;
         if (getSemanticKind(f) != SemanticOpKind::Unknown) return;   // shim bodies carry no wtc ops
-        auto uses = SymbolTable::getSymbolUses(f, module_.getOperation());
-        if (!uses) return;
-        bool addressTaken = false;
-        for (const SymbolTable::SymbolUse &use : *uses) {
-            Operation *user = use.getUser();
-            if (auto call = dyn_cast<cir::CallOp>(user)) {
-                if (call.getCalleeAttr() == use.getSymbolRef()) continue;    // a direct call
-                addressTaken = true; break;
-            }
-            if (isa<QueuePushOp, QueuePopOp, LockOp, UnlockOp>(user)) continue; // fallback_impl
-            if (auto gg = dyn_cast<cir::GetGlobalOp>(user)) {
-                if (flowsOnlyToSpawnEntry(gg.getResult(), 0)) continue;
-                addressTaken = true; break;
-            }
-            addressTaken = true; break;   // a global initializer, a vtable, anything else
-        }
-        if (addressTaken && relevant_(f)) {
-            addInstance({f, nextThread_++, Mult::Many, Mult::Many, nullptr, nullptr, true, false});
-            f.emitRemark() << "wtc: address of this function is taken; it is treated as callable "
-                              "from any thread, any number of times";
-            ++remarks_;
+        if (isAddressTaken(f, module_) && relevant_(f)) {
+            if (addIfRoom({f, nextThread_++, Mult::Many, Mult::Many, nullptr, nullptr, true, false}))
+                noteRemark(f, "wtc: address of this function is taken; it is treated as callable "
+                              "from any thread, any number of times");
         }
     });
 }
@@ -396,27 +579,47 @@ void ThreadInstanceWalk::expand(Instance &inst) {
             if (k >= call.getNumOperands()) return;
             cir::FuncOp entry = resolveEntry(call.getOperand(k), &inst);
             if (!entry || entry.getBody().empty()) {
-                call.emitRemark() << "wtc: spawn target could not be resolved to a function in this module";
-                ++remarks_;
+                noteRemark(call, "wtc: spawn target could not be resolved to a function in this module");
                 return;
             }
             if (!relevant_(entry)) return;
-            const Mult m = join(inst.execMult, siteMult(call.getOperation(), f));
-            if (instances_.size() < cap_)
-                addInstance({entry, nextThread_++, m, m, call, &inst, inst.speculative, false});
-            else
-                capExceeded_ = true;
+            // A site whose multiplicity is a guess (a goto in this function,
+            // no loop around the site) makes the child's count unknown rather
+            // than many: an earlier version took the guess, so one spawn
+            // below a goto in main stood for many threads and every store
+            // they made was "repeated".
+            // The multiplicity keeps the guess -- a client that must assume
+            // the worst, such as the queue analysis, reads Many -- and the
+            // instance records that it is one, so a client that would turn
+            // Many into a claim can decline to.
+            bool known;
+            const Mult site = siteMult(call.getOperation(), f, known);
+            const Mult m = join(inst.execMult, site);
+            const bool certainlyMany = (inst.execMult == Mult::Many && !inst.execUnknown) ||
+                                       (known && site == Mult::Many);
+            if (Instance *child = addIfRoom({entry, nextThread_++, m, m, call, &inst,
+                                             inst.speculative, false}))
+                child->execUnknown = !certainlyMany && (!known || inst.execUnknown);
             return;
         }
         if (kind != SemanticOpKind::Unknown) return;           // shim functions: nothing inside
         if (callee.getBody().empty()) return;                  // a declaration
         if (!relevant_(callee)) return;
-        const Mult m = join(inst.execMult, siteMult(call.getOperation(), f));
-        if (instances_.size() < cap_)
-            addInstance({callee, inst.thread, inst.threadMult, m, call, &inst, inst.speculative,
-                         inst.startup && !spawnPrecedes(call.getOperation(), f)});
-        else
-            capExceeded_ = true;
+        bool known;
+        const Mult site = siteMult(call.getOperation(), f, known);
+        const Mult m = join(inst.execMult, site);
+        const bool certainlyMany = (inst.execMult == Mult::Many && !inst.execUnknown) ||
+                                   (known && site == Mult::Many);
+        if (Instance *child = addIfRoom({callee, inst.thread, inst.threadMult, m, call, &inst,
+                                         inst.speculative,
+                                         inst.startup && !spawnPrecedes(call.getOperation(), f)})) {
+            child->execUnknown = !certainlyMany && (!known || inst.execUnknown);
+            // In an unstructured function that can spawn, "no spawn precedes
+            // this call" is a guess: the goto may jump over the spawn or
+            // back behind it.
+            child->startupUnknown = inst.startupUnknown ||
+                                    (inst.startup && isUnstructured(f) && canSpawn(f));
+        }
     });
 }
 
@@ -432,16 +635,35 @@ void ThreadInstanceWalk::addOrphanRoots() {
             linkage == cir::GlobalLinkageKind::PrivateLinkage)
             return;
         if (!relevant_(f)) return;
-        addInstance({f, nextThread_++, Mult::Many, Mult::Many, nullptr, nullptr, true, false});
+        addIfRoom({f, nextThread_++, Mult::Many, Mult::Many, nullptr, nullptr, true, false});
     });
 }
 
 void ThreadInstanceWalk::run(llvm::function_ref<void(Instance &)> visit,
                              llvm::function_ref<void(cir::FuncOp)> onRecursion) {
     auto step = [&](Instance &inst) {
-        // Recursion: the parameter-to-root map would be cyclic.
-        for (Instance *p = inst.parent; p; p = p->parent) {
-            if (p->func == inst.func) { onRecursion(inst.func); return; }
+        // Recursion: the chain already holds this function. The first
+        // recurrence is visited and expanded once more, standing for many
+        // runs (or, when a spawn closed the cycle, many threads), so that
+        // what the recursive call reaches is seen -- an earlier version
+        // skipped it and lost every access the recursive call made to
+        // objects the outer call did not touch, and a worker that spawned
+        // itself through a helper lost the helper's writes. The second
+        // recurrence is visited and not expanded, which bounds the walk.
+        bool seen = false;
+        for (Instance *p = inst.parent; p; p = p->parent)
+            if (p->func == inst.func) { seen = true; break; }
+        if (seen) {
+            onRecursion(inst.func);
+            inst.recurring = true;
+            if (inst.site && getSemanticKind(lookupCallee(inst.site)) == SemanticOpKind::ThreadSpawn)
+                inst.threadMult = inst.execMult = Mult::Many;
+            else
+                inst.execMult = Mult::Many;
+            // Each function's recurrence is expanded once in the whole walk:
+            // unrolling every cycle once per path made the walk exponential
+            // in the size of a mutually recursive group.
+            if (!expandedRecurrence_.insert(inst.func.getOperation()).second) { visit(inst); return; }
         }
         expand(inst);
         visit(inst);
@@ -456,4 +678,10 @@ void ThreadInstanceWalk::run(llvm::function_ref<void(Instance &)> visit,
     for (; next < instances_.size(); ++next) step(instances_[next]);
     addOrphanRoots();
     for (; next < instances_.size(); ++next) step(instances_[next]);
+
+    if (capExceeded_) return;
+    for (auto &[at, msg] : pendingRemarks_) {
+        at->emitRemark() << msg;
+        ++remarks_;
+    }
 }

@@ -21,6 +21,8 @@ int main(int argc, char **argv) {
   mlir::wtc::registerLowerWTCToCIRPass();
   mlir::wtc::registerQueueOwnershipAnalysisPass();
   mlir::wtc::registerWTCSpecializePass();
+  mlir::wtc::registerWTCFalseSharingDiagnosePass();
+  mlir::wtc::registerWTCAlignByOwnerPass();
 
   return mlir::asMainReturnCode(
       mlir::MlirOptMain(argc, argv, "wtc-opt: the Well-tempered Compiler optimizer driver\n", registry));

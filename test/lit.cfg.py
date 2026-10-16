@@ -17,7 +17,7 @@ config.test_format = lit.formats.ShTest()
 # .mlir tests drive wtc-opt on hand-written IR. .cpp tests drive the whole
 # pipeline from source, which is the only kind of test that can catch a
 # mismatch between what the compiler emits and what the passes expect.
-config.suffixes = [".mlir", ".cpp"]
+config.suffixes = [".mlir", ".cpp", ".c"]
 
 # test_source_root: The root path where tests are located.
 config.test_source_root = os.path.dirname(__file__)
@@ -52,6 +52,8 @@ llvm_config.add_tool_substitutions(tools, tool_dirs)
 # The pinned ClangIR clang, from the same tools directory as cir-translate.
 clangxx = os.path.join(config.llvm_tools_dir, "clang++")
 config.substitutions.append(("%clangxx", clangxx))
+# %clang for C sources: the C++ driver rejects -std=gnu11 outright.
+config.substitutions.append(("%clang", os.path.join(config.llvm_tools_dir, "clang")))
 # wtc-cc takes clang++ and cir-translate from the toolchain (the parent of
 # its bin/) and wtc-opt from the WTC_OPT environment variable set below.
 config.substitutions.append(("%wtc_cc", os.path.join(config.wtc_src_root, "tools", "wtc-cc")

@@ -107,7 +107,16 @@ Value traceToLocalRoot(Value v) {
         Operation* def = v.getDefiningOp();
         if (!def)
             return v;
+        // Only the casts under which the value still names the same object:
+        // a reinterpretation of the pointer, or an array decaying to a
+        // pointer to its first element. A pointer made from an integer
+        // names nothing the walk can vouch for, whatever the integer was
+        // made from, and following it once placed `(S *)(uintptr_t)p + k`
+        // on p's object.
         if (auto castOp = mlir::dyn_cast<cir::CastOp>(def)) {
+            const cir::CastKind kind = castOp.getKind();
+            if (kind != cir::CastKind::bitcast && kind != cir::CastKind::array_to_ptrdecay)
+                return v;
             v = castOp.getSrc();
             continue;
         }
@@ -192,5 +201,60 @@ unsigned spawnEntryOperand(cir::CallOp op) {
 
 unsigned spawnFirstArgOperand(cir::CallOp op) {
     return spawnEntryOperand(op) + 1;
+}
+
+void memoryAccesses(Operation *op, llvm::SmallVectorImpl<MemoryAccess> &out) {
+    auto pointee = [](Value ptr) -> Type {
+        if (auto pt = dyn_cast<cir::PointerType>(ptr.getType())) return pt.getPointee();
+        return Type();
+    };
+    // A libc memory call touches `len` bytes: an array of that many bytes
+    // when the length is a constant, else the pointee, which is at least
+    // what the call was written over.
+    // Behind the void* the call takes sits the pointer the program wrote,
+    // whose pointee is the least the call touches; failing that, one byte.
+    auto lengthType = [&](Value len, Value ptr) -> Type {
+        if (auto c = len.getDefiningOp<cir::ConstantOp>())
+            if (auto n = dyn_cast<cir::IntAttr>(c.getValue()))
+                if (n.getValue().getActiveBits() <= 32 && n.getValue().getZExtValue() > 0)
+                    return cir::ArrayType::get(op->getContext(),
+                                               cir::IntType::get(op->getContext(), 8, false),
+                                               n.getValue().getZExtValue());
+        Type t = pointee(traceToLocalRoot(ptr));
+        if (!t || isa<cir::VoidType>(t) || isa<cir::FuncType>(t))
+            t = cir::IntType::get(op->getContext(), 8, false);
+        return t;
+    };
+    if (auto ld = dyn_cast<cir::LoadOp>(op)) {
+        out.push_back({ld.getAddr(), ld.getResult().getType(), false});
+    } else if (auto st = dyn_cast<cir::StoreOp>(op)) {
+        out.push_back({st.getAddr(), st.getValue().getType(), true});
+    } else if (auto rmw = dyn_cast<cir::AtomicFetchOp>(op)) {
+        out.push_back({rmw.getPtr(), rmw.getVal().getType(), true});
+    } else if (auto x = dyn_cast<cir::AtomicXchgOp>(op)) {
+        out.push_back({x.getPtr(), x.getVal().getType(), true});
+    } else if (auto cx = dyn_cast<cir::AtomicCmpXchgOp>(op)) {
+        out.push_back({cx.getPtr(), cx.getDesired().getType(), true});
+    } else if (auto ts = dyn_cast<cir::AtomicTestAndSetOp>(op)) {
+        out.push_back({ts.getPtr(), pointee(ts.getPtr()), true});
+    } else if (auto cl = dyn_cast<cir::AtomicClearOp>(op)) {
+        out.push_back({cl.getPtr(), pointee(cl.getPtr()), true});
+    } else if (auto sb = dyn_cast<cir::SetBitfieldOp>(op)) {
+        // The whole storage unit is rewritten, whatever the field's width.
+        out.push_back({sb.getAddr(), pointee(sb.getAddr()), true});
+    } else if (auto gb = dyn_cast<cir::GetBitfieldOp>(op)) {
+        out.push_back({gb.getAddr(), pointee(gb.getAddr()), false});
+    } else if (auto cp = dyn_cast<cir::CopyOp>(op)) {
+        out.push_back({cp.getSrc(), pointee(cp.getSrc()), false});
+        out.push_back({cp.getDst(), pointee(cp.getDst()), true});
+    } else if (auto ms = dyn_cast<cir::MemSetOp>(op)) {
+        out.push_back({ms.getDst(), lengthType(ms.getLen(), ms.getDst()), true});
+    } else if (auto mc = dyn_cast<cir::MemCpyOp>(op)) {
+        out.push_back({mc.getSrc(), lengthType(mc.getLen(), mc.getSrc()), false});
+        out.push_back({mc.getDst(), lengthType(mc.getLen(), mc.getDst()), true});
+    } else if (auto mm = dyn_cast<cir::MemMoveOp>(op)) {
+        out.push_back({mm.getSrc(), lengthType(mm.getLen(), mm.getSrc()), false});
+        out.push_back({mm.getDst(), lengthType(mm.getLen(), mm.getDst()), true});
+    }
 }
 }

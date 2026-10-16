@@ -72,6 +72,25 @@ struct Instance {
     // same struct, and the analysis reports 176 findings that are all one
     // start-up phase.
     bool startup = false;
+    // True when the instance's Many is a guess: some call or spawn on its
+    // chain sits in a function whose control flow is unstructured, outside
+    // any loop, so the site could run once or many times, and nothing else
+    // on the chain is known to repeat. The multiplicities above keep the
+    // guess, so a client that must assume the worst reads Many; a client
+    // that would turn Many into a claim treats such an instance as neither
+    // once nor repeated.
+    bool execUnknown = false;
+    // True for an instance whose function already appears on its chain.
+    // The first such instance of each function is expanded once more, so
+    // that what the recursive call reaches is seen; later ones are not,
+    // which bounds the walk on a group of mutually recursive functions.
+    bool recurring = false;
+    // True when whether this instance runs before the first spawn cannot be
+    // read: a caller on the way has unstructured control flow and can
+    // spawn, so its spawn may come before or after the call. Reached
+    // without passing a spawn, as far as the walk can tell, and that is a
+    // guess.
+    bool startupUnknown = false;
 };
 
 class ThreadInstanceWalk {
@@ -112,8 +131,13 @@ public:
     bool reachesOp(cir::FuncOp f, llvm::function_ref<bool(Operation *)> pred);
 
     // Many if the operation sits inside a loop of its function, or the
-    // function's control flow is not structured enough to tell.
+    // function's control flow is not structured enough to tell. The
+    // three-argument form also says which: `known` is false only when the
+    // answer is a guess, that is, the function has a goto and the operation
+    // is not inside a loop. A client that must assume the worst keeps the
+    // guess; a client that would turn it into a claim treats it as unknown.
     Mult siteMult(Operation *op, cir::FuncOp f);
+    Mult siteMult(Operation *op, cir::FuncOp f, bool &known);
 
     // Whether some call that can spawn a thread comes before this operation
     // in its function. An operation inside a loop that contains a spawn
@@ -136,6 +160,37 @@ public:
         return inst.startup && !spawnPrecedes(op, inst.func);
     }
 
+    // Whether the answer above is a guess: the instance was reached
+    // through, or sits in, a function with unstructured control flow that
+    // can spawn, so where its start-up phase ends cannot be read. A guess
+    // makes no definite verdict and no cold one.
+    bool startupUncertain(const Instance &inst) {
+        return inst.startupUnknown ||
+               (inst.startup && isUnstructured(inst.func) && canSpawn(inst.func));
+    }
+
+    // Whether the function's control flow is structured enough for siteMult
+    // to mean what it says. With a goto in the function, siteMult answers
+    // Many so that clients which must assume the worst do; a client that
+    // would turn "many" into a claim asks here first, and treats a function
+    // that is not known as neither once nor many.
+    bool rateKnown(cir::FuncOp f) { return !isUnstructured(f); }
+
+    // Whether two accounted-for threads cannot both exist: each was started
+    // from a different arm of one `if` (or ternary) in the function that
+    // started them both, directly or through calls. `if (c) spawn(w) else
+    // spawn(w)` is one thread, and the walk, which numbers every spawn
+    // instance, used to hand it two numbers and then report the fields it
+    // touches as shared between them.
+    bool exclusive(unsigned threadA, unsigned threadB) const;
+
+    // How many instances the walk created for f. A stack slot of f is one
+    // object only if f ran once.
+    unsigned instanceCount(cir::FuncOp f) const;
+    // Whether f has exactly one instance and that instance runs exactly
+    // once on exactly one thread. A slot of such a function is one object.
+    bool runsOnce(cir::FuncOp f) const;
+
     bool capExceeded() const { return capExceeded_; }
     unsigned cap() const { return cap_; }
     unsigned remarks() const { return remarks_; }
@@ -149,10 +204,13 @@ public:
 
 private:
     bool isUnstructured(cir::FuncOp f);
+    bool isRecursive(cir::FuncOp f);
     bool canSpawn(cir::FuncOp f);
     bool indirectCallCanSpawn();
     const llvm::DenseSet<Operation *> &preSpawnOps(cir::FuncOp f);
     Instance &addInstance(Instance inst);
+    Instance *addIfRoom(Instance inst);
+    void noteRemark(Operation *at, const llvm::Twine &msg);
     void addRootsForModule();
     void expand(Instance &inst);
     void addOrphanRoots();
@@ -166,12 +224,18 @@ private:
     std::deque<Instance> instances_;   // stable addresses: Instance::parent points into it
     llvm::DenseSet<Operation *> reachedFuncs_;
     llvm::DenseMap<Operation *, bool> unstructuredCache_;
+    llvm::DenseMap<Operation *, bool> recursiveCache_;
+    bool recursiveComputed_ = false;
+    llvm::DenseMap<unsigned, const Instance *> threadRoot_;   // the instance that began each thread
+    llvm::DenseSet<Operation *> expandedRecurrence_;           // functions whose recurrence was unrolled
     llvm::DenseMap<Operation *, bool> reachesCache_;
     llvm::DenseMap<Operation *, llvm::DenseSet<Operation *>> preSpawnCache_;
     llvm::DenseMap<Operation *, bool> spawnsCache_;
     std::optional<bool> indirectSpawns_;
     bool capExceeded_ = false;
     unsigned remarks_ = 0;
+    llvm::SmallVector<std::pair<Operation *, std::string>, 8> pendingRemarks_;
+    llvm::DenseSet<Operation *> remarkedAt_;
 };
 
 } // namespace mlir::wtc

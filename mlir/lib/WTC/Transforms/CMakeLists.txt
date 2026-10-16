@@ -3,6 +3,8 @@ add_mlir_library(MLIRWTCTransforms
   LowerWTCToCIR.cpp
   QueueOwnershipAnalysis.cpp
   ThreadInstances.cpp
+  WTCAlignByOwner.cpp
+  WTCFalseSharingDiagnose.cpp
   WTCSpecialize.cpp
   Utils.cpp
   LINK_LIBS PUBLIC
