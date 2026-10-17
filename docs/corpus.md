@@ -10,8 +10,9 @@ where they were made, because a retraction that deletes what it retracts
 teaches nothing.
 
 **The result of this phase is negative, and narrower than it first looked.**
-On amalgamated memcached the analysis reports 246 definite and 1,457
-possible pairs. 156 of the definite pairs and 852 of the possible sit on five
+On amalgamated memcached the analysis reports 246 definite and 2,610
+possible pairs, 1,131 of the possible on stack slots of command handlers
+whose address goes to a helper, where two invocations are two objects. 156 of the definite pairs and 852 of the possible sit on five
 globals, every one of which was read against the source, and no pair there
 describes traffic that separating fields would remove: each is decided by
 how often one side runs, which the analysis cannot tell; the 72 definite
@@ -386,8 +387,25 @@ option prints a remark per field access, where it went or why not, and
 the notes on a possible pair carry both offsets; that listing is what
 found the three gaps.
 
-**memcached after.** 246 definite, 1,457 possible, 0 cold; 4,103
-unplaced (1,215 field, 14 global, 324 slot, 1,423 root parameter, 872
+Three more rules, from the stack test (each with a test that fails on
+the code before it): a store in a nest of `cir.scope` and
+`cir.cleanup.scope` under the slot's block is the slot's one store, since
+such a scope runs exactly once when reached and the front end at -O2
+puts every initialiser in one, and a lifetime marker is no use that ends
+a listing; an untyped view of a record is followed into the function it
+reaches -- a spill to a slot, a cast back to the record's type, a call to
+a function with a body whose parameter is then followed the same way, to
+a depth of four, and a call by function pointer when every caller hands
+in a function's address -- instead of marking the record written whole;
+and a possible pair on a heap object or a slot looks for two threads as
+its witness before it accepts one thread standing for many, where the
+first witness found decided and a thread writing both fields came first.
+
+**memcached after.** 246 definite, 2,610 possible (1,457 before the
+witness rule; 1,131 of the new ones on escaping stack slots, each with
+the caveat that two invocations are two objects, and 252 pairs that
+were "by one thread that stands for many" now have two threads), 0
+cold; 4,103 unplaced (1,215 field, 14 global, 324 slot, 1,423 root parameter, 872
 call result, 62 past the caps, 193 otherwise), 718 at elements not told
 apart, 51 through sets; 301 of the possible would be cold but for
 unplaced accesses. The 87 new definite pairs all come through the
@@ -410,27 +428,39 @@ Phoenix: linear_regression's 17 definite unchanged; histogram 0/6,
 kmeans 0/7, string_match 0/3 possible where there were 0/0, 0/1, 0/0,
 not read; streamcluster 0/22 unchanged.
 
-**The DPDK ring, against its own annotations.** `rte_ring` keeps its
-producer and consumer heads in two cache-line-aligned unions with a
-64-byte guard after each and after the header; the perf test runs
-`enqueue_bulk` on one lcore and `dequeue_bulk` on another. With the
-headers as shipped: 0 definite, 81 possible, every pair inside one union
-(the producer's head beside its tail, which the consumer reads: DPDK's
-deliberate layout), none across a guard. With `__rte_cache_aligned` and
-`RTE_CACHE_GUARD` defined empty and the name's `alignas` removed, so the
-unions sit at 64 and 88 and the header at 48: 0 definite, 276 possible,
-105 of them producer against consumer and 90 header against a head --
-every boundary the annotations draw, reported once they are gone.
-Possible rather than definite for two reasons the remark states: the
-ring is one of two objects, and its allocation runs more than once, one
-ring per sub-test. (48 threads, because the test's entry is address-taken
-and every worker reaches both enqueue and dequeue through a flag the walk
-does not read.) Recall on this object is one of one; the stack test gives
-0/0 in both variants with 45 accesses "from a slot written more than
-once" the round did not get to, and mempool and distributor were not
-run. Set-up: DPDK 26.11.0-rc1 configured with meson for its generated
-header, the test compiled by ClangIR with the meson flags, in under a
-second.
+**The DPDK ring and stack, against their own annotations.** `rte_ring`
+keeps its producer and consumer heads in two cache-line-aligned unions
+with a 64-byte guard after each and after the header; the perf test runs
+`enqueue_bulk` on one lcore and `dequeue_bulk` on another. The memzone
+behind a ring or a stack is cache-line aligned, which the pass is told
+with `heap-align=64`. With the headers as shipped: 0 definite, 88
+possible, every pair inside one union (the producer's head beside its
+tail, which the consumer reads: DPDK's deliberate layout), none across a
+guard. With `__rte_cache_aligned` and `RTE_CACHE_GUARD` defined empty
+and the name's `alignas` removed, so the unions sit at 64 and 88: 0
+definite, 193 possible, 105 of them producer against consumer -- every
+boundary the annotations draw, reported once they are gone. (At the
+default heap alignment of 16 the header's `size`, `mask` and `capacity`
+pair with the heads as well, 90 pairs, since the object may then start
+anywhere in a line.) Possible rather than definite for two reasons the
+remark states: the ring is one of two objects, and its allocation runs
+more than once, one ring per sub-test; 48 threads, because the test's
+entry is address-taken and every worker reaches both enqueue and dequeue
+through a flag the walk does not read. `rte_stack` keeps its lock-free
+lists, `used` and `free`, each cache-line aligned with a guard after it,
+and the pile variant four such lists; the perf test pushes and pops from
+every lcore. As shipped: 5 possible on the stack, each a list's head
+beside its own length (`used` at 64 and 80, `free` at 192 and 208, the
+pile's at 320 and 448), none across a guard. Stripped, with the lists
+at 48, 80, 112 and 144: 10, among them `used`'s length against `free`'s
+head and length and against the elements, and the pile's lists against
+each other -- the pairs the guards exist for. Recall on these two
+objects is two of two; mempool and distributor were not run. The test
+harness's own `thread_args args[2]`, two 24-byte records on one line
+with one lcore's `avg` beside the other's `s` and `sz`, comes out
+possible in both variants, as it should. Set-up: DPDK 26.11.0-rc1
+configured with meson for its generated header, the tests compiled by
+ClangIR with the meson flags, in under a second each.
 
 ## The review: every memcached object, read against the source
 
