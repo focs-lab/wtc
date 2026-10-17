@@ -1,0 +1,701 @@
+codebase,file,line,idiom,text,context,label
+linux,drivers/infiniband/hw/hfi1/user_sdma.h,154,kernel_aligned,struct list_head txps ____cacheline_aligned_in_smp;,"  151  	u16 seqsubmitted;
+  152  
+  153  	/* Send side fields */
+  154> 	struct list_head txps ____cacheline_aligned_in_smp;
+  155  	u16 seqnum;
+  156  	/*
+  157  	 * KDETH.OFFSET (TID) field",yes
+dpdk,examples/l3fwd/l3fwd.h,72,dpdk_aligned,struct __rte_cache_aligned lcore_rx_queue {,"   69  	struct rte_mbuf *m_table[MAX_PKT_BURST];
+   70  };
+   71  
+   72> struct __rte_cache_aligned lcore_rx_queue {
+   73  	uint16_t port_id;
+   74  	uint16_t queue_id;
+   75  };",yes
+parsec,pkgs/libs/tbblib/src/include/tbb/_concurrent_queue_internal.h,119,pad_field,char pad3[NFS_MaxLineSize-sizeof(size_t)-sizeof(size_t)-sizeof(atomic<size_t>)];,"  116      //! number of invalid entries in the queue
+  117      atomic<size_t> n_invalid_entries;
+  118  
+  119>     char pad3[NFS_MaxLineSize-sizeof(size_t)-sizeof(size_t)-sizeof(atomic<size_t>)];
+  120  } ;
+  121  
+  122  inline bool is_valid_page(const concurrent_queue_rep_base::page* p) {",yes
+linux,include/linux/mmzone.h,860,kernel_aligned,} ____cacheline_aligned_in_smp;,"  857  
+  858  	/* Lists of pages, one per migrate type stored on the pcp-lists */
+  859  	struct list_head lists[NR_PCP_LISTS];
+  860> } ____cacheline_aligned_in_smp;
+  861  
+  862  struct per_cpu_zonestat {
+  863  #ifdef CONFIG_SMP",yes
+linux,drivers/net/ethernet/mellanox/mlx5/core/lib/aso.c,20,kernel_aligned,} ____cacheline_aligned_in_smp;,"   17  	/* control */
+   18  	struct mlx5_core_dev      *mdev;
+   19  	struct mlx5_wq_ctrl        wq_ctrl;
+   20> } ____cacheline_aligned_in_smp;
+   21  
+   22  struct mlx5_aso {
+   23  	/* data path */",yes
+linux,drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.h,675,pad_field,u8			__pad[SMP_CACHE_BYTES];,"  672  			atomic_t	prod;
+  673  			atomic_t	cons;
+  674  		} atomic;
+  675> 		u8			__pad[SMP_CACHE_BYTES];
+  676  	} ____cacheline_aligned_in_smp;
+  677  	u32				max_n_shift;
+  678  };",yes
+dpdk,drivers/net/intel/idpf/idpf_common_device.h,102,alignas_named,alignas(RTE_CACHE_LINE_MIN_SIZE) uint32_t ptype_tbl[IDPF_MAX_PKT_TYPE];,"   99  	uint32_t cmd_retval; /* return value of the cmd response from cp */
+  100  	uint8_t *mbx_resp; /* buffer to store the mailbox response from cp */
+  101  
+  102> 	alignas(RTE_CACHE_LINE_MIN_SIZE) uint32_t ptype_tbl[IDPF_MAX_PKT_TYPE];
+  103  
+  104  	bool is_tx_singleq; /* true - single queue model, false - split queue model */
+  105  	bool is_rx_singleq; /* true - single queue model, false - split queue model */",no
+rocksdb,db/forward_iterator_bench.cc,193,pad_field,char pad1[128] __attribute__((__unused__));,"  190    }
+  191  
+  192   private:
+  193>   char pad1[128] __attribute__((__unused__));
+  194    std::vector<ShardState>* shard_states_;
+  195    ROCKSDB_NAMESPACE::DB* db_;
+  196    ROCKSDB_NAMESPACE::port::Thread thread_;",yes
+dpdk,drivers/event/sw/sw_evdev.h,236,alignas_named,alignas(RTE_CACHE_LINE_SIZE) rte_atomic32_t inflights;,"  233  	/* Contains all ports - load balanced and directed */
+  234  	alignas(RTE_CACHE_LINE_SIZE) struct sw_port ports[SW_PORTS_MAX];
+  235  
+  236> 	alignas(RTE_CACHE_LINE_SIZE) rte_atomic32_t inflights;
+  237  
+  238  	/*
+  239  	 * max events in this instance. Cached here for performance.",yes
+dpdk,drivers/net/avp/rte_avp_common.h,103,dpdk_aligned,struct __rte_cache_aligned __rte_packed_begin rte_avp_desc {,"  100  /*
+  101   * AVP packet buffer header used to define the exchange of packet data.
+  102   */
+  103> struct __rte_cache_aligned __rte_packed_begin rte_avp_desc {
+  104  	uint64_t pad0;
+  105  	void *pkt_mbuf; /**< Reference to packet mbuf */
+  106  	uint8_t pad1[14];",no
+dpdk,lib/compressdev/rte_compressdev_internal.h,72,dpdk_aligned,struct __rte_cache_aligned rte_compressdev {,"   69  		struct rte_comp_op **ops, uint16_t nb_ops);
+   70  
+   71  /** The data structure associated with each comp device. */
+   72> struct __rte_cache_aligned rte_compressdev {
+   73  	compressdev_dequeue_pkt_burst_t dequeue_burst;
+   74  	/**< Pointer to PMD receive function */
+   75  	compressdev_enqueue_pkt_burst_t enqueue_burst;",yes
+linux,lib/crc/x86/crc-pclmul-consts.h,162,kernel_aligned,} crc64_msb_0x42f0e1eba9ea3693_consts ____cacheline_aligned __maybe_unused = {,"  159  	u64 fold_across_128_bits_consts[2];
+  160  	u8 shuf_table[48];
+  161  	u64 barrett_reduction_consts[2];
+  162> } crc64_msb_0x42f0e1eba9ea3693_consts ____cacheline_aligned __maybe_unused = {
+  163  	.bswap_mask = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0},
+  164  	.fold_across_2048_bits_consts = {
+  165  		0x7f52691a60ddc70d,	/* LO64_TERMS: (x^2048 mod G) * x^0 */",no
+onetbb,python/rml/ipc_server.cpp,321,pad_field,char pad[cache_line_sz - sizeof(ipc_worker)%cache_line_sz];,"  318      #pragma warning(disable:4510 4610)
+  319  #endif
+  320  class padded_ipc_worker: public ipc_worker {
+  321>     char pad[cache_line_sz - sizeof(ipc_worker)%cache_line_sz];
+  322  public:
+  323      padded_ipc_worker(ipc_server& server, tbb_client& client, const size_t i)
+  324      : ipc_worker( server,client,i ) { suppress_unused_warning(pad); }",yes
+linux,drivers/net/ethernet/intel/ixgbe/ixgbe.h,444,kernel_internode,} ____cacheline_internodealigned_in_smp;,"  441  	u16 indices;	/* current value of indices */
+  442  	u16 mask;	/* Mask used for feature to ring mapping */
+  443  	u16 offset;	/* offset to start of feature */
+  444> } ____cacheline_internodealigned_in_smp;
+  445  
+  446  #define IXGBE_82599_VMDQ_8Q_MASK 0x78
+  447  #define IXGBE_82599_VMDQ_4Q_MASK 0x7C",yes
+linux,arch/sparc/kernel/prom_irqtrans.c,357,attr_aligned,__attribute__ ((aligned (64)));,"  354  
+  355  	if (_arg1) {
+  356  		static unsigned char cacheline[64]
+  357> 			__attribute__ ((aligned (64)));
+  358  
+  359  		__asm__ __volatile__(""rd %%fprs, %0\n\t""
+  360  				     ""or %0, %4, %1\n\t""",no
+dpdk,drivers/net/ena/ena_ethdev.h,155,dpdk_aligned,struct __rte_cache_aligned ena_ring {,"  152  	int offset;
+  153  };
+  154  
+  155> struct __rte_cache_aligned ena_ring {
+  156  	u16 next_to_use;
+  157  	u16 next_to_clean;
+  158  	uint64_t last_cleanup_ticks;",yes
+linux,include/net/tc_act/tc_police.h,28,kernel_aligned,spinlock_t		tcfp_lock ____cacheline_aligned_in_smp;,"   25  	struct tc_action	common;
+   26  	struct tcf_police_params __rcu *params;
+   27  
+   28> 	spinlock_t		tcfp_lock ____cacheline_aligned_in_smp;
+   29  	s64			tcfp_toks;
+   30  	s64			tcfp_ptoks;
+   31  	s64			tcfp_pkttoks;",yes
+linux,kernel/time/jiffies.c,42,kernel_aligned,__cacheline_aligned_in_smp DEFINE_RAW_SPINLOCK(jiffies_lock);,"   39  	.max_cycles		= 10,
+   40  };
+   41  
+   42> __cacheline_aligned_in_smp DEFINE_RAW_SPINLOCK(jiffies_lock);
+   43  __cacheline_aligned_in_smp seqcount_raw_spinlock_t jiffies_seq =
+   44  	SEQCNT_RAW_SPINLOCK_ZERO(jiffies_seq, &jiffies_lock);
+   45  ",yes
+dpdk,app/test-mldev/test_inference_common.h,40,dpdk_aligned,struct __rte_cache_aligned test_inference {,"   37  	uint64_t end_cycles;
+   38  };
+   39  
+   40> struct __rte_cache_aligned test_inference {
+   41  	/* common data */
+   42  	struct test_common cmn;
+   43  ",yes
+dpdk,lib/mbuf/rte_mbuf_core.h,634,alignas_named,alignas(RTE_CACHE_LINE_MIN_SIZE),"  631  	 * Reserved for dynamic fields
+  632  	 * when the next pointer is in first cache line (i.e. RTE_IOVA_IN_MBUF is 0).
+  633  	 */
+  634> 	alignas(RTE_CACHE_LINE_MIN_SIZE)
+  635  	uint64_t dynfield2;
+  636  #endif
+  637  ",yes
+rocksdb,db/forward_iterator_bench.cc,268,pad_field,char pad2[128] __attribute__((__unused__));,"  265    std::vector<ShardState>* shard_states_;
+  266    ROCKSDB_NAMESPACE::DB* db_;
+  267    ROCKSDB_NAMESPACE::port::Thread thread_;
+  268>   char pad2[128] __attribute__((__unused__));
+  269  };
+  270  
+  271  struct StatsThread {",yes
+parsec,pkgs/libs/tbblib/src/src/tbb/concurrent_queue.cpp,154,pad_field,char pad2[NFS_MaxLineSize-((sizeof(atomic<ticket>)+sizeof(concurrent_monitor))&(NFS_MaxLineSize-1))];,"  151  
+  152      atomic<ticket> tail_counter;
+  153      concurrent_monitor slots_avail;
+  154>     char pad2[NFS_MaxLineSize-((sizeof(atomic<ticket>)+sizeof(concurrent_monitor))&(NFS_MaxLineSize-1))];
+  155      micro_queue array[n_queue];    
+  156  
+  157      micro_queue& choose( ticket k ) {",yes
+linux,mm/util.c,922,kernel_aligned,struct percpu_counter vm_committed_as ____cacheline_aligned_in_smp;,"  919   * Make sure vm_committed_as in one cacheline and not cacheline shared with
+  920   * other variables. It can be updated by several CPUs frequently.
+  921   */
+  922> struct percpu_counter vm_committed_as ____cacheline_aligned_in_smp;
+  923  
+  924  /*
+  925   * The global memory commitment made in the system can be a metric",yes
+mysql,storage/innobase/include/log0sys.h,356,alignas_named,alignas(ut::INNODB_CACHE_LINE_SIZE) os_event_t closer_event;,"  353    /** @{ */
+  354  
+  355    /** Event used by the log closer thread to wait for tasks. */
+  356>   alignas(ut::INNODB_CACHE_LINE_SIZE) os_event_t closer_event;
+  357  
+  358    /** Mutex which can be used to pause log closer thread. */
+  359    mutable ib_mutex_t closer_mutex;",yes
+dpdk,drivers/event/dsw/dsw_evdev.h,244,alignas_named,alignas(RTE_CACHE_LINE_SIZE) uint8_t flow_to_port_map[DSW_MAX_FLOWS];,"  241  	RTE_BITSET_DECLARE(serving_ports, DSW_MAX_PORTS);
+  242  	uint16_t num_serving_ports;
+  243  
+  244> 	alignas(RTE_CACHE_LINE_SIZE) uint8_t flow_to_port_map[DSW_MAX_FLOWS];
+  245  };
+  246  
+  247  /* Limited by the size of the 'serving_ports' bitmask */",yes
+linux,drivers/net/ethernet/broadcom/tg3.h,3005,kernel_aligned,struct napi_struct		napi	____cacheline_aligned;," 3002  #define TG3_IRQ_MAX_VECS		TG3_IRQ_MAX_VECS_RSS
+ 3003  
+ 3004  struct tg3_napi {
+ 3005> 	struct napi_struct		napi	____cacheline_aligned;
+ 3006  	struct tg3			*tp;
+ 3007  	struct tg3_hw_status		*hw_status;
+ 3008  ",yes
+folly,folly/io/async/AtomicNotificationQueue.h,251,alignas_named,alignas(folly::cacheline_align_v) std::atomic<Node*> head_{};,"  248      template <typename... Args>
+  249      bool pushImpl(std::shared_ptr<RequestContext> rctx, Args&&... args);
+  250  
+  251>     alignas(folly::cacheline_align_v) std::atomic<Node*> head_{};
+  252      static constexpr intptr_t kQueueArmedTag = 1;
+  253    };
+  254  ",yes
+linux,drivers/net/ethernet/intel/fm10k/fm10k.h,306,kernel_aligned,struct fm10k_ring *tx_ring[MAX_QUEUES] ____cacheline_aligned_in_smp;,"  303  	u16 rx_itr;
+  304  
+  305  	/* TX */
+  306> 	struct fm10k_ring *tx_ring[MAX_QUEUES] ____cacheline_aligned_in_smp;
+  307  
+  308  	u64 restart_queue;
+  309  	u64 tx_busy;",yes
+dpdk,lib/table/rte_table_lpm_ipv6.c,49,alignas_named,alignas(RTE_CACHE_LINE_SIZE) uint8_t nht[];,"   46  
+   47  	/* Next Hop Table (NHT) */
+   48  	uint32_t nht_users[RTE_TABLE_LPM_MAX_NEXT_HOPS];
+   49> 	alignas(RTE_CACHE_LINE_SIZE) uint8_t nht[];
+   50  };
+   51  
+   52  static void *",no
+linux,arch/xtensa/kernel/smp.c,188,kernel_aligned,unsigned long cpu_start_id __cacheline_aligned;,"  185  }
+  186  
+  187  #ifdef CONFIG_HOTPLUG_CPU
+  188> unsigned long cpu_start_id __cacheline_aligned;
+  189  #endif
+  190  unsigned long cpu_start_ccount;
+  191  ",yes
+linux,drivers/soc/fsl/qbman/bman_test_api.c,39,kernel_aligned,static struct bm_buffer bufs_out[NUM_BUFS] ____cacheline_aligned;,"   36  
+   37  static struct bman_pool *pool;
+   38  static struct bm_buffer bufs_in[NUM_BUFS] ____cacheline_aligned;
+   39> static struct bm_buffer bufs_out[NUM_BUFS] ____cacheline_aligned;
+   40  static int bufs_received;
+   41  
+   42  static void bufs_init(void)",no
+linux,include/linux/memcontrol.h,115,kernel_padding,CACHELINE_PADDING(_pad2_);,"  112  
+  113  	/* Fields which get updated often at the end. */
+  114  	struct lruvec		lruvec;
+  115> 	CACHELINE_PADDING(_pad2_);
+  116  	unsigned long		lru_zone_size[MAX_NR_ZONES][NR_LRU_LISTS];
+  117  	struct mem_cgroup_reclaim_iter	iter;
+  118  ",yes
+linux,include/net/sch_generic.h,120,kernel_aligned,__cacheline_group_begin(Qdisc_write) ____cacheline_aligned;,"  117  	__cacheline_group_end(Qdisc_read_mostly);
+  118  
+  119  	/* Fields dirtied in dequeue() fast path. */
+  120> 	__cacheline_group_begin(Qdisc_write) ____cacheline_aligned;
+  121  		struct qdisc_skb_head	q;
+  122  		unsigned long		state;
+  123  		struct gnet_stats_basic_sync bstats;",yes
+linux,include/net/dst_ops.h,43,kernel_aligned,struct percpu_counter	pcpuc_entries ____cacheline_aligned_in_smp;,"   40  
+   41  	struct kmem_cache	*kmem_cachep;
+   42  
+   43> 	struct percpu_counter	pcpuc_entries ____cacheline_aligned_in_smp;
+   44  };
+   45  
+   46  static inline int dst_entries_get_fast(struct dst_ops *dst)",yes
+dpdk,lib/eventdev/rte_event_timer_adapter.c,647,alignas_named,alignas(RTE_CACHE_LINE_SIZE) struct {,"  644  	/* Identifier of timer data instance */
+  645  	uint32_t timer_data_id;
+  646  	/* Track which cores have actually armed a timer */
+  647> 	alignas(RTE_CACHE_LINE_SIZE) struct {
+  648  		RTE_ATOMIC(uint16_t) v;
+  649  	} in_use[RTE_MAX_LCORE];
+  650  	/* Track which cores' timer lists should be polled */",yes
+dpdk,drivers/common/qat/qat_common.h,73,dpdk_aligned,struct __rte_cache_aligned __rte_packed_begin qat_sgl {,"   70  }
+   71  
+   72  __extension__
+   73> struct __rte_cache_aligned __rte_packed_begin qat_sgl {
+   74  	qat_sgl_hdr;
+   75  	/* flexible array of flat buffers*/
+   76  	struct qat_flat_buf buffers[0];",no
+linux,include/target/iscsi/iscsi_target_core.h,330,kernel_aligned,} ____cacheline_aligned;,"  327  	u32			exp_cmdsn;
+  328  	struct iscsit_cmd	*cmd;
+  329  	struct list_head	ooo_list;
+  330> } ____cacheline_aligned;
+  331  
+  332  struct iscsi_datain {
+  333  	u8			flags;",unsure
+linux,kernel/pid.c,86,kernel_aligned,static  __cacheline_aligned_in_smp DEFINE_SPINLOCK(pidmap_lock);,"   83  };
+   84  EXPORT_SYMBOL_GPL(init_pid_ns);
+   85  
+   86> static  __cacheline_aligned_in_smp DEFINE_SPINLOCK(pidmap_lock);
+   87  
+   88  void put_pid(struct pid *pid)
+   89  {",yes
+mysql,storage/innobase/include/os0file.h,106,pad_field,byte pad[ut::INNODB_CACHE_LINE_SIZE];,"  103    can't use alignas because std::vector<Block> uses std::allocator which in
+  104    C++14 doesn't have to handle overaligned types. (see § 20.7.9.1.5 of N4140
+  105    draft) */
+  106>   byte pad[ut::INNODB_CACHE_LINE_SIZE];
+  107    std::atomic<bool> m_in_use;
+  108  };
+  109  }  // namespace file",yes
+linux,drivers/net/ethernet/intel/idpf/idpf_txrx.h,573,kernel_group,__cacheline_group_begin_aligned(cold);,"  570  	struct idpf_rx_queue_stats q_stats;
+  571  	__cacheline_group_end_aligned(read_write);
+  572  
+  573> 	__cacheline_group_begin_aligned(cold);
+  574  	u32 q_id;
+  575  	u32 size;
+  576  	dma_addr_t dma;",yes
+dpdk,app/test-flow-perf/actions_gen.c,488,alignas_named,static alignas(RTE_CACHE_LINE_SIZE) struct rte_flow_action_set_dscp set_dscp[RTE_MAX_LCORE];,"  485  	uint8_t actions_counter,
+  486  	struct additional_para para)
+  487  {
+  488> 	static alignas(RTE_CACHE_LINE_SIZE) struct rte_flow_action_set_dscp set_dscp[RTE_MAX_LCORE];
+  489  	uint32_t dscp_value = para.counter;
+  490  
+  491  	/* Fixed value */",yes
+folly,folly/synchronization/FlatCombining.h,392,alignas_interf,alignas(hardware_destructive_interference_size),"  389  
+  390    alignas(hardware_destructive_interference_size) Mutex m_;
+  391  
+  392>   alignas(hardware_destructive_interference_size)
+  393        folly::SaturatingSemaphore<true, Atom> pending_;
+  394    Atom<bool> shutdown_{false};
+  395  ",yes
+linux,include/vdso/datapage.h,138,kernel_aligned,} ____cacheline_aligned;,"  135  	s32				tz_dsttime;
+  136  	u32				hrtimer_res;
+  137  	u32				__unused;
+  138> } ____cacheline_aligned;
+  139  
+  140  /**
+  141   * struct vdso_rng_data - vdso RNG state information",yes
+dpdk,drivers/crypto/mlx5/mlx5_crypto.h,93,dpdk_aligned,struct __rte_cache_aligned mlx5_crypto_dek {,"   90  	uint16_t cpy_tag_op;
+   91  };
+   92  
+   93> struct __rte_cache_aligned mlx5_crypto_dek {
+   94  	struct mlx5_list_entry entry; /* Pointer to DEK hash list entry. */
+   95  	struct mlx5_devx_obj *obj; /* Pointer to DEK DevX object. */
+   96  	uint8_t data[MLX5_CRYPTO_KEY_LENGTH]; /* DEK key data. */",yes
+linux,drivers/net/ethernet/intel/idpf/idpf_txrx.h,878,kernel_group,__cacheline_group_begin_aligned(read_write);,"  875  	u32 desc_count;
+  876  	__cacheline_group_end_aligned(read_mostly);
+  877  
+  878> 	__cacheline_group_begin_aligned(read_write);
+  879  	u32 next_to_use;
+  880  	u32 next_to_clean;
+  881  	__cacheline_group_end_aligned(read_write);",yes
+dpdk,drivers/event/cnxk/cnxk_eventdev.h,153,alignas_named,alignas(RTE_CACHE_LINE_SIZE) uint64_t xaq_lmt;,"  150  	/* PTP timestamp */
+  151  	struct cnxk_timesync_info **tstamp;
+  152  	/* Add Work Fastpath data */
+  153> 	alignas(RTE_CACHE_LINE_SIZE) uint64_t xaq_lmt;
+  154  	uint64_t __rte_atomic *fc_mem;
+  155  	uintptr_t grp_base;
+  156  	/* Tx Fastpath data */",yes
+dpdk,drivers/net/intel/ice/ice_ethdev.h,679,alignas_named,alignas(RTE_CACHE_LINE_MIN_SIZE) uint32_t ptype_tbl[ICE_MAX_PKT_TYPE];,"  676  	enum ice_rx_func_type rx_func_type;
+  677  	enum ice_tx_func_type tx_func_type;
+  678  	/* ptype mapping table */
+  679> 	alignas(RTE_CACHE_LINE_MIN_SIZE) uint32_t ptype_tbl[ICE_MAX_PKT_TYPE];
+  680  	bool is_safe_mode;
+  681  	struct ice_devargs devargs;
+  682  	enum ice_pkg_type active_pkg_type; /* loaded ddp package type */",no
+dpdk,examples/l3fwd-power/main.c,335,alignas_named,static alignas(RTE_CACHE_LINE_SIZE) uint16_t ipv6_l3fwd_out_if[L3FWD_HASH_ENTRIES];,"  332  #define L3FWD_HASH_ENTRIES	1024
+  333  
+  334  static alignas(RTE_CACHE_LINE_SIZE) uint16_t ipv4_l3fwd_out_if[L3FWD_HASH_ENTRIES];
+  335> static alignas(RTE_CACHE_LINE_SIZE) uint16_t ipv6_l3fwd_out_if[L3FWD_HASH_ENTRIES];
+  336  #endif
+  337  
+  338  #if (APP_LOOKUP_METHOD == APP_LOOKUP_LPM)",no
+linux,drivers/net/ethernet/amazon/ena/ena_com.h,120,kernel_aligned,u32 msix_vector ____cacheline_aligned;,"  117  	/* The value to write to the above register to unmask
+  118  	 * the interrupt of this queue
+  119  	 */
+  120> 	u32 msix_vector ____cacheline_aligned;
+  121  
+  122  	enum queue_direction direction;
+  123  ",yes
+linux,net/packet/internal.h,102,kernel_aligned,} ____cacheline_aligned_in_smp;,"   99  	atomic_long_t		num_failed;
+  100  #define ROLLOVER_HLEN	(L1_CACHE_BYTES / sizeof(u32))
+  101  	u32			history[ROLLOVER_HLEN] ____cacheline_aligned;
+  102> } ____cacheline_aligned_in_smp;
+  103  
+  104  struct packet_sock {
+  105  	/* struct sock has to be the first member of packet_sock */",yes
+linux,drivers/net/ethernet/amazon/ena/ena_netdev.h,169,kernel_aligned,} ____cacheline_aligned;,"  166  	 */
+  167  	unsigned long last_jiffies;
+  168  	struct ena_com_buf bufs[ENA_PKT_MAX_BUFS];
+  169> } ____cacheline_aligned;
+  170  
+  171  struct ena_rx_buffer {
+  172  	struct sk_buff *skb;",yes
+mysql,storage/ndb/src/kernel/blocks/dbtc/Dbtc.hpp,419,alignas_literal,alignas(64) AttributeBuffer_pool c_theAttributeBufferPool;,"  416     */
+  417    TcDefinedTriggerData_list c_theDefinedTriggers;
+  418  
+  419>   alignas(64) AttributeBuffer_pool c_theAttributeBufferPool;
+  420    RSS_AP_SNAPSHOT(c_theAttributeBufferPool);
+  421  
+  422    typedef DataBufferSegment<5, RT_DBTC_COMMIT_ACK_MARKER_BUFFER>",yes
+linux,drivers/net/ethernet/intel/idpf/idpf_txrx.h,778,kernel_group,__cacheline_group_begin_aligned(read_write);,"  775  	u32 thresh;
+  776  	__cacheline_group_end_aligned(read_mostly);
+  777  
+  778> 	__cacheline_group_begin_aligned(read_write);
+  779  	u32 next_to_use;
+  780  	u32 next_to_clean;
+  781  	u32 next_to_alloc;",yes
+dpdk,drivers/event/opdl/opdl_ring.c,102,alignas_named,alignas(RTE_CACHE_LINE_SIZE) struct shared_state shared;,"   99  	/* Direct dependencies of this stage */
+  100  	struct shared_state **deps;
+  101  	/* Other stages read this! */
+  102> 	alignas(RTE_CACHE_LINE_SIZE) struct shared_state shared;
+  103  	/* For managing disclaims in multi-threaded processing stages */
+  104  	alignas(RTE_CACHE_LINE_SIZE) struct claim_manager pending_disclaims[RTE_MAX_LCORE];
+  105  	uint32_t shadow_head;  /* Shadow head for single-thread operation */",yes
+linux,drivers/macintosh/rack-meter.c,55,kernel_aligned,} ____cacheline_aligned;,"   52  	u64			prev_wall;
+   53  	u64			prev_idle;
+   54  	int			zero;
+   55> } ____cacheline_aligned;
+   56  
+   57  struct rackmeter {
+   58  	struct macio_dev		*mdev;",no
+linux,include/net/sch_generic.h,113,kernel_aligned,__cacheline_group_begin(Qdisc_read_mostly) ____cacheline_aligned;,"  110  	refcount_t		refcnt;
+  111  
+  112  	/* Cache line potentially dirtied in dequeue() or __netif_reschedule(). */
+  113> 	__cacheline_group_begin(Qdisc_read_mostly) ____cacheline_aligned;
+  114  		struct sk_buff_head	gso_skb;
+  115  		struct Qdisc		*next_sched;
+  116  		struct sk_buff_head	skb_bad_txq;",yes
+dpdk,app/test-flow-perf/actions_gen.c,237,alignas_named,static alignas(RTE_CACHE_LINE_SIZE) struct rte_flow_action_set_mac set_macs[RTE_MAX_LCORE];,"  234  	uint8_t actions_counter,
+  235  	struct additional_para para)
+  236  {
+  237> 	static alignas(RTE_CACHE_LINE_SIZE) struct rte_flow_action_set_mac set_macs[RTE_MAX_LCORE];
+  238  	uint32_t mac = para.counter;
+  239  	uint16_t i;
+  240  ",yes
+dpdk,examples/l3fwd-power/perf_core.c,23,dpdk_aligned,struct __rte_cache_aligned perf_lcore_params {,"   20  static uint16_t hp_lcores[RTE_MAX_LCORE];
+   21  static uint16_t nb_hp_lcores;
+   22  
+   23> struct __rte_cache_aligned perf_lcore_params {
+   24  	uint16_t port_id;
+   25  	uint16_t queue_id;
+   26  	uint8_t high_perf;",yes
+dpdk,lib/eventdev/rte_event_crypto_adapter.c,105,dpdk_aligned,struct __rte_cache_aligned crypto_device_info {,"  102  };
+  103  
+  104  /* Per crypto device information */
+  105> struct __rte_cache_aligned crypto_device_info {
+  106  	/* Pointer to cryptodev */
+  107  	struct rte_cryptodev *dev;
+  108  	/* Pointer to queue pair info */",yes
+linux,arch/powerpc/include/asm/lppaca.h,144,kernel_aligned,} ____cacheline_aligned;,"  141  		__be64     esid;
+  142  		__be64	vsid;
+  143  	} save_area[SLB_NUM_BOLTED];
+  144> } ____cacheline_aligned;
+  145  
+  146  #endif /* CONFIG_PPC_BOOK3S */
+  147  #endif /* __KERNEL__ */",no
+linux,drivers/net/ethernet/sfc/net_driver.h,1193,kernel_aligned,struct delayed_work monitor_work ____cacheline_aligned_in_smp;," 1190  
+ 1191  	/* The following fields may be written more often */
+ 1192  
+ 1193> 	struct delayed_work monitor_work ____cacheline_aligned_in_smp;
+ 1194  	spinlock_t biu_lock;
+ 1195  	int last_irq_cpu;
+ 1196  	spinlock_t stats_lock;",yes
+dpdk,lib/distributor/distributor_private.h,143,alignas_named,alignas(RTE_CACHE_LINE_SIZE) uint16_t,"  140  	 * on the worker core. Second cache line are the backlog
+  141  	 * that are going to go to the worker core.
+  142  	 */
+  143> 	alignas(RTE_CACHE_LINE_SIZE) uint16_t
+  144  		in_flight_tags[RTE_DISTRIB_MAX_WORKERS][RTE_DIST_BURST_SIZE*2];
+  145  
+  146  	alignas(RTE_CACHE_LINE_SIZE) struct rte_distributor_backlog",yes
+folly,folly/codec/hex.h,53,alignas_interf,alignas(hardware_constructive_interference_size) //,"   50  } // namespace detail
+   51  
+   52  /// hex_alphabet_table
+   53> alignas(hardware_constructive_interference_size) //
+   54      constexpr auto hex_alphabet_table = detail::make_hex_alphabet_table();
+   55  
+   56  /// hex_decoded_digit_is_valid",no
+linux,drivers/crypto/ccp/ccp-dev.h,337,kernel_aligned,} ____cacheline_aligned;,"  334  	unsigned long total_rsa_ops;
+  335  	unsigned long total_pt_ops;
+  336  	unsigned long total_ecc_ops;
+  337> } ____cacheline_aligned;
+  338  
+  339  struct ccp_device {
+  340  	struct list_head entry;",unsure
+linux,drivers/gpu/drm/amd/amdgpu/amdgpu_mes_ctx.h,73,pad_field,uint32_t padding[64];,"   70  		/* only for ib test */
+   71  		uint32_t ib[256] __aligned(256);
+   72  
+   73> 		uint32_t padding[64];
+   74  
+   75  	} __aligned(PAGE_SIZE) gfx[AMDGPU_MES_CTX_MAX_GFX_RINGS];
+   76  ",no
+compiler-rt,lib/tsan/rtl/tsan_rtl.h,166,project_aligned,} ALIGNED(SANITIZER_CACHE_LINE_SIZE);,"  163    }
+  164  
+  165    TidSlot();
+  166> } ALIGNED(SANITIZER_CACHE_LINE_SIZE);
+  167  
+  168  #if TSAN_REX_FILTER
+  169  // ReX redundancy filter implementation - lockset optimization.",yes
+linux,drivers/misc/hpilo.h,173,pad_field,u8  pad_1[ILO_CACHE_SZ - (sizeof(u64))];,"  170  	u8  pad_0[ILO_CACHE_SZ - (sizeof(u64) * 4)];
+  171  
+  172  	u64 head;
+  173> 	u8  pad_1[ILO_CACHE_SZ - (sizeof(u64))];
+  174  
+  175  	u64 tail;
+  176  	u8  pad_2[ILO_CACHE_SZ - (sizeof(u64))];",no
+folly,folly/ProducerConsumerQueue.h,53,alignas_interf,struct alignas(hardware_destructive_interference_size) ProducerConsumerQueue {,"   50  /// touch only their own line, plus the other side's line on the occasions
+   51  /// they need to refresh their cached index.
+   52  template <class T>
+   53> struct alignas(hardware_destructive_interference_size) ProducerConsumerQueue {
+   54    using value_type = T;
+   55  
+   56    ProducerConsumerQueue(const ProducerConsumerQueue&) = delete;",yes
+dpdk,drivers/net/xsc/xsc_tx.h,16,dpdk_aligned,struct __rte_cache_aligned xsc_txq_data {,"   13  	uint64_t tx_errors; /* Total number of tx error packets */
+   14  };
+   15  
+   16> struct __rte_cache_aligned xsc_txq_data {
+   17  	uint16_t idx;  /*QP idx */
+   18  	uint16_t port_id;
+   19  	void *cq; /* CQ pointer */",yes
+dpdk,drivers/net/ntnic/include/ntos_drv.h,57,dpdk_aligned,struct __rte_cache_aligned ntnic_rx_queue {,"   54  	struct nthw_memory_descriptor *pkt_buffers;
+   55  };
+   56  
+   57> struct __rte_cache_aligned ntnic_rx_queue {
+   58  	struct flow_queue_id_s queue;    /* queue info - user id and hw queue index */
+   59  	struct rte_mempool *mb_pool; /* mbuf memory pool */
+   60  	uint16_t buf_size; /* Size of data area in mbuf */",yes
+dpdk,lib/stack/rte_stack.h,57,alignas_named,alignas(RTE_CACHE_LINE_SIZE) struct rte_stack_lf_elem elems[];,"   54  	/** LIFO list of free elements */
+   55  	alignas(RTE_CACHE_LINE_SIZE) struct rte_stack_lf_list free;
+   56  	/** LIFO elements */
+   57> 	alignas(RTE_CACHE_LINE_SIZE) struct rte_stack_lf_elem elems[];
+   58  };
+   59  
+   60  /* Structure containing the LIFO, its current length, and a lock for mutual",yes
+linux,drivers/net/ethernet/sfc/falcon/net_driver.h,229,kernel_aligned,unsigned int read_count ____cacheline_aligned_in_smp;,"  226  	int (*handle_tso)(struct ef4_tx_queue*, struct sk_buff*, bool *);
+  227  
+  228  	/* Members used mainly on the completion path */
+  229> 	unsigned int read_count ____cacheline_aligned_in_smp;
+  230  	unsigned int old_write_count;
+  231  	unsigned int merge_events;
+  232  	unsigned int bytes_compl;",yes
+linux,drivers/crypto/ccree/cc_hash.c,92,kernel_aligned,dma_addr_t opad_tmp_keys_dma_addr  ____cacheline_aligned;,"   89  	u8 digest_buff[CC_MAX_HASH_DIGEST_SIZE]  ____cacheline_aligned;
+   90  	u8 opad_tmp_keys_buff[CC_MAX_OPAD_KEYS_SIZE]  ____cacheline_aligned;
+   91  
+   92> 	dma_addr_t opad_tmp_keys_dma_addr  ____cacheline_aligned;
+   93  	dma_addr_t digest_buff_dma_addr;
+   94  	/* use for hmac with key large then mode block size */
+   95  	struct hash_key_req_ctx key_params;",no
+linux,drivers/md/dm-vdo/indexer/sparse-cache.c,89,kernel_aligned_to,struct __aligned(L1_CACHE_BYTES) cached_index_counters {,"   86   * them on different cache lines from the chapter fields that are accessed far more often than they
+   87   * are updated.
+   88   */
+   89> struct __aligned(L1_CACHE_BYTES) cached_index_counters {
+   90  	u64 consecutive_misses;
+   91  };
+   92  ",yes
+dpdk,lib/member/rte_member.h,133,dpdk_aligned,struct __rte_cache_aligned rte_member_setsum {,"  130  				   const void *key);
+  131  
+  132  /** @internal setsummary structure. */
+  133> struct __rte_cache_aligned rte_member_setsum {
+  134  	enum rte_member_setsum_type type; /* Type of the set summary. */
+  135  	uint32_t key_len;		/* Length of key. */
+  136  	uint32_t prim_hash_seed;	/* Primary hash function seed. */",yes
+dpdk,drivers/net/hns3/hns3_ethdev.h,797,alignas_named,alignas(RTE_CACHE_LINE_SIZE) uint32_t ptype[HNS3_PTYPE_NUM];,"  794  	 * descriptor, it functions only when firmware report the capability of
+  795  	 * HNS3_CAPS_RXD_ADV_LAYOUT_B and driver enabled it.
+  796  	 */
+  797> 	alignas(RTE_CACHE_LINE_SIZE) uint32_t ptype[HNS3_PTYPE_NUM];
+  798  };
+  799  
+  800  #define HNS3_FIXED_MAX_TQP_NUM_MODE		0",no
+dpdk,drivers/net/txgbe/txgbe_ptypes.c,50,alignas_named,static alignas(RTE_CACHE_LINE_SIZE) u32 txgbe_ptype_lookup[TXGBE_PTID_MAX] = {,"   47  #define RTE_PTYPE_INNER_L3_NONE         0
+   48  #define RTE_PTYPE_INNER_L4_NONE         0
+   49  
+   50> static alignas(RTE_CACHE_LINE_SIZE) u32 txgbe_ptype_lookup[TXGBE_PTID_MAX] = {
+   51  	/* L2:0-3 L3:4-7 L4:8-11 TUN:12-15 EL2:16-19 EL3:20-23 EL2:24-27 */
+   52  	/* L2: ETH */
+   53  	TPTE(0x10, ETHER,          NONE, NONE, NONE, NONE, NONE, NONE),",no
+linux,kernel/sched/sched.h,495,kernel_aligned,atomic_long_t		load_avg ____cacheline_aligned;,"  492  	 * it in its own cache-line separated from the fields above which
+  493  	 * will also be accessed at each tick.
+  494  	 */
+  495> 	atomic_long_t		load_avg ____cacheline_aligned;
+  496  	atomic_long_t		runnable_avg;
+  497  
+  498  #endif /* CONFIG_FAIR_GROUP_SCHED */",yes
+dpdk,lib/member/rte_member_sketch.c,27,dpdk_aligned,struct __rte_cache_aligned sketch_runtime {,"   24  #include ""rte_member_sketch_avx512.h""
+   25  #endif /* CC_AVX512_SUPPORT */
+   26  
+   27> struct __rte_cache_aligned sketch_runtime {
+   28  	uint64_t pkt_cnt;
+   29  	uint32_t until_next;
+   30  	int converged;",yes
+linux,include/linux/io_uring_types.h,348,kernel_aligned,} ____cacheline_aligned_in_smp;,"  345  
+  346  		enum task_work_notify_mode	notify_method;
+  347  		unsigned			sq_thread_idle;
+  348> 	} ____cacheline_aligned_in_smp;
+  349  
+  350  	/* submission data */
+  351  	struct {",yes
+dpdk,drivers/net/mlx5/mlx5_rx.h,103,dpdk_aligned,struct __rte_cache_aligned mlx5_rxq_data {,"  100  };
+  101  
+  102  /* RX queue descriptor. */
+  103> struct __rte_cache_aligned mlx5_rxq_data {
+  104  	unsigned int csum:1; /* Enable checksum offloading. */
+  105  	unsigned int hw_timestamp:1; /* Enable HW timestamp. */
+  106  	unsigned int rt_timestamp:1; /* Realtime timestamp format. */",yes
+linux,drivers/net/ethernet/ti/netcp.h,73,kernel_aligned,struct u64_stats_sync   syncp_tx ____cacheline_aligned_in_smp;,"   70  	u32                     rx_errors;
+   71  	u32                     rx_dropped;
+   72  
+   73> 	struct u64_stats_sync   syncp_tx ____cacheline_aligned_in_smp;
+   74  	u64_stats_t             tx_packets;
+   75  	u64_stats_t             tx_bytes;
+   76  	u32                     tx_errors;",yes
+compiler-rt,lib/tsan/benchmarks/vts_many_threads_bench.cpp,31,attr_aligned,class __attribute__((aligned(64))) Mutex {,"   28  #include <stdio.h>
+   29  #include <stdlib.h>
+   30  
+   31> class __attribute__((aligned(64))) Mutex {
+   32   public:
+   33    Mutex()  { pthread_mutex_init(&m_, NULL); }
+   34    ~Mutex() { pthread_mutex_destroy(&m_); }",yes
+linux,kernel/bpf/bpf_struct_ops.c,19,kernel_aligned,char data[] ____cacheline_aligned_in_smp;,"   16  
+   17  struct bpf_struct_ops_value {
+   18  	struct bpf_struct_ops_common_value common;
+   19> 	char data[] ____cacheline_aligned_in_smp;
+   20  };
+   21  
+   22  #define MAX_TRAMP_IMAGE_PAGES 8",yes
+dpdk,app/test-flow-perf/actions_gen.c,66,alignas_named,static alignas(RTE_CACHE_LINE_SIZE),"   63  	uint8_t actions_counter,
+   64  	struct additional_para para)
+   65  {
+   66> 	static alignas(RTE_CACHE_LINE_SIZE)
+   67  	    struct rte_flow_action_mark mark_actions[RTE_MAX_LCORE];
+   68  	uint32_t counter = para.counter;
+   69  ",yes
+dpdk,lib/mempool/rte_mempool.h,224,dpdk_aligned,struct __rte_cache_aligned rte_mempool_info {,"  221   * The structure is cache-line aligned to avoid ABI breakages in
+  222   * a number of cases when something small is added.
+  223   */
+  224> struct __rte_cache_aligned rte_mempool_info {
+  225  	/** Number of objects in the contiguous block */
+  226  	unsigned int contig_block_size;
+  227  };",yes
+linux,drivers/net/ethernet/chelsio/cxgb/common.h,249,kernel_aligned,spinlock_t async_lock ____cacheline_aligned;,"  246  	spinlock_t mac_lock;
+  247  
+  248  	/* guards async operations */
+  249> 	spinlock_t async_lock ____cacheline_aligned;
+  250  	u32 pending_thread_intr;
+  251  	u32 slow_intr_mask;
+  252  	int t1powersave;",yes
+linux,fs/quota/dquot.c,128,kernel_aligned,static __cacheline_aligned_in_smp DEFINE_SPINLOCK(dq_list_lock);,"  125   *   s_umount > i_mutex > journal_lock > dquot->dq_lock > dqio_sem
+  126   */
+  127  
+  128> static __cacheline_aligned_in_smp DEFINE_SPINLOCK(dq_list_lock);
+  129  static __cacheline_aligned_in_smp DEFINE_SPINLOCK(dq_state_lock);
+  130  __cacheline_aligned_in_smp DEFINE_SPINLOCK(dq_data_lock);
+  131  EXPORT_SYMBOL(dq_data_lock);",yes
+dpdk,examples/vm_power_manager/power_manager.c,35,dpdk_aligned,struct __rte_cache_aligned freq_info {,"   32  	rte_spinlock_unlock(&global_core_freq_info[core_num].power_sl); \
+   33  } while (0)
+   34  
+   35> struct __rte_cache_aligned freq_info {
+   36  	rte_spinlock_t power_sl;
+   37  	uint32_t freqs[RTE_MAX_LCORE_FREQS];
+   38  	unsigned num_freqs;",yes
+mysql,storage/innobase/include/trx0sys.h,526,pad_field,char pad4[ut::INNODB_CACHE_LINE_SIZE];,"  523    /** @} */
+  524  
+  525    /* Members protected by the trx_sys_t::mutex. */
+  526>   char pad4[ut::INNODB_CACHE_LINE_SIZE];
+  527  
+  528    /** @{ */
+  529  ",yes
+abseil,absl/random/internal/entropy_pool.cc,51,alignas_named,"class alignas(std::max(size_t{ABSL_CACHELINE_SIZE}, size_t{32}))","   48  // At least 32-byte alignment is required for the state_ array on some ARM
+   49  // platforms.  We also want this aligned to a cacheline to eliminate false
+   50  // sharing.
+   51> class alignas(std::max(size_t{ABSL_CACHELINE_SIZE}, size_t{32}))
+   52      RandenPoolEntry {
+   53   public:
+   54    static constexpr size_t kState = RandenTraits::kStateBytes / sizeof(uint32_t);",yes
+mysql,extra/abseil/abseil-cpp-20230802.1/absl/synchronization/mutex.cc,130,project_aligned,struct ABSL_CACHELINE_ALIGNED MutexGlobals {,"  127  // See the comment in GetMutexGlobals() for more information.
+  128  enum DelayMode { AGGRESSIVE, GENTLE };
+  129  
+  130> struct ABSL_CACHELINE_ALIGNED MutexGlobals {
+  131    absl::once_flag once;
+  132    int spinloop_iterations = 0;
+  133    int32_t mutex_sleep_spins[2] = {};",yes
+folly,folly/crypto/detail/MathOperation_Simple.cpp,53,alignas_named,"alignas(kCacheLineSize) std::array<uint64_t, kValsPerCacheLine> results;","   50    static constexpr size_t kValsPerCacheLine = kCacheLineSize / sizeof(uint64_t);
+   51    static_assert(
+   52        kValsPerCacheLine > 0, ""kCacheLineSize must be >= sizeof(uint64_t)"");
+   53>   alignas(kCacheLineSize) std::array<uint64_t, kValsPerCacheLine> results;
+   54  
+   55    if (bitsPerElement == 16 || bitsPerElement == 32) {
+   56      // When bitsPerElement is 16:",no
+linux,lib/debugobjects.c,63,kernel_aligned,} ____cacheline_aligned;,"   60  	unsigned int		min_cnt;
+   61  	unsigned int		max_cnt;
+   62  	struct pool_stats	stats;
+   63> } ____cacheline_aligned;
+   64  
+   65  
+   66  static DEFINE_PER_CPU_ALIGNED(struct obj_pool, pool_pcpu)  = {",yes
+linux,arch/x86/include/asm/fpu/types.h,221,pad_field,u8				pad_to_64_bytes[64];,"  218  struct mpx_bndcsr_state {
+  219  	union {
+  220  		struct mpx_bndcsr		bndcsr;
+  221> 		u8				pad_to_64_bytes[64];
+  222  	};
+  223  } __packed;
+  224  ",no
+dpdk,drivers/event/cnxk/cnxk_eventdev.h,161,dpdk_aligned,struct __rte_cache_aligned cnxk_sso_hws_cookie {,"  158  	uint8_t tx_adptr_data[];
+  159  };
+  160  
+  161> struct __rte_cache_aligned cnxk_sso_hws_cookie {
+  162  	const struct rte_eventdev *event_dev;
+  163  	bool configured;
+  164  };",yes
+dpdk,lib/mempool/rte_mempool.h,90,dpdk_aligned,struct __rte_cache_aligned rte_mempool_cache {,"   87  /**
+   88   * A structure that stores a per-core object cache.
+   89   */
+   90> struct __rte_cache_aligned rte_mempool_cache {
+   91  	uint32_t size;	      /**< Size of the cache */
+   92  	uint32_t flushthresh; /**< Obsolete; for API/ABI compatibility purposes only */
+   93  	uint32_t len;	      /**< Current cache count */",yes
+dpdk,drivers/net/ngbe/ngbe_rxtx.c,934,alignas_named,static alignas(RTE_CACHE_LINE_SIZE) uint64_t ip_rss_types_map[16] = {,"  931  static inline uint64_t
+  932  ngbe_rxd_pkt_info_to_pkt_flags(uint32_t pkt_info)
+  933  {
+  934> 	static alignas(RTE_CACHE_LINE_SIZE) uint64_t ip_rss_types_map[16] = {
+  935  		0, RTE_MBUF_F_RX_RSS_HASH, RTE_MBUF_F_RX_RSS_HASH, RTE_MBUF_F_RX_RSS_HASH,
+  936  		0, RTE_MBUF_F_RX_RSS_HASH, 0, RTE_MBUF_F_RX_RSS_HASH,
+  937  		RTE_MBUF_F_RX_RSS_HASH, 0, 0, 0,",no
+linux,arch/loongarch/include/asm/cpu-info.h,65,kernel_aligned_to,} __aligned(SMP_CACHE_BYTES);,"   62  	unsigned int		watch_dreg_count;   /* Number data breakpoints */
+   63  	unsigned int		watch_ireg_count;   /* Number instruction breakpoints */
+   64  	unsigned int		watch_reg_use_cnt; /* min(NUM_WATCH_REGS, watch_dreg_count + watch_ireg_count), Usable by ptrace */
+   65> } __aligned(SMP_CACHE_BYTES);
+   66  
+   67  extern struct cpuinfo_loongarch cpu_data[];
+   68  #define boot_cpu_data cpu_data[0]",yes
+onetbb,include/oneapi/tbb/concurrent_priority_queue.h,406,pad_field,char padding2[max_nfs_size - (2*sizeof(size_type)) - sizeof(Compare)];,"  403      Compare my_compare;
+  404  
+  405      // Padding added to avoid false sharing
+  406>     char padding2[max_nfs_size - (2*sizeof(size_type)) - sizeof(Compare)];
+  407      //! Storage for the heap of elements in queue, plus unheapified elements
+  408      /** data has the following structure:
+  409  ",yes

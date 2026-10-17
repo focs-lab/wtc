@@ -1,0 +1,601 @@
+codebase,file,line,text,context,label
+compiler-rt,lib/scudo/standalone/release.h,109,"SCUDO_CACHE_LINE_SIZE),","  107    static_assert(StaticBufferCount < SCUDO_WORDSIZE, """");
+  108    static_assert(isAligned(StaticBufferNumElements * sizeof(uptr),
+  109>                           SCUDO_CACHE_LINE_SIZE),
+  110                  """");
+  111  ",no
+compiler-rt,lib/xray/xray_buffer_queue.cpp,62,unsigned char Storage[kCacheLineSize];,"   60    union {
+   61      atomic_uint64_t Extents;
+   62>     unsigned char Storage[kCacheLineSize];
+   63    };
+   64  };",yes
+compiler-rt,lib/builtins/clear_cache.c,150,for (addr = xstart & ~(icache_line_size - 1); addr < xend;,"  148    if (((ctr_el0 >> 29) & 0x1) == 0x0) {
+  149      const size_t icache_line_size = 4 << ((ctr_el0 >> 0) & 15);
+  150>     for (addr = xstart & ~(icache_line_size - 1); addr < xend;
+  151           addr += icache_line_size)
+  152        __asm __volatile(""ic ivau, %0"" ::""r""(addr));",no
+compiler-rt,lib/xray/xray_allocator.h,195,"reinterpret_cast<uintptr_t>(AlignedNextBlock), kCacheLineSize);","  193        auto BackingStoreNum = reinterpret_cast<uintptr_t>(BackingStore);
+  194        auto AlignedNextBlockNum = nearest_boundary(
+  195>           reinterpret_cast<uintptr_t>(AlignedNextBlock), kCacheLineSize);
+  196        if (diff(AlignedNextBlockNum, BackingStoreNum) > ptrdiff_t(MaxMemory)) {
+  197          deallocateBuffer(BackingStore, MaxMemory);",no
+compiler-rt,lib/xray/xray_allocator.h,208,"DCHECK_EQ(reinterpret_cast<uintptr_t>(AlignedNextBlock) % kCacheLineSize,","  206  
+  207        // Assert that AlignedNextBlock is cache-line aligned.
+  208>       DCHECK_EQ(reinterpret_cast<uintptr_t>(AlignedNextBlock) % kCacheLineSize,
+  209                  0);
+  210      }",no
+compiler-rt,lib/builtins/clear_cache.c,151,addr += icache_line_size),"  149      const size_t icache_line_size = 4 << ((ctr_el0 >> 0) & 15);
+  150      for (addr = xstart & ~(icache_line_size - 1); addr < xend;
+  151>          addr += icache_line_size)
+  152        __asm __volatile(""ic ivau, %0"" ::""r""(addr));
+  153      __asm __volatile(""dsb ish"");",no
+compiler-rt,lib/scudo/standalone/primary64.h,558,char Padding[SCUDO_CACHE_LINE_SIZE -,"  556    };
+  557    struct RegionInfo : UnpaddedRegionInfo {
+  558>     char Padding[SCUDO_CACHE_LINE_SIZE -
+  559                   (sizeof(UnpaddedRegionInfo) % SCUDO_CACHE_LINE_SIZE)] = {};
+  560    };",yes
+compiler-rt,lib/sanitizer_common/sanitizer_platform_limits_posix.h,586,uptr pad[128 / sizeof(uptr)];,"  584  #else
+  585    // Require uptr, because siginfo_t is always pointer-size aligned on Linux.
+  586>   uptr pad[128 / sizeof(uptr)];
+  587  #endif
+  588  };",no
+compiler-rt,lib/tsan/rtl/tsan_rtl.cpp,60,static char ctx_placeholder[sizeof(Context)] ALIGNED(SANITIZER_CACHE_LINE_SIZE);,"   58      SANITIZER_CACHE_LINE_SIZE);
+   59  #endif
+   60> static char ctx_placeholder[sizeof(Context)] ALIGNED(SANITIZER_CACHE_LINE_SIZE);
+   61  Context *ctx;
+   62  ",yes
+compiler-rt,lib/scudo/standalone/primary64.h,559,(sizeof(UnpaddedRegionInfo) % SCUDO_CACHE_LINE_SIZE)] = {};,"  557    struct RegionInfo : UnpaddedRegionInfo {
+  558      char Padding[SCUDO_CACHE_LINE_SIZE -
+  559>                  (sizeof(UnpaddedRegionInfo) % SCUDO_CACHE_LINE_SIZE)] = {};
+  560    };
+  561    static_assert(sizeof(RegionInfo) % SCUDO_CACHE_LINE_SIZE == 0, """");",no
+compiler-rt,lib/xray/xray_buffer_queue.h,45,char Buffer[kCacheLineSize];,"   43      union {
+   44        atomic_uint64_t RefCount;
+   45>       char Buffer[kCacheLineSize];
+   46      };
+   47  ",yes
+compiler-rt,lib/scudo/standalone/primary32.h,411,"static_assert(sizeof(SizeClassInfo) % SCUDO_CACHE_LINE_SIZE == 0, """");","  409      ReleaseToOsInfo ReleaseInfo GUARDED_BY(Mutex);
+  410    };
+  411>   static_assert(sizeof(SizeClassInfo) % SCUDO_CACHE_LINE_SIZE == 0, """");
+  412  
+  413    uptr computeRegionId(uptr Mem) {",no
+compiler-rt,lib/xray/xray_interface_internal.h,31,unsigned char Padding[13]; // Need 32 bytes,"   29    unsigned char AlwaysInstrument;
+   30    unsigned char Version;
+   31>   unsigned char Padding[13]; // Need 32 bytes
+   32    uint64_t function() const {
+   33      // The target address is relative to the location of the Function variable.",no
+compiler-rt,lib/sanitizer_common/sanitizer_platform_limits_solaris.h,70,int pad[4];,"   68    int key;                    // key_t
+   69  #if !defined(_LP64)
+   70>   int pad[4];
+   71  #endif
+   72  };",no
+compiler-rt,lib/xray/xray_allocator.h,168,"static constexpr auto Size = nearest_boundary(N, kCacheLineSize);","  166    struct Block {
+  167      /// Compute the minimum cache-line size multiple that is >= N.
+  168>     static constexpr auto Size = nearest_boundary(N, kCacheLineSize);
+  169      void *Data;
+  170    };",no
+compiler-rt,lib/tsan/rtl/tsan_platform_mac.cpp,50,SANITIZER_CACHE_LINE_SIZE);,"   48  #if !SANITIZER_GO
+   49  static char main_thread_state[sizeof(ThreadState)] ALIGNED(
+   50>     SANITIZER_CACHE_LINE_SIZE);
+   51  static ThreadState *dead_thread_state;
+   52  static pthread_key_t thread_state_key;",yes
+compiler-rt,lib/sanitizer_common/sanitizer_allocator_primary32.h,286,COMPILER_CHECK(sizeof(SizeClassInfo) % kCacheLineSize == 0);,"  284      u32 rand_state;
+  285    };
+  286>   COMPILER_CHECK(sizeof(SizeClassInfo) % kCacheLineSize == 0);
+  287  
+  288    uptr ComputeRegionId(uptr mem) const {",no
+compiler-rt,lib/builtins/clear_cache.c,139,const size_t dcache_line_size = 4 << ((ctr_el0 >> 16) & 15);,"  137    // is not required for instruction to data coherence.
+  138    if (((ctr_el0 >> 28) & 0x1) == 0x0) {
+  139>     const size_t dcache_line_size = 4 << ((ctr_el0 >> 16) & 15);
+  140      for (addr = xstart & ~(dcache_line_size - 1); addr < xend;
+  141           addr += dcache_line_size)",no
+compiler-rt,lib/xray/xray_interface_internal.h,46,unsigned char Padding[5]; // Need 16 bytes,"   44    unsigned char AlwaysInstrument;
+   45    unsigned char Version;
+   46>   unsigned char Padding[5]; // Need 16 bytes
+   47    uint32_t function() const {
+   48      // The target address is relative to the location of the Function variable.",no
+compiler-rt,lib/sanitizer_common/sanitizer_common.h,41,const uptr kCacheLineSize = SANITIZER_CACHE_LINE_SIZE;,"   39  const uptr kWordSizeInBits = 8 * kWordSize;
+   40  
+   41> const uptr kCacheLineSize = SANITIZER_CACHE_LINE_SIZE;
+   42  
+   43  const uptr kMaxPathLength = 4096;",no
+compiler-rt,lib/scudo/standalone/primary64.h,561,"static_assert(sizeof(RegionInfo) % SCUDO_CACHE_LINE_SIZE == 0, """");","  559                   (sizeof(UnpaddedRegionInfo) % SCUDO_CACHE_LINE_SIZE)] = {};
+  560    };
+  561>   static_assert(sizeof(RegionInfo) % SCUDO_CACHE_LINE_SIZE == 0, """");
+  562  
+  563    RegionInfo *getRegionInfo(uptr ClassId) {",no
+compiler-rt,include/xray/xray_records.h,112,uint8_t Padding[2] = {};,"  110  
+  111    // Add a few bytes to pad.
+  112>   uint8_t Padding[2] = {};
+  113  
+  114    // The function ID for the record.",no
+compiler-rt,lib/tsan/rtl/tsan_rtl.h,271,} ALIGNED(SANITIZER_CACHE_LINE_SIZE);,"  269    LocksetContext filter_ctx;
+  270  #endif
+  271> } ALIGNED(SANITIZER_CACHE_LINE_SIZE);
+  272  
+  273  #if !SANITIZER_GO",yes
+compiler-rt,lib/sanitizer_common/sanitizer_allocator_primary32.h,281,struct ALIGNED(SANITIZER_CACHE_LINE_SIZE) SizeClassInfo {,"  279    static const uptr kNumPossibleRegions = kSpaceSize / kRegionSize;
+  280  
+  281>   struct ALIGNED(SANITIZER_CACHE_LINE_SIZE) SizeClassInfo {
+  282      StaticSpinMutex mutex;
+  283      IntrusiveList<TransferBatch> free_list;",yes
+compiler-rt,lib/builtins/clear_cache.c,140,for (addr = xstart & ~(dcache_line_size - 1); addr < xend;,"  138    if (((ctr_el0 >> 28) & 0x1) == 0x0) {
+  139      const size_t dcache_line_size = 4 << ((ctr_el0 >> 16) & 15);
+  140>     for (addr = xstart & ~(dcache_line_size - 1); addr < xend;
+  141           addr += dcache_line_size)
+  142        __asm __volatile(""dc cvau, %0"" ::""r""(addr));",no
+dpdk,drivers/net/dpaa2/mc/fsl_dpni_cmd.h,895,uint8_t pad0[7];,"  893  struct dpni_enable_sw_sequence {
+  894  	uint8_t dest;
+  895> 	uint8_t pad0[7];
+  896  	uint16_t ss_offset;
+  897  	uint16_t hxs;",no
+dpdk,lib/node/node_mbuf_dynfield.c,40,RTE_CACHE_LINE_SIZE);,"   38  						 sizeof(struct node_mbuf_dynfield_mz),
+   39  						 SOCKET_ID_ANY, 0,
+   40> 						 RTE_CACHE_LINE_SIZE);
+   41  		if (!mz) {
+   42  			node_err(""node_mbuf_dyn"", ""rte_memzone_reserve_aligned failed"");",no
+dpdk,lib/rawdev/rte_rawdev.c,550,"RTE_CACHE_LINE_SIZE,","  548  		rawdev->dev_private = rte_zmalloc_socket(""rawdev private"",
+  549  				     dev_priv_size,
+  550> 				     RTE_CACHE_LINE_SIZE,
+  551  				     socket_id);
+  552  		if (!rawdev->dev_private) {",no
+dpdk,examples/ipsec-secgw/sa.c,1103,"sizeof(struct ipsec_sa) * nb_sa, RTE_CACHE_LINE_SIZE);"," 1101  
+ 1102  	sa_ctx = rte_zmalloc(NULL, sizeof(struct sa_ctx) +
+ 1103> 		sizeof(struct ipsec_sa) * nb_sa, RTE_CACHE_LINE_SIZE);
+ 1104  
+ 1105  	if (sa_ctx == NULL) {",no
+dpdk,drivers/ml/cnxk/tvmrt_ml_ops.c,406,"RTE_ALIGN_CEIL(model->tvmrt.params.size, RTE_CACHE_LINE_MIN_SIZE));","  404  	model->tvmrt.burst_xstats =
+  405  		RTE_PTR_ADD(model->tvmrt.params.buffer,
+  406> 			    RTE_ALIGN_CEIL(model->tvmrt.params.size, RTE_CACHE_LINE_MIN_SIZE));
+  407  
+  408  	for (int qp_id = 0; qp_id < cnxk_mldev->mldev->data->nb_queue_pairs; qp_id++) {",no
+dpdk,examples/l3fwd-graph/main.c,673,"RTE_CACHE_LINE_SIZE,","  671  				rte_pktmbuf_pool_create(
+  672  					s, nb_mbuf, MEMPOOL_CACHE_SIZE,
+  673> 					RTE_CACHE_LINE_SIZE,
+  674  					RTE_MBUF_DEFAULT_BUF_SIZE, socketid);
+  675  			if (pktmbuf_pool[portid][socketid] == NULL)",no
+dpdk,examples/ipsec-secgw/esp.c,368,padding[pad_len - 1] = nlp;,"  366  		} else {
+  367  			padding[pad_len - 2] = pad_len - 2;
+  368> 			padding[pad_len - 1] = nlp;
+  369  		}
+  370  		goto done;",no
+dpdk,drivers/net/memif/memif.h,173,MEMIF_CACHELINE_ALIGN_MARK(cacheline1);,"  171  #define MEMIF_RING_FLAG_MASK_INT 1		/**< disable interrupt mode */
+  172  	RTE_ATOMIC(uint16_t) head;			/**< pointer to ring buffer head */
+  173> 	MEMIF_CACHELINE_ALIGN_MARK(cacheline1);
+  174  	RTE_ATOMIC(uint16_t) tail;			/**< pointer to ring buffer tail */
+  175  	MEMIF_CACHELINE_ALIGN_MARK(cacheline2);",yes
+dpdk,drivers/event/dlb2/pf/dlb2_main.c,93,RTE_CACHE_LINE_SIZE);,"   91  
+   92  	dlb2_dev = rte_malloc(""DLB2_PF"", sizeof(struct dlb2_dev),
+   93> 			      RTE_CACHE_LINE_SIZE);
+   94  
+   95  	if (dlb2_dev == NULL) {",no
+dpdk,drivers/net/dpaa2/mc/fsl_dpni_cmd.h,713,uint8_t pad[5];,"  711  	uint8_t tc;
+  712  	uint8_t channel_id;
+  713> 	uint8_t pad[5];
+  714  	uint64_t early_drop_iova;
+  715  };",no
+dpdk,drivers/event/dlb2/dlb2.c,4476,if (num_avail == DLB2_NUM_QES_PER_CACHE_LINE)," 4474  		dlb2_inc_cq_idx(qm_port, num_avail);
+ 4475  
+ 4476> 		if (num_avail == DLB2_NUM_QES_PER_CACHE_LINE)
+ 4477  			num += dlb2_process_dequeue_four_qes(ev_port,
+ 4478  							     qm_port,",no
+dpdk,drivers/common/cnxk/roc_nix_inl_dev.c,1287,"mem = plt_zmalloc(bmap_sz, PLT_CACHE_LINE_SIZE);"," 1285  	bmap_sz =
+ 1286  		plt_bitmap_get_memory_footprint(ROC_NIX_INL_MAX_SOFT_EXP_RNGS);
+ 1287> 	mem = plt_zmalloc(bmap_sz, PLT_CACHE_LINE_SIZE);
+ 1288  	if (mem == NULL) {
+ 1289  		plt_err(""soft expiry ring bmap alloc failed"");",no
+dpdk,drivers/net/sfc/sfc_repr.c,724,"RTE_CACHE_LINE_SIZE, socket_id);","  722  	ret = -ENOMEM;
+  723  	txq = rte_zmalloc_socket(""sfc-repr-txq"", sizeof(*txq),
+  724> 				 RTE_CACHE_LINE_SIZE, socket_id);
+  725  	if (txq == NULL)
+  726  		goto fail_txq_alloc;",no
+dpdk,drivers/net/intel/idpf/base/virtchnl2.h,1149,u8 pad[10];," 1147  	__le32 vport_id;
+ 1148  	__le16 num_queue_groups;
+ 1149> 	u8 pad[10];
+ 1150  	struct virtchnl2_queue_group_info groups[STRUCT_VAR_LEN];
+ 1151  ",no
+dpdk,drivers/net/gve/gve_rss.c,113,"indir_bytes, RTE_CACHE_LINE_SIZE);","  111  	else
+  112  		priv_config->indir = rte_realloc(priv_config->indir,
+  113> 			indir_bytes, RTE_CACHE_LINE_SIZE);
+  114  
+  115  	if (!priv_config->indir)",no
+dpdk,drivers/net/cnxk/cnxk_ethdev.c,405,"mem = plt_zmalloc(bmap_sz, PLT_CACHE_LINE_SIZE);","  403  		/* Allocate a bitmap to alloc and free sa indexes */
+  404  		bmap_sz = plt_bitmap_get_memory_footprint(dev->outb.max_sa);
+  405> 		mem = plt_zmalloc(bmap_sz, PLT_CACHE_LINE_SIZE);
+  406  		if (mem == NULL) {
+  407  			plt_err(""Outbound SA bmap alloc failed"");",no
+dpdk,drivers/crypto/dpaa_sec/dpaa_sec.c,2366,RTE_CACHE_LINE_SIZE);," 2364  
+ 2365  	session->cipher_key.data = rte_zmalloc(NULL, cipher_xform->key.length,
+ 2366> 					       RTE_CACHE_LINE_SIZE);
+ 2367  	if (session->cipher_key.data == NULL && cipher_xform->key.length > 0) {
+ 2368  		DPAA_SEC_ERR(""No Memory for cipher key"");",no
+dpdk,drivers/net/bnx2x/bnx2x_vfpf.h,126,uint8_t pad1[3];,"  124  	uint16_t length;
+  125  	uint8_t status;
+  126> 	uint8_t pad1[3];
+  127  	uint32_t chip_num;
+  128  	uint8_t pad2[4];",no
+dpdk,drivers/common/nitrox/nitrox_device.c,23,"RTE_CACHE_LINE_SIZE,","   21  
+   22  	ndev = rte_zmalloc_socket(""nitrox device"", sizeof(*ndev),
+   23> 				   RTE_CACHE_LINE_SIZE,
+   24  				   pdev->device.numa_node);
+   25  	if (!ndev)",no
+dpdk,drivers/net/intel/ice/ice_rxtx.c,1685,"RTE_CACHE_LINE_SIZE, socket_id);"," 1683  
+ 1684  		txq->tsq = rte_zmalloc_socket(NULL, sizeof(struct ice_txtime),
+ 1685> 				RTE_CACHE_LINE_SIZE, socket_id);
+ 1686  		if (!txq->tsq) {
+ 1687  			ice_tx_queue_release(txq);",no
+dpdk,drivers/common/cnxk/roc_dev.c,1593,} else if (PLT_CACHE_LINE_SIZE != 64) {," 1591  			plt_warn(""Cache line size of %d might affect performance"",
+ 1592  				 PLT_CACHE_LINE_SIZE);
+ 1593> 		} else if (PLT_CACHE_LINE_SIZE != 64) {
+ 1594  			plt_err(""Cache line size of %d is wrong for CN10K"", PLT_CACHE_LINE_SIZE);
+ 1595  			return false;",no
+dpdk,lib/eal/common/eal_common_memzone.c,155,align = RTE_CACHE_LINE_SIZE;,"  153  	/* alignment less than cache size is not allowed */
+  154  	if (align < RTE_CACHE_LINE_SIZE)
+  155> 		align = RTE_CACHE_LINE_SIZE;
+  156  
+  157  	/* align length on cache boundary. Check for overflow before doing so */",no
+dpdk,drivers/net/mlx5/mlx5_tx.h,2147,start = (~start + 1) & (RTE_CACHE_LINE_SIZE - 1);," 2145  		 */
+ 2146  do_align:
+ 2147> 		start = (~start + 1) & (RTE_CACHE_LINE_SIZE - 1);
+ 2148  		if (unlikely(start)) {
+ 2149  			start += inlen;",no
+dpdk,drivers/net/bnx2x/bnx2x_vfpf.c,465,rxq_init->cache_line_log = BNX2X_RX_ALIGN_SHIFT;,"  463  	rxq_init->flags = flags;
+  464  	rxq_init->stat_id = -1;
+  465> 	rxq_init->cache_line_log = BNX2X_RX_ALIGN_SHIFT;
+  466  }
+  467  ",no
+dpdk,examples/vhost_blk/vhost_blk.c,819,"ctrlr = rte_zmalloc(NULL, sizeof(*ctrlr), RTE_CACHE_LINE_SIZE);","  817  	vhost_dev_install_rte_compat_hooks(dev_pathname);
+  818  
+  819> 	ctrlr = rte_zmalloc(NULL, sizeof(*ctrlr), RTE_CACHE_LINE_SIZE);
+  820  	if (!ctrlr) {
+  821  		rte_vhost_driver_unregister(dev_pathname);",no
+folly,folly/crypto/detail/MathOperation_AVX2.cpp,111,"DCHECK_EQ(0, b1.size() % kCacheLineSize);","  109    DCHECK_EQ(b1.size(), b2.size());
+  110    DCHECK_EQ(b1.size(), out.size());
+  111>   DCHECK_EQ(0, b1.size() % kCacheLineSize);
+  112    static_assert(
+  113        kCacheLineSize % sizeof(__m256i) == 0,",no
+folly,folly/crypto/detail/MathOperation_AVX2.cpp,178,kValsPerCacheLine>,"  176    alignas(kCacheLineSize) std::array<
+  177        long long __attribute__((__vector_size__(sizeof(__m256i)))),
+  178>       kValsPerCacheLine>
+  179        results;
+  180    __m256i mask = _mm256_set1_epi64x(dataMask);",no
+folly,folly/synchronization/MicroSpinLock.h,131,char padding[hardware_destructive_interference_size - sizeof(T)];,"  129      PaddedSpinLock() : lock() {}
+  130      T lock;
+  131>     char padding[hardware_destructive_interference_size - sizeof(T)];
+  132    };
+  133    static_assert(",yes
+folly,folly/crypto/detail/MathOperation_Simple.cpp,178,static constexpr size_t kValsPerCacheLine = kCacheLineSize / sizeof(uint64_t);,"  176        kCacheLineSize % sizeof(uint64_t) == 0,
+  177        ""kCacheLineSize must be a multiple of sizeof(uint64_t)"");
+  178>   static constexpr size_t kValsPerCacheLine = kCacheLineSize / sizeof(uint64_t);
+  179    static_assert(
+  180        kValsPerCacheLine > 0, ""kCacheLineSize must be >= sizeof(uint64_t)"");",no
+folly,folly/lang/Align.h,205,constexpr std::size_t cacheline_align_v = has_extended_alignment,"  203  //  may be used with alignas, since hardware_constructive_interference_size may
+  204  //  be too large on some platforms to be used with alignas.
+  205> constexpr std::size_t cacheline_align_v = has_extended_alignment
+  206      ? hardware_constructive_interference_size
+  207      : max_align_v;",no
+folly,folly/crypto/detail/MathOperation_AVX2.cpp,64,alignas(kCacheLineSize) std::array<,"   62    // gcc issues 'ignoring attributes on template argument' warning if
+   63    // __m256i is used below, so have to type explicitly
+   64>   alignas(kCacheLineSize) std::array<
+   65        long long __attribute__((__vector_size__(sizeof(__m256i)))),
+   66        kValsPerCacheLine>",no
+folly,folly/lang/Align.h,162,constexpr std::size_t hardware_constructive_interference_size =,"  160  FOLLY_GCC_DISABLE_WARNING(""-Winterference-size"")
+  161  
+  162> constexpr std::size_t hardware_constructive_interference_size =
+  163      std::hardware_constructive_interference_size;
+  164  ",no
+folly,folly/crypto/detail/MathOperation_AVX2.cpp,88,for (size_t pos = 0; pos < b1.size(); pos += kCacheLineSize) {,"   86    } else {
+   87      __m256i mask = _mm256_set1_epi64x(dataMask);
+   88>     for (size_t pos = 0; pos < b1.size(); pos += kCacheLineSize) {
+   89        const __m256i* v1p = reinterpret_cast<const __m256i*>(b1.data() + pos);
+   90        const __m256i* v2p = reinterpret_cast<const __m256i*>(b2.data() + pos);",no
+folly,folly/compression/elias_fano/EliasFanoCoding.h,817,__builtin_prefetch(addr + kCacheLineSize);,"  815      const auto addr = lower_ + (upperPosition * numLowerBits_ / 8);
+  816      __builtin_prefetch(addr);
+  817>     __builtin_prefetch(addr + kCacheLineSize);
+  818    }
+  819  ",no
+folly,folly/fibers/Fiber.h,194,"using Buffer = folly::aligned_storage_t<kBufferSize, cacheline_align_v>;","  192  
+  193      static constexpr size_t kBufferSize = 128;
+  194>     using Buffer = folly::aligned_storage_t<kBufferSize, cacheline_align_v>;
+  195      struct VTable {
+  196        std::type_info const* type;",unsure
+folly,folly/crypto/detail/MathOperation_SSE2.cpp,166,"kCacheLineSize % sizeof(__m128i) == 0,","  164    DCHECK_EQ(0, buf.size() % kCacheLineSize);
+  165    static_assert(
+  166>       kCacheLineSize % sizeof(__m128i) == 0,
+  167        ""kCacheLineSize must be a multiple of sizeof(__m128i)"");
+  168    static constexpr size_t kValsPerCacheLine = kCacheLineSize / sizeof(__m128i);",no
+folly,folly/crypto/detail/MathOperation_AVX2.cpp,56,"kCacheLineSize % sizeof(__m256i) == 0,","   54    DCHECK_EQ(0, b1.size() % kCacheLineSize);
+   55    static_assert(
+   56>       kCacheLineSize % sizeof(__m256i) == 0,
+   57        ""kCacheLineSize must be a multiple of sizeof(__m256i)"");
+   58    static constexpr size_t kValsPerCacheLine = kCacheLineSize / sizeof(__m256i);",no
+folly,folly/crypto/detail/MathOperation_SSE2.cpp,63,alignas(kCacheLineSize) std::array<,"   61    // gcc issues 'ignoring attributes on template argument' warning if
+   62    // __m128i is used below, so have to type explicitly
+   63>   alignas(kCacheLineSize) std::array<
+   64        long long __attribute__((__vector_size__(sizeof(__m128i)))),
+   65        kValsPerCacheLine>",no
+folly,folly/crypto/detail/MathOperation_Simple.cpp,88,for (size_t pos = 0; pos < b1.size(); pos += kCacheLineSize) {,"   86      }
+   87    } else {
+   88>     for (size_t pos = 0; pos < b1.size(); pos += kCacheLineSize) {
+   89        auto v1p = reinterpret_cast<const uint64_t*>(b1.data() + pos);
+   90        auto v2p = reinterpret_cast<const uint64_t*>(b2.data() + pos);",no
+folly,folly/crypto/detail/MathOperation_SSE2.cpp,116,"kValsPerCacheLine > 0, ""kCacheLineSize must be >= sizeof(__m128i)"");","  114    static constexpr size_t kValsPerCacheLine = kCacheLineSize / sizeof(__m128i);
+  115    static_assert(
+  116>       kValsPerCacheLine > 0, ""kCacheLineSize must be >= sizeof(__m128i)"");
+  117    // gcc issues 'ignoring attributes on template argument' warning if
+  118    // __m128i is used below, so have to type explicitly",no
+folly,folly/crypto/detail/MathOperation_AVX2.cpp,115,static constexpr size_t kValsPerCacheLine = kCacheLineSize / sizeof(__m256i);,"  113        kCacheLineSize % sizeof(__m256i) == 0,
+  114        ""kCacheLineSize must be a multiple of sizeof(__m256i)"");
+  115>   static constexpr size_t kValsPerCacheLine = kCacheLineSize / sizeof(__m256i);
+  116    static_assert(
+  117        kValsPerCacheLine > 0, ""kCacheLineSize must be >= sizeof(__m256i)"");",no
+folly,folly/crypto/detail/MathOperation_SSE2.cpp,112,"kCacheLineSize % sizeof(__m128i) == 0,","  110    DCHECK_EQ(0, b1.size() % kCacheLineSize);
+  111    static_assert(
+  112>       kCacheLineSize % sizeof(__m128i) == 0,
+  113        ""kCacheLineSize must be a multiple of sizeof(__m128i)"");
+  114    static constexpr size_t kValsPerCacheLine = kCacheLineSize / sizeof(__m128i);",no
+folly,folly/crypto/detail/MathOperation_Simple.cpp,174,"DCHECK_EQ(0, buf.size() % kCacheLineSize);","  172    }
+  173  
+  174>   DCHECK_EQ(0, buf.size() % kCacheLineSize);
+  175    static_assert(
+  176        kCacheLineSize % sizeof(uint64_t) == 0,",no
+folly,folly/crypto/detail/MathOperation_Simple.cpp,52,"kValsPerCacheLine > 0, ""kCacheLineSize must be >= sizeof(uint64_t)"");","   50    static constexpr size_t kValsPerCacheLine = kCacheLineSize / sizeof(uint64_t);
+   51    static_assert(
+   52>       kValsPerCacheLine > 0, ""kCacheLineSize must be >= sizeof(uint64_t)"");
+   53    alignas(kCacheLineSize) std::array<uint64_t, kValsPerCacheLine> results;
+   54  ",no
+folly,folly/concurrency/PriorityUnboundedQueueSet.h,167,"size_t LgAlign = constexpr_log2(hardware_destructive_interference_size),","  165      bool MayBlock,
+  166      size_t LgSegmentSize = 8,
+  167>     size_t LgAlign = constexpr_log2(hardware_destructive_interference_size),
+  168      template <typename> class Atom = std::atomic>
+  169  using PriorityUMPSCQueueSet = PriorityUnboundedQueueSet<",yes
+folly,folly/synchronization/DistributedMutex-inl.h,360,"std::array<std::uint8_t, hardware_destructive_interference_size> padding2;","  358      folly::aligned_storage_t<48, 8> storage_;
+  359    };
+  360>   std::array<std::uint8_t, hardware_destructive_interference_size> padding2;
+  361  };
+  362  ",yes
+folly,folly/concurrency/PriorityUnboundedQueueSet.h,152,"size_t LgAlign = constexpr_log2(hardware_destructive_interference_size),","  150      bool MayBlock,
+  151      size_t LgSegmentSize = 8,
+  152>     size_t LgAlign = constexpr_log2(hardware_destructive_interference_size),
+  153      template <typename> class Atom = std::atomic>
+  154  using PriorityUSPSCQueueSet = PriorityUnboundedQueueSet<",yes
+folly,folly/lang/Align.h,186,constexpr std::size_t hardware_destructive_interference_size =,"  184  //
+  185  //  mimic: std::hardware_destructive_interference_size, C++17
+  186> constexpr std::size_t hardware_destructive_interference_size =
+  187      (kIsArchArm || kIsArchS390X) ? 64 : 128;
+  188  static_assert(hardware_destructive_interference_size >= max_align_v, ""math?"");",no
+folly,folly/crypto/detail/MathOperation_AVX2.cpp,114,"""kCacheLineSize must be a multiple of sizeof(__m256i)"");","  112    static_assert(
+  113        kCacheLineSize % sizeof(__m256i) == 0,
+  114>       ""kCacheLineSize must be a multiple of sizeof(__m256i)"");
+  115    static constexpr size_t kValsPerCacheLine = kCacheLineSize / sizeof(__m256i);
+  116    static_assert(",no
+folly,folly/crypto/detail/MathOperation_SSE2.cpp,182,for (size_t i = 0; i < kValsPerCacheLine; ++i) {,"  180    for (size_t pos = 0; pos < buf.size(); pos += kCacheLineSize) {
+  181      auto p = reinterpret_cast<const __m128i*>(buf.data() + pos);
+  182>     for (size_t i = 0; i < kValsPerCacheLine; ++i) {
+  183        results[i] = _mm_and_si128(_mm_load_si128(p + i), mask);
+  184      }",no
+mysql,storage/perfschema/pfs_instr.cc,101,static PFS_cacheline_atomic_uint64 thread_internal_id_counter;,"   99  std::atomic<PFS_memory_shared_stat *> global_instr_class_memory_array{nullptr};
+  100  
+  101> static PFS_cacheline_atomic_uint64 thread_internal_id_counter;
+  102  
+  103  /** Hash table for instrumented files. */",yes
+mysql,storage/innobase/include/ut0guarded.h,44,Cacheline_padded<IB_mutex> mutex{latch_id};,"   42  class Guarded {
+   43  #ifndef UNIV_LIBRARY
+   44>   Cacheline_padded<IB_mutex> mutex{latch_id};
+   45  #endif
+   46    Inner inner;",yes
+mysql,storage/perfschema/pfs_global.h,103,PFS_cacheline_atomic_size_t() : m_size_t(0) {},"  101    char m_full_cache_line[PFS_CACHE_LINE_SIZE - sizeof(std::atomic<size_t>)];
+  102  
+  103>   PFS_cacheline_atomic_size_t() : m_size_t(0) {}
+  104  };
+  105  ",no
+mysql,extra/icu/icu-release-73-1/source/stubdata/stubdata.h,37,char padding[8];,"   35      uint8_t magic1, magic2;
+   36      UDataInfo info;
+   37>     char padding[8];
+   38      uint32_t count, reserved;
+   39      /*",no
+mysql,extra/abseil/abseil-cpp-20230802.1/absl/crc/internal/crc_internal.h,31,constexpr int kPrefetchHorizon = ABSL_CACHELINE_SIZE * 4;  // Prefetch this far,"   29  
+   30  // Prefetch constants used in some Extend() implementations
+   31> constexpr int kPrefetchHorizon = ABSL_CACHELINE_SIZE * 4;  // Prefetch this far
+   32  // Shorter prefetch distance for smaller buffers
+   33  constexpr int kPrefetchHorizonMedium = ABSL_CACHELINE_SIZE * 1;",no
+mysql,extra/abseil/abseil-cpp-20230802.1/absl/crc/internal/non_temporal_memcpy.h,75,kCacheLineSize -,"   73    if (reinterpret_cast<uintptr_t>(d) & (kCacheLineSize - 1)) {
+   74      uintptr_t bytes_before_alignment_boundary =
+   75>         kCacheLineSize -
+   76          (reinterpret_cast<uintptr_t>(d) & (kCacheLineSize - 1));
+   77      size_t header_len = (std::min)(bytes_before_alignment_boundary, len);",no
+mysql,storage/perfschema/pfs_events_stages.cc,59,PFS_ALIGNED PFS_cacheline_atomic_uint32 events_stages_history_long_index;,"   57  PFS_ALIGNED bool events_stages_history_long_full = false;
+   58  /** Index in EVENTS_STAGES_HISTORY_LONG circular buffer. */
+   59> PFS_ALIGNED PFS_cacheline_atomic_uint32 events_stages_history_long_index;
+   60  /** EVENTS_STAGES_HISTORY_LONG circular buffer. */
+   61  PFS_ALIGNED PFS_events_stages *events_stages_history_long_array = nullptr;",yes
+mysql,storage/perfschema/pfs_global.h,79,char m_full_cache_line[PFS_CACHE_LINE_SIZE - sizeof(std::atomic<uint32>)];,"   77  struct PFS_cacheline_atomic_uint32 {
+   78    std::atomic<uint32> m_u32;
+   79>   char m_full_cache_line[PFS_CACHE_LINE_SIZE - sizeof(std::atomic<uint32>)];
+   80  
+   81    PFS_cacheline_atomic_uint32() : m_u32(0) {}",yes
+mysql,extra/abseil/abseil-cpp-20230802.1/absl/crc/internal/non_temporal_memcpy.h,97,temp4 = _mm_lddqu_si128(src_cacheline + 3);,"   95        temp2 = _mm_lddqu_si128(src_cacheline + 1);
+   96        temp3 = _mm_lddqu_si128(src_cacheline + 2);
+   97>       temp4 = _mm_lddqu_si128(src_cacheline + 3);
+   98        _mm_stream_si128(dst_cacheline + 0, temp1);
+   99        _mm_stream_si128(dst_cacheline + 1, temp2);",no
+mysql,sql/containers/atomics_array_index_interleaved.h,119,: m_cacheline_size{memory::minimum_cacheline_for<,"  117  template <typename T>
+  118  container::Interleaved_indexing<T>::Interleaved_indexing(size_t size)
+  119>     : m_cacheline_size{memory::minimum_cacheline_for<
+  120            Interleaved_indexing::type>()},
+  121        m_page_size{m_cacheline_size / sizeof(Interleaved_indexing::type)},",unsure
+mysql,extra/abseil/abseil-cpp-20230802.1/absl/crc/internal/non_temporal_memcpy.h,92,while (len >= kCacheLineSize) {,"   90      size_t loops = len / kCacheLineSize;
+   91  
+   92>     while (len >= kCacheLineSize) {
+   93        __m128i temp1, temp2, temp3, temp4;
+   94        temp1 = _mm_lddqu_si128(src_cacheline + 0);",no
+mysql,storage/perfschema/pfs_events_waits.cc,60,PFS_ALIGNED PFS_cacheline_atomic_uint32 events_waits_history_long_index;,"   58  PFS_ALIGNED bool events_waits_history_long_full = false;
+   59  /** Index in EVENTS_WAITS_HISTORY_LONG circular buffer. */
+   60> PFS_ALIGNED PFS_cacheline_atomic_uint32 events_waits_history_long_index;
+   61  /** EVENTS_WAITS_HISTORY_LONG circular buffer. */
+   62  PFS_ALIGNED PFS_events_waits *events_waits_history_long_array = nullptr;",yes
+mysql,sql/dd/impl/types/collation_impl.cc,98,"err |= r->store(Collations::FIELD_PAD_ATTRIBUTE, pad_str[m_pad_attribute]);","   96            bootstrap::DD_VERSION_80012)) {
+   97      String_type pad_str[] = {"""", ""PAD SPACE"", ""NO PAD""};
+   98>     err |= r->store(Collations::FIELD_PAD_ATTRIBUTE, pad_str[m_pad_attribute]);
+   99    } else {
+  100      err |= r->store(Collations::FIELD_PAD_ATTRIBUTE,",no
+mysql,extra/gperftools/gperftools-2.15/src/tcmalloc.cc,2033,"extern ""C"" PERFTOOLS_DLL_DECL CACHELINE_ALIGNED_FN"," 2031  }
+ 2032  
+ 2033> extern ""C"" PERFTOOLS_DLL_DECL CACHELINE_ALIGNED_FN
+ 2034  void* tc_new(size_t size) {
+ 2035    return malloc_fast_path<tcmalloc::cpp_throw_oom>(size);",no
+mysql,extra/abseil/abseil-cpp-20230802.1/absl/crc/internal/crc_internal.h,33,constexpr int kPrefetchHorizonMedium = ABSL_CACHELINE_SIZE * 1;,"   31  constexpr int kPrefetchHorizon = ABSL_CACHELINE_SIZE * 4;  // Prefetch this far
+   32  // Shorter prefetch distance for smaller buffers
+   33> constexpr int kPrefetchHorizonMedium = ABSL_CACHELINE_SIZE * 1;
+   34  static_assert(kPrefetchHorizon >= 64, ""CRCPrefetchHorizon less than loop len"");
+   35  ",no
+mysql,storage/ndb/src/kernel/vm/mt.cpp,8846,const int alligned_offs = NDB_CL_PADSZ((UintPtr)g_thr_repository_mem);," 8844     */
+ 8845    g_thr_repository_mem = new char[sizeof(thr_repository) + NDB_CL];
+ 8846>   const int alligned_offs = NDB_CL_PADSZ((UintPtr)g_thr_repository_mem);
+ 8847    char *cache_alligned_mem = &g_thr_repository_mem[alligned_offs];
+ 8848    require((((UintPtr)cache_alligned_mem) % NDB_CL) == 0);",unsure
+mysql,sql/memory/aligned_atomic.h,312,"m_storage = my_aligned_malloc(m_storage_size, cache_line_size());","  310  memory::Aligned_atomic<T>::Aligned_atomic()
+  311      : m_storage_size{memory::minimum_cacheline_for<std::atomic<T>>()} {
+  312>   m_storage = my_aligned_malloc(m_storage_size, cache_line_size());
+  313    m_underlying = new (this->m_storage) std::atomic<T>();
+  314  }",unsure
+mysql,storage/innobase/include/read0types.h,318,byte pad1[64 - sizeof(node_t)];,"  316  
+  317    /** List of read views in trx_sys */
+  318>   byte pad1[64 - sizeof(node_t)];
+  319    node_t m_view_list;
+  320  };",yes
+mysql,storage/perfschema/pfs_events_waits.h,138,extern PFS_cacheline_atomic_uint32 events_waits_history_long_index;,"  136  
+  137  extern bool events_waits_history_long_full;
+  138> extern PFS_cacheline_atomic_uint32 events_waits_history_long_index;
+  139  extern PFS_events_waits *events_waits_history_long_array;
+  140  extern ulong events_waits_history_long_size;",no
+mysql,storage/perfschema/pfs_global.h,113,char m_full_cache_line[PFS_CACHE_LINE_SIZE - sizeof(std::atomic<T>)];,"  111  struct PFS_cacheline_atomic_ptr {
+  112    std::atomic<T> m_ptr;
+  113>   char m_full_cache_line[PFS_CACHE_LINE_SIZE - sizeof(std::atomic<T>)];
+  114  
+  115    PFS_cacheline_atomic_ptr() : m_ptr(nullptr) {}",yes
+mysql,extra/protobuf/protobuf-24.4/src/google/protobuf/raw_ptr.h,56,"static_assert(alignof(T) <= ABSL_CACHELINE_SIZE, """");","   54    constexpr RawPtr() : RawPtr(kZeroBuffer) {
+   55      static_assert(sizeof(T) <= sizeof(kZeroBuffer), """");
+   56>     static_assert(alignof(T) <= ABSL_CACHELINE_SIZE, """");
+   57    }
+   58    explicit constexpr RawPtr(const void* p) : p_(const_cast<void*>(p)) {}",no
+mysql,extra/abseil/abseil-cpp-20230802.1/absl/crc/internal/crc_memcpy_x86_64.cc,242,while (copy_rounds > kBlocksPerCacheLine) {,"  240  
+  241    // Main loop.
+  242>   while (copy_rounds > kBlocksPerCacheLine) {
+  243      // Prefetch kPrefetchAhead bytes ahead of each pointer.
+  244      for (size_t i = 0; i < kRegions; i++) {",no
+mysql,extra/abseil/abseil-cpp-20230802.1/absl/crc/internal/non_temporal_memcpy.h,160,d += loops * kCacheLineSize;,"  158        len -= kCacheLineSize;
+  159      }
+  160>     d += loops * kCacheLineSize;
+  161      s += loops * kCacheLineSize;
+  162      _mm_sfence();",no
+mysql,storage/perfschema/pfs_buffer_container.h,1003,PFS_cacheline_atomic_size_t m_monotonic;," 1001     - frequent read and write, must be on its own cacheline
+ 1002    */
+ 1003>   PFS_cacheline_atomic_size_t m_monotonic;
+ 1004  
+ 1005    /**",yes
+mysql,extra/protobuf/protobuf-24.4/src/google/protobuf/raw_ptr.h,46,"kZeroBuffer[std::max(ABSL_CACHELINE_SIZE, 64)];","   44  
+   45  PROTOBUF_EXPORT ABSL_CACHELINE_ALIGNED extern const char
+   46>     kZeroBuffer[std::max(ABSL_CACHELINE_SIZE, 64)];
+   47  
+   48  // This class is trivially copyable/trivially destructible and constexpr",no
+postgres,contrib/oid2name/oid2name.c,428,pad[l] = '\0';,"  426  		pad = (char *) pg_malloc(l + 1);
+  427  		memset(pad, '-', l);
+  428> 		pad[l] = '\0';
+  429  		fprintf(stdout, ""%s\n"", pad);
+  430  		pg_free(pad);",no
+postgres,src/backend/storage/ipc/shmem.c,412,size = CACHELINEALIGN(size);,"  410  	size = hash_estimate_size(list_length(pending_shmem_requests) + SHMEM_INDEX_ADDITIONAL_SIZE,
+  411  							  sizeof(ShmemIndexEnt));
+  412> 	size = CACHELINEALIGN(size);
+  413  
+  414  	/* memory needed for all the requested areas */",unsure
+postgres,src/backend/storage/ipc/shmem.c,866,alignment = PG_CACHE_LINE_SIZE;,"  864  	 */
+  865  	if (alignment < PG_CACHE_LINE_SIZE)
+  866> 		alignment = PG_CACHE_LINE_SIZE;
+  867  
+  868  	Assert(ShmemSegHdr != NULL);",unsure
+postgres,src/backend/utils/adt/bytea.c,1112,if (len > PG_CACHE_LINE_SIZE)," 1110  								   Min(len, PG_CACHE_LINE_SIZE)));
+ 1111  
+ 1112> 	if (len > PG_CACHE_LINE_SIZE)
+ 1113  		hash ^= murmurhash32((uint32) len);
+ 1114  ",no
+postgres,src/backend/storage/ipc/shmem.c,718,offset = CACHELINEALIGN(seghdr->content_offset + sizeof(ShmemAllocatorData));,"  716  	 * first allocation begins on a cache line boundary.
+  717  	 */
+  718> 	offset = CACHELINEALIGN(seghdr->content_offset + sizeof(ShmemAllocatorData));
+  719  	if (offset > seghdr->totalsize)
+  720  		ereport(ERROR,",unsure
+postgres,src/backend/utils/adt/bytea.c,1110,"Min(len, PG_CACHE_LINE_SIZE)));"," 1108  	 */
+ 1109  	hash = DatumGetUInt32(hash_any((unsigned char *) authoritative_data,
+ 1110> 								   Min(len, PG_CACHE_LINE_SIZE)));
+ 1111  
+ 1112  	if (len > PG_CACHE_LINE_SIZE)",no
+postgres,src/backend/storage/ipc/shmem.c,420,if (alignment < PG_CACHE_LINE_SIZE),"  418  
+  419  		/* pad the start address for alignment like ShmemAllocRaw() does */
+  420> 		if (alignment < PG_CACHE_LINE_SIZE)
+  421  			alignment = PG_CACHE_LINE_SIZE;
+  422  		size = TYPEALIGN(alignment, size);",unsure
+postgres,src/backend/access/gist/gistutil.c,242,char		padding[2 * sizeof(GISTENTRY) + GEVHDRSZ];,"  240  	{
+  241  		GistEntryVector gev;
+  242> 		char		padding[2 * sizeof(GISTENTRY) + GEVHDRSZ];
+  243  	}			storage;
+  244  	GistEntryVector *evec = &storage.gev;",no
+postgres,contrib/btree_gist/btree_macaddr.c,17,char		pad[4];			/* make struct size = sizeof(gbtreekey16) */,"   15  	macaddr		lower;
+   16  	macaddr		upper;
+   17> 	char		pad[4];			/* make struct size = sizeof(gbtreekey16) */
+   18  } macKEY;
+   19  ",no
+postgres,src/backend/storage/buffer/buf_init.c,82,".alignment = PG_CACHE_LINE_SIZE,","   80  					   .size = NBuffers * sizeof(BufferDescPadded),
+   81  	/* Align descriptors to a cacheline boundary. */
+   82> 					   .alignment = PG_CACHE_LINE_SIZE,
+   83  					   .ptr = (void **) &BufferDescriptors,
+   84  		);",unsure
+postgres,src/backend/utils/adt/varlena.c,2158,"Min(len, PG_CACHE_LINE_SIZE)));"," 2156  	 */
+ 2157  	hash = DatumGetUInt32(hash_any((unsigned char *) authoritative_data,
+ 2158> 								   Min(len, PG_CACHE_LINE_SIZE)));
+ 2159  
+ 2160  	if (len > PG_CACHE_LINE_SIZE)",no
+postgres,src/include/storage/condition_variable.h,42,char		pad[CV_MINIMAL_SIZE];,"   40  {
+   41  	ConditionVariable cv;
+   42> 	char		pad[CV_MINIMAL_SIZE];
+   43  } ConditionVariableMinimallyPadded;
+   44  ",unsure
+postgres,src/backend/utils/cache/catcache.c,948,"cp = (CatCache *) palloc_aligned(sizeof(CatCache), PG_CACHE_LINE_SIZE,","  946  	 * Note: we rely on zeroing to initialize all the dlist headers correctly
+  947  	 */
+  948> 	cp = (CatCache *) palloc_aligned(sizeof(CatCache), PG_CACHE_LINE_SIZE,
+  949  									 MCXT_ALLOC_ZERO);
+  950  	cp->cc_bucket = palloc0_array(dlist_head, nbuckets);",unsure
+postgres,src/include/storage/lwlock.h,71,char		pad[LWLOCK_PADDED_SIZE];,"   69  {
+   70  	LWLock		lock;
+   71> 	char		pad[LWLOCK_PADDED_SIZE];
+   72  } LWLockPadded;
+   73  ",yes
+postgres,src/backend/storage/ipc/shmem.c,421,alignment = PG_CACHE_LINE_SIZE;,"  419  		/* pad the start address for alignment like ShmemAllocRaw() does */
+  420  		if (alignment < PG_CACHE_LINE_SIZE)
+  421> 			alignment = PG_CACHE_LINE_SIZE;
+  422  		size = TYPEALIGN(alignment, size);
+  423  ",unsure
+postgres,src/backend/storage/ipc/shmem.c,865,if (alignment < PG_CACHE_LINE_SIZE),"  863  	 * won't be sufficient.
+  864  	 */
+  865> 	if (alignment < PG_CACHE_LINE_SIZE)
+  866  		alignment = PG_CACHE_LINE_SIZE;
+  867  ",unsure
+postgres,src/backend/storage/buffer/buf_init.c,96,".alignment = PG_CACHE_LINE_SIZE,","   94  					   .size = NBuffers * sizeof(ConditionVariableMinimallyPadded),
+   95  	/* Align descriptors to a cacheline boundary. */
+   96> 					   .alignment = PG_CACHE_LINE_SIZE,
+   97  					   .ptr = (void **) &BufferIOCVArray,
+   98  		);",unsure
+postgres,src/backend/utils/adt/varlena.c,2160,if (len > PG_CACHE_LINE_SIZE)," 2158  								   Min(len, PG_CACHE_LINE_SIZE)));
+ 2159  
+ 2160> 	if (len > PG_CACHE_LINE_SIZE)
+ 2161  		hash ^= murmurhash32((uint32) len);
+ 2162  ",no
+postgres,src/backend/backup/basebackup.c,1636,char		padding[BLCKSZ];," 1634  		unsigned	magic = INCREMENTAL_MAGIC;
+ 1635  		size_t		header_bytes_done = 0;
+ 1636> 		char		padding[BLCKSZ];
+ 1637  		size_t		paddinglen;
+ 1638  ",no
+postgres,src/include/storage/buf_internals.h,386,char		pad[BUFFERDESC_PAD_TO_SIZE];,"  384  {
+  385  	BufferDesc	bufferdesc;
+  386> 	char		pad[BUFFERDESC_PAD_TO_SIZE];
+  387  } BufferDescPadded;
+  388  ",yes
