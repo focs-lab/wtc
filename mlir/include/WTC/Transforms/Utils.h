@@ -128,4 +128,10 @@ Value traceToRoot(Value v);
 // budget counts as escaping.
 bool addressEscapes(cir::AllocaOp slot);
 
+// The functions an indirect call may reach: the one a function's address
+// names, or every function handed in for the parameter the call goes
+// through, at every direct call of the enclosing function. Empty when any
+// of that is unknown, or the enclosing function's own address is taken.
+llvm::SmallVector<cir::FuncOp, 4> indirectCallees(cir::CallOp call);
+
 }

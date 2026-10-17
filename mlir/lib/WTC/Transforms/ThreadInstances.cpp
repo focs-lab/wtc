@@ -7,6 +7,7 @@
 
 #include "mlir/IR/SymbolTable.h"
 
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 
 using namespace mlir;
@@ -685,6 +686,91 @@ llvm::ArrayRef<Instance *> ThreadInstanceWalk::instancesOf(cir::FuncOp f) const 
     return it->second;
 }
 
+// Functions with no body that read what they are handed and write nothing
+// the walk would want to know of: a memset writes zeros, and a null names
+// no object.
+static bool harmlessCallee(cir::FuncOp f) {
+    if (!f) return false;
+    if (isAllocator(f) || getSemanticKind(f) == SemanticOpKind::ThreadSpawn) return true;
+    const StringRef n = f.getSymName();
+    return n == "free" || n == "memset" || n == "memcmp" || n == "strlen" || n == "strcmp" ||
+           n == "strncmp" || n == "memchr" || n == "puts" || n == "printf" || n == "fprintf";
+}
+
+// The functions a call may reach with a body each, for the operand rules
+// below: the direct callee, or the resolved targets of an indirect call.
+// Empty when the callee is unknown or has no body.
+static llvm::SmallVector<cir::FuncOp, 4> calleesWithBodies(cir::CallOp call) {
+    llvm::SmallVector<cir::FuncOp, 4> out;
+    if (call.isIndirect()) out = indirectCallees(call);
+    else if (cir::FuncOp f = lookupCallee(call)) out.push_back(f);
+    for (cir::FuncOp f : out)
+        if (f.getBody().empty()) return {};
+    return out;
+}
+
+// The record seen through another type -- `(char *)&c`, `(void *)c` -- is
+// written in ways no field listing sees unless every use of the view is a
+// load, a memset, a copy out of it, a call to a function known to write
+// nothing, a cast back to the record's own type (whose member stores the
+// listing sees, and whose other casts the module-wide scan reads), a
+// spill into a slot whose address never leaves and whose loads are the
+// view again, or an argument to a function with a body whose parameter is
+// itself such a view. A store through it, a store of it anywhere else, or
+// a call the module cannot see into writes the record whole.
+static bool viewWritten(Value p0, Type rec, unsigned depth, llvm::DenseSet<Value> &seen) {
+    if (depth > 4) return true;
+    auto recordBehind = [&](Type t) -> Type {
+        auto pt = dyn_cast<cir::PointerType>(t);
+        Type e = pt ? pt.getPointee() : Type();
+        while (auto arr = dyn_cast_or_null<cir::ArrayType>(e)) e = arr.getElementType();
+        return isa_and_nonnull<cir::RecordType>(e) ? e : Type();
+    };
+    llvm::SmallVector<Value, 4> work{p0};
+    while (!work.empty()) {
+        Value p = work.pop_back_val();
+        if (!seen.insert(p).second) continue;
+        for (OpOperand &use : p.getUses()) {
+            Operation *u = use.getOwner();
+            if (isa<cir::LoadOp>(u)) continue;
+            if (auto cc = dyn_cast<cir::CastOp>(u)) {
+                if (cc.getKind() != cir::CastKind::bitcast) return true;
+                if (recordBehind(cc.getResult().getType()) != rec) work.push_back(cc.getResult());
+                continue;
+            }
+            if (auto st = dyn_cast<cir::StoreOp>(u)) {
+                if (st.getValue() != p) return true;   // a store through the view
+                auto slot = st.getAddr().getDefiningOp<cir::AllocaOp>();
+                if (!slot || addressEscapes(slot)) return true;   // the view is published
+                for (Operation *su : slot->getUsers())
+                    if (auto ld = dyn_cast<cir::LoadOp>(su)) work.push_back(ld.getResult());
+                continue;
+            }
+            if (auto ms = dyn_cast<cir::MemSetOp>(u))
+                if (ms.getDst() == p) continue;
+            if (auto mc = dyn_cast<cir::MemCpyOp>(u))
+                if (mc.getSrc() == p && mc.getDst() != p) continue;
+            if (auto mm = dyn_cast<cir::MemMoveOp>(u))
+                if (mm.getSrc() == p && mm.getDst() != p) continue;
+            if (auto call = dyn_cast<cir::CallOp>(u)) {
+                if (!call.isIndirect() && harmlessCallee(lookupCallee(call))) continue;
+                llvm::SmallVector<cir::FuncOp, 4> targets = calleesWithBodies(call);
+                if (targets.empty()) return true;
+                const unsigned first = firstRealOperand(call) + (call.isIndirect() ? 1 : 0);
+                const unsigned idx = use.getOperandNumber();
+                if (idx < first) return true;
+                for (cir::FuncOp f : targets) {
+                    if (idx - first >= f.getNumArguments()) return true;
+                    if (viewWritten(f.getArgument(idx - first), rec, depth + 1, seen)) return true;
+                }
+                continue;
+            }
+            return true;   // anything else
+        }
+    }
+    return false;
+}
+
 // Every store into every field of the module, by (record, field), and the
 // fields no such list can speak for: the field's address goes somewhere a
 // store through it would not be seen (a call, a store of the address, a
@@ -709,16 +795,7 @@ void ThreadInstanceWalk::computeFieldStores() const {
         if (!rec || rec.isIncomplete()) return std::nullopt;
         return FieldKey{rec, gm.getIndex()};
     };
-    // Functions with no body that read what they are handed and write
-    // nothing the walk would want to know of: a memset writes zeros, and
-    // a null names no object.
-    auto harmless = [](cir::FuncOp f) {
-        if (!f) return false;
-        if (isAllocator(f) || getSemanticKind(f) == SemanticOpKind::ThreadSpawn) return true;
-        const StringRef n = f.getSymName();
-        return n == "free" || n == "memset" || n == "memcmp" || n == "strlen" || n == "strcmp" ||
-               n == "strncmp" || n == "memchr" || n == "puts" || n == "printf" || n == "fprintf";
-    };
+    auto harmless = [](cir::FuncOp f) { return harmlessCallee(f); };
     module.walk([&](Operation *op) {
         if (auto gm = dyn_cast<cir::GetMemberOp>(op)) {
             auto key = fieldKey(gm);
@@ -798,28 +875,8 @@ void ThreadInstanceWalk::computeFieldStores() const {
             if (c.getKind() != cir::CastKind::bitcast) return;
             Type rec = recordBehind(c.getSrc().getType());
             if (!rec || recordBehind(c.getResult().getType()) == rec) return;
-            llvm::SmallVector<Value, 4> work{c.getResult()};
-            bool written = false;
-            while (!work.empty() && !written) {
-                Value p = work.pop_back_val();
-                for (OpOperand &use : p.getUses()) {
-                    Operation *u = use.getOwner();
-                    if (isa<cir::LoadOp>(u)) continue;
-                    if (auto cc = dyn_cast<cir::CastOp>(u))
-                        if (cc.getKind() == cir::CastKind::bitcast) { work.push_back(cc.getResult()); continue; }
-                    if (auto ms = dyn_cast<cir::MemSetOp>(u))
-                        if (ms.getDst() == p) continue;
-                    if (auto mc = dyn_cast<cir::MemCpyOp>(u))
-                        if (mc.getSrc() == p && mc.getDst() != p) continue;
-                    if (auto mm = dyn_cast<cir::MemMoveOp>(u))
-                        if (mm.getSrc() == p && mm.getDst() != p) continue;
-                    if (auto call = dyn_cast<cir::CallOp>(u))
-                        if (harmless(lookupCallee(call))) continue;
-                    written = true;
-                    break;
-                }
-            }
-            if (written) whole.insert(rec);
+            llvm::DenseSet<Value> seen;
+            if (viewWritten(c.getResult(), rec, 0, seen)) whole.insert(rec);
             return;
         }
         Value dst, src;
@@ -834,9 +891,8 @@ void ThreadInstanceWalk::computeFieldStores() const {
         // A record handed by pointer to code the module cannot see may
         // come back with any of its fields rewritten.
         if (auto call = dyn_cast<cir::CallOp>(op)) {
-            cir::FuncOp callee = lookupCallee(call);
-            if (callee && !callee.getBody().empty()) return;
-            if (harmless(callee)) return;
+            if (!calleesWithBodies(call).empty()) return;
+            if (!call.isIndirect() && harmless(lookupCallee(call))) return;
             for (Value arg : call.getOperands())
                 if (Type rec = recordBehind(traceToRoot(arg).getType())) whole.insert(rec);
         }
