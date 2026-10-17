@@ -273,30 +273,62 @@ bool isAllocator(cir::FuncOp f) {
            n == "rte_ring_create" || n == "rte_ring_create_elem" || n == "rte_stack_create";
 }
 
-static cir::CallOp allocationBehindImpl(cir::CallOp call, unsigned depth) {
+static void allocationsBehindImpl(cir::CallOp call, unsigned depth, llvm::SmallVectorImpl<cir::CallOp> &sites,
+                                  bool &bad);
+
+// One value a wrapper hands back: a null, which reaches no field access; an
+// allocation, behind another wrapper or not; or a load from a slot every
+// store into which hands back one of those -- the front end's `__retval`,
+// which every `return` of a function with several of them stores to.
+static void returnedValue(Value v, unsigned depth, llvm::SmallVectorImpl<cir::CallOp> &sites, bool &bad) {
+    if (bad) return;
+    if (depth > 8) { bad = true; return; }
+    Value r = traceToRoot(v);
+    if (auto c = r.getDefiningOp<cir::ConstantOp>())
+        if (auto cp = dyn_cast<cir::ConstPtrAttr>(c.getValue()))
+            if (cp.getValue().getValue().isZero()) return;
+    if (auto c = r.getDefiningOp<cir::CallOp>()) { allocationsBehindImpl(c, depth + 1, sites, bad); return; }
+    if (auto ld = r.getDefiningOp<cir::LoadOp>()) {
+        auto slot = ld.getAddr().getDefiningOp<cir::AllocaOp>();
+        if (slot && !addressEscapes(slot)) {
+            bool any = false;
+            for (Operation *u : slot->getUsers())
+                if (auto st = dyn_cast<cir::StoreOp>(u))
+                    if (st.getAddr() == slot.getResult()) { any = true; returnedValue(st.getValue(), depth + 1, sites, bad); }
+            if (any) return;
+        }
+    }
+    bad = true;
+}
+
+static void allocationsBehindImpl(cir::CallOp call, unsigned depth, llvm::SmallVectorImpl<cir::CallOp> &sites,
+                                  bool &bad) {
     cir::FuncOp callee = lookupCallee(call);
-    if (!callee) return cir::CallOp();
-    if (isAllocator(callee)) return call;
-    if (callee.getBody().empty() || depth > 4) return cir::CallOp();
-    cir::CallOp site;
-    bool bad = false;
+    if (!callee) { bad = true; return; }
+    if (isAllocator(callee)) {
+        if (!llvm::is_contained(sites, call)) sites.push_back(call);
+        return;
+    }
+    if (callee.getBody().empty() || depth > 4) { bad = true; return; }
     callee.walk([&](cir::ReturnOp ret) {
         if (bad) return;
         if (ret.getNumOperands() != 1) { bad = true; return; }
-        Value r = traceToRoot(ret.getOperand(0));
-        // A null handed back on the failure path reaches no field access.
-        if (auto c = r.getDefiningOp<cir::ConstantOp>())
-            if (auto cp = dyn_cast<cir::ConstPtrAttr>(c.getValue()))
-                if (cp.getValue().getValue().isZero()) return;
-        cir::CallOp here;
-        if (auto c = r.getDefiningOp<cir::CallOp>()) here = allocationBehindImpl(c, depth + 1);
-        if (!here || (site && site != here)) bad = true;
-        else site = here;
+        returnedValue(ret.getOperand(0), depth, sites, bad);
     });
-    return bad ? cir::CallOp() : site;
 }
 
-cir::CallOp allocationBehind(cir::CallOp call) { return allocationBehindImpl(call, 0); }
+llvm::SmallVector<cir::CallOp, 4> allocationsBehind(cir::CallOp call) {
+    llvm::SmallVector<cir::CallOp, 4> sites;
+    bool bad = false;
+    allocationsBehindImpl(call, 0, sites, bad);
+    if (bad) sites.clear();
+    return sites;
+}
+
+cir::CallOp allocationBehind(cir::CallOp call) {
+    llvm::SmallVector<cir::CallOp, 4> sites = allocationsBehind(call);
+    return sites.size() == 1 ? sites.front() : cir::CallOp();
+}
 
 std::optional<uint64_t> allocationAlignment(cir::CallOp call) {
     call = allocationBehind(call);
