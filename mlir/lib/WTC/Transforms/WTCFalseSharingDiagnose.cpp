@@ -170,6 +170,16 @@ private:
 
     void report();
 
+    // Whether the data layout can size and align the object a root names.
+    static bool hasLayout(Operation *root) {
+        Type ty;
+        if (auto g = dyn_cast<cir::GlobalOp>(root)) ty = g.getSymType();
+        else if (auto a = dyn_cast<cir::AllocaOp>(root)) ty = a.getAllocaType();
+        else return false;
+        auto rec = dyn_cast<cir::RecordType>(ty);
+        return !rec || !rec.isIncomplete();
+    }
+
     // A stack slot is a different object in every invocation, so two threads
     // running the same function do not share it and cannot falsely share its
     // fields. Running on real compiler output, this was the whole of the
@@ -245,6 +255,10 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
                 if (!base) { unresolvedOps.insert(op); return; }
                 Operation *root = walk.resolveRoot(base, &inst);
                 if (!root) { unresolvedOps.insert(op); return; }
+                // A root declared with an incomplete record type (an opaque
+                // global the program only ever casts) has no layout to place
+                // fields in, and asking the data layout for one asserts.
+                if (!hasLayout(root)) { unresolvedOps.insert(op); return; }
                 if (auto slot = dyn_cast<cir::AllocaOp>(root)) {
                     if (!addressEscapes(slot)) { stackLocalOps.insert(op); return; }
                 }

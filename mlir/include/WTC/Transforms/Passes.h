@@ -7,6 +7,7 @@ namespace mlir::wtc {
     void registerQueueOwnershipAnalysisPass();
     void registerWTCSpecializePass();
     void registerWTCFalseSharingDiagnosePass();
+    void registerWTCAlignByOwnerPass();
 }
 
 #endif
