@@ -51,6 +51,9 @@ bool isWTCAnnotatedCall(cir::CallOp op, StringRef annotation) {
 // program that uses std::thread looked as if it never started a thread.
 static SemanticOpKind kindByName(StringRef name) {
     if (name == "pthread_create" || name == "thrd_create") return SemanticOpKind::ThreadSpawn;
+    // DPDK's EAL starts a worker on another lcore: rte_eal_remote_launch(f, arg,
+    // worker_id), entry first and its argument next, as the shim's spawn.
+    if (name == "rte_eal_remote_launch") return SemanticOpKind::ThreadSpawn;
     if (name.contains("6thread15_M_start_thread")) return SemanticOpKind::ThreadSpawn;
     return SemanticOpKind::Unknown;
 }
@@ -254,9 +257,20 @@ unsigned spawnFirstArgOperand(cir::CallOp op) {
 bool isAllocator(cir::FuncOp f) {
     if (!f) return false;
     const StringRef n = f.getSymName();
-    return n == "malloc" || n == "calloc" || n == "aligned_alloc" || n == "memalign" ||
-           n == "posix_memalign" || n == "_Znwm" || n == "_Znam" ||
-           n == "_ZnwmSt11align_val_t" || n == "_ZnamSt11align_val_t";
+    if (n == "malloc" || n == "calloc" || n == "aligned_alloc" || n == "memalign" ||
+        n == "posix_memalign" || n == "_Znwm" || n == "_Znam" ||
+        n == "_ZnwmSt11align_val_t" || n == "_ZnamSt11align_val_t")
+        return true;
+    // DPDK's EAL heap, rte_malloc(type, size, align) and its zeroing, counting
+    // and per-socket forms, and the ring and stack constructors, which hand
+    // back a fresh object that exists nowhere else: rte_ring_create(name,
+    // count, socket, flags), rte_ring_create_elem(name, esize, count,
+    // socket, flags) and rte_stack_create(name, count, socket, flags). The
+    // memzone behind them is reserved cache-line aligned, which the pass
+    // does not read; the heap-align option stands in for it.
+    return n == "rte_malloc" || n == "rte_zmalloc" || n == "rte_calloc" ||
+           n == "rte_malloc_socket" || n == "rte_zmalloc_socket" || n == "rte_calloc_socket" ||
+           n == "rte_ring_create" || n == "rte_ring_create_elem" || n == "rte_stack_create";
 }
 
 static cir::CallOp allocationBehindImpl(cir::CallOp call, unsigned depth) {
@@ -293,6 +307,12 @@ std::optional<uint64_t> allocationAlignment(cir::CallOp call) {
     if (n == "aligned_alloc" || n == "memalign") idx = firstRealOperand(call);
     else if (n == "posix_memalign") idx = firstRealOperand(call) + 1;
     else if (n == "_ZnwmSt11align_val_t" || n == "_ZnamSt11align_val_t") idx = firstRealOperand(call) + 1;
+    // rte_malloc(type, size, align), rte_calloc(type, num, size, align); an
+    // align of 0 means the EAL's default, which is not read here.
+    else if (n == "rte_malloc" || n == "rte_zmalloc") idx = firstRealOperand(call) + 2;
+    else if (n == "rte_calloc") idx = firstRealOperand(call) + 3;
+    else if (n == "rte_malloc_socket" || n == "rte_zmalloc_socket") idx = firstRealOperand(call) + 2;
+    else if (n == "rte_calloc_socket") idx = firstRealOperand(call) + 3;
     else return std::nullopt;
     if (idx >= call.getNumOperands()) return std::nullopt;
     if (auto c = call.getOperand(idx).getDefiningOp<cir::ConstantOp>())
