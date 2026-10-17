@@ -1061,10 +1061,25 @@ Operation *ThreadInstanceWalk::resolveRootImpl(Value v, Instance *inst, unsigned
     // leave the wrapper by a global it stores, and two names for it must be
     // one root. How many times it is made is read from the call graph
     // (siteRunsOnce), not from the wrapper's own loop structure alone.
-    if (auto call = t.getDefiningOp<cir::CallOp>()) {
-        cir::CallOp site = allocationBehind(call);
-        return site ? site.getOperation() : fail(Unplaced::CallResult);
-    }
+    // A wrapper that hands back one of several allocations, as a
+    // constructor choosing between allocators does, hands back one of
+    // several objects: the steps taken so far apply to each, and none is
+    // owned.
+    auto oneOfSites = [&](llvm::ArrayRef<cir::CallOp> sites) -> Operation * {
+        if (sites.size() == 1) { cir::CallOp s = sites.front(); return s.getOperation(); }
+        if (sites.empty() || !many || !place) return fail(Unplaced::CallResult);
+        if (sites.size() > kMaxSources) return fail(Unplaced::ManySources);
+        for (cir::CallOp s : sites) {
+            Place p = *place;
+            p.root = s.getOperation();
+            p.owner = false;
+            p.oneOf = true;
+            many->push_back(p);
+        }
+        return nullptr;
+    };
+    if (auto call = t.getDefiningOp<cir::CallOp>())
+        return oneOfSites(allocationsBehind(call));
     // A pointer loaded from a global the module writes exactly once: the
     // loaded value is the one stored, wherever the load is. The stored
     // value is resolved without an instance, since the storing function's
@@ -1078,8 +1093,8 @@ Operation *ThreadInstanceWalk::resolveRootImpl(Value v, Instance *inst, unsigned
             if (Value stored = g ? singleStoredGlobalValue(g) : Value()) {
                 Value s = traceToRoot(stored);
                 if (auto call = s.getDefiningOp<cir::CallOp>()) {
-                    cir::CallOp site = allocationBehind(call);
-                    if (site) return site.getOperation();
+                    llvm::SmallVector<cir::CallOp, 4> sites = allocationsBehind(call);
+                    if (!sites.empty()) return oneOfSites(sites);
                     if (!many) return fail(Unplaced::CallResult);
                 } else if (auto sg = s.getDefiningOp<cir::GetGlobalOp>()) {
                     return SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(sg, sg.getNameAttr()).getOperation();

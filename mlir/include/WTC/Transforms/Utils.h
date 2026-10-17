@@ -95,6 +95,11 @@ std::optional<uint64_t> allocationAlignment(cir::CallOp call);
 // checked malloc, with or without a null on its failure path). Null when
 // the callee is neither, returns from two sites, or returns anything else.
 cir::CallOp allocationBehind(cir::CallOp call);
+// Every allocation a call may hand back, when each of its returns hands
+// back an allocation or a null: one site for a checked wrapper, several for
+// a constructor that picks between allocators; empty when some return
+// hands back anything else.
+llvm::SmallVector<cir::CallOp, 4> allocationsBehind(cir::CallOp call);
 
 // Walks backward from v through the casts under which it still names the
 // same object -- bitcast, array-to-pointer decay, and the single-operand
