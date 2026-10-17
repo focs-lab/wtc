@@ -147,10 +147,38 @@ cir::FuncOp resolveFunctionOperand(Value v) {
 // The stored value if `alloca` is written exactly once, null stores aside,
 // by a store in its own block that precedes every load, and nothing else
 // touches its address.
+// Whether a store into a slot runs before a load from it on every path:
+// the store sits in the slot's own block, or in a nest of `cir.scope` and
+// `cir.cleanup.scope` under it, each of which runs exactly once when
+// reached -- the front end wraps a declaration's initialiser in one at
+// -O2, and a store there is as good as one in the block itself -- and the
+// load comes after it, at whatever depth. A store in an `if` or a loop
+// does not qualify.
+static bool storeDominatesLoad(cir::StoreOp st, cir::LoadOp ld, Block *top) {
+    llvm::SmallVector<Operation *, 8> chain;   // st, then each scope up to top
+    Operation *o = st.getOperation();
+    while (o->getBlock() != top) {
+        chain.push_back(o);
+        Operation *parent = o->getParentOp();
+        if (!parent || !mlir::isa<cir::ScopeOp, cir::CleanupScopeOp>(parent)) return false;
+        o = parent;
+    }
+    chain.push_back(o);
+    for (int i = chain.size() - 1; i >= 0; --i) {
+        Operation *anc = chain[i]->getBlock()->findAncestorOpInBlock(*ld.getOperation());
+        if (!anc) return false;
+        if (anc != chain[i]) return chain[i]->isBeforeInBlock(anc);
+        // The load is inside the same scope as the store: look one level in.
+    }
+    return false;
+}
+
 static Value singleStoredValue(cir::AllocaOp alloca) {
     cir::StoreOp theStore;
     llvm::SmallVector<cir::LoadOp, 8> loads;
     for (Operation *user : alloca->getUsers()) {
+        // A lifetime marker names the slot and touches nothing in it.
+        if (mlir::isa<cir::LifetimeStartOp, cir::LifetimeEndOp>(user)) continue;
         if (auto st = mlir::dyn_cast<cir::StoreOp>(user)) {
             if (st.getAddr() != alloca.getResult())
                 return nullptr;          // the slot's address is the stored value
@@ -171,14 +199,11 @@ static Value singleStoredValue(cir::AllocaOp alloca) {
         }
         return nullptr;                  // address escapes into something else
     }
-    if (!theStore || theStore->getBlock() != alloca->getBlock())
+    if (!theStore)
         return nullptr;
-    Block *block = alloca->getBlock();
-    for (cir::LoadOp ld : loads) {
-        Operation *anc = block->findAncestorOpInBlock(*ld.getOperation());
-        if (!anc || !theStore->isBeforeInBlock(anc))
+    for (cir::LoadOp ld : loads)
+        if (!storeDominatesLoad(theStore, ld, alloca->getBlock()))
             return nullptr;              // a load the store does not dominate
-    }
     return theStore.getValue();
 }
 
@@ -224,6 +249,7 @@ bool addressEscapes(cir::AllocaOp slot) {
             }
             if (!seen.insert(u).second) continue;
             if (isa<cir::LoadOp>(u)) continue;                  // reads the slot
+            if (isa<cir::LifetimeStartOp, cir::LifetimeEndOp>(u)) continue;   // names it, touches nothing
             if (isa<cir::CastOp, cir::GetMemberOp, cir::GetElementOp, cir::PtrStrideOp>(u)) {
                 work.push_back(u->getResult(0));
                 continue;

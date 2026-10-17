@@ -922,6 +922,7 @@ bool ThreadInstanceWalk::placesOfLoad(Value at, Instance *inst, unsigned depth,
                 for (OpOperand &use : p.getUses()) {
                     Operation *u = use.getOwner();
                     if (isa<cir::LoadOp>(u)) continue;
+                    if (isa<cir::LifetimeStartOp, cir::LifetimeEndOp>(u)) continue;
                     if (auto st = dyn_cast<cir::StoreOp>(u)) {
                         if (st.getAddr() != p) { listed = false; break; }
                         if (!isNullPointer(st.getValue())) stores.push_back(st);
