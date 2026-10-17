@@ -308,6 +308,11 @@ private:
     llvm::DenseSet<Operation *> stackLocalOps;   // slots that never leave their invocation
     llvm::DenseSet<Operation *> threadLocalOps;  // every thread has its own copy
     unsigned definite = 0, possible = 0;
+    // Possible pairs on a stack slot whose address escapes: each invocation
+    // has its own slot, so two threads may be looking at two objects. Kept
+    // apart in the summary, since a command handler's locals produce them
+    // by the hundred.
+    unsigned possibleOnSlots = 0;
     unsigned coldPairs = 0;   // different threads, but one side touches once
     // Possible pairs that would be cold if the once-side's thread had no
     // unplaced accesses. On real code that is most of what was once "cold":
@@ -1059,14 +1064,21 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
                 // exists if the pointer names this one. The weakest thing
                 // known about a pair is its reason, so this one comes
                 // first.
+                // Two threads first, one thread standing for many only when
+                // no two are found: a pair on a heap object or a slot is
+                // dropped when its one witness is a single thread, and the
+                // first witness found used to decide it, whatever the others
+                // were -- DPDK's stack, touched by 34 threads, had no pair.
                 auto mayContend = [&](const FieldInfo &x, uint64_t ox, const FieldInfo &y, uint64_t oy,
                                       Operation *&wx, Operation *&wy) {
+                  for (const bool allowSame : {false, true})
                     for (const auto &xs : {x.hotWriters, x.unknownRateWriters, x.oneOfHotWriters})
                         for (unsigned w : xs)
                             for (const auto &set : {y.hotWriters, y.hotReaders,
                                                     y.unknownRateWriters, y.unknownRateReaders,
                                                     y.oneOfHotWriters, y.oneOfHotReaders})
                                 for (unsigned u : set) {
+                                    if (u == w && !allowSame) continue;
                                     // One thread standing for many on two fields of
                                     // one element: when each of those threads owns
                                     // its element alone, that is one thread, and no
@@ -1089,7 +1101,7 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
                                         why = "by a thread whose access rate the analysis cannot tell";
                                     return true;
                                 }
-                    return false;
+                  return false;
                 };
                 const bool contend = unknownHit || (!hit && (mayContend(a, oa, b, ob, whereA, whereB) ||
                                                              mayContend(b, ob, a, oa, whereB, whereA)));
@@ -1162,6 +1174,7 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
                 // libstdc++'s own locals produced on real output.
                 if (onStack && (hit || unplaced || (contend && !contendSameThread))) {
                     ++possible;
+                    if (isa<cir::AllocaOp>(root)) ++possibleOnSlots;
                     Operation *at = whereA ? whereA : (a.firstWrite ? a.firstWrite : a.firstAccess);
                     auto d = at->emitRemark() << "wtc: possible false sharing in " << label << ": '";
                     if (oa == ob) d << a.name << "' of two elements may share one " << line << "-byte line";
@@ -1315,7 +1328,9 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
                             << " function instances; " << unplacedPairs
                             << " of the possible pairs would be cold but for unplaced accesses"
                             << unplacedBreakdown() << "; " << oneOfCount
-                            << " accesses placed as one of several objects";
+                            << " accesses placed as one of several objects; " << possibleOnSlots
+                            << " of the possible pairs are on stack slots whose address escapes, "
+                               "which may be two invocations";
 }
 
 } // namespace
