@@ -107,6 +107,37 @@ unsigned firstRealOperand(cir::CallOp op) {
     return (op.getNumOperands() > 0 && hasSretArg(op, 0)) ? 1u : 0u;
 }
 
+llvm::SmallVector<cir::FuncOp, 4> indirectCallees(cir::CallOp call) {
+    llvm::SmallVector<cir::FuncOp, 4> out;
+    if (!call.isIndirect()) return out;
+    Value fnv = traceToRoot(call.getIndirectCall());
+    if (auto gg = fnv.getDefiningOp<cir::GetGlobalOp>()) {
+        if (auto f = mlir::SymbolTable::lookupNearestSymbolFrom<cir::FuncOp>(gg, gg.getNameAttr())) out.push_back(f);
+        return out;
+    }
+    // A parameter of the enclosing function: the actuals at every call of
+    // it, each a function's address, or nothing is known.
+    auto arg = mlir::dyn_cast<BlockArgument>(fnv);
+    if (!arg) return out;
+    auto owner = mlir::dyn_cast_or_null<cir::FuncOp>(arg.getOwner()->getParentOp());
+    if (!owner || owner.getBody().empty() || arg.getOwner() != &owner.getBody().front()) return out;
+    const unsigned idx = arg.getArgNumber();
+    auto module = owner->getParentOfType<ModuleOp>();
+    auto uses = mlir::SymbolTable::getSymbolUses(owner, module);
+    if (!uses) return out;
+    for (const mlir::SymbolTable::SymbolUse &u : *uses) {
+        auto site = mlir::dyn_cast<cir::CallOp>(u.getUser());
+        if (!site || site.isIndirect()) { out.clear(); return out; }   // its address is taken
+        const unsigned k = firstRealOperand(site) + idx;
+        if (k >= site.getNumOperands()) { out.clear(); return out; }
+        auto g = traceToRoot(site.getOperand(k)).getDefiningOp<cir::GetGlobalOp>();
+        auto f = g ? mlir::SymbolTable::lookupNearestSymbolFrom<cir::FuncOp>(g, g.getNameAttr()) : cir::FuncOp();
+        if (!f) { out.clear(); return out; }
+        if (!llvm::is_contained(out, f)) out.push_back(f);
+    }
+    return out;
+}
+
 Value traceToLocalRoot(Value v) {
     while (true) {
         Operation* def = v.getDefiningOp();
