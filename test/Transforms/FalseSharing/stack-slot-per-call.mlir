@@ -84,4 +84,4 @@ module {
 
 // CHECK-NOT: wtc: false sharing in
 // CHECK: possible false sharing in %local: 'a' and 'b'{{.*}}stack slot whose address escapes
-// CHECK: false sharing: 0 definite, 1 possible, 0 cold
+// CHECK: false sharing: 0 definite, 1 possible, 0 cold{{.*}}; 1 of the possible pairs are on stack slots whose address escapes, which may be two invocations
