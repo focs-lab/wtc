@@ -1,4 +1,4 @@
-// RUN: wtc-opt %s --wtc-align-by-owner 2>&1 >/dev/null | FileCheck %s
+// RUN: wtc-opt %s --wtc-align-by-owner 2>&1 | FileCheck %s
 
 // One hot global and one thread. There is nothing for it to share a line
 // with that anybody contends over, so padding it to 64 bytes would buy
@@ -44,3 +44,4 @@ module {
 
 // CHECK-NOT: raised the alignment
 // CHECK: align by owner: 0 globals raised
+// CHECK-NOT: alignment = 64

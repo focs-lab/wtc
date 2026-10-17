@@ -11,6 +11,7 @@
    CHECK: remark: wtc: false sharing in @stats
    CHECK-SAME: 'hits'
    CHECK-SAME: 'misses'
+   CHECK: false sharing: 1 definite, 0 possible, 0 cold
 */
 
 #include <pthread.h>

@@ -73,3 +73,4 @@ module {
 // CHECK: remark: wtc: false sharing in @s
 // CHECK-SAME: 'hits'
 // CHECK-SAME: 'misses'
+// CHECK: false sharing: 1 definite, 0 possible, 0 cold

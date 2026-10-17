@@ -15,6 +15,7 @@
 
    CHECK-DAG: remark: wtc: false sharing in @s: 'a' (offset 0) and 'b' (offset 56) {{.*}} in 1 of the 8 positions an object aligned to 8 bytes may start at
    CHECK-DAG: remark: wtc: false sharing in @s: 'b' (offset 56) and 'c' (offset 64) {{.*}} in 7 of the 8 positions an object aligned to 8 bytes may start at
+   CHECK: false sharing: 2 definite, 0 possible, 0 cold
 */
 
 #include <pthread.h>

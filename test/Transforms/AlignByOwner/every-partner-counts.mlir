@@ -1,4 +1,4 @@
-// RUN: wtc-opt %s --wtc-align-by-owner 2>&1 >/dev/null | FileCheck %s
+// RUN: wtc-opt %s --wtc-align-by-owner 2>&1 | FileCheck %s
 
 // @x and @y are written by different threads; @table is a constant one of
 // them reads. Each global may be paired with several others, and whether
@@ -95,3 +95,6 @@ module {
 // CHECK: raised the alignment of @y from 8 to 64 bytes: a different thread repeatedly touches @x
 // CHECK-NOT: raised the alignment of @table
 // CHECK: align by owner: 2 globals raised to 64 bytes
+// CHECK-DAG: @x = #cir.int<0> : !s64i {alignment = 64 : i64}
+// CHECK-DAG: @table = #cir.int<0> : !s64i {alignment = 8 : i64}
+// CHECK-DAG: @y = #cir.int<0> : !s64i {alignment = 64 : i64}

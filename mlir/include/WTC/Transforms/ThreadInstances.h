@@ -136,6 +136,25 @@ public:
         return inst.startup && !spawnPrecedes(op, inst.func);
     }
 
+    // Whether the function's control flow is structured enough for siteMult
+    // to mean what it says. With a goto in the function, siteMult answers
+    // Many so that clients which must assume the worst do; a client that
+    // would turn "many" into a claim asks here first, and treats a function
+    // that is not known as neither once nor many.
+    bool rateKnown(cir::FuncOp f) { return !isUnstructured(f); }
+
+    // Whether two accounted-for threads cannot both exist: each was started
+    // from a different arm of one `if` (or ternary) in the function that
+    // started them both, directly or through calls. `if (c) spawn(w) else
+    // spawn(w)` is one thread, and the walk, which numbers every spawn
+    // instance, used to hand it two numbers and then report the fields it
+    // touches as shared between them.
+    bool exclusive(unsigned threadA, unsigned threadB) const;
+
+    // How many instances the walk created for f. A stack slot of f is one
+    // object only if f ran once.
+    unsigned instanceCount(cir::FuncOp f) const;
+
     bool capExceeded() const { return capExceeded_; }
     unsigned cap() const { return cap_; }
     unsigned remarks() const { return remarks_; }
@@ -149,10 +168,13 @@ public:
 
 private:
     bool isUnstructured(cir::FuncOp f);
+    bool isRecursive(cir::FuncOp f);
     bool canSpawn(cir::FuncOp f);
     bool indirectCallCanSpawn();
     const llvm::DenseSet<Operation *> &preSpawnOps(cir::FuncOp f);
     Instance &addInstance(Instance inst);
+    bool addIfRoom(Instance inst);
+    void noteRemark(Operation *at, const llvm::Twine &msg);
     void addRootsForModule();
     void expand(Instance &inst);
     void addOrphanRoots();
@@ -166,12 +188,17 @@ private:
     std::deque<Instance> instances_;   // stable addresses: Instance::parent points into it
     llvm::DenseSet<Operation *> reachedFuncs_;
     llvm::DenseMap<Operation *, bool> unstructuredCache_;
+    llvm::DenseMap<Operation *, bool> recursiveCache_;
+    bool recursiveComputed_ = false;
+    llvm::DenseMap<unsigned, const Instance *> threadRoot_;   // the instance that began each thread
     llvm::DenseMap<Operation *, bool> reachesCache_;
     llvm::DenseMap<Operation *, llvm::DenseSet<Operation *>> preSpawnCache_;
     llvm::DenseMap<Operation *, bool> spawnsCache_;
     std::optional<bool> indirectSpawns_;
     bool capExceeded_ = false;
     unsigned remarks_ = 0;
+    llvm::SmallVector<std::pair<Operation *, std::string>, 8> pendingRemarks_;
+    llvm::DenseSet<Operation *> remarkedAt_;
 };
 
 } // namespace mlir::wtc

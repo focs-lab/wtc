@@ -1,4 +1,4 @@
-// RUN: wtc-opt %s --wtc-align-by-owner 2>&1 >/dev/null | FileCheck %s
+// RUN: wtc-opt %s --wtc-align-by-owner 2>&1 | FileCheck %s
 // RUN: wtc-opt %s --wtc-false-sharing-diagnose 2>&1 >/dev/null | FileCheck %s --check-prefix=DIAG
 
 // A global declared with an incomplete record type, which the program only
@@ -80,6 +80,7 @@ module {
 
 // CHECK: left @opaque where it is: it is only declared here
 // CHECK: align by owner: 0 globals raised
+// CHECK-NOT: alignment = 64
 
 // DIAG-NOT: false sharing in
 // DIAG: false sharing: 0 definite, 0 possible, 0 cold{{.*}}2 field accesses on objects that could not be identified

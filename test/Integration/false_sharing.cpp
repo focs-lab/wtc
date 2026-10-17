@@ -1,8 +1,5 @@
-// Two counters in one struct, one thread each. This is the program the
-// project measured at 6.4x against the same two counters a cache line
-// apart, with the control -- both threads on the two hardware threads of
-// one core, sharing an L1 -- at 1.0x, which is what says the 6.4x is the
-// line travelling and nothing else.
+// Two counters in one struct, one thread each: the textbook shape, and the
+// one every detector in the literature is demonstrated on.
 //
 // Nothing here is written for the compiler: no shim, no annotation, no
 // pragma. The struct is what anyone would write, and the fact that the two
@@ -41,3 +38,4 @@ int main() {
     b.join();
     return static_cast<int>(stats.hits + stats.misses);
 }
+// CHECK: false sharing: 0 definite, 1 possible, 0 cold

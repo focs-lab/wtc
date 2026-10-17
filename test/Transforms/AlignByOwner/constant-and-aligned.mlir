@@ -1,4 +1,4 @@
-// RUN: wtc-opt %s --wtc-align-by-owner 2>&1 >/dev/null | FileCheck %s
+// RUN: wtc-opt %s --wtc-align-by-owner 2>&1 | FileCheck %s
 
 // Two refusals in one file. @table is constant, so no thread writes it and
 // it cannot be the write end of a contended pair. @already is aligned to a
@@ -78,3 +78,5 @@ module {
 // @table pairs with @plain, not with @already: a different thread writes
 // @plain, so @table reaches the candidate set and is refused there.
 // CHECK: refused 1 constant, 1 already aligned
+// CHECK: @already = #cir.int<0> : !s64i {alignment = 64 : i64}
+// CHECK: @plain = #cir.int<0> : !s64i {alignment = 64 : i64}

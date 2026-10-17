@@ -1,20 +1,40 @@
 // RUN: wtc-opt %s --wtc-false-sharing-diagnose 2>&1 >/dev/null | FileCheck %s
 
-// Both fields written, both by main. One thread cannot contend with itself,
-// and padding here would cost memory for nothing.
+// Both fields written, repeatedly, both by main, with no thread started.
+// One thread cannot contend with itself, and padding here would cost
+// memory for nothing. The writes are in a loop so that the pair reaches
+// the thread test rather than falling out earlier as not repeated, which
+// is what an earlier version of this test did.
 
+!s32i = !cir.int<s, 32>
 !s64i = !cir.int<s, 64>
 !rec_S = !cir.struct<"S" {data !s64i, data !s64i}>
 module {
   cir.global external @s = #cir.zero : !rec_S {alignment = 8 : i64}
 
   cir.func @main() {
-    %p = cir.get_global @s : !cir.ptr<!rec_S>
-    %m0 = cir.get_member %p[0] {name = "hits"} : !cir.ptr<!rec_S> -> !cir.ptr<!s64i>
-    %m1 = cir.get_member %p[1] {name = "misses"} : !cir.ptr<!rec_S> -> !cir.ptr<!s64i>
-    %v = cir.const #cir.int<1> : !s64i
-    cir.store %v, %m0 : !s64i, !cir.ptr<!s64i>
-    cir.store %v, %m1 : !s64i, !cir.ptr<!s64i>
+    %n = cir.alloca "i" align(4) : !cir.ptr<!s32i>
+    %z = cir.const #cir.int<0> : !s32i
+    cir.store %z, %n : !s32i, !cir.ptr<!s32i>
+    cir.for : cond {
+      %c = cir.load %n : !cir.ptr<!s32i>, !s32i
+      %l = cir.const #cir.int<1000> : !s32i
+      %lt = cir.cmp lt %c, %l : !s32i
+      cir.condition(%lt)
+    } body {
+      %p = cir.get_global @s : !cir.ptr<!rec_S>
+      %m0 = cir.get_member %p[0] {name = "hits"} : !cir.ptr<!rec_S> -> !cir.ptr<!s64i>
+      %m1 = cir.get_member %p[1] {name = "misses"} : !cir.ptr<!rec_S> -> !cir.ptr<!s64i>
+      %v = cir.const #cir.int<1> : !s64i
+      cir.store %v, %m0 : !s64i, !cir.ptr<!s64i>
+      cir.store %v, %m1 : !s64i, !cir.ptr<!s64i>
+      cir.yield
+    } step {
+      %c = cir.load %n : !cir.ptr<!s32i>, !s32i
+      %i = cir.inc nsw %c : !s32i
+      cir.store %i, %n : !s32i, !cir.ptr<!s32i>
+      cir.yield
+    }
     cir.return
   }
 }

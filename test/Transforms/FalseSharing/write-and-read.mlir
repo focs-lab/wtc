@@ -73,3 +73,4 @@ module {
 // CHECK: remark: wtc: false sharing in @s
 // CHECK-SAME: 'counter'
 // CHECK-SAME: 'config'
+// CHECK: false sharing: 1 definite, 0 possible, 0 cold

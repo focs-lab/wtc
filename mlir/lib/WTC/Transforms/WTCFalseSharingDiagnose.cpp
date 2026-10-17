@@ -20,11 +20,10 @@ using namespace mlir::wtc;
 
 // Two fields of one object, written by two different threads, landing in one
 // cache line. Nothing in the program says so and nothing reports it: the
-// line simply travels between the cores for the rest of the run. Measured on
-// this project's own host, two counters in one line cost 6.4x against the
-// same two counters one line apart, and the control -- the same two threads
-// on the two hardware threads of a single core, sharing an L1 -- costs 1.0x,
-// which is what says the 6.4x is the line moving and nothing else.
+// line simply travels between the cores for the rest of the run. How much
+// that costs is a measurement, made per program under the protocol in
+// docs/gate.md, and no figure is quoted here: an earlier version quoted
+// one from an unreserved probe, which a review found recorded nowhere.
 //
 // Tools find this by running the program: perf c2c samples the coherence
 // traffic, and the research detectors instrument and watch. All of them see
@@ -34,9 +33,12 @@ using namespace mlir::wtc;
 // what the ownership walk already computes.
 //
 // This pass only reports. It changes no byte of the program, so it carries
-// none of the layout risk, and its output is the ground truth for the pass
-// that does change layout: a field pair reported here is a field pair that
-// should have been separated.
+// none of the layout risk. Its output is a list of pairs that *may* be worth
+// separating, not a list that should be: a verdict says which threads touch
+// which fields and how the fields lie, and nothing about how often. On
+// memcached every pair it reported turned out to be serialised by a lock or
+// written too rarely to matter (docs/corpus.md), so a reader checks a pair
+// against the source before acting on it.
 //
 // What it will not claim. A thread that stands for many dynamic threads
 // (spawned in a loop, or of unknown provenance) touching two fields is
@@ -55,6 +57,11 @@ struct FieldInfo {
     // for as long as both sides keep touching it, so a pair where either
     // side touches once is a single invalidation and costs nothing.
     llvm::SmallSetVector<unsigned, 4> hotReaders, hotWriters;
+    // Threads whose access rate the walk cannot tell: the function's
+    // control flow is unstructured (a goto), so "inside a loop" has no
+    // meaning there. Neither once nor repeated; such a side can make a
+    // pair possible and never definite or cold.
+    llvm::SmallSetVector<unsigned, 4> unknownRateReaders, unknownRateWriters;
     // Threads this module can account for: descended from main, from a spawn
     // it can see, or from a function whose address it takes. A thread
     // invented for an externally visible function nobody here references is
@@ -120,9 +127,21 @@ private:
     // follow, and counting it a thousand times made memcached's figure
     // 1.6 million, more than the program has operations.
     llvm::DenseSet<Operation *> unresolvedOps;
+    // Threads with an access the analysis could not place. Such a thread
+    // may be touching the very field a cold verdict says it touches once,
+    // through a pointer the walk could not follow, so no pair involving it
+    // is cold: unknown must not print as "costs nothing".
+    llvm::DenseSet<unsigned> unresolvedThreads;
     llvm::DenseSet<Operation *> stackLocalOps;   // slots that never leave their invocation
+    llvm::DenseSet<Operation *> threadLocalOps;  // every thread has its own copy
     unsigned definite = 0, possible = 0;
     unsigned coldPairs = 0;   // different threads, but one side touches once
+    // Possible pairs that would be cold if the once-side's thread had no
+    // unplaced accesses. On real code that is most of what was once "cold":
+    // every memcached thread has accesses the walk cannot place, so the
+    // count is kept apart from the possibles that are possible for another
+    // reason, or "possible" would stop meaning anything there.
+    unsigned unplacedPairs = 0;
     size_t walkInstances = 0;
 
     // Walks the chain of cir.get_member back to whatever the record sits in,
@@ -158,7 +177,12 @@ private:
         return Value();
     }
 
-    void report();
+    void report(const ThreadInstanceWalk &walk);
+
+    void noteUnresolved(Operation *op, const Instance &inst) {
+        unresolvedOps.insert(op);
+        unresolvedThreads.insert(inst.thread);
+    }
 
     // Whether the data layout can size and align the object a root names.
     static bool hasLayout(Operation *root) {
@@ -210,7 +234,7 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
     multiInvocation.clear();
     unresolvedOps.clear();
     stackLocalOps.clear();
-    definite = possible = coldPairs = 0;
+    definite = possible = coldPairs = unplacedPairs = 0;
 
     const DataLayout dl(module);
 
@@ -241,13 +265,18 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
                 // much the analysis could not see.
                 if (!traceToLocalRoot(addr).getDefiningOp<cir::GetMemberOp>()) return;
                 Value base = resolveMember(addr, dl, offset, path);
-                if (!base) { unresolvedOps.insert(op); return; }
+                if (!base) { noteUnresolved(op, inst); return; }
                 Operation *root = walk.resolveRoot(base, &inst);
-                if (!root) { unresolvedOps.insert(op); return; }
+                if (!root) { noteUnresolved(op, inst); return; }
                 // A root declared with an incomplete record type (an opaque
                 // global the program only ever casts) has no layout to place
                 // fields in, and asking the data layout for one asserts.
-                if (!hasLayout(root)) { unresolvedOps.insert(op); return; }
+                if (!hasLayout(root)) { noteUnresolved(op, inst); return; }
+                // A thread-local global is one object per thread, so no two
+                // threads share its line. The walk hands every thread the
+                // same GlobalOp for it, which once made its fields a pair.
+                if (auto g = dyn_cast<cir::GlobalOp>(root))
+                    if (g.getTlsModelAttr()) { threadLocalOps.insert(op); return; }
                 if (auto slot = dyn_cast<cir::AllocaOp>(root)) {
                     if (!addressEscapes(slot)) { stackLocalOps.insert(op); return; }
                 }
@@ -264,24 +293,30 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
                 // repeats. This is what memcached's getopt loop is, and
                 // without it the option parsing pairs against every worker
                 // that later reads the same struct.
-                const bool repeated = !walk.inStartupPhase(op, inst) &&
-                                      (inst.threadMult == Mult::Many ||
-                                       inst.execMult == Mult::Many ||
-                                       walk.siteMult(op, inst.func) == Mult::Many);
+                // Three answers, not two. An instance that runs many times,
+                // or stands for many threads, repeats whatever its control
+                // flow looks like; otherwise the site decides, and the site
+                // can only be read in structured control flow. A goto used
+                // to make every access in its function "repeated", so one
+                // store followed by a goto was reported as a definite pair.
+                const bool startup = walk.inStartupPhase(op, inst);
+                const bool manyAnyway = inst.threadMult == Mult::Many || inst.execMult == Mult::Many;
+                const bool rateKnown = walk.rateKnown(inst.func);
+                const bool repeated = !startup && (manyAnyway ||
+                                                   (rateKnown && walk.siteMult(op, inst.func) == Mult::Many));
+                const bool unknownRate = !startup && !manyAnyway && !rateKnown;
                 if (isWrite) {
                     fi.writers.insert(inst.thread);
-                    if (repeated) {
-                        fi.hotWriters.insert(inst.thread);
-                        fi.hotWriteAt.try_emplace(inst.thread, op);
-                    }
+                    if (repeated) fi.hotWriters.insert(inst.thread);
+                    if (unknownRate) fi.unknownRateWriters.insert(inst.thread);
+                    if (repeated || unknownRate) fi.hotWriteAt.try_emplace(inst.thread, op);
                     if (repeated && inst.threadMult == Mult::Many) fi.manyHotWriters.insert(inst.thread);
                     if (!fi.firstWrite) fi.firstWrite = op;
                 } else {
                     fi.readers.insert(inst.thread);
-                    if (repeated) {
-                        fi.hotReaders.insert(inst.thread);
-                        fi.hotReadAt.try_emplace(inst.thread, op);
-                    }
+                    if (repeated) fi.hotReaders.insert(inst.thread);
+                    if (unknownRate) fi.unknownRateReaders.insert(inst.thread);
+                    if (repeated || unknownRate) fi.hotReadAt.try_emplace(inst.thread, op);
                 }
                 };
                 llvm::SmallVector<MemoryAccess, 2> accesses;
@@ -302,11 +337,19 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
         return;
     }
     walkInstances = walk.instances();
-    report();
+    // A stack slot is one object only when its function ran once. The
+    // instance that touched it may well have run once, from a function
+    // that called it twice: two calls, two slots, and the second call's
+    // threads cannot share a line with the first's.
+    for (auto &kv : byRoot)
+        if (auto slot = dyn_cast<cir::AllocaOp>(kv.first))
+            if (walk.instanceCount(slot->getParentOfType<cir::FuncOp>()) > 1)
+                multiInvocation.insert(kv.first);
+    report(walk);
     markAllAnalysesPreserved();
 }
 
-void WTCFalseSharingDiagnosePass::report() {
+void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
     const uint64_t line = lineSize;
     const DataLayout dl(module);
 
@@ -355,6 +398,11 @@ void WTCFalseSharingDiagnosePass::report() {
                 const uint64_t oa = offsets[i], ob = offsets[j];
                 const FieldInfo &a = fields[oa];
                 const FieldInfo &b = fields[ob];
+                // Overlapping bytes are the same data: a store of a whole
+                // record against a store to one of its members is true
+                // sharing, which no layout removes. Keyed by start offset,
+                // the two once passed as distinct fields of one line.
+                if (oa + std::max<uint64_t>(a.size, 1) > ob) continue;
                 unsigned positions = 0, sharing = 0;
                 for (uint64_t shift = 0; shift < line; shift += std::min(align, line)) {
                     ++positions;
@@ -394,7 +442,7 @@ void WTCFalseSharingDiagnosePass::report() {
                         if (!x.certain.count(w)) continue;
                         for (const auto &set : {y.hotWriters, y.hotReaders})
                             for (unsigned u : set)
-                                if (u != w && y.certain.count(u)) {
+                                if (u != w && y.certain.count(u) && !walk.exclusive(w, u)) {
                                     hit = true;
                                     if (!wx) { wx = pick(x, w); wy = pick(y, u); }
                                     return;
@@ -413,15 +461,19 @@ void WTCFalseSharingDiagnosePass::report() {
                 // whether anything had ever been written, and paired
                 // memcached's option parsing -- start-up, run once -- with a
                 // command that rewrites the same setting.
+                // A side whose rate is unknown may be repeated, so it can
+                // make a pair possible; it cannot make one definite or cold.
                 auto mayContend = [&](const FieldInfo &x, const FieldInfo &y,
                                       Operation *&wx, Operation *&wy) {
-                    for (unsigned w : x.hotWriters)
-                        for (const auto &set : {y.hotWriters, y.hotReaders})
-                            for (unsigned u : set)
-                                if (u != w || x.manyHotWriters.count(w)) {
-                                    wx = pick(x, w); wy = pick(y, u);
-                                    return true;
-                                }
+                    for (const auto &xs : {x.hotWriters, x.unknownRateWriters})
+                        for (unsigned w : xs)
+                            for (const auto &set : {y.hotWriters, y.hotReaders,
+                                                    y.unknownRateWriters, y.unknownRateReaders})
+                                for (unsigned u : set)
+                                    if (u != w || x.manyHotWriters.count(w)) {
+                                        wx = pick(x, w); wy = pick(y, u);
+                                        return true;
+                                    }
                     return false;
                 };
                 const bool contend = !hit && (mayContend(a, b, whereA, whereB) ||
@@ -436,18 +488,33 @@ void WTCFalseSharingDiagnosePass::report() {
                 // one extra store by main turn such a pair into "costs
                 // nothing". Unknown must print as unknown.
                 bool cold = false;
+                // A pair that would be cold but for an access the walk could
+                // not place on the once-side's thread: that thread may be
+                // writing this very field through the pointer it could not
+                // follow, so the answer is unknown, and printed as such.
+                bool unplaced = false;
                 if (!hit && !contend) {
-                    auto coldAgainst = [&](const FieldInfo &x, const FieldInfo &y) {
+                    auto coldAgainst = [&](const FieldInfo &x, const FieldInfo &y,
+                                           Operation *&wx, Operation *&wy) {
                         for (unsigned w : x.writers) {
                             if (!x.certain.count(w)) continue;
                             if (x.hotWriters.count(w)) continue;   // this side is not cold
+                            if (x.unknownRateWriters.count(w)) continue;   // nor known to be
                             for (const auto &set : {y.hotWriters, y.hotReaders})
                                 for (unsigned u : set)
-                                    if (u != w && y.certain.count(u)) return true;
+                                    if (u != w && y.certain.count(u)) {
+                                        if (unresolvedThreads.count(w)) {
+                                            unplaced = true;
+                                            wx = x.firstWrite; wy = pick(y, u);
+                                            continue;
+                                        }
+                                        return true;
+                                    }
                         }
                         return false;
                     };
-                    cold = coldAgainst(a, b) || coldAgainst(b, a);
+                    cold = coldAgainst(a, b, whereA, whereB) || coldAgainst(b, a, whereB, whereA);
+                    if (cold) unplaced = false;
                 }
 
                 if (hit && onStack) {
@@ -486,8 +553,21 @@ void WTCFalseSharingDiagnosePass::report() {
                         << "wtc: possible false sharing in " << label << ": '" << a.name
                         << "' and '" << b.name << "' share one " << line << "-byte line" << where
                         << " and are touched repeatedly, but by threads the analysis "
-                           "cannot tell apart or cannot account for";
+                           "cannot tell apart, cannot account for, cannot show both exist, "
+                           "or cannot rate";
                     d.attachNote(whereB->getLoc())
+                        << "wtc: the other access to '" << b.name << "' is here";
+                    continue;
+                }
+                if (unplaced && !onStack) {
+                    ++possible;
+                    ++unplacedPairs;
+                    auto d = whereA->emitRemark()
+                        << "wtc: possible false sharing in " << label << ": '" << a.name
+                        << "' and '" << b.name << "' share one " << line << "-byte line" << where
+                        << "; one side touches it once as far as the analysis can see, but "
+                           "that thread also has accesses it could not place";
+                    if (whereB) d.attachNote(whereB->getLoc())
                         << "wtc: the other access to '" << b.name << "' is here";
                     continue;
                 }
@@ -499,14 +579,17 @@ void WTCFalseSharingDiagnosePass::report() {
     // Printed whenever a field access was seen, so that "nothing to report"
     // is a line in the output rather than an absence a test cannot tell from
     // the pass not having run.
-    if (!byRoot.empty() || !unresolvedOps.empty() || !stackLocalOps.empty())
+    if (!byRoot.empty() || !unresolvedOps.empty() || !stackLocalOps.empty() ||
+        !threadLocalOps.empty())
         module.emitRemark() << "wtc: false sharing: " << definite << " definite, " << possible
                             << " possible, " << coldPairs
                             << " cold (different threads, but one side touches the line once), "
                             << unresolvedOps.size() << " field accesses on objects that could not "
                             << "be identified, " << stackLocalOps.size()
-                            << " on stack slots that never escape; " << walkInstances
-                            << " function instances";
+                            << " on stack slots that never escape, " << threadLocalOps.size()
+                            << " on thread-local objects; " << walkInstances
+                            << " function instances; " << unplacedPairs
+                            << " of the possible pairs would be cold but for unplaced accesses";
 }
 
 } // namespace

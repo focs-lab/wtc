@@ -1,4 +1,4 @@
-// RUN: wtc-opt %s --wtc-align-by-owner 2>&1 >/dev/null | FileCheck %s
+// RUN: wtc-opt %s --wtc-align-by-owner 2>&1 | FileCheck %s
 
 // @table is constant, so it is never raised. Raising @plain alone buys
 // nothing: an 8-byte object on its own 64-byte line leaves 56 bytes of tail
@@ -73,3 +73,4 @@ module {
 
 // CHECK-NOT: raised the alignment
 // CHECK: align by owner: 0 globals raised to 64 bytes, at most 0 bytes of padding; refused 1 constant, 0 already aligned, 1 whose partner could not be raised
+// CHECK-NOT: alignment = 64

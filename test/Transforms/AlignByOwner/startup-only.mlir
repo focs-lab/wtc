@@ -1,4 +1,4 @@
-// RUN: wtc-opt %s --wtc-align-by-owner 2>&1 >/dev/null | FileCheck %s
+// RUN: wtc-opt %s --wtc-align-by-owner 2>&1 | FileCheck %s
 
 // main fills two globals in a loop and only then starts a worker. The
 // writes are over before the worker exists, so there is no line for two
@@ -65,3 +65,4 @@ module {
 
 // CHECK-NOT: raised the alignment
 // CHECK: align by owner: 0 globals raised
+// CHECK-NOT: alignment = 64
