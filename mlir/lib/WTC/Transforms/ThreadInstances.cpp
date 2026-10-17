@@ -625,6 +625,48 @@ static bool isNullPointer(Value v) {
     return false;
 }
 
+// A constant that names no object: zeros, integers, floats, null pointers,
+// and records and arrays of those. A record written from one -- `c = {0}`,
+// `c = { .n = 8 }`, which the front end emits as a copy out of a private
+// constant -- holds no address a field listing would want, as a memset
+// leaves none. A view of a global, or a pointer of any other value, does.
+static bool namesNoObject(Attribute a) {
+    if (!a) return true;
+    if (isa<cir::ZeroAttr, cir::UndefAttr, cir::PoisonAttr, cir::IntAttr, cir::FPAttr, cir::BoolAttr>(a))
+        return true;
+    if (auto p = dyn_cast<cir::ConstPtrAttr>(a)) return p.getValue().getValue().isZero();
+    if (auto r = dyn_cast<cir::ConstRecordAttr>(a)) {
+        for (Attribute m : r.getMembers())
+            if (!namesNoObject(m)) return false;
+        return true;
+    }
+    if (auto arr = dyn_cast<cir::ConstArrayAttr>(a)) {
+        if (isa<StringAttr>(arr.getElts())) return true;
+        auto elts = dyn_cast<ArrayAttr>(arr.getElts());
+        if (!elts) return false;
+        for (Attribute e : elts)
+            if (!namesNoObject(e)) return false;
+        return true;
+    }
+    return false;
+}
+
+// Whether what a copy reads from is a constant global that names no object.
+static bool copiesNoObject(Value src) {
+    auto gg = traceToLocalRoot(src).getDefiningOp<cir::GetGlobalOp>();
+    if (!gg) return false;
+    auto g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr());
+    if (!g || !g.getConstant()) return false;
+    auto init = g.getInitialValue();
+    return !init || namesNoObject(*init);
+}
+
+// Whether a store writes a constant record that names no object.
+static bool storesNoObject(cir::StoreOp st) {
+    auto c = st.getValue().getDefiningOp<cir::ConstantOp>();
+    return c && namesNoObject(c.getValue());
+}
+
 llvm::ArrayRef<Instance *> ThreadInstanceWalk::instancesOf(cir::FuncOp f) const {
     if (instancesIndexed_ != instances_.size()) {
         instancesByFunc_.clear();
@@ -700,6 +742,7 @@ void ThreadInstanceWalk::computeFieldStores() const {
                     if (auto st = dyn_cast<cir::StoreOp>(u)) {
                         if (st.getAddr() != p) { fs.poisoned = true; continue; }   // the address is published
                         if (isa<cir::RecordType>(st.getValue().getType())) {
+                            if (storesNoObject(st)) continue;
                             whole.insert(st.getValue().getType());
                             fs.poisoned = true;
                             continue;
@@ -719,9 +762,11 @@ void ThreadInstanceWalk::computeFieldStores() const {
                     if (auto ms = dyn_cast<cir::MemSetOp>(u))
                         if (ms.getDst() == p) continue;   // zeros: no object named
                     bool copied = false;
-                    if (auto cp = dyn_cast<cir::CopyOp>(u)) copied = cp.getDst() == p;
-                    if (auto mc = dyn_cast<cir::MemCpyOp>(u)) copied = mc.getDst() == p;
-                    if (auto mm = dyn_cast<cir::MemMoveOp>(u)) copied = mm.getDst() == p;
+                    Value from;
+                    if (auto cp = dyn_cast<cir::CopyOp>(u)) { copied = cp.getDst() == p; from = cp.getSrc(); }
+                    if (auto mc = dyn_cast<cir::MemCpyOp>(u)) { copied = mc.getDst() == p; from = mc.getSrc(); }
+                    if (auto mm = dyn_cast<cir::MemMoveOp>(u)) { copied = mm.getDst() == p; from = mm.getSrc(); }
+                    if (copied && copiesNoObject(from)) continue;   // `= {0}`: no object named
                     if (copied)
                         if (Type rec = recordBehind(p.getType())) whole.insert(rec);
                     fs.poisoned = true;   // a call, a copy, anything else
@@ -731,14 +776,15 @@ void ThreadInstanceWalk::computeFieldStores() const {
         }
         // A record written as a whole, wherever its address came from.
         if (auto st = dyn_cast<cir::StoreOp>(op)) {
-            if (isa<cir::RecordType>(st.getValue().getType())) whole.insert(st.getValue().getType());
+            if (isa<cir::RecordType>(st.getValue().getType()) && !storesNoObject(st))
+                whole.insert(st.getValue().getType());
             return;
         }
-        // A global record with an initialiser other than zero: its fields
-        // hold values no store lists.
+        // A global record with an initialiser that names an object: its
+        // fields hold values no store lists.
         if (auto g = dyn_cast<cir::GlobalOp>(op)) {
             if (auto init = g.getInitialValue())
-                if (!isa<cir::ZeroAttr>(*init))
+                if (!namesNoObject(*init))
                     if (Type rec = recordIn(g.getSymType())) whole.insert(rec);
             return;
         }
@@ -776,11 +822,12 @@ void ThreadInstanceWalk::computeFieldStores() const {
             if (written) whole.insert(rec);
             return;
         }
-        Value dst;
-        if (auto cp = dyn_cast<cir::CopyOp>(op)) dst = cp.getDst();
-        else if (auto mc = dyn_cast<cir::MemCpyOp>(op)) dst = mc.getDst();
-        else if (auto mm = dyn_cast<cir::MemMoveOp>(op)) dst = mm.getDst();
+        Value dst, src;
+        if (auto cp = dyn_cast<cir::CopyOp>(op)) { dst = cp.getDst(); src = cp.getSrc(); }
+        else if (auto mc = dyn_cast<cir::MemCpyOp>(op)) { dst = mc.getDst(); src = mc.getSrc(); }
+        else if (auto mm = dyn_cast<cir::MemMoveOp>(op)) { dst = mm.getDst(); src = mm.getSrc(); }
         if (dst) {
+            if (copiesNoObject(src)) return;
             if (Type rec = recordBehind(traceToLocalRoot(dst).getType())) whole.insert(rec);
             return;
         }
