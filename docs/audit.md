@@ -1,11 +1,12 @@
 # Known defects
 
-State as of September 2026. The first review was of the prototype before it
-moved into this repository; the sections below have since been worked
+State as of September 2026 for the queue analysis, and October 2026 for the
+layout passes (the section after "Still open"). The first review was of the
+prototype before it moved into this repository; the sections below have since been worked
 through, and each one now says what became of it. A defect is only marked
 closed where a test would fail if it came back.
 
-Read "Still open" at the end before building anything on top of a verdict.
+Read "Still open" and the October section before building anything on top of a verdict.
 
 ## Closed, with the test that keeps them closed
 
@@ -53,6 +54,87 @@ what was measured and why the default is what it is.
 
 ---
 
+## The layout passes, October 2026
+
+`--wtc-false-sharing-diagnose` and `--wtc-align-by-owner` were reviewed
+four times after their numbers were taken on memcached, the third and
+fourth times on hand-written programs with known answers. Every defect
+found is closed with a test that fails on the code before the fix; the
+list, with the tests, is in `docs/corpus.md`. The ones that changed
+verdicts: the walk lost a thread spawned through a helper's local; a goto
+made every access in its function "repeated"; a thread-local global, a
+stack slot of a function called twice, two spawns in the two arms of an
+`if`, and overlapping byte ranges all gave `definite`; atomic
+read-modify-writes and bit-field stores were not memory accesses at all; a
+recursive function ran "once"; a thread with an access the walk could not
+place still made a pair cold, which on memcached was 349 pairs; the
+alignment pass raised the alignment of declarations, sections,
+thread-local and weak globals; a goto in a caller, or in `main`, still
+made single writes hot; a once-only read of a whole record widened the
+same thread's once-only write; the escape check called every slot
+published; and the start-up phase ended at a spawning callee's call rather
+than inside it.
+
+The heap-and-element round of October (heap objects by allocating call,
+array elements by constant index or by the spawn loop's own, one element
+per thread, elements the analysis cannot tell apart) was reviewed the same
+way: 33 defects by three readings, the verdict-changing ones being a
+loop-spawned thread whose every access was "repeated" even on the element
+it owns alone, five ways a loop can hand an element to no thread or to
+several while the analysis claimed one thread per element, a heap object
+with two names and so two roots, a pointer global written through a
+`global_view` or an alias, an entry lost through an integer round trip,
+and a recurrence left unexpanded whose reach was treated as seen. All are
+closed in `docs/corpus.md`'s section on heap objects and elements.
+
+The one-of round (a pointer loaded from a slot, a global or a field
+written in several places is one of the places the stores name; possible,
+never definite) was reviewed by two readings: 15 defects, the
+verdict-changing ones being a store through a bitcast of a slot the
+listing missed, a record global's initialiser, a store through a `char *`
+view, a union member written beside the one read, and the record's
+address leaving as `void *`, all writes no listing saw; a candidate that
+kept the storing thread's own element and so made pairs across elements
+that no thread makes; and a wide access through a set widening the
+thread's own narrow one to a definite pair. Closed the same way, in the
+same section.
+
+Still open for these passes, stated here and in `docs/corpus.md` rather
+than in the remarks themselves:
+
+**No notion of time.** A `definite` verdict says two accounted-for threads
+repeatedly touch the two fields, not that they do so at the same time. A
+spawn, a join, and a second spawn of the same worker are two threads to the
+walk. This errs *unsafe* for a false-sharing verdict: a pair reported
+between threads that never overlap costs nothing.
+
+**No notion of a lock.** Accesses under one mutex are not seen as
+serialised. On memcached a shared lock did not decide a pair by itself;
+who writes, hand-offs and rate did.
+
+**No notion of rate.** Repeated or once is all the walk can tell; a command
+handler that runs a thousand times a second and one that runs once a day
+are both "repeated". Every memcached pair was decided by rate, by hand.
+
+**Objects it cannot name.** A field reached through a pointer the walk
+cannot follow -- loaded from a slot, a global or a field written in
+places it cannot all place, or whose object is written some other way,
+from a `realloc`, from a callback's `void *` -- is counted as unidentified
+in every summary, never guessed at: 4,265 accesses on memcached against
+1,522 pairs. A pointer whose every source it can place is one of those
+places, and a pair through it is possible, never definite (51 accesses on
+memcached). Heap objects are named by the call that allocated them and array
+elements by a constant index or the spawn loop's own; an element at any
+other index is placed on its array without knowing which, counted apart
+(678 on memcached), and every pair there is at most possible. Objects from
+two allocations are never neighbours to the analysis, whatever the
+allocator does: Phoenix `histogram`'s known false sharing, between the
+per-thread histograms each worker allocates, is out of its reach.
+
+**Placement across objects** is the linker's and the allocator's. The
+analysis reports where fields lie within an object; which objects share a
+line is checked with `nm`, one pair at a time.
+
 # The original review
 
 What follows is the review as first written, kept because the reasoning
@@ -93,7 +175,8 @@ Three further problems cost precision rather than correctness:
 - The call graph is built from symbol references, so function pointers,
   lambdas, `std::function` and virtual calls are invisible, silently.
 - Thread lifetime is not modelled. Two threads that never overlap in time count
-  as two. This one errs safe.
+  as two. For the queue analysis this errs safe; for a false-sharing verdict
+  it does not (see the October section).
 
 ## The dialect carries no concurrency semantics
 

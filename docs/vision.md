@@ -221,7 +221,17 @@ it is that the analysis gives up safely rather than often: one translation
 unit, and a queue reached through a member or the heap is `unknown`.
 
 The next honest step was never another pass. It was to write the ring by hand
-and find out how large the prize is. That measurement is what `benchmarks/`
-exists for, and until its numbers are in `benchmarks/results/`, the size of
-the prize is still an open question and this document should not be read as
-claiming otherwise.
+and find out how large the prize is. That measurement was made, and `gate.md` reports it under the
+protocol it describes.
+
+The second direction built since is memory layout by owner: a false-sharing
+diagnosis over the same thread walk, a pass that aligns globals by who
+touches them, and a census of what seventeen codebases pad by hand. Its
+first result on real code is negative -- on memcached no pair the analysis
+reports survives a reading of the source, and two load tests of its
+verdict applied by hand did not overturn that reading: throughput within
+0.7% of the original on all four workloads, with 95% intervals from -3.2%
+to +2.0%, which cannot rule out a gain of about 2% -- and `corpus.md`
+says exactly how, including what the analysis cannot see:
+pointers it cannot follow, locks, time and rate. What padding is worth in a
+given program is measured per program, not assumed.

@@ -14,8 +14,15 @@ for that program rather than for the general case.
 The pipeline runs end to end on real C++: the compiler proves that a queue has
 one producer thread and one consumer thread, rewrites that object's
 construction to use a wait-free ring, and the program still produces the same
-output. What is not yet known is how much that is worth, which is what the
-measurements under way are for.
+output. How much that is worth was measured, under the protocol
+`docs/gate.md` describes.
+
+The second direction, memory layout by owner, has its analysis and its
+first result. The analysis reports pairs of fields that different threads
+repeatedly touch in one cache line, counts every member access it cannot place,
+and on memcached finds pairs of which none survives a reading of the
+source; `docs/corpus.md` says how, with the measurements that tested it
+and a census of what seventeen codebases pad by hand.
 
 | Piece | State |
 | --- | --- |
@@ -26,6 +33,8 @@ measurements under way are for.
 | Lowering back to CIR | faithful, restores the original argument attributes, and leaves no attribute of ours behind |
 | Specialised implementations | `runtime/spsc_ring.hpp`, an unbounded wait-free ring, with its own tests |
 | Measurements | harness, five workloads and eleven baselines in `benchmarks/`; results under `benchmarks/results/` |
+| False-sharing diagnosis | the same thread walk over field accesses; `definite`, `possible` and `cold` verdicts, each a claim with a test; arrays and heap objects are counted as unidentified, not guessed at |
+| Alignment by owner | raises a global a different thread repeatedly touches to a line of its own; kept as a measurement, since on memcached it is close to a build flag |
 
 The analysis assumes one translation unit. Queues reached through a member or
 the heap are `unknown` and keep the general-purpose implementation, which is
