@@ -1,9 +1,9 @@
 // RUN: wtc-opt %s --wtc-false-sharing-diagnose 2>&1 >/dev/null | FileCheck %s
 
 // One memcpy reads an element the analysis cannot name and writes through
-// a pointer it cannot place: one operation, counted once in the summary,
-// under the least that is known of it. It used to be counted in both
-// clauses.
+// a pointer it cannot place (a global written twice, once with a pointer
+// made from an integer): one operation, counted once in the summary, under
+// the least that is known of it. It used to be counted in both clauses.
 
 !s64i = !cir.int<s, 64>
 !u64i = !cir.int<u, 64>
@@ -42,7 +42,9 @@ module {
     %o = cir.get_global @other : !cir.ptr<!rec_S>
     %dp = cir.get_global @dst : !cir.ptr<!cir.ptr<!rec_S>>
     cir.store %o, %dp : !cir.ptr<!rec_S>, !cir.ptr<!cir.ptr<!rec_S>>
-    cir.store %o, %dp : !cir.ptr<!rec_S>, !cir.ptr<!cir.ptr<!rec_S>>
+    %z = cir.const #cir.int<4096> : !u64i
+    %ip = cir.cast int_to_ptr %z : !u64i -> !cir.ptr<!rec_S>
+    cir.store %ip, %dp : !cir.ptr<!rec_S>, !cir.ptr<!cir.ptr<!rec_S>>
     %one = cir.const #cir.int<1> : !s64i
     %f = cir.get_global @w : !fnptr
     cir.call @spawn(%f, %one) : (!fnptr, !s64i) -> ()

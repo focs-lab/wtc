@@ -3,6 +3,8 @@
 #include "clang/CIR/Dialect/IR/CIRAttrs.h"
 #include "mlir/IR/BuiltinOps.h"
 
+#include "llvm/ADT/DenseSet.h"
+
 namespace mlir::wtc {
 
 cir::FuncOp lookupCallee(cir::CallOp op) {
@@ -139,8 +141,9 @@ cir::FuncOp resolveFunctionOperand(Value v) {
         getGlobal, getGlobal.getNameAttr());
 }
 
-// The stored value if `alloca` is written exactly once, by a store in its
-// own block that precedes every load, and nothing else touches its address.
+// The stored value if `alloca` is written exactly once, null stores aside,
+// by a store in its own block that precedes every load, and nothing else
+// touches its address.
 static Value singleStoredValue(cir::AllocaOp alloca) {
     cir::StoreOp theStore;
     llvm::SmallVector<cir::LoadOp, 8> loads;
@@ -148,6 +151,12 @@ static Value singleStoredValue(cir::AllocaOp alloca) {
         if (auto st = mlir::dyn_cast<cir::StoreOp>(user)) {
             if (st.getAddr() != alloca.getResult())
                 return nullptr;          // the slot's address is the stored value
+            // `p = NULL` is no second value: a null reaches no field access,
+            // and `T *p = NULL; ... p = &x;` is the commonest shape of a
+            // pointer local.
+            if (auto c = st.getValue().getDefiningOp<cir::ConstantOp>())
+                if (auto cp = mlir::dyn_cast<cir::ConstPtrAttr>(c.getValue()))
+                    if (cp.getValue().getValue().isZero()) continue;
             if (theStore)
                 return nullptr;          // two stores: not a single assignment
             theStore = st;
@@ -186,6 +195,45 @@ Value traceToRoot(Value v) {
     }
 }
 
+
+// A stack slot is a different object in every invocation, so two threads
+// running the same function do not share it and cannot falsely share its
+// fields. Running on real compiler output, this was the whole of the
+// pass's noise: libstdc++ locals such as allocated_ptr's __guard_ptr,
+// reported because the function they live in is reachable from many
+// threads. They are only interesting if the address is published, and
+// even then two invocations are two objects, so an escaping slot can
+// reach "possible" and never "definite".
+bool addressEscapes(cir::AllocaOp slot) {
+    llvm::SmallVector<Value, 8> work{slot.getResult()};
+    llvm::DenseSet<Operation *> seen;
+    unsigned guard = 0;
+    while (!work.empty() && guard++ < 512) {
+        Value v = work.pop_back_val();
+        for (Operation *u : v.getUsers()) {
+            // A store is judged per operand: the same store may hold
+            // the slot's address as its destination and, through another
+            // derived value, as the value stored, and only the second
+            // publishes it.
+            if (auto st = dyn_cast<cir::StoreOp>(u)) {
+                if (st.getValue() == v) return true;
+                continue;
+            }
+            if (!seen.insert(u).second) continue;
+            if (isa<cir::LoadOp>(u)) continue;                  // reads the slot
+            if (isa<cir::CastOp, cir::GetMemberOp, cir::GetElementOp, cir::PtrStrideOp>(u)) {
+                work.push_back(u->getResult(0));
+                continue;
+            }
+            return true;    // a call, a global initialiser, anything else
+        }
+    }
+    // Out of budget with work left: assume the worst. With the work
+    // done, the address went nowhere. An earlier version returned true
+    // on both exits, so no slot was ever private and the summary's
+    // "on stack slots that never escape" was always zero.
+    return !work.empty();
+}
 
 unsigned spawnEntryOperand(cir::CallOp op) {
     cir::FuncOp callee = lookupCallee(op);
