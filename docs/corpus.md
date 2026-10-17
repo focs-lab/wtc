@@ -1,4 +1,4 @@
-# Status, 16 October 2026: recounted twice, and no reported pair survives review
+# Status, 17 October 2026: recounted twice, and no reported pair survives review
 
 This file was written in September, audited, and found wrong in places; the
 fixes were audited again on 16 October and found wrong in more; and the
@@ -10,21 +10,27 @@ where they were made, because a retraction that deletes what it retracts
 teaches nothing.
 
 **The result of this phase is negative, and narrower than it first looked.**
-On amalgamated memcached the analysis reports 156 definite and 1,335
-possible pairs. The definite pairs and 852 of the possible sit on five
+On amalgamated memcached the analysis reports 159 definite and 1,363
+possible pairs. 156 of the definite pairs and 852 of the possible sit on five
 globals, every one of which was read against the source, and no pair there
 describes traffic that separating fields would remove: each is decided by
-how often one side runs, which the analysis cannot tell. Two measurements
+how often one side runs, which the analysis cannot tell; the three
+definite pairs the one-of round added, on extstore's engine object, read
+the same way (below). Two measurements
 under load do not overturn it, within what ten runs resolve: applying the
 verdict by hand gives throughput within 0.7% of the original on every
-workload, with 95% intervals from -3.2% to +2.0%. The other 483 possible
-pairs sit at elements of arrays and heap objects -- the per-thread
+workload, with 95% intervals from -3.2% to +2.0%. Of the other possible
+pairs, 490 sit at elements of arrays and heap objects -- the per-thread
 `threads[]` and `itemstats[]` among them -- which the analysis places since
 the October round on heap objects and elements (below) but cannot tell
-apart; they were not read. What it still cannot place, 4,377 accesses
-through pointers it cannot follow, the slab allocator's items and the
-per-connection state among them, was not examined either, so this is not a
-claim that memcached has nothing to fix.
+apart, 5 come through pointers that may name one of several objects, and
+16 are on the extstore engine; none of these was read. What it still
+cannot place, 4,265 accesses through pointers it cannot follow, the slab
+allocator's items and the per-connection state among them, was not
+examined either, so this is not a claim that memcached has nothing to fix.
+Counted at the source the walk stopped at, most of those are the results
+of calls that are not allocations and the `void *` parameters of callbacks
+nobody in the module calls, not the slots and fields they sat in.
 
 ## What was wrong, and what it is now
 
@@ -35,14 +41,14 @@ reviewed. Both columns are kept.
 | what | September | first recount | **now** | why it moved |
 |---|---:|---:|---:|---|
 | source files scanned | 112,831 | 110,016 | **98,344** (+11,672 test files set aside) | a checked-in build tree was scanned; then test directories and `*_test` files were, and a fixture aligned to 64 is not a decision about two threads |
-| sites | 1,572 | 1,659 | **1,623** | directives, comments and build trees were counted; seven idioms were missed; then tests were set aside (-36 net of the new idioms) |
+| sites | 1,572 | 1,659 | **1,623** (1,546 in the v5 recount of 17 October on a refetched corpus at later commits, which mixes tool fixes with source drift; see the census section) | directives, comments and build trees were counted; seven idioms were missed; then tests were set aside (-36 net of the new idioms) |
 | precision of a site | -- | "near 75%", from 40 read | **74% [65%, 82%]**, 100 read and labelled in `corpus-precision-sample.csv`, six labels changed by an independent second reader | the misses are DMA and firmware layouts, SIMD tables, read-only lookup tables, hot/cold locality splits, habitual alignment of read-mostly structures and a SPARC trick; `kernel_aligned` 26 of 33, `alignas_named` 13 of 22, `dpdk_aligned` 13 of 18 |
 | what the census misses | -- | -- | **from about a tenth to about half of what it finds**, per codebase (DPDK 0.12, folly 0.19, compiler-rt 0.31, postgres 0.40, MySQL 0.53): folly ~13 against 71 found, MySQL ~39 against 74, compiler-rt ~6 against 18, DPDK ~62 [11, 305] against 539, postgres 2 against 8; from 120 candidates read against the previous census, ten of which the current one finds; `corpus-recall-sample.csv` | spellings with no pattern: a padded type (`PFS_cacheline_atomic_*`), a size macro (`LWLOCK_PADDED_SIZE`, `BUFFERDESC_PAD_TO_SIZE`), a group marker (memif), `ALIGNED(` split across lines, and a union of an atomic with a line-sized buffer |
-| fields / objects | 675 / 856 (44% / 56%) | 761 / 898 (46% / 54%) | **828 / 795 (51% / 49%)** | the nesting tracker could not see Allman braces; then it ended a record at the `)` of `struct alignas(X) Name {`, which made every member of such a record an object: 23 sites in MySQL's `log0sys.h` and 8 elsewhere move to fields, and MySQL's 34 / 33 is 66 / 8 with the nine sites the second census found |
-| field annotations on one member | 648 of 675 (96%) | 687 of 761 (90%) | **747 of 828 (90%)** | two of the three ways the kernel writes a group were missed; `__cacheline_group_begin(x) ____cacheline_aligned` is a group too |
+| fields / objects | 675 / 856 (44% / 56%) | 761 / 898 (46% / 54%) | **828 / 795 (51% / 49%)** (v5: 785 / 761, 51% / 49%) | the nesting tracker could not see Allman braces; then it ended a record at the `)` of `struct alignas(X) Name {`, which made every member of such a record an object: 23 sites in MySQL's `log0sys.h` and 8 elsewhere move to fields, and MySQL's 34 / 33 is 66 / 8 with the nine sites the second census found |
+| field annotations on one member | 648 of 675 (96%) | 687 of 761 (90%) | **747 of 828 (90%)** (v5: 703 of 785, 90%) | two of the three ways the kernel writes a group were missed; `__cacheline_group_begin(x) ____cacheline_aligned` is a group too |
 | files with several field annotations | 300, at most 24 | 153, at most 17 | **165, at most 23** (`log0sys.h`) | recounted from each classification |
-| memcached pairs, amalgamated | 397 definite, 546 possible | 155 definite, 503 possible, 349 cold | **156 definite, 1,335 possible, 0 cold; 349 of the possible would be cold but for accesses the walk could not place** (155 / 852 / 0 after the fourth and fifth rounds of fixes, 136,673 instances; the heap-and-element round adds one definite pair on `slabclass[0]` and 483 possible pairs at elements the analysis cannot tell apart, 137,526 instances) | the walk had stopped at 10,000 instances and never saw the workers; then "cold" stopped being claimed for a thread with unplaced accesses, which every memcached thread has; then heap objects and array elements were placed at all |
-| field accesses the analysis cannot place | 6,956 | 4,493 | **4,377**, with 678 more at elements of arrays it places but cannot tell apart, and 71 on stack slots that never escape | counted once per operation, not per call string; then atomic and bit-field accesses were counted at all (4,496); then accesses to array elements, to the whole of an object through a cast, and by memset and memcpy, none of which had been counted as accesses before (5,106); and a slot whose address never escapes is now told apart, which no slot ever was, since the escape check answered yes on every exit; then heap objects, elements at constant and per-thread indices, and the whole of an object through a pointer the walk resolves were placed |
+| memcached pairs, amalgamated | 397 definite, 546 possible | 155 definite, 503 possible, 349 cold | **159 definite, 1,363 possible, 0 cold after the one-of round (156 / 1,335 / 0 before it); 365 of the possible would be cold but for accesses the walk could not place or placed only as one of several objects** (155 / 852 / 0 after the fourth and fifth rounds of fixes, 136,673 instances; the heap-and-element round adds one definite pair on `slabclass[0]` and 483 possible pairs at elements the analysis cannot tell apart, 137,526 instances) | the walk had stopped at 10,000 instances and never saw the workers; then "cold" stopped being claimed for a thread with unplaced accesses, which every memcached thread has; then heap objects and array elements were placed at all |
+| field accesses the analysis cannot place | 6,956 | 4,493 | **4,265** after the one-of round (4,377 before it), with 703 more at elements of arrays it places but cannot tell apart, 71 on stack slots that never escape, and 51 placed as one of several objects | counted once per operation, not per call string; then atomic and bit-field accesses were counted at all (4,496); then accesses to array elements, to the whole of an object through a cast, and by memset and memcpy, none of which had been counted as accesses before (5,106); and a slot whose address never escapes is now told apart, which no slot ever was, since the escape check answered yes on every exit; then heap objects, elements at constant and per-thread indices, and the whole of an object through a pointer the walk resolves were placed |
 | memcached pairs, per file | 20 definite, 422 cold | 0 definite, 460 possible | **0 definite, 490 possible** | a placeholder thread gives no definite or cold verdict; then atomics and bit-field stores became accesses |
 | leveldb, per file | "none" | 0 | **0 pairs in the 11 files that compile** (2 refused: the Windows environment and a test helper) | the earlier 0 was a build artefact: all 13 files were refused, ten of them on a missing `LEVELDB_PLATFORM_POSIX`, the threaded ones among them |
 | globals `--wtc-align-by-owner` picks | 73, 4,254 B | 60, 3,489 B | **60, 3,489 B**, a different 60 | `stderr`, a libc declaration the pass must not touch, is out; `logger_gid`, written atomically, is in. The comparison point counted two declarations among its 141: 139 defined mutable globals, 7,778 B |
@@ -283,6 +289,80 @@ The claims audit also found the remark "padding each element to a line
 removes it" false on the very Phoenix case, since `calloc` aligns to 16,
 and two commit messages overstating what was placed; both are reworded.
 
+### One of several objects
+
+A pointer loaded from a stack slot, a pointer global or a field written
+in several places was, until this round, an access the analysis could
+not identify: on memcached 1,521 accesses through such slots, 984 through
+fields and 26 through globals, more than half of what was unplaced.
+Every store into such a place names a value, and when each of those
+values resolves, the loaded pointer is *one of* the places they name. The
+walk now lists the stores into a slot (under its own name or a bitcast
+of it, in the same instance), into a pointer global nothing else names,
+and into a (record, field) pair anywhere in the module, resolves each
+stored value where its store runs -- in every instance of the storing
+function, or without a call string when it has none -- and hands back
+the set. An access through a set is recorded on every object in it, apart
+from the accesses that name the object: it makes a pair possible, "through
+a pointer that may name one of several objects, this among them", never
+definite, and a repeated one keeps a pair on that object from being cold,
+as a repeated unplaced access does. A set of one is that place, not a
+set. A list says nothing -- and the load stays unplaced, counted under
+the source the walk stopped at -- when one source cannot be placed, when
+the record is written whole (assigned, copied, initialised, seen through
+a view of another type, handed by pointer to a function without a body
+or as `void *` to any function, or a union), when a field is set from
+itself, or when there are more than 8 sources or stores in more than 64
+instances.
+
+**memcached.** 159 definite and 1,363 possible pairs, 0 cold; 4,265 accesses unplaced, 703 at elements not told apart, 71 on private slots, 51 placed as one of several objects; 365 of the possible would be cold but for unplaced or set-placed accesses. The possible pairs: 852 on the five globals as before, 490 at elements not told apart, 5 through sets on `slabclass[]`, and 16 on extstore's engine whose once-writer has unplaced accesses. The 110 accesses placed by sets reach
+extstore's engine object, `calloc()` in `extstore_init`, with three
+definite pairs: `pages`, a pointer set once at start-up and read by every
+IO thread per request, beside `wbuf_stack` and `io_stack`, pushed and
+popped under `e->mutex` once per write buffer by the storage writer; and
+`stats.objects_read` beside `stats.bytes_read`, both written under
+`stats_mutex` by the IO threads. The first is a layout pair with one
+invalidation per write buffer of megabytes, the second is lock-serialised:
+the same class as the `@stats` pairs, nothing a workload would feel. The
+five possible pairs through sets are on `slabclass[]`, under
+`slabs_lock`. Counted at their sources, what remains unplaced is no longer
+mostly slots: 1,183 through a field whose list says nothing, 14 through a global, 324 through a slot whose address goes elsewhere, 1,223 through a parameter of a root nobody is seen to call, 932 through the result of a call that is not an allocation, 62 past the caps, 527 otherwise. The frontier is the result of a call that is
+not an allocation and the parameter of a callback nobody in the module
+calls -- libevent's `void *arg` -- not the slot or the field it sat in.
+
+**Phoenix and PARSEC, against the published object lists.** Of the five
+objects the dynamic-detector papers name that a layout analysis can
+reach, the analysis names four: `linear_regression`'s per-thread array
+(17 definite pairs across elements), `string_match`'s per-thread argument
+array (possible, element not known), and `streamcluster`'s `work_mem`
+and `switch_membership` (possible on `malloc()` in `pgain` and `calloc()`
+in `pkmedian`, element not known, allocation run more than once);
+`word_count`'s `use_len[]`, indexed by a field the spawn loop sets, waits
+on reading that index. `histogram`'s known pair lies between two
+allocations, which is the allocator's placement and out of reach. Nothing
+the papers call insignificant is definite here; `kmeans`'s `sum` objects,
+true sharing by the papers' reading, are possible on an allocation that
+runs more than once.
+
+**The audit of this round.** Two independent readings of the commit, the
+walk and the diagnosis with its claims, found fifteen defects, each
+closed with a test that fails on the code before the fix. The
+verdict-changing ones: a store through a bitcast of the slot was admitted
+by the escape check and missing from the list (a definite pair on the one
+object listed); a record global's initialiser, a store through a
+`char *` view of the record, a union member written beside the one read,
+and the record's address leaving as `void *` through a local or a
+forwarding function were writes no listing saw; a candidate resolved in
+the storing thread's instance kept that thread's own element and the
+collapsed set borrowed owner-ness from the loading thread (four definite
+pairs across elements on a handle every worker had published); and the
+widest access per thread was recorded before the set branch, so a 64-byte
+copy through a set widened an 8-byte direct write to a definite pair.
+Also found: a chain of locals assigned on two arms resolved in 2^n time;
+the reason and location printed for a pair judged by any direct access
+rather than by role; "accesses it could not place" said of a placed one;
+a test that could not tell a dropped offset from a kept one.
+
 ## The review: every memcached object, read against the source
 
 A pair survives only if separating the two fields would remove cache-line
@@ -483,14 +563,18 @@ does not cost what its verdict might suggest:
 - **Where an object starts.** "In *k* of 8 positions" treats the
   positions as equally likely; the real start is fixed by the linker and
   readable with `nm`.
-- **Pointers it cannot follow**: 4,377 accesses on memcached, the slab
+- **Pointers it cannot follow**: 4,265 accesses on memcached, the slab
   allocator's items with their atomic reference counts and the state
-  reached through `conn->thread` among them. Heap objects are placed by
+  reached through `conn->thread` among them (set where the connection is
+  made from a callback's `void *` argument, which is where the walk
+  stops). Heap objects are placed by
   the call that allocated them and array elements by a constant index or
   the spawn loop's own; an element at any other index is placed on its
   array without knowing which element, and every pair there is at most
-  possible (483 on memcached). A `realloc`, a pointer global written twice,
-  a pointer stored in a field: not followed.
+  possible (490 on memcached). A pointer loaded from a slot, a global or
+  a field written in several places is one of the places the stores name,
+  when every store can be placed and nothing writes the object another
+  way; otherwise, and after a `realloc`, not followed.
 - **The optimiser.** The analysis runs on ClangIR before `-O2`, which may
   keep a store in a register, hoist it, or merge it.
 - **Core placement.** Two threads on the two hardware threads of one core,
@@ -631,6 +715,25 @@ compiler-rt 18, onetbb 23, abseil 5, prose 2,857; see the top section.)*
 | memcached | 96 | 0 | 0 | 2 |
 | sqlite | 390 | 0 | 0 | 3 |
 | **total** | **110,016** | **1,659** | 1,572 | **2,933** |
+
+### Census, v5 (17 October, a-p13)
+
+The corpus was fetched again on the second host with `tools/corpus-fetch.sh`
+plus MySQL 8.0.39, SQLite 3.50.2 and upstream llvm-project at their
+current heads, since the first corpus lives on a disk this round could
+not use; linux, dpdk, folly, rocksdb and the others are therefore at
+later commits than in v4, and compiler-rt and llvm come from upstream
+rather than the fork the previous count read. The tool changes since v4
+-- parameter brackets, `#if`/`#else` arms, string literals, padding types
+by name, `test*` and `bench` directories -- went in at the same time, so
+the move from 1,623 to 1,546 sites (98,439 files, 13,316 tests set aside)
+mixes the two causes and is not a correction of v4: linux 836 to 798,
+dpdk 539 to 491, compiler-rt 18 to 37 (upstream has `alignas(64)` where
+the fork did not), rocksdb 24 to 14, `pad_field` 116 to 74. The shape
+holds: 785 fields against 761 objects (51% / 49%), 703 of 785 field
+annotations on one member (90%), 28 groups by begin-macro and 27 by
+brace. The precision sample is not redrawn; the 74% [65%, 82%] of v4
+stands as v4's figure.
 
 ## What it changes
 

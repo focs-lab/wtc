@@ -87,6 +87,18 @@ with two names and so two roots, a pointer global written through a
 and a recurrence left unexpanded whose reach was treated as seen. All are
 closed in `docs/corpus.md`'s section on heap objects and elements.
 
+The one-of round (a pointer loaded from a slot, a global or a field
+written in several places is one of the places the stores name; possible,
+never definite) was reviewed by two readings: 15 defects, the
+verdict-changing ones being a store through a bitcast of a slot the
+listing missed, a record global's initialiser, a store through a `char *`
+view, a union member written beside the one read, and the record's
+address leaving as `void *`, all writes no listing saw; a candidate that
+kept the storing thread's own element and so made pairs across elements
+that no thread makes; and a wide access through a set widening the
+thread's own narrow one to a definite pair. Closed the same way, in the
+same section.
+
 Still open for these passes, stated here and in `docs/corpus.md` rather
 than in the remarks themselves:
 
@@ -105,10 +117,13 @@ handler that runs a thousand times a second and one that runs once a day
 are both "repeated". Every memcached pair was decided by rate, by hand.
 
 **Objects it cannot name.** A field reached through a pointer the walk
-cannot follow -- loaded from a field of another object, from a global
-written twice, from a `realloc` -- is counted as unidentified in every
-summary, never guessed at: 4,377 accesses on memcached against 1,491
-pairs. Heap objects are named by the call that allocated them and array
+cannot follow -- loaded from a slot, a global or a field written in
+places it cannot all place, or whose object is written some other way,
+from a `realloc`, from a callback's `void *` -- is counted as unidentified
+in every summary, never guessed at: 4,265 accesses on memcached against
+1,522 pairs. A pointer whose every source it can place is one of those
+places, and a pair through it is possible, never definite (51 accesses on
+memcached). Heap objects are named by the call that allocated them and array
 elements by a constant index or the spawn loop's own; an element at any
 other index is placed on its array without knowing which, counted apart
 (678 on memcached), and every pair there is at most possible. Objects from
