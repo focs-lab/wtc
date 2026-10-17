@@ -184,6 +184,32 @@ struct FieldInfo {
 // before reporting so the output does not depend on walk order.
 using FieldMap = llvm::MapVector<uint64_t, FieldInfo>;
 
+// The name a report gives an object: a global by its symbol, a slot by its
+// name, a heap object by the allocator call and the function it sits in.
+static std::string rootLabel(Operation *root) {
+    if (auto g = dyn_cast<cir::GlobalOp>(root)) return ("@" + g.getSymName()).str();
+    if (auto a = dyn_cast<cir::AllocaOp>(root)) return ("%" + a.getName()).str();
+    if (auto call = dyn_cast<cir::CallOp>(root)) {
+        cir::FuncOp callee = lookupCallee(call);
+        return ((callee ? callee.getSymName() : StringRef("allocation")) + "() in @" +
+                call->getParentOfType<cir::FuncOp>().getSymName()).str();
+    }
+    return "<object>";
+}
+
+static StringRef causeName(Unplaced why) {
+    switch (why) {
+    case Unplaced::LoadedField: return "a pointer loaded from a field";
+    case Unplaced::LoadedGlobal: return "a global written more than once or named elsewhere";
+    case Unplaced::LoadedSlot: return "a slot written more than once";
+    case Unplaced::RootParameter: return "a parameter nobody is seen to pass";
+    case Unplaced::CallResult: return "the result of a call that is not an allocation";
+    case Unplaced::Integer: return "an integer";
+    case Unplaced::ManySources: return "a pointer with too many sources";
+    default: return "otherwise";
+    }
+}
+
 class WTCFalseSharingDiagnosePass
     : public PassWrapper<WTCFalseSharingDiagnosePass, OperationPass<ModuleOp>> {
 public:
@@ -217,6 +243,12 @@ public:
         *this, "heap-align",
         llvm::cl::desc("Alignment malloc guarantees on the target (default 16)"),
         llvm::cl::init(16)};
+    // A remark per field access saying where it was placed, or why not:
+    // the way to read the summary's counts back to the code.
+    Option<bool> listAccesses{
+        *this, "list-accesses",
+        llvm::cl::desc("Say where each field access was placed, and why not"),
+        llvm::cl::init(false)};
 
     void runOnOperation() override;
 
@@ -586,17 +618,23 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
                                           (manyAnyway || (siteKnown && site == Mult::Many));
                 const bool unknownRateHere = !startup && !repeatedHere &&
                                              (startupGuess || !siteKnown || inst.execUnknown);
-                auto unplaced = [&](Unplaced why) {
-                    unresolvedOps.insert(op);
-                    unresolvedWhy.try_emplace(op, why);
-                    if (repeatedHere || unknownRateHere) unresolvedThreads.insert(inst.thread);
-                };
-
                 uint64_t baseOffset = 0;
                 std::string path;
                 bool baseUnknownIdx = false;
                 uint64_t baseUnknownSize = 0;
                 llvm::SmallVector<Place, 4> places;
+                auto rate = [&]() -> StringRef {
+                    return repeatedHere ? "repeated" : unknownRateHere ? "rate unknown" : startup ? "start-up" : "once";
+                };
+                auto unplaced = [&](Unplaced why) {
+                    unresolvedOps.insert(op);
+                    unresolvedWhy.try_emplace(op, why);
+                    if (repeatedHere || unknownRateHere) unresolvedThreads.insert(inst.thread);
+                    if (listAccesses)
+                        op->emitRemark() << "wtc: access to '" << path << "' not placed: " << causeName(why)
+                                         << " (thread " << inst.thread << " in @" << inst.func.getSymName()
+                                         << ", " << rate() << ")";
+                };
                 // A local array whose address never leaves its invocation:
                 // nobody else can be looking at it.
                 if (shape == Shape::Array)
@@ -679,6 +717,13 @@ void WTCFalseSharingDiagnosePass::runOnOperation() {
                 if (valTy && !isa<cir::VoidType, cir::FuncType>(valTy)) size = dl.getTypeSize(valTy);
                 const PlaceKey key{root, kind};
                 FieldInfo &fi = byRoot[key][offset];
+                if (listAccesses)
+                    op->emitRemark() << "wtc: access to '" << path << "' at offset " << offset << " of "
+                                     << rootLabel(root) << (place.oneOf ? " (one of several)" : "")
+                                     << (unknownIdx ? " (element not known)" : place.loop ? " (one element per thread)" : "")
+                                     << " (thread " << inst.thread << " in @" << inst.func.getSymName() << ", "
+                                     << (repeated ? "repeated" : unknownRate ? "rate unknown" : startup ? "start-up" : "once")
+                                     << (isWrite ? ", write)" : ", read)");
                 // The most specific name seen: a member's over the record's,
                 // and a record's over "<whole>".
                 if (fi.name.empty() || fi.name == "<whole>" ||
@@ -850,13 +895,7 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
         // whose allocation runs more than once, is many objects: two threads
         // on two fields of "it" may be on two of them.
         const bool onStack = (isa<cir::AllocaOp>(root) || isHeapRoot(root)) && multiInvocation.count(root);
-        if (auto g = dyn_cast<cir::GlobalOp>(root)) label = ("@" + g.getSymName()).str();
-        else if (auto a = dyn_cast<cir::AllocaOp>(root)) label = ("%" + a.getName()).str();
-        else if (auto call = dyn_cast<cir::CallOp>(root)) {
-            cir::FuncOp callee = lookupCallee(call);
-            label = ((callee ? callee.getSymName() : StringRef("allocation")) + "() in @" +
-                     call->getParentOfType<cir::FuncOp>().getSymName()).str();
-        } else label = "<object>";
+        label = rootLabel(root);
         if (relative) label += " (one element per thread)";
         if (unknownIndex) label += " (element not known)";
 
@@ -1132,6 +1171,9 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
                                 "may be looking at two objects rather than one"
                               : ", but the object is a stack slot whose address escapes, "
                                 "so two threads may be looking at two invocations rather than one");
+                    if (whereB) d.attachNote(whereB->getLoc())
+                        << "wtc: the other access to '" << b.name << "' (offset " << ob << ") is here; this one is to '"
+                        << a.name << "' (offset " << oa << ")";
                     continue;
                 }
                 if (hit) {
@@ -1157,7 +1199,8 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
                         d << a.name << "' and '" << b.name << "' share one " << line << "-byte line"
                           << where << " and are touched repeatedly, but " << why;
                     if (whereB) d.attachNote(whereB->getLoc())
-                        << "wtc: the other access to '" << b.name << "' is here";
+                        << "wtc: the other access to '" << b.name << "' (offset " << ob << ") is here; this one is to '"
+                        << a.name << "' (offset " << oa << ")";
                     continue;
                 }
                 if (unplaced && !onStack) {
@@ -1171,7 +1214,8 @@ void WTCFalseSharingDiagnosePass::report(const ThreadInstanceWalk &walk) {
                            "that thread also has accesses it could not place, or placed only "
                            "as one of several objects";
                     if (whereB) d.attachNote(whereB->getLoc())
-                        << "wtc: the other access to '" << b.name << "' is here";
+                        << "wtc: the other access to '" << b.name << "' (offset " << ob << ") is here; this one is to '"
+                        << a.name << "' (offset " << oa << ")";
                     continue;
                 }
                 if (cold) ++coldPairs;
