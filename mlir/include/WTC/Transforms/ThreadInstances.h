@@ -29,12 +29,15 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
+#include "llvm/ADT/SmallVector.h"
 
 #include <deque>
 #include <optional>
+#include <utility>
 
 namespace mlir::wtc {
 
@@ -111,6 +114,7 @@ enum class Unplaced {
     RootParameter,   // a parameter of a root instance: nobody passed it
     CallResult,      // the result of a call that is not an allocation
     Integer,         // cast from an integer
+    ManySources,     // a loaded pointer with more sources, or sources in more instances, than the walk will carry
     Other
 };
 
@@ -135,6 +139,11 @@ struct Place {
     // read: the handle points into some element of the root, at an offset
     // within it, and which element is not known.
     bool unknownIndex = false;
+    // Set when the handle was loaded from a slot, a global or a field
+    // written in several places, each of which the walk could place: this
+    // is one of the places it may name, and the others are reported
+    // alongside. A statement about a set, so never a definite verdict.
+    bool oneOf = false;
 };
 
 class ThreadInstanceWalk {
@@ -168,6 +177,20 @@ public:
     // per-thread, any other index makes the element unknown (see Place).
     // A null root means unresolved, as for resolveRoot.
     Place resolvePlace(Value v, Instance *inst) const;
+
+    // resolvePlace, following a pointer loaded from a slot, a global or a
+    // field written in several places: every value stored there is
+    // placed where its store runs, and the handle is one of those places
+    // (Place::oneOf), unless any of them cannot be placed, in which case
+    // nothing is. One place with a null root means unresolved, with the
+    // cause set; several places all carry oneOf; one place without it is
+    // as certain as resolvePlace's.
+    llvm::SmallVector<Place, 4> resolvePlaces(Value v, Instance *inst) const;
+    // More sources than this, or more instances of a storing function
+    // than this, and the load stays unplaced: a set that large says
+    // nothing about where the pointer points.
+    static constexpr unsigned kMaxSources = 8;
+    static constexpr unsigned kMaxStoreInstances = 64;
 
     // How many times the instance's function runs within its own thread:
     // the sites on the chain from the thread's entry down to it, joined,
@@ -285,8 +308,22 @@ private:
     const llvm::DenseSet<Operation *> &preSpawnOps(cir::FuncOp f);
     Instance &addInstance(Instance inst);
     Instance *addIfRoom(Instance inst);
+    // `many` receives the places of a pointer loaded from somewhere written
+    // more than once, when given; the call then returns null with the
+    // cause unset. `inst` may be null: the value is then resolved without
+    // a call string, so a parameter is a root.
     Operation *resolveRootImpl(Value v, Instance *inst, unsigned depth, cir::CallOp via,
-                               Place *place) const;
+                               Place *place, llvm::SmallVectorImpl<Place> *many) const;
+    // The places a pointer loaded from `at` (a slot, a pointer global or a
+    // field) may be, each value stored there resolved where its store
+    // runs; false when any of them is not placed, or there are too many,
+    // with `why` moved from the load's own reason to that source's.
+    bool placesOfLoad(Value at, Instance *inst, unsigned depth,
+                      llvm::SmallVectorImpl<Place> &out, Unplaced &why) const;
+    bool resolveSources(llvm::ArrayRef<cir::StoreOp> stores, Instance *ctx, bool perInstance,
+                        unsigned depth, llvm::SmallVectorImpl<Place> &out, Unplaced &why) const;
+    void computeFieldStores() const;
+    llvm::ArrayRef<Instance *> instancesOf(cir::FuncOp f) const;
     // Whether `index` is the induction variable of `loop`: a slot whose
     // every store is either outside the loop or in its step region.
     // `unitStep` is set when the step region advances it by exactly one.
@@ -312,6 +349,34 @@ private:
     llvm::DenseSet<std::pair<Operation *, uint64_t>> expandedRecurrence_;   // (function, thread/phase) unrolled once
     mutable llvm::DenseMap<Operation *, Value> globalStores_;  // pointer global -> its one stored value
     mutable bool globalStoresComputed_ = false;
+    // Pointer global -> every store into it, when nothing else names it.
+    mutable llvm::DenseMap<Operation *, llvm::SmallVector<cir::StoreOp, 2>> globalMultiStores_;
+    // (record type, field index) -> every store into that field anywhere in
+    // the module, or poisoned: the field's address goes somewhere a store
+    // would not be seen, or the record is written as a whole.
+    struct FieldStores {
+        llvm::SmallVector<cir::StoreOp, 4> stores;
+        bool poisoned = false;
+    };
+    using FieldKey = std::pair<Type, unsigned>;
+    mutable llvm::DenseMap<FieldKey, FieldStores> fieldStores_;
+    mutable bool fieldStoresComputed_ = false;
+    // What a load from a field or a global resolves to, kept per field and
+    // per global: the answer does not depend on who asks. An entry in
+    // progress is a cycle (`s->next = t`), which resolves to nothing.
+    struct Candidates {
+        llvm::SmallVector<Place, 4> places;
+        bool ok = false;
+        bool inProgress = false;
+        Unplaced why = Unplaced::None;
+    };
+    mutable llvm::DenseMap<FieldKey, Candidates> fieldCandidates_;
+    mutable llvm::DenseMap<Operation *, Candidates> globalCandidates_;
+    // Per slot and instance: a chain of locals each assigned on two arms
+    // from the previous one was resolved once per path, 2^n times.
+    mutable llvm::DenseMap<std::pair<Operation *, const Instance *>, Candidates> slotCandidates_;
+    mutable llvm::DenseMap<Operation *, llvm::SmallVector<Instance *, 2>> instancesByFunc_;
+    mutable size_t instancesIndexed_ = 0;   // instances_.size() the index and the candidates were built for
     mutable std::optional<DataLayout> dataLayout_;
     llvm::DenseMap<Operation *, llvm::SmallVector<Operation *, 2>> callers_;  // function -> direct call sites
     bool callersComputed_ = false;

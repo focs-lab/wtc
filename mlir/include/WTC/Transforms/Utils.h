@@ -117,4 +117,10 @@ Value traceToLocalRoot(Value v);
 // and the caller treats the result as unresolved, which is the safe answer.
 Value traceToRoot(Value v);
 
+// Whether a stack slot's address goes anywhere but its own loads and
+// stores: stored as a value, passed to a call, or used by anything but a
+// cast, member or element step that itself goes nowhere else. Out of
+// budget counts as escaping.
+bool addressEscapes(cir::AllocaOp slot);
+
 }

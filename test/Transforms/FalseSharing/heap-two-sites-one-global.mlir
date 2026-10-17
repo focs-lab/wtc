@@ -1,8 +1,9 @@
 // RUN: wtc-opt %s --wtc-false-sharing-diagnose 2>&1 >/dev/null | FileCheck %s
 
 // Two allocations stored into one global pointer: a load from it may see
-// either object, and the walk follows a global pointer only when the module
-// writes it exactly once. Both accesses stay unplaced, and are counted.
+// either object. Each access is placed on both, as one of the two, and a
+// pair made through such a pointer is possible and never definite: the two
+// threads may be on two objects. The accesses used to stay unplaced.
 
 !s32i = !cir.int<s, 32>
 !s64i = !cir.int<s, 64>
@@ -69,5 +70,7 @@ module {
   }
 }
 
-// CHECK-NOT: false sharing in
-// CHECK: false sharing: 0 definite, 0 possible, 0 cold{{.*}}, 2 field accesses on objects that could not be identified
+// CHECK-NOT: remark: wtc: false sharing in
+// CHECK: possible false sharing in calloc() in @main: 'a' and 'b' share one 64-byte line and are touched repeatedly, but through a pointer that may name one of several objects, this among them
+// CHECK: possible false sharing in calloc() in @main: 'a' and 'b' share one 64-byte line and are touched repeatedly, but through a pointer that may name one of several objects, this among them
+// CHECK: false sharing: 0 definite, 2 possible, 0 cold{{.*}}, 0 field accesses on objects that could not be identified{{.*}}; 2 accesses placed as one of several objects

@@ -2,9 +2,11 @@
 
 // The summary says why each unidentified access could not be placed, so
 // that what to place next is read off it: here one access through a
-// pointer loaded from a field (`q->next->a`), one through a pointer
-// global the module writes twice, and one through a parameter of a
-// function nobody in the module calls.
+// pointer loaded from a field (`q->next->a`, and nothing ever stores into
+// `next`), one through a pointer global the module writes twice, once
+// with a pointer made from an integer -- counted under the integer, the
+// source the walk stopped at, not under the global -- and one through a
+// parameter of a function nobody in the module calls.
 
 !s32i = !cir.int<s, 32>
 !s64i = !cir.int<s, 64>
@@ -12,7 +14,6 @@
 !fnptr = !cir.ptr<!cir.func<()>>
 module {
   cir.global external @s = #cir.zero : !rec_S {alignment = 8 : i64}
-  cir.global external @t = #cir.zero : !rec_S {alignment = 8 : i64}
   cir.global external @gp = #cir.ptr<null> : !cir.ptr<!rec_S>
 
   cir.func @spawn(%fn: !fnptr) [#cir.annotation<"wtc_thread_spawn">] { cir.return }
@@ -59,8 +60,9 @@ module {
     %gpp = cir.get_global @gp : !cir.ptr<!cir.ptr<!rec_S>>
     %s = cir.get_global @s : !cir.ptr<!rec_S>
     cir.store %s, %gpp : !cir.ptr<!rec_S>, !cir.ptr<!cir.ptr<!rec_S>>
-    %t = cir.get_global @t : !cir.ptr<!rec_S>
-    cir.store %t, %gpp : !cir.ptr<!rec_S>, !cir.ptr<!cir.ptr<!rec_S>>
+    %z = cir.const #cir.int<4096> : !s64i
+    %ip = cir.cast int_to_ptr %z : !s64i -> !cir.ptr<!rec_S>
+    cir.store %ip, %gpp : !cir.ptr<!rec_S>, !cir.ptr<!cir.ptr<!rec_S>>
     %a = cir.get_global @worker_a : !fnptr
     cir.call @spawn(%a) : (!fnptr) -> ()
     %b = cir.get_global @worker_b : !fnptr
@@ -69,4 +71,4 @@ module {
   }
 }
 
-// CHECK: false sharing: 0 definite, 0 possible, 0 cold{{.*}}, 3 field accesses on objects that could not be identified{{.*}}; of the unidentified, 1 through a pointer loaded from a field, 1 from a global written more than once or named elsewhere, 0 from a slot written more than once, 1 through a parameter nobody is seen to pass, 0 from the result of a call that is not an allocation, 0 from an integer, 0 otherwise
+// CHECK: false sharing: 0 definite, 0 possible, 0 cold{{.*}}, 3 field accesses on objects that could not be identified{{.*}}; of the unidentified, 1 through a pointer loaded from a field, 0 from a global written more than once or named elsewhere, 0 from a slot written more than once, 1 through a parameter nobody is seen to pass, 0 from the result of a call that is not an allocation, 1 from an integer, 0 from a pointer with more than 8 sources or sources in more than 64 instances, 0 otherwise; 0 accesses placed as one of several objects

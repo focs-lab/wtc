@@ -432,7 +432,7 @@ Value ThreadInstanceWalk::singleStoredGlobalValue(cir::GlobalOp g) const {
         globalStoresComputed_ = true;
         // One pass over every use of every global: the stores through its
         // address, and whether its address goes anywhere but a load.
-        llvm::DenseMap<Operation *, llvm::SmallVector<Value, 2>> stores;
+        llvm::DenseMap<Operation *, llvm::SmallVector<cir::StoreOp, 2>> stores;
         llvm::DenseSet<Operation *> spoiled;
         ModuleOp module = module_;   // a copy of the handle: walk is not const
         // A name used anywhere but in a cir.get_global -- a global_view in
@@ -463,7 +463,7 @@ Value ThreadInstanceWalk::singleStoredGlobalValue(cir::GlobalOp g) const {
                     Operation *u = use.getOwner();
                     if (isa<cir::LoadOp>(u)) continue;
                     if (auto st = dyn_cast<cir::StoreOp>(u)) {
-                        if (st.getAddr() == p) stores[key].push_back(st.getValue());
+                        if (st.getAddr() == p) stores[key].push_back(st);
                         else spoiled.insert(key);               // the address itself is stored
                         continue;
                     }
@@ -474,8 +474,11 @@ Value ThreadInstanceWalk::singleStoredGlobalValue(cir::GlobalOp g) const {
                 }
             }
         });
-        for (auto &kv : stores)
-            if (kv.second.size() == 1 && !spoiled.count(kv.first)) globalStores_[kv.first] = kv.second[0];
+        for (auto &kv : stores) {
+            if (spoiled.count(kv.first)) continue;
+            if (kv.second.size() == 1) globalStores_[kv.first] = kv.second[0].getValue();
+            globalMultiStores_[kv.first] = kv.second;
+        }
     }
     // An initialiser other than null is a second value.
     if (auto init = g.getInitialValue()) {
@@ -567,30 +570,404 @@ const DataLayout &ThreadInstanceWalk::dataLayout() const {
 }
 
 Operation *ThreadInstanceWalk::resolveRoot(Value v, Instance *inst, unsigned depth) const {
-    return resolveRootImpl(v, inst, depth, cir::CallOp(), nullptr);
+    return resolveRootImpl(v, inst, depth, cir::CallOp(), nullptr, nullptr);
+}
+
+// An element step the walk could not read under a per-thread one: which
+// element is not known, so neither is whose it is.
+static void settle(Place &place) {
+    if (place.unknownIndex) { place.loop = nullptr; place.elem = Type(); place.owner = false; }
 }
 
 Place ThreadInstanceWalk::resolvePlace(Value v, Instance *inst) const {
     Place place;
-    place.root = resolveRootImpl(v, inst, 0, cir::CallOp(), &place);
+    place.root = resolveRootImpl(v, inst, 0, cir::CallOp(), &place, nullptr);
     if (!place.root) {
         const Unplaced why = place.cause;
         place = Place();
         place.cause = why;
     }
-    // An element step the walk could not read under a per-thread one: which
-    // element is not known, so neither is whose it is.
-    if (place.unknownIndex) { place.loop = nullptr; place.elem = Type(); place.owner = false; }
+    settle(place);
     return place;
 }
 
+llvm::SmallVector<Place, 4> ThreadInstanceWalk::resolvePlaces(Value v, Instance *inst) const {
+    llvm::SmallVector<Place, 4> many;
+    Place place;
+    place.root = resolveRootImpl(v, inst, 0, cir::CallOp(), &place, &many);
+    llvm::SmallVector<Place, 4> out;
+    if (place.root) {
+        out.push_back(place);
+    } else if (!many.empty()) {
+        out = std::move(many);
+    } else {
+        Place none;
+        none.cause = place.cause == Unplaced::None ? Unplaced::Other : place.cause;
+        out.push_back(none);
+    }
+    for (Place &p : out) settle(p);
+    return out;
+}
+
+// Adds a place to a set unless an equal one is there: two stores of the
+// same handle, one on each arm of an `if`, are one place.
+static void addPlace(llvm::SmallVectorImpl<Place> &out, const Place &p) {
+    for (const Place &q : out)
+        if (q.root == p.root && q.offset == p.offset && q.unknownIndex == p.unknownIndex && q.loop == p.loop)
+            return;
+    out.push_back(p);
+}
+
+static bool isNullPointer(Value v) {
+    if (auto c = v.getDefiningOp<cir::ConstantOp>())
+        if (auto cp = dyn_cast<cir::ConstPtrAttr>(c.getValue()))
+            return cp.getValue().getValue().isZero();
+    return false;
+}
+
+llvm::ArrayRef<Instance *> ThreadInstanceWalk::instancesOf(cir::FuncOp f) const {
+    if (instancesIndexed_ != instances_.size()) {
+        instancesByFunc_.clear();
+        // Resolved under new instances, a field's candidates may differ.
+        fieldCandidates_.clear();
+        globalCandidates_.clear();
+        slotCandidates_.clear();
+        for (const Instance &inst : instances_) {
+            cir::FuncOp fn = inst.func;
+            instancesByFunc_[fn.getOperation()].push_back(const_cast<Instance *>(&inst));
+        }
+        instancesIndexed_ = instances_.size();
+    }
+    auto it = instancesByFunc_.find(f.getOperation());
+    if (it == instancesByFunc_.end()) return {};
+    return it->second;
+}
+
+// Every store into every field of the module, by (record, field), and the
+// fields no such list can speak for: the field's address goes somewhere a
+// store through it would not be seen (a call, a store of the address, a
+// cast to anything but a reinterpretation), or the record it is in -- or a
+// record containing that record -- is written as a whole: assigned, copied,
+// or handed by pointer to a function with no body in the module.
+void ThreadInstanceWalk::computeFieldStores() const {
+    fieldStoresComputed_ = true;
+    ModuleOp module = module_;
+    llvm::DenseSet<Type> whole;   // records written as a whole somewhere
+    auto recordIn = [](Type t) -> Type {
+        while (auto arr = dyn_cast_or_null<cir::ArrayType>(t)) t = arr.getElementType();
+        return isa_and_nonnull<cir::RecordType>(t) ? t : Type();
+    };
+    auto recordBehind = [&](Type t) -> Type {
+        auto pt = dyn_cast<cir::PointerType>(t);
+        return pt ? recordIn(pt.getPointee()) : Type();
+    };
+    auto fieldKey = [](cir::GetMemberOp gm) -> std::optional<FieldKey> {
+        auto pt = dyn_cast<cir::PointerType>(gm.getAddr().getType());
+        auto rec = pt ? dyn_cast<cir::RecordType>(pt.getPointee()) : cir::RecordType();
+        if (!rec || rec.isIncomplete()) return std::nullopt;
+        return FieldKey{rec, gm.getIndex()};
+    };
+    // Functions with no body that read what they are handed and write
+    // nothing the walk would want to know of: a memset writes zeros, and
+    // a null names no object.
+    auto harmless = [](cir::FuncOp f) {
+        if (!f) return false;
+        if (isAllocator(f) || getSemanticKind(f) == SemanticOpKind::ThreadSpawn) return true;
+        const StringRef n = f.getSymName();
+        return n == "free" || n == "memset" || n == "memcmp" || n == "strlen" || n == "strcmp" ||
+               n == "strncmp" || n == "memchr" || n == "puts" || n == "printf" || n == "fprintf";
+    };
+    module.walk([&](Operation *op) {
+        if (auto gm = dyn_cast<cir::GetMemberOp>(op)) {
+            auto key = fieldKey(gm);
+            if (!key) return;
+            FieldStores &fs = fieldStores_[*key];
+            // A union: a store through any member writes every member, so
+            // no member's list is complete, and a record member is
+            // written whole.
+            if (cast<cir::RecordType>(key->first).isUnion()) {
+                fs.poisoned = true;
+                for (Type m : cast<cir::RecordType>(key->first).getMembers())
+                    if (Type rec = recordIn(m)) whole.insert(rec);
+                return;
+            }
+            llvm::SmallVector<Value, 4> work{gm.getResult()};
+            while (!work.empty()) {
+                Value p = work.pop_back_val();
+                for (OpOperand &use : p.getUses()) {
+                    Operation *u = use.getOwner();
+                    if (isa<cir::LoadOp>(u)) continue;
+                    if (auto st = dyn_cast<cir::StoreOp>(u)) {
+                        if (st.getAddr() != p) { fs.poisoned = true; continue; }   // the address is published
+                        if (isa<cir::RecordType>(st.getValue().getType())) {
+                            whole.insert(st.getValue().getType());
+                            fs.poisoned = true;
+                            continue;
+                        }
+                        if (isNullPointer(st.getValue())) continue;
+                        fs.stores.push_back(st);
+                        continue;
+                    }
+                    if (auto c = dyn_cast<cir::CastOp>(u))
+                        if (c.getKind() == cir::CastKind::bitcast) { work.push_back(c.getResult()); continue; }
+                    // A part of a record or array field is touched, not the
+                    // field: nothing to a pointer-typed field, which has
+                    // no parts.
+                    if (isa<cir::GetMemberOp, cir::GetElementOp, cir::PtrStrideOp>(u)) continue;
+                    if (auto c = dyn_cast<cir::CastOp>(u))
+                        if (c.getKind() == cir::CastKind::array_to_ptrdecay) continue;
+                    if (auto ms = dyn_cast<cir::MemSetOp>(u))
+                        if (ms.getDst() == p) continue;   // zeros: no object named
+                    bool copied = false;
+                    if (auto cp = dyn_cast<cir::CopyOp>(u)) copied = cp.getDst() == p;
+                    if (auto mc = dyn_cast<cir::MemCpyOp>(u)) copied = mc.getDst() == p;
+                    if (auto mm = dyn_cast<cir::MemMoveOp>(u)) copied = mm.getDst() == p;
+                    if (copied)
+                        if (Type rec = recordBehind(p.getType())) whole.insert(rec);
+                    fs.poisoned = true;   // a call, a copy, anything else
+                }
+            }
+            return;
+        }
+        // A record written as a whole, wherever its address came from.
+        if (auto st = dyn_cast<cir::StoreOp>(op)) {
+            if (isa<cir::RecordType>(st.getValue().getType())) whole.insert(st.getValue().getType());
+            return;
+        }
+        // A global record with an initialiser other than zero: its fields
+        // hold values no store lists.
+        if (auto g = dyn_cast<cir::GlobalOp>(op)) {
+            if (auto init = g.getInitialValue())
+                if (!isa<cir::ZeroAttr>(*init))
+                    if (Type rec = recordIn(g.getSymType())) whole.insert(rec);
+            return;
+        }
+        // The record seen through another type -- `(char *)&c`, `(void *)
+        // c`, `(T *)&c` -- is written in ways no field listing sees: a store
+        // through the view, the view stored or handed to code with a body
+        // of its own or none at all. Only a load, a memset, a copy out of
+        // it and a call to a function known to write nothing leave the
+        // listing standing.
+        if (auto c = dyn_cast<cir::CastOp>(op)) {
+            if (c.getKind() != cir::CastKind::bitcast) return;
+            Type rec = recordBehind(c.getSrc().getType());
+            if (!rec || recordBehind(c.getResult().getType()) == rec) return;
+            llvm::SmallVector<Value, 4> work{c.getResult()};
+            bool written = false;
+            while (!work.empty() && !written) {
+                Value p = work.pop_back_val();
+                for (OpOperand &use : p.getUses()) {
+                    Operation *u = use.getOwner();
+                    if (isa<cir::LoadOp>(u)) continue;
+                    if (auto cc = dyn_cast<cir::CastOp>(u))
+                        if (cc.getKind() == cir::CastKind::bitcast) { work.push_back(cc.getResult()); continue; }
+                    if (auto ms = dyn_cast<cir::MemSetOp>(u))
+                        if (ms.getDst() == p) continue;
+                    if (auto mc = dyn_cast<cir::MemCpyOp>(u))
+                        if (mc.getSrc() == p && mc.getDst() != p) continue;
+                    if (auto mm = dyn_cast<cir::MemMoveOp>(u))
+                        if (mm.getSrc() == p && mm.getDst() != p) continue;
+                    if (auto call = dyn_cast<cir::CallOp>(u))
+                        if (harmless(lookupCallee(call))) continue;
+                    written = true;
+                    break;
+                }
+            }
+            if (written) whole.insert(rec);
+            return;
+        }
+        Value dst;
+        if (auto cp = dyn_cast<cir::CopyOp>(op)) dst = cp.getDst();
+        else if (auto mc = dyn_cast<cir::MemCpyOp>(op)) dst = mc.getDst();
+        else if (auto mm = dyn_cast<cir::MemMoveOp>(op)) dst = mm.getDst();
+        if (dst) {
+            if (Type rec = recordBehind(traceToLocalRoot(dst).getType())) whole.insert(rec);
+            return;
+        }
+        // A record handed by pointer to code the module cannot see may
+        // come back with any of its fields rewritten.
+        if (auto call = dyn_cast<cir::CallOp>(op)) {
+            cir::FuncOp callee = lookupCallee(call);
+            if (callee && !callee.getBody().empty()) return;
+            if (harmless(callee)) return;
+            for (Value arg : call.getOperands())
+                if (Type rec = recordBehind(traceToRoot(arg).getType())) whole.insert(rec);
+        }
+    });
+    // A record written as a whole takes every record nested in it along.
+    llvm::SmallVector<Type, 8> work(whole.begin(), whole.end());
+    while (!work.empty()) {
+        auto rec = dyn_cast<cir::RecordType>(work.pop_back_val());
+        if (!rec || rec.isIncomplete()) continue;
+        for (Type m : rec.getMembers()) {
+            while (auto arr = dyn_cast<cir::ArrayType>(m)) m = arr.getElementType();
+            if (isa<cir::RecordType>(m) && whole.insert(m).second) work.push_back(m);
+        }
+    }
+    for (auto &kv : fieldStores_)
+        if (whole.count(kv.first.first)) kv.second.poisoned = true;
+}
+
+bool ThreadInstanceWalk::resolveSources(llvm::ArrayRef<cir::StoreOp> stores, Instance *ctx, bool perInstance,
+                                        unsigned depth, llvm::SmallVectorImpl<Place> &out,
+                                        Unplaced &why) const {
+    for (cir::StoreOp st : stores) {
+        llvm::SmallVector<Instance *, 4> contexts;
+        if (perInstance) {
+            auto f = st->getParentOfType<cir::FuncOp>();
+            llvm::ArrayRef<Instance *> insts = f ? instancesOf(f) : llvm::ArrayRef<Instance *>();
+            if (insts.size() > kMaxStoreInstances) { why = Unplaced::ManySources; return false; }
+            contexts.assign(insts.begin(), insts.end());
+            // A store in a function the walk never entered -- an init()
+            // that touches no field -- is resolved without a call string.
+            if (contexts.empty()) contexts.push_back(nullptr);
+        } else {
+            contexts.push_back(ctx);
+        }
+        for (Instance *c : contexts) {
+            Place sub;
+            llvm::SmallVector<Place, 4> subMany;
+            Operation *root = resolveRootImpl(st.getValue(), c, depth + 1, cir::CallOp(), &sub, &subMany);
+            // An element the storing thread owns is, to the loading thread,
+            // some element: the handle was published, and which thread
+            // stored it is not what the loading thread's spawn says.
+            auto strip = [&](Place &p) {
+                if (perInstance && p.loop) p.unknownIndex = true;
+            };
+            if (root) {
+                sub.root = root;
+                strip(sub);
+                addPlace(out, sub);
+            } else if (!subMany.empty()) {
+                for (Place p : subMany) { strip(p); addPlace(out, p); }
+            } else {
+                // One source nobody can place: the set says nothing, and
+                // the reason is that source's, the frontier of what the
+                // walk reaches, not the load's.
+                if (sub.cause != Unplaced::None) why = sub.cause;
+                return false;
+            }
+            if (out.size() > kMaxSources) { why = Unplaced::ManySources; return false; }
+        }
+    }
+    return !out.empty();
+}
+
+bool ThreadInstanceWalk::placesOfLoad(Value at, Instance *inst, unsigned depth,
+                                      llvm::SmallVectorImpl<Place> &out, Unplaced &why) const {
+    if (auto slot = at.getDefiningOp<cir::AllocaOp>()) {
+        // Every store into the slot, under its own name or a reinterpretation
+        // of it, in this very instance; any other use of the address -- a
+        // call, a store of the address, a step from it -- is a name for the
+        // slot the listing would not see, and ends it. (A review found a
+        // store through a bitcast of the slot admitted by the escape check
+        // and missing from the list.)
+        instancesOf(cir::FuncOp());   // refresh the index, and the memos with it
+        const std::pair<Operation *, const Instance *> slotKey{slot.getOperation(), inst};
+        if (slotCandidates_[slotKey].inProgress) return false;   // `p = p->next`: set from itself
+        if (!slotCandidates_[slotKey].ok && slotCandidates_[slotKey].why == Unplaced::None) {
+            slotCandidates_[slotKey].inProgress = true;
+            llvm::SmallVector<cir::StoreOp, 4> stores;
+            bool listed = true;
+            llvm::SmallVector<Value, 4> work{slot.getResult()};
+            while (!work.empty() && listed) {
+                Value p = work.pop_back_val();
+                for (OpOperand &use : p.getUses()) {
+                    Operation *u = use.getOwner();
+                    if (isa<cir::LoadOp>(u)) continue;
+                    if (auto st = dyn_cast<cir::StoreOp>(u)) {
+                        if (st.getAddr() != p) { listed = false; break; }
+                        if (!isNullPointer(st.getValue())) stores.push_back(st);
+                        continue;
+                    }
+                    if (auto c = dyn_cast<cir::CastOp>(u))
+                        if (c.getKind() == cir::CastKind::bitcast) { work.push_back(c.getResult()); continue; }
+                    listed = false;
+                    break;
+                }
+            }
+            llvm::SmallVector<Place, 4> places;
+            Unplaced w = why;
+            const bool ok = listed && resolveSources(stores, inst, false, depth, places, w);
+            Candidates &m = slotCandidates_[slotKey];
+            m.inProgress = false;
+            m.ok = ok;
+            m.places = std::move(places);
+            m.why = ok ? Unplaced::None : w;
+        }
+        const Candidates &m = slotCandidates_[slotKey];
+        if (!m.ok) {
+            if (m.why != Unplaced::None) why = m.why;
+            return false;
+        }
+        for (const Place &p : m.places) addPlace(out, p);
+        return true;
+    }
+    llvm::ArrayRef<cir::StoreOp> stores;
+    Operation *globalKey = nullptr;
+    FieldKey fieldKey;
+    if (auto gg = at.getDefiningOp<cir::GetGlobalOp>()) {
+        auto g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr());
+        if (!g) return false;
+        singleStoredGlobalValue(g);   // builds the store lists
+        if (auto init = g.getInitialValue()) {
+            auto cp = dyn_cast<cir::ConstPtrAttr>(*init);
+            if (!cp || !cp.getValue().getValue().isZero()) return false;   // a value nobody stored
+        }
+        auto it = globalMultiStores_.find(g.getOperation());
+        if (it == globalMultiStores_.end()) return false;
+        stores = it->second;
+        globalKey = g.getOperation();
+    } else if (auto gm = at.getDefiningOp<cir::GetMemberOp>()) {
+        if (!fieldStoresComputed_) computeFieldStores();
+        auto pt = dyn_cast<cir::PointerType>(gm.getAddr().getType());
+        auto rec = pt ? dyn_cast<cir::RecordType>(pt.getPointee()) : cir::RecordType();
+        if (!rec || rec.isIncomplete()) return false;
+        fieldKey = FieldKey{rec, gm.getIndex()};
+        auto it = fieldStores_.find(fieldKey);
+        if (it == fieldStores_.end() || it->second.poisoned) return false;
+        stores = it->second.stores;
+    } else {
+        return false;
+    }
+    instancesOf(cir::FuncOp());   // refresh the index, and the memo with it
+    // Looked up afresh after the nested resolution: a query inside it may
+    // have grown the map.
+    auto memo = [&]() -> Candidates & {
+        return globalKey ? globalCandidates_[globalKey] : fieldCandidates_[fieldKey];
+    };
+    if (memo().inProgress) return false;   // a cycle: the field is set from itself
+    if (!memo().ok && memo().why == Unplaced::None) {
+        memo().inProgress = true;
+        llvm::SmallVector<Place, 4> places;
+        Unplaced w = why;
+        // Null stores name no object; a list of only those is empty.
+        llvm::SmallVector<cir::StoreOp, 4> named;
+        for (cir::StoreOp st : stores)
+            if (!isNullPointer(st.getValue())) named.push_back(st);
+        const bool ok = resolveSources(named, nullptr, true, depth, places, w);
+        Candidates &m = memo();
+        m.inProgress = false;
+        m.ok = ok;
+        m.places = std::move(places);
+        m.why = ok ? Unplaced::None : w;
+    }
+    const Candidates &m = memo();
+    if (!m.ok) {
+        if (m.why != Unplaced::None) why = m.why;
+        return false;
+    }
+    for (const Place &p : m.places) addPlace(out, p);
+    return true;
+}
+
 Operation *ThreadInstanceWalk::resolveRootImpl(Value v, Instance *inst, unsigned depth, cir::CallOp via,
-                                               Place *place) const {
+                                               Place *place, llvm::SmallVectorImpl<Place> *many) const {
     auto fail = [&](Unplaced why) -> Operation * {
         if (place && place->cause == Unplaced::None) place->cause = why;
         return nullptr;
     };
-    if (depth > 64 || !inst) return fail(Unplaced::Other);
+    if (depth > 64) return fail(Unplaced::Other);
     Value t = traceToRoot(v);
     // An element step. A constant index is so many bytes in; the
     // induction variable of the loop that spawned this thread, at the
@@ -613,7 +990,7 @@ Operation *ThreadInstanceWalk::resolveRootImpl(Value v, Instance *inst, unsigned
         auto k = c ? dyn_cast<cir::IntAttr>(c.getValue()) : cir::IntAttr();
         if (k && !k.getValue().isNegative() && k.getValue().getActiveBits() <= 32) {
             place->offset += k.getValue().getZExtValue() * elemSize;
-            return resolveRootImpl(stepBase, inst, depth + 1, via, place);
+            return resolveRootImpl(stepBase, inst, depth + 1, via, place, many);
         }
         Operation *loop = via ? enclosingLoop(via.getOperation(), inst->func) : nullptr;
         bool unitStep = false;
@@ -627,10 +1004,10 @@ Operation *ThreadInstanceWalk::resolveRootImpl(Value v, Instance *inst, unsigned
             place->owner = unitStep && forOp && unconditionalInBody(via.getOperation(), forOp) &&
                            !enclosingLoop(loop, inst->func) && inst->execMult == Mult::One &&
                            !inst->execUnknown && inst->threadMult == Mult::One && !inst->recurring;
-            return resolveRootImpl(stepBase, inst, depth + 1, cir::CallOp(), place);
+            return resolveRootImpl(stepBase, inst, depth + 1, cir::CallOp(), place, many);
         }
         place->unknownIndex = true;
-        return resolveRootImpl(stepBase, inst, depth + 1, cir::CallOp(), place);
+        return resolveRootImpl(stepBase, inst, depth + 1, cir::CallOp(), place, many);
     }
     // The object an allocator returned: the allocator call is its identity,
     // behind any wrapper that hands it back -- the same object may also
@@ -646,24 +1023,52 @@ Operation *ThreadInstanceWalk::resolveRootImpl(Value v, Instance *inst, unsigned
     // value is resolved without an instance, since the storing function's
     // instance is not this one: a global, an allocation, nothing else.
     if (auto ld = t.getDefiningOp<cir::LoadOp>()) {
-        if (auto gg = traceToLocalRoot(ld.getAddr()).getDefiningOp<cir::GetGlobalOp>()) {
+        Value at = traceToLocalRoot(ld.getAddr());
+        Unplaced why = Unplaced::Other;
+        if (auto gg = at.getDefiningOp<cir::GetGlobalOp>()) {
+            why = Unplaced::LoadedGlobal;
             auto g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr());
             if (Value stored = g ? singleStoredGlobalValue(g) : Value()) {
                 Value s = traceToRoot(stored);
                 if (auto call = s.getDefiningOp<cir::CallOp>()) {
                     cir::CallOp site = allocationBehind(call);
-                    return site ? site.getOperation() : fail(Unplaced::CallResult);
-                }
-                if (auto sg = s.getDefiningOp<cir::GetGlobalOp>())
+                    if (site) return site.getOperation();
+                    if (!many) return fail(Unplaced::CallResult);
+                } else if (auto sg = s.getDefiningOp<cir::GetGlobalOp>()) {
                     return SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(sg, sg.getNameAttr()).getOperation();
-                return fail(Unplaced::Other);
+                } else if (!many) {
+                    return fail(Unplaced::Other);
+                }
             }
-            return fail(Unplaced::LoadedGlobal);
+        } else if (at.getDefiningOp<cir::GetMemberOp>()) {
+            why = Unplaced::LoadedField;
+        } else if (at.getDefiningOp<cir::AllocaOp>()) {
+            why = Unplaced::LoadedSlot;
         }
-        Value at = traceToLocalRoot(ld.getAddr());
-        if (at.getDefiningOp<cir::GetMemberOp>()) return fail(Unplaced::LoadedField);
-        if (at.getDefiningOp<cir::AllocaOp>()) return fail(Unplaced::LoadedSlot);
-        return fail(Unplaced::Other);
+        if (!many || !place || why == Unplaced::Other) return fail(why);
+        // Written in several places, each of which the walk can place: the
+        // handle is one of those places. The steps taken so far -- a
+        // constant index, an element the thread owns -- apply to each.
+        llvm::SmallVector<Place, 4> places;
+        if (!placesOfLoad(at, inst, depth, places, why)) return fail(why);
+        for (Place &p : places) {
+            p.offset += place->offset;
+            if (place->unknownIndex) p.unknownIndex = true;
+            if (place->loop) {
+                if (p.loop && p.loop != place->loop) p.unknownIndex = true;
+                else { p.loop = place->loop; p.elem = place->elem; }
+            }
+            p.owner = false;
+            p.oneOf = true;
+        }
+        if (places.size() == 1) {
+            // One place under every store: not one of, but that one.
+            *place = places.front();
+            place->oneOf = false;
+            return place->root;
+        }
+        many->append(places.begin(), places.end());
+        return nullptr;
     }
     if (auto gg = t.getDefiningOp<cir::GetGlobalOp>()) {
         auto g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr());
@@ -683,7 +1088,7 @@ Operation *ThreadInstanceWalk::resolveRootImpl(Value v, Instance *inst, unsigned
             if (c.getKind() == cir::CastKind::int_to_ptr) return fail(Unplaced::Integer);
         return fail(Unplaced::Other);
     }
-    if (!inst->site) return fail(Unplaced::RootParameter);   // a root: nobody passed it
+    if (!inst || !inst->site) return fail(Unplaced::RootParameter);   // a root: nobody passed it
     if (arg.getOwner() != &inst->func.getBody().front()) return fail(Unplaced::Other);
     const unsigned i = arg.getArgNumber();
     cir::CallOp site = inst->site;
@@ -699,7 +1104,7 @@ Operation *ThreadInstanceWalk::resolveRootImpl(Value v, Instance *inst, unsigned
     // the per-thread reading does not apply.
     const bool spawn = getSemanticKind(lookupCallee(site)) == SemanticOpKind::ThreadSpawn;
     return resolveRootImpl(site.getOperand(idx), inst->parent, depth + 1,
-                           spawn ? site : cir::CallOp(), place);
+                           spawn ? site : cir::CallOp(), place, many);
 }
 
 Mult ThreadInstanceWalk::multWithinThread(const Instance &inst, bool &known) {
