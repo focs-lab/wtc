@@ -1016,6 +1016,17 @@ Operation *ThreadInstanceWalk::resolveRootImpl(Value v, Instance *inst, unsigned
     };
     if (depth > 64) return fail(Unplaced::Other);
     Value t = traceToRoot(v);
+    // A member's address handed on -- `&r->prod` as the argument of the
+    // routine that moves a queue's head -- is so many bytes into the record
+    // it is a member of; a union's members all start where the union does.
+    if (auto gm = t.getDefiningOp<cir::GetMemberOp>()) {
+        if (!place) return fail(Unplaced::Other);
+        auto ptrTy = dyn_cast<cir::PointerType>(gm.getAddr().getType());
+        auto rec = ptrTy ? dyn_cast<cir::RecordType>(ptrTy.getPointee()) : cir::RecordType();
+        if (!rec || rec.isIncomplete()) return fail(Unplaced::Other);
+        place->offset += rec.getElementOffset(dataLayout(), gm.getIndex());
+        return resolveRootImpl(gm.getAddr(), inst, depth + 1, via, place, many);
+    }
     // An element step. A constant index is so many bytes in; the
     // induction variable of the loop that spawned this thread, at the
     // spawn, means each thread the spawn starts gets its own element;
