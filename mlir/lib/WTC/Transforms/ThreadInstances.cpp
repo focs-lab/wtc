@@ -909,7 +909,7 @@ bool ThreadInstanceWalk::placesOfLoad(Value at, Instance *inst, unsigned depth,
         // slot the listing would not see, and ends it. (A review found a
         // store through a bitcast of the slot admitted by the escape check
         // and missing from the list.)
-        instancesOf(cir::FuncOp());   // refresh the index, and the memos with it
+        (void)instancesOf(cir::FuncOp());   // refresh the index, and the memos with it
         const std::pair<Operation *, const Instance *> slotKey{slot.getOperation(), inst};
         if (slotCandidates_[slotKey].inProgress) return false;   // `p = p->next`: set from itself
         if (!slotCandidates_[slotKey].ok && slotCandidates_[slotKey].why == Unplaced::None) {
@@ -977,7 +977,7 @@ bool ThreadInstanceWalk::placesOfLoad(Value at, Instance *inst, unsigned depth,
     } else {
         return false;
     }
-    instancesOf(cir::FuncOp());   // refresh the index, and the memo with it
+    (void)instancesOf(cir::FuncOp());   // refresh the index, and the memo with it
     // Looked up afresh after the nested resolution: a query inside it may
     // have grown the map.
     auto memo = [&]() -> Candidates & {
