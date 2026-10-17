@@ -10,13 +10,14 @@ where they were made, because a retraction that deletes what it retracts
 teaches nothing.
 
 **The result of this phase is negative, and narrower than it first looked.**
-On amalgamated memcached the analysis reports 159 definite and 1,363
+On amalgamated memcached the analysis reports 246 definite and 1,457
 possible pairs. 156 of the definite pairs and 852 of the possible sit on five
 globals, every one of which was read against the source, and no pair there
 describes traffic that separating fields would remove: each is decided by
-how often one side runs, which the analysis cannot tell; the three
-definite pairs the one-of round added, on extstore's engine object, read
-the same way (below). Two measurements
+how often one side runs, which the analysis cannot tell; the 72 definite
+pairs on extstore's engine object and the 21 on the crawler's module,
+which the one-of round and the member-address round added, read the same
+way (below). Two measurements
 under load do not overturn it, within what ten runs resolve: applying the
 verdict by hand gives throughput within 0.7% of the original on every
 workload, with 95% intervals from -3.2% to +2.0%. Of the other possible
@@ -25,7 +26,7 @@ pairs, 490 sit at elements of arrays and heap objects -- the per-thread
 the October round on heap objects and elements (below) but cannot tell
 apart, 5 come through pointers that may name one of several objects, and
 16 are on the extstore engine; none of these was read. What it still
-cannot place, 4,265 accesses through pointers it cannot follow, the slab
+cannot place, 4,103 accesses through pointers it cannot follow, the slab
 allocator's items and the per-connection state among them, was not
 examined either, so this is not a claim that memcached has nothing to fix.
 Counted at the source the walk stopped at, most of those are the results
@@ -48,7 +49,7 @@ reviewed. Both columns are kept.
 | field annotations on one member | 648 of 675 (96%) | 687 of 761 (90%) | **747 of 828 (90%)** (v5: 703 of 785, 90%) | two of the three ways the kernel writes a group were missed; `__cacheline_group_begin(x) ____cacheline_aligned` is a group too |
 | files with several field annotations | 300, at most 24 | 153, at most 17 | **165, at most 23** (`log0sys.h`) | recounted from each classification |
 | memcached pairs, amalgamated | 397 definite, 546 possible | 155 definite, 503 possible, 349 cold | **159 definite, 1,363 possible, 0 cold after the one-of round (156 / 1,335 / 0 before it); 365 of the possible would be cold but for accesses the walk could not place or placed only as one of several objects** (155 / 852 / 0 after the fourth and fifth rounds of fixes, 136,673 instances; the heap-and-element round adds one definite pair on `slabclass[0]` and 483 possible pairs at elements the analysis cannot tell apart, 137,526 instances) | the walk had stopped at 10,000 instances and never saw the workers; then "cold" stopped being claimed for a thread with unplaced accesses, which every memcached thread has; then heap objects and array elements were placed at all |
-| field accesses the analysis cannot place | 6,956 | 4,493 | **4,265** after the one-of round (4,377 before it), with 703 more at elements of arrays it places but cannot tell apart, 71 on stack slots that never escape, and 51 placed as one of several objects | counted once per operation, not per call string; then atomic and bit-field accesses were counted at all (4,496); then accesses to array elements, to the whole of an object through a cast, and by memset and memcpy, none of which had been counted as accesses before (5,106); and a slot whose address never escapes is now told apart, which no slot ever was, since the escape check answered yes on every exit; then heap objects, elements at constant and per-thread indices, and the whole of an object through a pointer the walk resolves were placed |
+| field accesses the analysis cannot place | 6,956 | 4,493 | **4,103** after the DPDK round (4,265 after the one-of round, 4,377 before it), with 718 more at elements of arrays it places but cannot tell apart, 71 on stack slots that never escape, and 51 placed as one of several objects | counted once per operation, not per call string; then atomic and bit-field accesses were counted at all (4,496); then accesses to array elements, to the whole of an object through a cast, and by memset and memcpy, none of which had been counted as accesses before (5,106); and a slot whose address never escapes is now told apart, which no slot ever was, since the escape check answered yes on every exit; then heap objects, elements at constant and per-thread indices, and the whole of an object through a pointer the walk resolves were placed |
 | memcached pairs, per file | 20 definite, 422 cold | 0 definite, 460 possible | **0 definite, 490 possible** | a placeholder thread gives no definite or cold verdict; then atomics and bit-field stores became accesses |
 | leveldb, per file | "none" | 0 | **0 pairs in the 11 files that compile** (2 refused: the Windows environment and a test helper) | the earlier 0 was a build artefact: all 13 files were refused, ten of them on a missing `LEVELDB_PLATFORM_POSIX`, the threaded ones among them |
 | globals `--wtc-align-by-owner` picks | 73, 4,254 B | 60, 3,489 B | **60, 3,489 B**, a different 60 | `stderr`, a libc declaration the pass must not touch, is out; `logger_gid`, written atomically, is in. The comparison point counted two declarations among its 141: 139 defined mutable globals, 7,778 B |
@@ -363,6 +364,74 @@ the reason and location printed for a pair judged by any direct access
 rather than by role; "accesses it could not place" said of a placed one;
 a test that could not tell a dropped offset from a kept one.
 
+### The DPDK round: a member's address, constants, allocation sets
+
+Running the analysis on a DPDK test, to score it against DPDK's own
+cache-line annotations (the oracle below), needed four things, each with
+a test that fails on the code before it. DPDK's EAL has no pthread_create
+and no malloc: `rte_eal_remote_launch(f, arg, lcore)` is read as a spawn,
+`rte_malloc` and its forms as allocations with their alignment operand,
+and the ring and stack constructors as allocations -- a reading of the
+API, stated as such. A record written from a constant that names no
+object, `= {0}` or `= { .n = 8 }`, which the front end emits as a copy
+out of a private constant, no longer marks the record written whole; on
+the ring test one such zeroing cost 91 unplaced accesses. A wrapper that
+hands back one of several allocations, `test_ring_create` choosing
+`rte_ring_create` or `rte_ring_create_elem`, places its result as one of
+its sites, through the `__retval` slot every return stores to. And the
+walk steps through a member's address handed on as an argument,
+`__rte_ring_headtail_move_head(&r->prod, &r->cons, ...)`: before, every
+access through such a parameter was "otherwise". A `list-accesses`
+option prints a remark per field access, where it went or why not, and
+the notes on a possible pair carry both offsets; that listing is what
+found the three gaps.
+
+**memcached after.** 246 definite, 1,457 possible, 0 cold; 4,103
+unplaced (1,215 field, 14 global, 324 slot, 1,423 root parameter, 872
+call result, 62 past the caps, 193 otherwise), 718 at elements not told
+apart, 51 through sets; 301 of the possible would be cold but for
+unplaced accesses. The 87 new definite pairs all come through the
+member's address: extstore spawns its IO threads with `&e->io_threads[i]`
+and each reads the engine from `me->e`, the one store into that field;
+the crawler hands `&active_crawler_mod.c` to the routines that write and
+release its client. Read against the source: 69 on the engine --
+counters under `stats_mutex` beside each other (lock-serialised, the
+`@stats` class); `page_free` and `version`, set under `e->mutex` once per
+page of tens of megabytes, beside `io_depth`, `page_size` and the other
+fields read per request (a layout pair with one invalidation per page);
+and `wbuf_stack`/`io_stack`, pushed in a loop of `extstore_init` that
+runs in main after the worker threads exist, against the IO threads
+`extstore_init` is about to spawn, which the static model cannot see
+start later in the same function. 18 on the crawler's module, between the
+crawler thread writing its client per item and the worker threads setting
+it up once per `lru_crawler` command under `lru_crawler_lock`. Nothing
+actionable at memcached's rates; the same wall as before, frequency.
+Phoenix: linear_regression's 17 definite unchanged; histogram 0/6,
+kmeans 0/7, string_match 0/3 possible where there were 0/0, 0/1, 0/0,
+not read; streamcluster 0/22 unchanged.
+
+**The DPDK ring, against its own annotations.** `rte_ring` keeps its
+producer and consumer heads in two cache-line-aligned unions with a
+64-byte guard after each and after the header; the perf test runs
+`enqueue_bulk` on one lcore and `dequeue_bulk` on another. With the
+headers as shipped: 0 definite, 81 possible, every pair inside one union
+(the producer's head beside its tail, which the consumer reads: DPDK's
+deliberate layout), none across a guard. With `__rte_cache_aligned` and
+`RTE_CACHE_GUARD` defined empty and the name's `alignas` removed, so the
+unions sit at 64 and 88 and the header at 48: 0 definite, 276 possible,
+105 of them producer against consumer and 90 header against a head --
+every boundary the annotations draw, reported once they are gone.
+Possible rather than definite for two reasons the remark states: the
+ring is one of two objects, and its allocation runs more than once, one
+ring per sub-test. (48 threads, because the test's entry is address-taken
+and every worker reaches both enqueue and dequeue through a flag the walk
+does not read.) Recall on this object is one of one; the stack test gives
+0/0 in both variants with 45 accesses "from a slot written more than
+once" the round did not get to, and mempool and distributor were not
+run. Set-up: DPDK 26.11.0-rc1 configured with meson for its generated
+header, the test compiled by ClangIR with the meson flags, in under a
+second.
+
 ## The review: every memcached object, read against the source
 
 A pair survives only if separating the two fields would remove cache-line
@@ -563,7 +632,7 @@ does not cost what its verdict might suggest:
 - **Where an object starts.** "In *k* of 8 positions" treats the
   positions as equally likely; the real start is fixed by the linker and
   readable with `nm`.
-- **Pointers it cannot follow**: 4,265 accesses on memcached, the slab
+- **Pointers it cannot follow**: 4,103 accesses on memcached, the slab
   allocator's items with their atomic reference counts and the state
   reached through `conn->thread` among them (set where the connection is
   made from a callback's `void *` argument, which is where the walk
@@ -574,7 +643,10 @@ does not cost what its verdict might suggest:
   possible (490 on memcached). A pointer loaded from a slot, a global or
   a field written in several places is one of the places the stores name,
   when every store can be placed and nothing writes the object another
-  way; otherwise, and after a `realloc`, not followed.
+  way, and a wrapper that returns one of several allocations is one of
+  them; otherwise, and after a `realloc`, not followed. A member's
+  address handed on is followed into the record; the address of a slot
+  handed on as an out-parameter is not.
 - **The optimiser.** The analysis runs on ClangIR before `-O2`, which may
   keep a store in a register, hoist it, or merge it.
 - **Core placement.** Two threads on the two hardware threads of one core,
