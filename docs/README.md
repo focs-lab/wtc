@@ -3,12 +3,13 @@
 | File | What it is |
 | --- | --- |
 | `vision.md` | Why the project exists and the transformations it intends to perform |
-| `audit.md` | Known defects in the current code, as of September 2026 |
-| `glossary.md` | Every term and abbreviation used in this repository |
-| `corpus.md` | What people pad by hand, counted across 17 codebases |
+| `audit.md` | Known defects in the current code: September 2026 for the queue analysis, October for the layout passes |
+| `glossary.md` | The terms and abbreviations this repository uses |
+| `gate.md` | The first gate: one producer, one consumer, proved on real C++ and measured |
+| `corpus.md` | What people pad by hand, counted across 17 codebases, and what the false-sharing analysis finds on memcached |
 | `related-work.md` | Bibliography, with the papers themselves under `related-works/` |
 | `toolchain.md` | Building and sharing the ClangIR-enabled Clang the project needs |
-| `MLIR Concur.pptx` | Early presentation on the dialect design and motivating examples |
+| `MLIR Concur.pptx` | Early presentation on the dialect design and motivating examples; an artefact kept verbatim, metadata included |
 
 ## What is deliberately not here
 

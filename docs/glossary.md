@@ -64,3 +64,18 @@ Every abbreviation and named thing this repository uses.
 | Shim | The thin header-only library whose calls the compiler recognises and lifts into the dialect |
 | Lifting, lowering | Turning calls into dialect operations, and turning them back into calls |
 | ADR | A record of an architectural decision. Here, the `decisions/` directory |
+
+## Memory layout by owner
+
+| Term | Meaning |
+| --- | --- |
+| Cache line | The unit the hardware moves between cores and caches: 64 bytes on the hosts here. Two cores writing one line take turns owning it |
+| False sharing | Two threads touching different data that happens to lie in one cache line, so the line travels between their cores although neither needs the other's data. Distinguished from *true* sharing, where both touch the same data |
+| Thread instance | A function under one chain of call sites from a root (main, a global constructor, a spawn), with the thread it runs on and how many times it runs. The unit the ownership walk reasons about |
+| Multiplicity, `One` / `Many` | How many dynamic threads, or how many runs of a function, one instance stands for. A spawn in a loop stands for many threads |
+| Start-up phase | The part of main and the global constructors that runs before the first call that can start a thread. Writes there cannot contend with threads that do not exist yet |
+| Speculative thread | A thread the module cannot account for: a function whose address is taken, or an externally visible function nobody in this translation unit calls (an *orphan*). It may contribute `possible`, never `definite` |
+| `definite` | Two threads the module accounts for and can tell apart repeatedly touch two fields of one object, at least one of them writing, outside the start-up phase, and the fields share a cache line in at least one of the starting positions the object's alignment allows |
+| `possible` | A pair the analysis cannot rule out: the threads may be one standing for many, may be unaccounted for, may not both exist, or may have an access rate it cannot tell; or the pair would be cold but for accesses the once-side's thread has that could not be placed; or the object is a stack slot whose address escapes |
+| `cold` | A resolved claim that a pair costs nothing: different threads, but one side touches the line once as far as the analysis can see. Not printed when that side's thread has an access the analysis could not place |
+| Unidentified access | A member access whose object the analysis could not resolve to a global or a stack slot: through a pointer it cannot follow, an array element, a heap object. Counted in every summary, because that count is the measure of the analysis's reach; element accesses to scalar and pointer arrays are not counted at all |

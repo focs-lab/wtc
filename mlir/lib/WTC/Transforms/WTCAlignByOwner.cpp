@@ -25,9 +25,9 @@ using namespace mlir::wtc;
 // A profiler cannot close the gap either, because it reports an address and
 // an address does not name the allocation that produced it.
 //
-// It is also, measured across seventeen codebases, the larger half: 856 of
-// the 1,531 hand-written cache-line annotations separate whole objects
-// against 675 that separate fields (docs/corpus.md). And it is the cheap
+// It is also, measured across seventeen codebases, about half of what
+// people write by hand: 795 of 1,623 cache-line annotations separate whole
+// objects against 828 that separate fields (docs/corpus.md). And it is the cheap
 // half to perform, which took a wrong turn to find out. A record's member
 // alignment is not a property of the member in CIR -- `cir.struct` carries
 // members, name, packed and member kinds, and no alignment -- so aligning a

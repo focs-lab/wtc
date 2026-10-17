@@ -1,54 +1,70 @@
-# Status, 16 October 2026: recounted, and no reported pair survives review
+# Status, 16 October 2026: recounted twice, and no reported pair survives review
 
 This file was written in September, audited, and found wrong in places; the
-fixes were audited again on 16 October and found wrong in more. This section
-says where it stands now. The sections below keep what they said, with
-corrections marked where they were made, because a retraction that deletes
-what it retracts teaches nothing.
+fixes were audited again on 16 October and found wrong in more; and the
+second round of fixes was audited once more the same day, which found
+fifteen defects in the analysis, fourteen errors in the numbers and sixteen
+claims the sources do not support. This section says where it stands after
+all three. The sections below keep what they said, with corrections marked
+where they were made, because a retraction that deletes what it retracts
+teaches nothing.
 
 **The result of this phase is negative, and narrower than it first looked.**
-On amalgamated memcached the analysis now reports 155 definite and 503
-possible pairs inside objects. Every object was read against the source,
-and no pair describes traffic that separating fields would remove. Two
-measurements under load agree: applying the verdict moves throughput by
-less than 1%, and its 95% intervals lie between -3.2% and +2.0%, without
-and with eviction. What the analysis cannot see at all --
-arrays indexed per class or per thread, and heap objects -- was not
+On amalgamated memcached the analysis reports 155 definite and 852 possible
+pairs inside objects, all of them on five globals. Every one of those
+objects was read against the source, and no pair describes traffic that
+separating fields would remove: each is decided by how often one side runs,
+which the analysis cannot tell. Two measurements under load do not overturn it,
+within what ten runs resolve: applying the verdict by hand gives throughput within
+0.7% of the original on every workload, with 95% intervals from -3.2% to
++2.0%. What the analysis cannot see at all -- arrays indexed per class or
+per thread, and heap objects, 4,496 field accesses here -- was not
 examined, so this is not a claim that memcached has nothing to fix.
 
 ## What was wrong, and what it is now
 
-| what | was | is | why it moved |
-|---|---:|---:|---|
-| source files scanned | 112,831 | 110,016 | a checked-in `cmake-build-release` was being scanned as source |
-| sites | 1,572 | **1,659** | build-tree files, preprocessor lines and comments were counted; seven idioms were missed (below) |
-| two totals in one document | 1,572 and 1,531 | **1,659 and 1,659** | the census counted directives, the classifier dropped them; both now set aside every line that starts with `#` |
-| LLVM sites | 34 | **0** | all 34 were lit-test output in the build tree |
-| PARSEC sites | 6 | **21** | the padding filter was case-sensitive. 16 of the 21 are in PARSEC's vendored copy of TBB, so they repeat oneTBB's idiom rather than add a codebase's own decisions |
-| oneTBB sites | 1 | **25** | `alignas(max_nfs_size)`, the library's own idiom, was not searched for |
-| Linux sites | 773 | **836** | `____cacheline_internodealigned_in_smp` (47), `__cacheline_group_begin_aligned` (25), `__aligned(SMP_CACHE_BYTES)` (14) and `CACHELINE_PADDING` (10) were not searched for; comment lines were counted |
-| fields / objects | 675 / 856 (44% / 56%) | **761 / 898 (46% / 54%)** | the nesting tracker could not see a brace on its own line, nor skip comments and string literals |
-| field annotations on one member | 648 of 675 (96%) | **687 of 761 (90%)** | two of the three ways the kernel writes a *group* were missed |
-| files with several field annotations | 300, at most 24 | **153, at most 17** | recounted from the corrected classification |
-| memcached pairs, amalgamated | 397 definite, 546 possible | **155 definite, 503 possible, 349 cold** | the walk had silently stopped at 10,000 function instances (it needs 132,997), and it never saw the worker pool |
-| memcached pairs, per file | 20 definite, 422 cold | **0 definite, 460 possible** | a thread the module cannot account for no longer gives a definite or a cold verdict |
-| globals `--wtc-align-by-owner` picks | 73, 4,254 B | **60, 3,489 B** | the same two defects; the comparison point, 141 mutable globals and 7,890 B, holds |
+Every number moved twice: once on 16 October when the walk was found to
+have stopped silently, and again the same evening when the fixes were
+reviewed. Both columns are kept.
 
-The idioms added are the four kernel ones above, DPDK's `RTE_CACHE_GUARD`
-(10), oneTBB's `alignas(max_nfs_size)` (18), and project macros that align
-to a line -- rocksdb's `ALIGN_AS(CACHE_LINE_SIZE)`, jemalloc's
-`JEMALLOC_ALIGNED(CACHELINE)`, abseil's `ABSL_CACHELINE_ALIGNED`, folly's
-`cacheline_aligned<T>` (31 together). The plain `__cacheline_group_begin`
-is *not* counted: it is a zero-length marker that aligns nothing. A sample
-read during the second audit put the census's precision near 75% -- a
-libuv control-message buffer and an MMIO window among the hits -- which is
-a property of matching text, and the reason the census is an oracle to
-compare against rather than ground truth.
+| what | September | first recount | **now** | why it moved |
+|---|---:|---:|---:|---|
+| source files scanned | 112,831 | 110,016 | **98,344** (+11,672 test files set aside) | a checked-in build tree was scanned; then test directories and `*_test` files were, and a fixture aligned to 64 is not a decision about two threads |
+| sites | 1,572 | 1,659 | **1,623** | directives, comments and build trees were counted; seven idioms were missed; then tests were set aside (-36 net of the new idioms) |
+| precision of a site | -- | "near 75%", from 40 read | **74% [65%, 82%]**, 100 read and labelled in `corpus-precision-sample.csv`, six labels changed by an independent second reader | the misses are DMA and firmware layouts, SIMD tables, read-only lookup tables, hot/cold locality splits, habitual alignment of read-mostly structures and a SPARC trick; `kernel_aligned` 26 of 33, `alignas_named` 13 of 22, `dpdk_aligned` 13 of 18 |
+| what the census misses | -- | -- | **from about a tenth to about half of what it finds**, per codebase (DPDK 0.12, folly 0.19, compiler-rt 0.31, postgres 0.40, MySQL 0.53): folly ~13 against 71 found, MySQL ~39 against 74, compiler-rt ~6 against 18, DPDK ~62 [11, 305] against 539, postgres 2 against 8; from 120 candidates read against the previous census, ten of which the current one finds; `corpus-recall-sample.csv` | spellings with no pattern: a padded type (`PFS_cacheline_atomic_*`), a size macro (`LWLOCK_PADDED_SIZE`, `BUFFERDESC_PAD_TO_SIZE`), a group marker (memif), `ALIGNED(` split across lines, and a union of an atomic with a line-sized buffer |
+| fields / objects | 675 / 856 (44% / 56%) | 761 / 898 (46% / 54%) | **828 / 795 (51% / 49%)** | the nesting tracker could not see Allman braces; then it ended a record at the `)` of `struct alignas(X) Name {`, which made every member of such a record an object: 23 sites in MySQL's `log0sys.h` and 8 elsewhere move to fields, and MySQL's 34 / 33 is 66 / 8 with the nine sites the second census found |
+| field annotations on one member | 648 of 675 (96%) | 687 of 761 (90%) | **747 of 828 (90%)** | two of the three ways the kernel writes a group were missed; `__cacheline_group_begin(x) ____cacheline_aligned` is a group too |
+| files with several field annotations | 300, at most 24 | 153, at most 17 | **165, at most 23** (`log0sys.h`) | recounted from each classification |
+| memcached pairs, amalgamated | 397 definite, 546 possible | 155 definite, 503 possible, 349 cold | **155 definite, 852 possible, 0 cold; 349 of the possible would be cold but for accesses the walk could not place** | the walk had stopped at 10,000 instances and never saw the workers; then "cold" stopped being claimed for a thread with unplaced accesses, which every memcached thread has |
+| field accesses the analysis cannot place | 6,956 | 4,493 | **4,496** | counted once per operation, not per call string; then atomic and bit-field accesses were counted at all |
+| memcached pairs, per file | 20 definite, 422 cold | 0 definite, 460 possible | **0 definite, 490 possible** | a placeholder thread gives no definite or cold verdict; then atomics and bit-field stores became accesses |
+| leveldb, per file | "none" | 0 | **0 pairs in the 11 files that compile** (2 refused: the Windows environment and a test helper) | the earlier 0 was a build artefact: all 13 files were refused, ten of them on a missing `LEVELDB_PLATFORM_POSIX`, the threaded ones among them |
+| globals `--wtc-align-by-owner` picks | 73, 4,254 B | 60, 3,489 B | **60, 3,489 B**, a different 60 | `stderr`, a libc declaration the pass must not touch, is out; `logger_gid`, written atomically, is in. The comparison point counted two declarations among its 141: 139 defined mutable globals, 7,778 B |
 
-Two of the corrections reverse conclusions drawn below and are flagged
-there: people do group fields as well as mark single boundaries (10%, not
-4%), and the memcached counts that the density and alignment sections stand
-on came from a walk that had stopped partway and had not seen the workers.
+The idioms added in the first recount were the four kernel ones, DPDK's
+`RTE_CACHE_GUARD` (8 once tests are set aside), oneTBB's
+`alignas(max_nfs_size)` (18), and project macros that align to a line (39
+now, with compiler-rt's `ALIGNED(SANITIZER_CACHE_LINE_SIZE)` and MySQL's
+`Cacheline_padded<T>` added in the second). The plain
+`__cacheline_group_begin` is *not* counted: it is a zero-length marker that
+aligns nothing. Allocation-time alignment -- `rte_zmalloc(..., RTE_CACHE_
+LINE_SIZE)`, `palloc_aligned`, `ShmemAlloc` -- is a separation mechanism
+of a different kind, decided per call rather than per type, and the census
+does not count it; ten of the twenty postgres candidates were of that kind.
+
+What the corrections do to the conclusions drawn below: people group
+fields as well as mark single boundaries (10%, not 4%); fields and objects
+are separated about equally often, not 44 to 56; the memcached counts the
+density and alignment sections stand on came from a walk that had stopped
+partway; and "1,623 sites" is a count of spellings whose precision is 74%
+and whose misses are of the same order as its errors, so no claim here
+rests on its third digit. Test and benchmark code is set aside, though
+about two thirds of the 110 sites set aside are themselves thread
+decisions inside stress tests and benchmarks; and 66 sites in test
+applications the rule does not match (DPDK's `app/test-*`, rocksdb's
+`*_bench.cc`, the kernel's `lib/test_*.c`) are still counted, as are six
+lines of a printf format in `raid6/mktables.c`.
 
 ## What the analysis got wrong, and the tests that now hold it
 
@@ -105,6 +121,31 @@ of fixes and found by the second review.
 - No pass checked whether the walk had hit its instance cap. On memcached it
   had, thirteen-fold. Every pass now refuses past the cap, which is 250,000
   and an option. (`instance-cap.mlir`)
+- **The third review, the same evening**, ran the passes over small
+  programs with known answers and found the verdicts wrong both ways.
+  Over-claims: a thread-local global was one object for every thread
+  (`thread-local-is-private.mlir`); two spawns in the two arms of an `if`
+  were two certain threads (`spawn-in-either-branch.mlir`); a stack slot of
+  a function called twice was one object (`stack-slot-per-call.mlir`); a
+  `goto` made every access in its function "repeated"
+  (`goto-is-unknown.mlir`); a store of a whole record and a store of one of
+  its members were two fields of one line (`overlap-is-true-sharing.mlir`);
+  main's start-up loop paired against a worker that itself spawns, because
+  the indirect-call check counted a spawn entry as an address taken
+  (`worker-that-spawns.mlir`). Under-claims: a thread spawned from a
+  helper's local vanished (`entry-through-helper-slot.mlir`); atomic
+  read-modify-writes, bit-field stores and `cir.copy` were not memory
+  accesses at all, so the textbook pair of atomic counters produced no
+  verdict (`atomic-counters.mlir`, `atomic-globals.mlir`); a recursive
+  function ran "once" and its pair was cold (`recursion-is-repetition.mlir`);
+  a thread with an access the walk could not place still made a pair cold
+  (`cold-needs-resolved-thread.mlir`). And `--wtc-align-by-owner` raised the
+  alignment of `extern` declarations, globals in named sections,
+  thread-local and weak globals (`cannot-move.mlir`), and both passes
+  asserted on a global of incomplete record type (`incomplete-root.mlir`);
+  the instance cap did not count roots (`cap-counts-roots.mlir`). Three
+  tests that named a rule never reached it, and five checked a verdict but
+  not the summary; they do now.
 - A record-padding pass, written after the September measurements and
   never committed, is not kept. Layout cannot be changed after the front
   end: `sizeof` arrives already folded into a constant, so
@@ -139,27 +180,39 @@ separately, and separation spares that fetch when the writers are disjoint.
 
 | object | definite | possible | verdict |
 |---|---:|---:|---|
-| `@stats_state` (56 B) | 49 | 17 | **no.** Every write but two is under `STATS_LOCK`; the two are `reserved_fds`, written once per worker while the workers are set up, and `accepting_conns`. The per-request writes are to `curr_items` and `curr_bytes`, by the workers on every link and unlink and, under eviction, by the LRU maintainer, the crawler, the slab mover and the extstore writer too -- all to the *same* two fields, which is true sharing that no layout removes. The fields on the other side of each pair are written per hash-table expansion, per crawl, per slab move, per connection, or once per worker at start. |
-| `@stats` (224 B) | 78 | 89 | **no.** Every write is under `STATS_LOCK` (all 31 sites checked). The per-request write, `total_items`, is the same field for every thread that links an item. The fastest writer of any other field is the LRU maintainer's `lru_maintainer_juggles`: under eviction it does not sleep and was measured at about 8,000 a second, against about 230,000 sets a second from the workers -- one transfer of the line in thirty. The rest are slower: the logger's flush, the slab mover, the crawler, extstore compaction, failure paths. |
-| `@slab_rebal` (72 B) | 25 | 0 | **no.** A hand-off: `slabs_reassign` only try-locks `slabs_rebalance_lock`, which the rebalancer thread holds except while it waits, and the rebalancer reads `s_clsid`/`d_clsid` only after being signalled. |
-| `@active_crawler_mod` (56 B) | 3 | 2 | **no.** The same hand-off under `lru_crawler_lock`, once per crawl command. |
-| `@settings` | 0 | 395 | **no.** Read on every request; written by `SIGHUP`, by administrative commands (`cache_memlimit`, `verbosity`, `slabs automove`, `lru` tuning, `stats detail`), by `flush_all`, a client command that sets `oldest_live`, and by the LRU maintainer's extstore automove, which writes `ext_global_pool_min` once per window from a file the amalgamation leaves out. A workload issuing `flush_all` continuously would make one pair here matter; none that measures a cache does. |
+| `@stats_state` (56 B) | 49 | 17 | **no.** Every write after start-up is under `STATS_LOCK` (23 sites in 17 lock regions); the unlocked ones are `reserved_fds`, written once per worker from `memcached_thread_init` before the workers start, and the `memset` and `accepting_conns = true` in `stats_init`, before any thread. Only 21 of its 66 pairs involve `curr_items` or `curr_bytes`; the rest pair two fields each written rarely. The per-request writes are to `curr_items` and `curr_bytes`, by the workers on every link and unlink -- eviction too happens on the workers' allocation path, and the maintainer and crawler unlink only expired or flushed items, none with memtier's expiry of 0 -- all to the *same* two fields, which is true sharing that no layout removes. The fields on the other side of each pair are written per hash-table expansion, per crawl, per slab move, per connection, once per worker at start, per maxconns transition (`accepting_conns`), or -- `log_watchers` -- per pass of the logger's loop while a `watch` client is attached, which neither leg did. |
+| `@stats` (224 B) | 78 | 89 | **no.** Every write after start-up is under `STATS_LOCK` (33 sites compiled in; two more under `TLS`, compiled out; the `memset` in `stats_init` runs before any thread). The per-request write, `total_items`, is the same field for every thread that links an item, and it never shares a line with `lru_maintainer_juggles` (offsets 0 and 104). Only 7 of the 167 pairs involve `total_items`; the rest pair two fields each written per slab move, per pass of the LRU maintainer's loop (`lru_maintainer_juggles`, every 1 ms to 1 s), per pass of the logger's loop, per crawl, per extstore compaction, per connection (`total_conns`), per maxconns event, per accepted connection in NAPI mode (`unexpected_napi_ids`, `round_robin_fallback`) or on a failure path. No rate of any of them was measured; an earlier version of this row quoted two, and neither was in the data. The one writer a workload could drive is the logger, which with a `watch` client attached writes `log_watchers` on every pass of its loop (every 1 ms to 1 s, and without sleeping while logs keep arriving) and with none attached blocks and writes nothing; neither leg attached one. |
+| `@slab_rebal` (72 B) | 25 | 10 | **no.** A hand-off: `slabs_reassign` only try-locks `slabs_rebalance_lock`, which the rebalancer thread holds except while it waits, and the rebalancer reads `s_clsid`/`d_clsid` only after being signalled. With `slab_automove=2` the workers call it once per eviction -- more often, still a locked hand-off. No field is written per request. |
+| `@active_crawler_mod` (56 B) | 3 | 7 | **no.** The same hand-off under `lru_crawler_lock`, once per crawl, whether a command or the maintainer's autocrawler starts it. |
+| `@settings` | 0 | 729 | **no.** Read on every request; written by `SIGHUP`, by administrative commands (`cache_memlimit`, `verbosity`, `slabs automove`, `lru` tuning, `stats detail`, `extstore`, `lru_crawler sleep` and `tocrawl`), by thread start and stop (`lru_crawler`, `lru_maintainer_thread`), by `flush_all`, a client command that sets `oldest_live`, and by the LRU maintainer's extstore automove, which writes `ext_global_pool_min` once per window from a file the amalgamation leaves out but every measured binary links in, and only with extstore enabled, which neither leg was. A workload issuing `flush_all` continuously would make one pair here matter; none that measures a cache does. |
 
-So decision point 1 of the plan is reached for the pairs the analysis
-reports: none survives. It is not reached for memcached as a whole, and
+The counts in the table are from the passes as fixed in October: 155
+definite and 852 possible, of which 349 would have been "cold" before the
+rule that a thread with accesses the walk cannot place makes nothing cold.
+All of them sit on these five objects, so the reading covers every pair the
+analysis reports, the former cold ones included. So the first decision
+point of the plan, which lives outside the repository, is reached for the
+pairs the analysis reports: none survives. It is not reached for memcached as a whole, and
 two things the review found are outside what the analysis reports:
 
 - **One pair across objects.** `expanding` (`assoc.c:47`), read by every
   hash lookup, sits on the same line as `stats_state`, written on every
   item link: 0x455b8 against 0x45580 in the binary. That is false sharing
-  between two objects, and `--wtc-align-by-owner` does separate them. It is
-  the one candidate both measurements below can see.
+  between two objects. `--wtc-align-by-owner` puts them on two 64-byte
+  lines but inside one 128-byte pair, which the adjacent-line prefetcher
+  fetches together; the `hand` build separates `expanding` from
+  `stats_state`'s per-request fields at both sizes (its 128-byte pair still
+  holds `lru_crawler_running`, at offset 640 of the grown struct), and moves
+  other things as well (`primary_hashtable` leaves `cas_id`'s pair), so
+  neither arm below is a single-variable test of this one pair.
 - **What the analysis does not model.** `lru_locks[]` holds 40-byte mutexes
   aligned to 16, so neighbouring slab classes share lines; `heads[]`,
   `tails[]` and `itemstats[]` are indexed per class and written under
   different locks; the item locks are a heap array; and the summary line
-  admits 4,493 field accesses on objects it could not identify. None of
-  these was examined, because nothing here reports them.
+  admits 4,496 member accesses on objects it could not identify, and
+  element accesses to scalar and pointer arrays (`heads[]`, `tails[]`,
+  `lru_locks[]`) it does not count at all. None of these was examined,
+  because nothing here reports them.
 
 ## The measurements that test the review
 
@@ -171,39 +224,55 @@ not include):
 
 - `orig`: `clang -O2`, as shipped.
 - `hand`: every field in a definite pair given `__attribute__((aligned(64)))`
-  -- the analysis' verdict applied as literally as possible, 50 fields in
-  four objects. It was built from the verdict before the worker pool was
-  visible; the later verdict adds two fields of `@stats` and one of
-  `@slab_rebal`. This is maximal
+  -- the analysis' verdict applied as literally as possible: 50 attributes
+  on 49 distinct fields in four objects. It was built from the verdict
+  before the worker pool was visible; the later verdict adds two fields of
+  `@stats` and one of `@slab_rebal`, 52 in all. This is maximal
   separation, not the least the verdicts need, and it moves `expanding` off
   `stats_state`'s line as a side effect, since `stats_state` grows to 704
   bytes.
 - `cir`: the same source through ClangIR with no transformation: what the
   round trip itself costs.
 - `ciralign`: through ClangIR with `--wtc-align-by-owner` (57 globals raised;
-  the fixed pass would raise 60, the difference being three logger
-  globals).
+  the pass as fixed since raises 60: `bump_buf_tail`, `logger_count` and
+  `logger_stack_tail` in, and after the October fixes `stderr`, a libc
+  declaration it must not touch, out and `logger_gid`, written atomically,
+  in).
 
-Fixed in advance: the review is overturned if `hand ÷ orig` is at least
+The thresholds -- the review is overturned if `hand ÷ orig` is at least
 1.02 with a 95% interval above 1.00 on any workload; the round trip is
-acceptable if `cir ÷ orig` is within 2%. memcached ran four workers on four
-cores of one NUMA node of a dedicated 80-thread Xeon Gold 6230 host, and
-memtier eight client threads on eight other cores of the same node, inside
-one container; repetitions interleaved, ten per arm, 20 s each. The governor
-was `powersave` with turbo on -- fixing either needs root -- which widens the
-intervals but cannot favour an arm, since every arm ran in every position.
+acceptable if `cir ÷ orig` is within 2% -- were written down with the
+results, not before the runs; an earlier version of this text said "fixed
+in advance", and nothing on disk supports that. The next legs carry them
+in the script.
+
+The host: two Xeon Gold 6230 sockets, 80 threads, 64-byte lines, kernel
+6.12, with nothing else of ours running. memcached (`-t 4`) was pinned to
+CPUs 20-23, four physical cores of NUMA node 1, and memtier (eight threads,
+25 connections each, pipeline 16) to CPUs 24-31, eight more such cores,
+inside one container; their SMT siblings (60-63 and 64-71) were not given
+to the benchmark, and whether anything ran on them was not recorded; ten
+repetitions per arm, 20 s each, no warm-up, the first repetition kept. All
+ten of memcached's threads -- main, the four workers, the LRU maintainer,
+the crawler, the slab rebalancer, the logger, the hash-table maintainer --
+shared those four CPUs, so the background threads time-shared the
+workers' cores. The governor was
+`powersave` with turbo on; fixing either needs root.
 
 Two workloads per leg, each with set:get in two ratios. Leg 1 is memcached
 as usually benchmarked: 2 GiB of memory and uniformly random keys, so
 nothing is evicted. memtier gives every client the same random sequence,
-so these runs touched a small set of keys over and over, which is a
-property of the tool and the same for every arm. Leg 2 answers the
+so every client requested the same keys in the same order -- about
+120,000 draws from 100,000 keys per client per run, which covers most of
+the space -- a property of the tool and the same for every arm. Leg 2 answers the
 objection that leg 1 leaves the background threads idle: 64 MiB of memory,
 a separate key range per client, values of 32 to 4,096 bytes, and about 9
-million evictions per 20-second write-heavy run, with the LRU maintainer
-busy throughout. The slab mover stayed idle even so: a uniform spread of
-sizes keeps the classes balanced, so its pairs, which are hand-offs
-anyway, were not driven.
+million evictions per 20-second write-heavy run (8.7 million on average
+for 1:1, the same per operation in every arm), which keeps the LRU
+maintainer running. Neither its rate nor the slab mover's was recorded:
+that the maintainer was busy and the mover idle is inferred from the
+eviction count and the uniform spread of sizes, not measured. The hit rate
+was not recorded either.
 
 Throughput relative to `orig`, median of ten, with a 95% bootstrap interval:
 
@@ -214,40 +283,89 @@ Throughput relative to `orig`, median of ten, with a 95% bootstrap interval:
 | `cir ÷ orig` | 0.974 [0.956, 0.987] | 0.987 [0.968, 0.993] | 0.974 [0.963, 0.993] | 0.966 [0.941, 0.990] |
 | `ciralign ÷ cir` | 0.995 [0.979, 1.014] | 1.005 [0.996, 1.020] | 0.996 [0.981, 1.009] | 1.009 [0.967, 1.036] |
 
-**The review stands.** Applying the analysis' verdict -- every field it
-names put on a line of its own, and `expanding` moved off `stats_state`'s
-line with them -- changes nothing measurable under either load: no
-interval reaches 1.02, and every one contains 1.00.
+**The review stands, within what ten runs resolve.** Applying the
+analysis' verdict -- every field it names put on a line of its own, and
+`expanding` moved off `stats_state`'s line with them -- gives point
+estimates within 0.7% of 1.00 on all four workloads, and the overturn
+threshold, 1.02 on the point estimate, is not met on any. The intervals
+admit anything from -3.2% to +2.0%; the leg-2 upper bounds cross 1.02 in
+40-46% of bootstrap seeds taken one interval at a time, and one of the
+four does in two seeds of three, so what the data say is "no loss of more
+than about 3% and no gain of more than about 2%, with a 2% gain at the
+edge of what the intervals admit", not "less than 1%". p99 latency was recorded and is in
+the CSVs; the `cir` arms' p99 is 1-3% worse than `orig`'s, and no interval
+was computed for it.
 
-**The round trip through ClangIR costs 1.3% to 3.4%**, so the acceptance
-fixed in advance, within 2%, is not met on three of the four workloads.
-That is a cost of the pipeline before it changes anything, and it means a
-transformation applied through it has to be measured against `cir`, not
-against `orig`. Measured so, raising 57 globals to a line each -- which
-does separate `expanding` from `stats_state` -- changes nothing either.
+**The round trip through ClangIR costs 1.3% to 3.4% on the point
+estimates**, which miss the 2% threshold on three of the four workloads;
+by the intervals, which reach down to 0.941, no workload is shown within
+2% and none is shown outside it. The `cir` binaries carry 555 text
+functions against `orig`'s 400, so the round trip changes code generation
+rather than adding a constant. It is a cost of the pipeline before it
+changes anything, and it means a transformation applied through it has to
+be measured against `cir`, not against `orig`. Measured so, raising 57
+globals to a line each shows no change; the intervals reach +3.6%, so none
+is excluded either.
 
 What these two legs do not show: a gain on a workload neither of them
 drives, such as continuous `flush_all` or a busy slab mover; anything about
 the arrays and heap objects the analysis does not report; and anything
 below about 2%, which ten repetitions on a host with frequency scaling
-cannot resolve. Leg 1 shuffled the arm order per repetition; leg 2 rotated
-it, so every arm ran in every position but always after the same
-predecessor, which leaves any carry-over from one run to the next
-unbalanced. Nothing in the data suggests one, and the `hand` result is the
-same in both legs.
+cannot resolve.
+
+The arm order was not balanced. Leg 1 seeded its shuffle from the
+repetition and workload names in a way that gave `get` and `set` the same
+order, never ran `cir` last or `ciralign` third, and ran `ciralign` last
+in six repetitions of ten and `hand` last in one. Throughput normalised
+per arm and workload rises with position in leg 1 -- 0.992, 0.997, 1.002,
+1.008 from first to last, a 1.6% drift (in leg 2 the positions span 0.6%
+but not monotonically, +0.1% first to last) -- which favours
+`ciralign` over `cir` by about 0.4% and works against `hand` by about 0.3%.
+Leg 2 rotated the order, so every arm ran in every position, but always
+after the same predecessor, and no arm's positions are balanced (`hand`
+6/4/4/6, `orig` 4/4/6/6, `cir` 6/6/4/4, `ciralign` 4/6/6/4). The next
+legs use a Latin square. The `hand` result is the same in both legs.
 
 ## What the analysis still cannot say
 
 A `definite` verdict says two accounted-for threads repeatedly touch the
 two fields; it does not say they do so *at the same time*. The walk has no
-notion of `pthread_join` or of branches that exclude each other, so two
-threads started in the two arms of an `if`, or one after the other with a
-join between them, are still two threads to it, and main's loops after it
-has joined its workers still pair with them. On memcached this does not
-arise, since its threads run for the life of the process, but it is a
-limit of the verdict, not of one program. So is frequency, which every
-pair in the review was decided by, and which no static rule here
-estimates.
+notion of `pthread_join`, so a thread started after another is joined is
+still a second thread to it, and main's loops after it has joined its
+workers still pair with them. (A pair between threads started in the two
+arms of one `if` is no longer definite; a join is still invisible.)
+memcached joins its threads only on a graceful shutdown, `SIGUSR1`;
+`lru_crawler disable` stops the crawler without joining it, and
+`lru_crawler enable` starts a new one -- a spawn, a stop and a second
+spawn, which the walk also sees as two threads. So the limit arises there
+too, on rare paths, not only in principle.
+
+The rest of what a verdict leaves out, each the reason some pair above
+does not cost what its verdict might suggest:
+
+- **A lock.** Accesses under one mutex are not seen as serialised. On
+  memcached the review found that a shared lock does not decide a pair by
+  itself; each was decided by who writes it, by hand-offs, and by rate.
+- **Rate.** Repeated or once is all the walk tells; every pair above was
+  decided by how often one side runs, by hand.
+- **Placement across objects**, which is the linker's and the allocator's.
+  One cross-object pair was checked in the binary; nothing enumerates the
+  rest, and the 128-byte pairs the adjacent-line prefetcher fetches
+  together are not modelled at all.
+- **Where an object starts.** "In *k* of 8 positions" treats the
+  positions as equally likely; the real start is fixed by the linker and
+  readable with `nm`.
+- **Arrays and heap objects**: 4,496 field accesses on memcached, the
+  per-thread statistics in the heap `threads[]` array and the atomic
+  reference counts in items among them, all unidentified.
+- **The optimiser.** The analysis runs on ClangIR before `-O2`, which may
+  keep a store in a register, hoist it, or merge it.
+- **Core placement.** Two threads on the two hardware threads of one core,
+  or time-sharing one core, move no line between caches; in these legs the
+  background threads time-shared the workers' cores.
+- **The measured program is not quite the analysed one.**
+  `slab_automove_extstore.c` is outside the amalgamation and inside every
+  binary.
 
 ---
 
@@ -269,8 +387,9 @@ around, `struct stats_state`, on three counts, all checkable from the source:
    every critical section.
    *Corrected 16 October: the lock is not on the data's line, so separation
    can spare a fetch of the data line -- but only when the two fields are
-   written by different threads. Here the hot fields are all written by the
-   worker pool, so the conclusion stands for a different reason.*
+   written by different threads. Here the per-request fields are written by
+   the worker pool and, under eviction, by the maintenance threads too, all
+   to the same two fields, so the conclusion stands for a different reason.*
 3. **The threads are the same threads.** `conn_new` (`memcached.c:828`) is
    called from `thread.c:624`, inside the worker's own event handler: the
    listener hands the descriptor to a worker, and the worker calls it. It is
@@ -302,7 +421,8 @@ different threads are moved apart so their cache line stops travelling between
 cores. Before writing the analysis, we counted how often people already do
 this by hand, because every hand-written annotation is a place where an expert
 has already decided *different threads touch these*, and that decision is the
-ground truth the analysis will be measured against.
+oracle the analysis is compared against -- an oracle with a measured
+precision, not ground truth; see the top section.
 
 Nothing here is compiled. The census is a scan of source text, so it covers
 codebases the pipeline cannot yet ingest, the Linux kernel included.
@@ -353,8 +473,10 @@ requiring the array to be cache-line-sized or cache-line-named, which leaves
 
 ## The census
 
-17 codebases, 110,016 source files. *(Recounted 16 October; the September
-counts are in the second column.)*
+17 codebases, 110,016 source files. *(The first recount of 16 October; the
+September counts are in the second column. The second recount, with test
+files set aside, gives 98,344 files and 1,623 sites -- dpdk 539, mysql 74,
+compiler-rt 18, onetbb 23, abseil 5, prose 2,857; see the top section.)*
 
 | codebase | files | sites | was | prose |
 |---|---:|---:|---:|---:|
@@ -472,7 +594,7 @@ presenting the last number as if it followed from the last change.
 
 ## The finding worth the exercise  *(retracted -- see the top of this file)*
 
-`memcached.h:430`, above `struct stats_state`:
+`memcached.h:431`, above `struct stats_state`:
 
 > Ordered for some cache line locality for commonly updated counters.
 
@@ -494,16 +616,21 @@ placeholder and no pair can be claimed.
 
 | codebase | scanned | refused | findings |
 |---|---:|---:|---:|
-| memcached, per file | 31 | 20 | 0 definite, 460 possible *(was 20 definite, 422 cold)* |
-| memcached, amalgamated | 1 | 0 | 155 definite, 503 possible, 349 cold *(was 397 definite, 546 possible)* |
+| memcached, per file | 31 | 20 | 0 definite, 460 possible *(was 20 definite, 422 cold; 490 possible since the October fixes)* |
+| memcached, amalgamated | 1 | 0 | 155 definite, 503 possible, 349 cold *(was 397 definite, 546 possible; since the October fixes 155 definite, 852 possible, 0 cold)* |
 | libuv | 44 | 18 | 11 possible *(was 32 scanned, 1 possible; the recount scans `src/` and `src/unix/` whole)* |
-| leveldb | 28 | 13 | none *(was 11 scanned, 2 possible; the recount scans `db/`, `util/` and `table/` without tests)* |
+| leveldb | 28 | 13 | none *(was 11 scanned, 2 possible; the recount scans `db/`, `util/` and `table/` without tests; the 13 refusals were a missing platform define, see the top section)* |
 | redis | 0 | 3 | needs its vendored dependencies built first |
 
 libuv's refusals are its AIX, BSD and Darwin files, which is the scanner
 being right. leveldb's two were `Slice`'s return slot, an escaping stack
 object; since 16 October a stack slot in a function that runs more than once
-gives no verdict at all, so they are gone.
+gives no verdict at all, so they are gone. *(The scanned counts in this
+table are not reproducible from the scan logs, which list 10 compiled and
+20 refused files for memcached, 3 and 18 for libuv, 11 and 2 for leveldb
+with the platform define; and leveldb's 13 refusals were a build artefact
+-- with `LEVELDB_PLATFORM_POSIX` defined, 11 of 13 files compile and
+report nothing.)*
 
 So the next step is not more files. It is whole-program input, and that was
 built: 27 of memcached's translation units in one file, after giving its
@@ -554,8 +681,11 @@ spelling means both things.
 
 *(Recounted 16 October. The nesting tracker now sees a brace on its own
 line and skips comments, string literals and preprocessor lines. The
-largest shift, MySQL's, from fields towards objects, has not been checked
-site by site.)*
+largest shift, MySQL's, from fields towards objects, was mostly a
+classifier bug: a `)` in `struct alignas(X) Name {` ended the record, and
+every member of such a record counted as an object -- 23 sites in
+`log0sys.h`; nine more fields come from sites the second census found.
+Corrected, MySQL is 66 / 8 and the total 828 / 795; see the top section.)*
 
 Reading the line instead of the nesting gets this wrong, and the first
 version of the script did. The kernel's idiom for separating *groups* of
@@ -584,9 +714,9 @@ kernel and MySQL separate fields; DPDK, which puts `__rte_cache_aligned` on
 whole structs, separates objects; LLVM separates only objects. So the two
 transformations are of comparable reach, not a flagship and a follow-up:
 
-- **reordering fields by owner** reaches 44% *(46%)*, and costs nothing when it
+- **reordering fields by owner** reaches 44% *(51% after the second recount)*, and costs nothing when it
   works, where the hand-written version always costs a line of padding;
-- **placing allocations by owner** reaches 56% *(54%)*, and is the half the language
+- **placing allocations by owner** reaches 56% *(49%)*, and is the half the language
   cannot express at all: `alignas` lives inside a type, so two objects from
   two separate allocations have no syntax to keep them apart.
 
@@ -612,7 +742,9 @@ edges, 0.31; `@slab_rebal` 14, 25, 0.27; `@stats_state` 11, 49, 0.89;
 On amalgamated memcached, all 943 findings sit on 14 objects, and they
 divide exactly along the rule the pass was built with: every global is
 `definite`, every stack slot is `possible`, because a slot is a different
-object in every invocation. The four globals:
+object in every invocation. *(From the truncated walk. Recounted 16
+October: 1,007 pairs on five globals, `@settings` among them with no
+definite pair; see the top section.)* The four globals:
 
 | object | fields | edges | density | max degree |
 |---|---:|---:|---:|---:|
@@ -636,13 +768,15 @@ which costs a line per field, or a copy per thread summed on read, which
 changes the program rather than its layout.
 
 The other three are sparse enough that a partition by owner plausibly
-exists, `@settings` most of all at 0.09.
+exists, `@settings` most of all at 0.09. *(Recounted: `@settings` has no
+definite pair, so there is nothing of it to partition; `@slab_rebal` is
+0.27 and `@stats` 0.31.)*
 
 **This is the reason to measure before building.** The plan had reordering
 as the flagship and padding as its fallback. Density says they are answers
 to different objects, not better and worse answers to the same one, and
 that an implementation which only reorders would leave the clearest case in
-memcached untouched. It also gives the transformation a cheap precondition
+memcached untouched *(the retracted one, above)*. It also gives the transformation a cheap precondition
 to check: compute the density, reorder below some threshold, pad above it,
 and refuse when neither pays.
 
@@ -653,9 +787,9 @@ and refuse when neither pays.
 Three measurements, taken before writing it, say what it has to be.
 
 > **Withdrawn 16 October.** Recounted, 90% sit on one member and 10% mark a
-> group, three ways: `__cacheline_group_begin_aligned` (25), an annotated
-> closing brace (27) and an annotated opening brace (22). 153 files carry
-> several, at most 17. People mostly mark boundaries, but grouping is not
+> group, three ways: `__cacheline_group_begin_aligned` (28), an annotated
+> closing brace (27) and an annotated opening brace (26). 165 files carry
+> several, at most 23. People mostly mark boundaries, but grouping is not
 > rare, and a transformation that can only emit single-member alignment
 > would not reproduce one annotation in ten.
 
@@ -709,7 +843,7 @@ so raising it is one attribute, with no type rebuilt and no offset moved,
 and raising an alignment is safe by construction -- the linker takes the
 maximum across translation units and nothing inside the object shifts. That
 made the inter-object half look like the cheap one to build, and the census
-made it the larger one at 56%. So it was built: `--wtc-align-by-owner`
+made it the larger one at 56% *(49% after the second recount: about half)*. So it was built: `--wtc-align-by-owner`
 raises the alignment of every global that one thread repeatedly writes while
 a different thread repeatedly touches another, and counts the bytes.
 
@@ -722,13 +856,13 @@ On amalgamated memcached:
 
 *(Recounted 16 October, on the whole walk with the workers visible: **60**
 globals, **3,489 B**. The argument below holds with the new numbers -- the
-analysis picks 43% of the mutable globals and saves 4.4 KB against a flag --
+analysis picks 43% of the mutable globals and saves 4.3 KB against a flag, 7,778 B for the 139 defined ones --
 and what the pass is worth when run is in the top section.)*
 
-**The analysis selects half the mutable globals and saves 3.6 KB** *(43% and 4.4 KB, recounted)*. The
+**The analysis selects half the mutable globals and saves 3.6 KB** *(43% and 4.3 KB, recounted)*. The
 guarantee is identical either way: after the pass no two contended globals
-share a line. A build flag that aligned all 141 would give the same
-guarantee for 7.9 KB instead of 4.3 KB, in a program that uses gigabytes.
+share a line. A build flag that aligned all 141 *(139 defined; two were declarations)*
+would give the same guarantee for 7.9 KB *(7.8 KB)* instead of 4.3 KB *(3.5 KB recounted)*, in a program that uses gigabytes.
 
 That is a negative result about the design, and it was only visible by
 running it. *(The next claim is withdrawn: the pass remembered only the first
@@ -758,13 +892,13 @@ here, so it is where the argument survives rather than where it is won.
 
 | half | selective? | why |
 |---|---|---|
-| fields of one record (44%; 46% recounted) | **yes** | offsets are known at compile time, so the analysis says exactly which pairs share a line |
-| separate globals (56%; 54% recounted) | no | placement is the linker's; a flag gives the same guarantee for twice the memory |
+| fields of one record (44%; 51% recounted) | **yes** | offsets are known at compile time, so the analysis says exactly which pairs share a line |
+| separate globals (56%; 49% recounted) | no | placement is the linker's; a flag gives the same guarantee for twice the memory |
 | separate heap objects | unmeasured | placement is the allocator's; nothing but the compiler reaches it |
 
-So the field case is the one where an analysis beats a flag, even though it
-is the smaller share of practice and needs the record type rebuilt across
-the module, which is the expensive machinery. Two messages ago that
-conclusion was the other way round, on the strength of the alignment
+So the field case is the one where an analysis beats a flag, and after the
+second recount it is the slightly larger share of practice (51%); it needs the record type rebuilt across
+the module, which is the expensive machinery. An earlier draft had that
+conclusion the other way round, on the strength of the alignment
 attribute being cheap to write. Cheap to perform and worth performing are
 different questions.

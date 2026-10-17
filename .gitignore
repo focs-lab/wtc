@@ -17,3 +17,7 @@ MY_NOTES.md
 
 # Smoke legs run unreserved and are not results.
 /benchmarks/results/*-smoke/
+
+# Python
+__pycache__/
+*.pyc

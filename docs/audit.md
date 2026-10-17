@@ -1,11 +1,12 @@
 # Known defects
 
-State as of September 2026. The first review was of the prototype before it
-moved into this repository; the sections below have since been worked
+State as of September 2026 for the queue analysis, and October 2026 for the
+layout passes (the section after "Still open"). The first review was of the
+prototype before it moved into this repository; the sections below have since been worked
 through, and each one now says what became of it. A defect is only marked
 closed where a test would fail if it came back.
 
-Read "Still open" at the end before building anything on top of a verdict.
+Read "Still open" and the October section before building anything on top of a verdict.
 
 ## Closed, with the test that keeps them closed
 
@@ -53,6 +54,49 @@ what was measured and why the default is what it is.
 
 ---
 
+## The layout passes, October 2026
+
+`--wtc-false-sharing-diagnose` and `--wtc-align-by-owner` were reviewed
+three times after their numbers were taken on memcached, the third time on
+hand-written programs with known answers. Every defect found is closed with a test that fails on
+the code before the fix; the list, with the tests, is in `docs/corpus.md`.
+The ones that changed verdicts: the walk lost a thread spawned through a
+helper's local; a goto made every access in its function "repeated"; a
+thread-local global, a stack slot of a function called twice, two spawns in
+the two arms of an `if`, and overlapping byte ranges all gave `definite`;
+atomic read-modify-writes and bit-field stores were not memory accesses at
+all; a recursive function ran "once"; a thread with an access the walk could
+not place still made a pair cold, which on memcached was 349 pairs; and
+the alignment pass raised the alignment of declarations, sections,
+thread-local and weak globals.
+
+Still open for these passes, stated here and in `docs/corpus.md` rather
+than in the remarks themselves:
+
+**No notion of time.** A `definite` verdict says two accounted-for threads
+repeatedly touch the two fields, not that they do so at the same time. A
+spawn, a join, and a second spawn of the same worker are two threads to the
+walk. This errs *unsafe* for a false-sharing verdict: a pair reported
+between threads that never overlap costs nothing.
+
+**No notion of a lock.** Accesses under one mutex are not seen as
+serialised. On memcached a shared lock did not decide a pair by itself;
+who writes, hand-offs and rate did.
+
+**No notion of rate.** Repeated or once is all the walk can tell; a command
+handler that runs a thousand times a second and one that runs once a day
+are both "repeated". Every memcached pair was decided by rate, by hand.
+
+**Objects it cannot name.** An element of an array, a heap object, a field
+reached through a pointer the walk cannot follow: counted as unidentified
+in every summary, never guessed at. On memcached that is 4,496 member
+accesses against 1,007 pairs; element accesses to scalar and pointer arrays
+are not counted at all.
+
+**Placement across objects** is the linker's and the allocator's. The
+analysis reports where fields lie within an object; which objects share a
+line is checked with `nm`, one pair at a time.
+
 # The original review
 
 What follows is the review as first written, kept because the reasoning
@@ -93,7 +137,8 @@ Three further problems cost precision rather than correctness:
 - The call graph is built from symbol references, so function pointers,
   lambdas, `std::function` and virtual calls are invisible, silently.
 - Thread lifetime is not modelled. Two threads that never overlap in time count
-  as two. This one errs safe.
+  as two. For the queue analysis this errs safe; for a false-sharing verdict
+  it does not (see the October section).
 
 ## The dialect carries no concurrency semantics
 
