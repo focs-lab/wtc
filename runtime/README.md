@@ -15,4 +15,8 @@ Every implementation carries, in its header comment:
 - what breaks if that fact is false;
 - the measured numbers against the general-purpose baseline, and on what.
 
-Nothing here yet.
+## What is here
+
+- `spsc_queue.hpp`: an unbounded single-producer, single-consumer queue, the
+  substitute for a `wtc::queue<T>` proven SPSC. `test/spsc_stress.cpp`
+  checks order, count and destruction, and CI runs it under ThreadSanitizer.

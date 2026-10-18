@@ -57,6 +57,24 @@ jobs:
           }
           CPP
           clang++ -std=c++17 -Ishim -fsyntax-only -Wall -Werror /tmp/all.cpp
+      - name: Compile every runtime header on its own
+        run: |
+          set -e
+          for h in runtime/*.hpp; do
+            echo "== $h"
+            printf '#include "%s"\nint main(){}\n' "$(basename "$h")" > /tmp/tu.cpp
+            clang++ -std=c++17 -Iruntime -fsyntax-only -Wall -Werror /tmp/tu.cpp
+            g++     -std=c++17 -Iruntime -fsyntax-only -Wall \
+                    -Wno-attributes /tmp/tu.cpp
+          done
+      # A lock-free structure is only as good as its race checking. The
+      # stress test asserts order, count and destruction; TSan asserts that
+      # getting them right was not luck.
+      - name: Stress the runtime queues under ThreadSanitizer
+        run: |
+          clang++ -std=c++17 -O1 -g -Wall -Wextra -Werror -fsanitize=thread \
+            -Iruntime runtime/test/spsc_stress.cpp -o /tmp/spsc_stress
+          /tmp/spsc_stress
 
   # Which toolchain image this commit needs, derived from the submodule pin
   # rather than configured separately. The two cannot drift apart.
