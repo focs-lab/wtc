@@ -24,6 +24,8 @@ struct LowerMutexLockPattern : public OpConversionPattern<LockOp> {
         ConversionPatternRewriter &rewriter
     ) const override {
         auto calleeAttr = op.getFallbackImplAttr();
+        if (!calleeAttr || !op.getSourceMutexTypeAttr())
+            return rewriter.notifyMatchFailure(op, "no fallback_impl or source_mutex_type");
         auto sourceMutexType = op.getSourceMutexTypeAttr().getValue();
 
         Value mutexAsCir = mlir::UnrealizedConversionCastOp::create(
@@ -50,7 +52,8 @@ struct LowerMutexUnlockPattern : public OpConversionPattern<UnlockOp> {
         ConversionPatternRewriter &rewriter
     ) const override {
         auto calleeAttr = op.getFallbackImplAttr();
-
+        if (!calleeAttr || !op.getSourceMutexTypeAttr())
+            return rewriter.notifyMatchFailure(op, "no fallback_impl or source_mutex_type");
         auto sourceMutexType = op.getSourceMutexTypeAttr().getValue();
 
         Value mutexAsCir = mlir::UnrealizedConversionCastOp::create(
@@ -77,18 +80,28 @@ struct LowerQueuePushPattern : public OpConversionPattern<QueuePushOp> {
         ConversionPatternRewriter &rewriter
     ) const override {
         auto calleeAttr = op.getFallbackImplAttr();
+        if (!calleeAttr || !op.getSourceQueueTypeAttr())
+            return rewriter.notifyMatchFailure(op, "no fallback_impl or source_queue_type");
         auto sourceQueueType = op.getSourceQueueTypeAttr().getValue();
 
         Value queueAsCir = mlir::UnrealizedConversionCastOp::create(
             rewriter, op.getLoc(), sourceQueueType, adaptor.getQueue()
         ).getResult(0);
 
-        rewriter.replaceOpWithNewOp<cir::CallOp>(
-            op,
+        // The push op has no result, but the function it lowers to may: a
+        // substituted implementation can return a status. The call has to
+        // match the callee's signature either way.
+        auto calleeFunc = SymbolTable::lookupNearestSymbolFrom<cir::FuncOp>(op, calleeAttr);
+        Type returnType = calleeFunc ? calleeFunc.getFunctionType().getReturnType() : Type{};
+
+        cir::CallOp::create(
+            rewriter,
+            op.getLoc(),
             calleeAttr,
-            /*returnType=*/Type{},
+            returnType,
             ValueRange{queueAsCir, adaptor.getValue()}
         );
+        rewriter.eraseOp(op);
 
         return success();
     }
@@ -103,6 +116,8 @@ struct LowerQueuePopPattern : public OpConversionPattern<QueuePopOp> {
         ConversionPatternRewriter &rewriter
     ) const override {
         auto calleeAttr = op.getFallbackImplAttr();
+        if (!calleeAttr || !op.getSourceQueueTypeAttr())
+            return rewriter.notifyMatchFailure(op, "no fallback_impl or source_queue_type");
         auto sourceQueueType = op.getSourceQueueTypeAttr().getValue();
 
         Value queueAsCir = mlir::UnrealizedConversionCastOp::create(
@@ -138,6 +153,39 @@ struct LowerWTCToCIRPass
 
     void runOnOperation() override {
         MLIRContext *context = &getContext();
+
+        // Lowering restores the original call, so it needs both the callee
+        // and the original object type. Both are optional on the ops, and a
+        // transform may emit ops without them; say which op and stop rather
+        // than leave the patterns to fail to legalize it.
+        bool missing = false;
+        getOperation().walk([&](Operation *op) {
+            Attribute impl, sourceType;
+            if (auto lockOp = mlir::dyn_cast<LockOp>(op)) {
+                impl = lockOp.getFallbackImplAttr();
+                sourceType = lockOp.getSourceMutexTypeAttr();
+            } else if (auto unlockOp = mlir::dyn_cast<UnlockOp>(op)) {
+                impl = unlockOp.getFallbackImplAttr();
+                sourceType = unlockOp.getSourceMutexTypeAttr();
+            } else if (auto pushOp = mlir::dyn_cast<QueuePushOp>(op)) {
+                impl = pushOp.getFallbackImplAttr();
+                sourceType = pushOp.getSourceQueueTypeAttr();
+            } else if (auto popOp = mlir::dyn_cast<QueuePopOp>(op)) {
+                impl = popOp.getFallbackImplAttr();
+                sourceType = popOp.getSourceQueueTypeAttr();
+            } else {
+                return;
+            }
+            if (impl && sourceType)
+                return;
+            op->emitOpError("cannot be lowered: it carries no ")
+                << (impl ? "source type" : "fallback_impl")
+                << " to reconstruct the original call from";
+            missing = true;
+        });
+        if (missing)
+            return signalPassFailure();
+
         WTCToCirConversionTarget conversionTarget(*context);
         RewritePatternSet patterns(context);
         patterns.add<LowerMutexLockPattern>(context);
