@@ -1,7 +1,7 @@
 # Known defects
 
 State as of September 2026, from a review of the prototype before it moved
-into this repository. Two items marked below have since been fixed; the rest
+into this repository. Items marked fixed below have been fixed since; the rest
 are open.
 
 Read the first section before building anything on top of the analysis.
@@ -54,20 +54,26 @@ CIR did not already say.
 Typing is inconsistent: the queue operations constrain their operand to the
 queue type, while `lock` and `unlock` accept anything.
 
-## Lowering crashes on hand-written IR
+## Lowering crashes on hand-written IR — fixed
 
-All four lowering patterns unconditionally dereference an attribute that is
+All four lowering patterns unconditionally dereferenced an attribute that is
 declared optional. Every ownership-analysis test constructs its operations
-without it, so running the lowering pass over any of them crashes. This is not
-hypothetical: a future specialisation pass will emit operations the same way.
+without it, so running the lowering pass over any of them crashed.
+
+Fixed in October 2026: the pass names the op and the missing attribute
+instead (`test/Transforms/LowerWTCToCIR/missing-attributes.mlir`).
 
 ## Lifting is fragile in predictable places
 
-Operands are taken by index with no arity check. The element type for a pop is
-recovered by casting the result type to a record and taking field zero, which
-hardcodes an assumption about `std::shared_ptr`'s layout; a deviation produces
-a crash rather than a diagnostic. Shim functions are matched by exact string
-comparison against a record name, which will not survive templates or nesting.
+Operands were taken by index with no arity check. That is fixed: lifting
+checks each call's shape and names the call when it is unexpected
+(`test/Transforms/LiftCIRToWTC/arity-mismatch.mlir`).
+
+Still open: the element type for a pop is recovered by taking field zero of
+`std::shared_ptr`, an assumption about its layout. A deviation now produces a
+diagnostic rather than a crash, but it is still an assumption. Shim functions
+are matched by exact string comparison against a record name, which will not
+survive templates or nesting.
 
 ## The analysis result goes nowhere
 
@@ -127,6 +133,20 @@ fault. Lifting the queue example crashes inside `LiftQueueCallPattern`.
 
 `queue::push` is unaffected: it returns void already, so the queue really is
 operand zero there.
+
+**Lifting no longer crashes on this** (October 2026). The callee marks the
+hidden argument `llvm.sret`, so lifting reads the queue from the argument
+after it and lifts to a `wtc.queue_pop` that writes through the slot; lowering
+puts the slot back, attribute included
+(`test/Transforms/LiftCIRToWTC/sret-try-pop.mlir`).
+
+**The hidden argument depends on the target.** Measured at the pin on an
+AArch64 macOS host: the same source gives `try_pop` and `spawn` their record
+results directly, with no hidden argument, and the old fixed indices happen
+to be right there. The same file emitted with `-target x86_64-apple-macos14`
+puts the slot first. So a pass that works on one machine can still read the
+wrong operand on another; both shapes have to be handled, and both now are
+in lifting.
 
 ### The mutex path works, start to finish
 

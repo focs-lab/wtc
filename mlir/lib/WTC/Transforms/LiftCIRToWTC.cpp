@@ -69,13 +69,18 @@ struct LiftMutexCallPattern : public OpConversionPattern<cir::CallOp> {
         OpAdaptor adaptor, 
         ConversionPatternRewriter &rewriter
     ) const override {
-        Value mutex = adaptor.getOperands()[0];
-
         bool isLock = isWTCAnnotatedCall(op, "wtc_mutex_lock");
         bool isUnlock = isWTCAnnotatedCall(op, "wtc_mutex_unlock");
 
         if (!isLock && !isUnlock)
             return failure();
+
+        if (op.getArgOperands().size() != 1) {
+            op.emitError("expected a mutex call to take exactly the mutex, got ")
+                << op.getArgOperands().size() << " arguments";
+            return failure();
+        }
+        Value mutex = adaptor.getOperands()[0];
 
         auto fallbackImplAttr = FlatSymbolRefAttr::get(
             rewriter.getContext(),
@@ -109,19 +114,59 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
         if (!isPush && !isPop)
             return failure();
 
+        // Where the target returns try_pop's shared_ptr indirectly, the call
+        // has no result and a hidden argument the callee marks sret; the
+        // queue is the argument after it. Reading operands by fixed index
+        // without accounting for that is what used to crash.
+        auto callee = SymbolTable::lookupNearestSymbolFrom<cir::FuncOp>(op, op.getCalleeAttr());
+        std::optional<unsigned> sret = callee ? sretArgIndex(callee) : std::nullopt;
+        if (sret && *sret != 0) {
+            op.emitError("expected the hidden result argument of a queue call to come first, got argument ")
+                << *sret;
+            return failure();
+        }
+        unsigned self = sret ? 1 : 0;
+
+        auto args = op.getArgOperands();
+        unsigned expected = self + (isPush ? 2 : 1);
+        if (args.size() != expected) {
+            op.emitError("expected a queue ")
+                << (isPush ? "push" : "try_pop") << " call to take " << expected
+                << " arguments, got " << args.size();
+            return failure();
+        }
+        if (!isPush && !sret && op.getNumResults() != 1) {
+            op.emitError("expected a queue try_pop call to return its value directly "
+                         "or through an sret argument");
+            return failure();
+        }
+
         Type elementType;
         if (isPush) {
-            auto valuePtrType = mlir::cast<cir::PointerType>(op.getOperand(1).getType());
-            elementType = valuePtrType.getPointee();
+            if (auto valuePtrType = mlir::dyn_cast<cir::PointerType>(args[self + 1].getType()))
+                elementType = valuePtrType.getPointee();
         } else {
-            auto resultRecordType = mlir::cast<cir::RecordType>(op.getResult().getType());
-            auto objectPtrType = mlir::cast<cir::PointerType>(resultRecordType.getMembers()[0]);
-            elementType = objectPtrType.getPointee();
+            // try_pop returns std::shared_ptr<T>, whose first member is T*.
+            Type returned;
+            if (!sret)
+                returned = op.getResult().getType();
+            else if (auto sretType = mlir::dyn_cast<TypeAttr>(callee.getArgAttr(*sret, "llvm.sret")))
+                returned = sretType.getValue();
+            if (auto recordType = mlir::dyn_cast_if_present<cir::RecordType>(returned)) {
+                auto members = recordType.getMembers();
+                if (!members.empty())
+                    if (auto objectPtrType = mlir::dyn_cast<cir::PointerType>(members[0]))
+                        elementType = objectPtrType.getPointee();
+            }
+        }
+        if (!elementType) {
+            op.emitError("cannot recover the queue's element type from this call's signature");
+            return failure();
         }
 
         auto queueType = QueueType::get(rewriter.getContext(), elementType);
         Value queue = mlir::UnrealizedConversionCastOp::create(
-            rewriter, op.getLoc(), queueType, adaptor.getOperands()[0]
+            rewriter, op.getLoc(), queueType, adaptor.getOperands()[self]
         ).getResult(0);
 
         auto fallbackImplAttr = FlatSymbolRefAttr::get(
@@ -129,12 +174,14 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
             op.getCalleeAttr().getRootReference().getValue()
         );
 
-        auto sourceQueueTypeAttr = TypeAttr::get(op.getOperand(0).getType());
+        auto sourceQueueTypeAttr = TypeAttr::get(args[self].getType());
 
         if (isPush) {
-            rewriter.replaceOpWithNewOp<QueuePushOp>(op, queue, adaptor.getOperands()[1], IntegerAttr(), fallbackImplAttr, sourceQueueTypeAttr);
+            rewriter.replaceOpWithNewOp<QueuePushOp>(op, queue, adaptor.getOperands()[self + 1], IntegerAttr(), fallbackImplAttr, sourceQueueTypeAttr);
+        } else if (sret) {
+            rewriter.replaceOpWithNewOp<QueuePopOp>(op, /*value=*/Type{}, queue, adaptor.getOperands()[0], IntegerAttr(), fallbackImplAttr, sourceQueueTypeAttr);
         } else {
-            rewriter.replaceOpWithNewOp<QueuePopOp>(op, op.getResult().getType(), queue, IntegerAttr(), fallbackImplAttr, sourceQueueTypeAttr);
+            rewriter.replaceOpWithNewOp<QueuePopOp>(op, op.getResult().getType(), queue, /*result_slot=*/Value{}, IntegerAttr(), fallbackImplAttr, sourceQueueTypeAttr);
         }
 
         return success();

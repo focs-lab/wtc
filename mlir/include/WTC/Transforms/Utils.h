@@ -3,6 +3,8 @@
 #include "clang/CIR/Dialect/IR/CIRDialect.h"
 #include "llvm/ADT/StringRef.h"
 
+#include <optional>
+
 namespace mlir::wtc {
     enum class SemanticOpKind {
         Unknown,
@@ -12,6 +14,17 @@ namespace mlir::wtc {
     bool isWTCAnnotatedCall(cir::CallOp op, StringRef annotation);
 
     SemanticOpKind getSemanticKind(cir::FuncOp funcOp);
+
+    // The argument through which funcOp returns its value indirectly, if it
+    // does. Whether it does depends on the target: on x86-64 a non-trivial
+    // record is returned through a hidden first argument, which ClangIR
+    // marks llvm.sret; on AArch64 the same function returns it directly.
+    std::optional<unsigned> sretArgIndex(cir::FuncOp funcOp);
+
+    // Gives a rebuilt call the argument attributes of its callee, sret
+    // among them. A call that drops sret no longer matches the ABI of the
+    // function it calls.
+    void copyArgAttrsFromCallee(cir::CallOp call, cir::FuncOp callee);
 
     // Walks backward from v through pass-through casts -- cir.cast and the
     // single-operand form of builtin.unrealized_conversion_cast -- to

@@ -49,6 +49,21 @@ namespace mlir::wtc {
         return SemanticOpKind::Unknown;
     }
 
+    std::optional<unsigned> sretArgIndex(cir::FuncOp funcOp) {
+        for (unsigned i = 0, e = funcOp.getNumArguments(); i < e; ++i)
+            if (funcOp.getArgAttr(i, "llvm.sret"))
+                return i;
+        return std::nullopt;
+    }
+
+    void copyArgAttrsFromCallee(cir::CallOp call, cir::FuncOp callee) {
+        if (!callee || !callee.getArgAttrsAttr())
+            return;
+        if (callee.getNumArguments() != call.getArgOperands().size())
+            return;
+        call.setArgAttrsAttr(callee.getArgAttrsAttr());
+    }
+
     Value traceToLocalRoot(Value v) {
         while (true) {
             Operation* def = v.getDefiningOp();

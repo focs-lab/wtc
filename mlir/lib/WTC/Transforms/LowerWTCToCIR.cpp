@@ -1,4 +1,5 @@
 #include "WTC/WTCOps.h"
+#include "WTC/Transforms/Utils.h"
 
 using namespace mlir;
 using namespace mlir::wtc;
@@ -32,12 +33,13 @@ struct LowerMutexLockPattern : public OpConversionPattern<LockOp> {
             rewriter, op.getLoc(), sourceMutexType, adaptor.getMutex()
         ).getResult(0);
 
-        rewriter.replaceOpWithNewOp<cir::CallOp>(
+        auto call = rewriter.replaceOpWithNewOp<cir::CallOp>(
             op,
             calleeAttr,
             /*returnType=*/Type{},
             ValueRange{mutexAsCir}
         );
+        copyArgAttrsFromCallee(call, SymbolTable::lookupNearestSymbolFrom<cir::FuncOp>(call, calleeAttr));
 
         return success();
     }
@@ -60,12 +62,13 @@ struct LowerMutexUnlockPattern : public OpConversionPattern<UnlockOp> {
             rewriter, op.getLoc(), sourceMutexType, adaptor.getMutex()
         ).getResult(0);
 
-        rewriter.replaceOpWithNewOp<cir::CallOp>(
+        auto call = rewriter.replaceOpWithNewOp<cir::CallOp>(
             op,
             calleeAttr,
             /*returnType=*/Type{},
             ValueRange{mutexAsCir}
         );
+        copyArgAttrsFromCallee(call, SymbolTable::lookupNearestSymbolFrom<cir::FuncOp>(call, calleeAttr));
 
         return success();
     }
@@ -94,13 +97,14 @@ struct LowerQueuePushPattern : public OpConversionPattern<QueuePushOp> {
         auto calleeFunc = SymbolTable::lookupNearestSymbolFrom<cir::FuncOp>(op, calleeAttr);
         Type returnType = calleeFunc ? calleeFunc.getFunctionType().getReturnType() : Type{};
 
-        cir::CallOp::create(
+        auto call = cir::CallOp::create(
             rewriter,
             op.getLoc(),
             calleeAttr,
             returnType,
             ValueRange{queueAsCir, adaptor.getValue()}
         );
+        copyArgAttrsFromCallee(call, calleeFunc);
         rewriter.eraseOp(op);
 
         return success();
@@ -124,12 +128,22 @@ struct LowerQueuePopPattern : public OpConversionPattern<QueuePopOp> {
             rewriter, op.getLoc(), sourceQueueType, adaptor.getQueue()
         ).getResult(0);
 
-        rewriter.replaceOpWithNewOp<cir::CallOp>(
-            op,
-            calleeAttr,
-            /*returnType=*/op.getResult().getType(),
-            ValueRange{queueAsCir}
-        );
+        auto calleeFunc = SymbolTable::lookupNearestSymbolFrom<cir::FuncOp>(op, calleeAttr);
+
+        // A value returned indirectly goes back where the callee expects
+        // its hidden argument, which the callee's signature marks.
+        SmallVector<Value> args{queueAsCir};
+        Type returnType;
+        if (Value slot = adaptor.getResultSlot()) {
+            unsigned slotIndex = calleeFunc ? sretArgIndex(calleeFunc).value_or(0) : 0;
+            args.insert(args.begin() + std::min<size_t>(slotIndex, args.size()), slot);
+        } else {
+            returnType = op.getValue().getType();
+        }
+
+        auto call = cir::CallOp::create(rewriter, op.getLoc(), calleeAttr, returnType, args);
+        copyArgAttrsFromCallee(call, calleeFunc);
+        rewriter.replaceOp(op, call.getResults());
 
         return success();
     }

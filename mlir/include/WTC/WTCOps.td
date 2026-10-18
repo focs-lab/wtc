@@ -33,11 +33,18 @@ def QueuePushOp : WTC_Op<"queue_push", []> {
 
 def QueuePopOp : WTC_Op<"queue_pop", []> {
     let summary = "A non-blocking queue pop operation, mirroring shared_ptr<T> semantics: a null result means empty";
+    let description = [{
+      The popped value is either the op's result or, where the target ABI
+      returns it indirectly, written through `result_slot`: the hidden
+      argument the original call passed it in. Exactly one of the two is
+      present, mirroring the call this op was lifted from.
+    }];
     let arguments = (ins WTC_QueueType:$queue,
+        Optional<AnyType>:$result_slot,
         OptionalAttr<I64Attr>:$queue_id,
         OptionalAttr<FlatSymbolRefAttr>:$fallback_impl,
         OptionalAttr<TypeAttr>:$source_queue_type);
-    let results = (outs AnyType:$value);
+    let results = (outs Optional<AnyType>:$value);
 }
 
 #endif // WTC_OPS_TD
