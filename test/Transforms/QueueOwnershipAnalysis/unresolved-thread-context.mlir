@@ -1,8 +1,9 @@
 // RUN: wtc-opt %s --queue-ownership-analysis | FileCheck %s
 
-// A queue_push with a resolvable queue root, but whose enclosing function
-// was never spawned as a thread entry point, should be skipped with a
-// diagnostic naming the orphaned caller.
+// A push in a function nothing in this module calls or spawns. It may be
+// entered from outside on any number of threads, so the push cannot be
+// attributed to a thread: the function is named, and the queue it touches
+// gets no verdict that could justify substituting it.
 
 !s32i = !cir.int<s, 32>
 module {
@@ -20,14 +21,8 @@ module {
     "wtc.queue_push"(%qcast, %value) : (!wtc.queue<!s32i>, !cir.ptr<!s32i>) -> ()
     cir.return
   }
-
-  // main() calls orphan() directly, not through the thread-spawn shim, so
-  // no thread context is ever assigned to it.
-  cir.func @main() {
-    cir.call @orphan() : () -> ()
-    cir.return
-  }
 }
 
 // CHECK: Could not resolve thread context for orphan
-// CHECK-NOT: classification:
+// CHECK-LABEL: Queue @q
+// CHECK: classification: UNKNOWN

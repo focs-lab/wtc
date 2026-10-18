@@ -77,11 +77,13 @@ module {
   }
 }
 
-// CHECK-DAG: Queue @q1
-// CHECK-DAG: producers: 1
-// CHECK-DAG: consumers: 1
-// CHECK-DAG: classification: SPSC
-// CHECK-DAG: Queue @q2
-// CHECK-DAG: producers: 2
-// CHECK-DAG: consumers: 2
-// CHECK-DAG: classification: MPMC
+// Verdicts are printed in the order queues are first accessed, so each one
+// is checked against its own queue: swapped verdicts fail.
+// CHECK-LABEL: Queue @q1
+// CHECK-NEXT: producers: 1
+// CHECK-NEXT: consumers: 1
+// CHECK-NEXT: classification: SPSC
+// CHECK-LABEL: Queue @q2
+// CHECK-NEXT: producers: 2
+// CHECK-NEXT: consumers: 2
+// CHECK-NEXT: classification: MPMC

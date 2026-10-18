@@ -6,40 +6,42 @@ are open.
 
 Read the first section before building anything on top of the analysis.
 
-## The ownership analysis is unsound in three ways
+## The ownership analysis was unsound in three ways — fixed
 
 The analysis counts how many threads push to each queue and how many pop, and
-prints one of SPSC, MPSC, SPMC or MPMC. Substituting a specialised structure on
-the strength of that verdict is not yet safe.
+prints one of SPSC, MPSC, SPMC or MPMC. Until October 2026, substituting a
+specialised structure on the strength of that verdict was not safe:
 
-**A spawn inside a loop counts as one thread.** A thread id is handed out per
-*static* call site, not per dynamic spawn. A loop that starts N producers
-yields one id, and the queue is classified single-producer. That is the common
-worker-pool shape, and getting it wrong introduces a race rather than merely
-losing performance.
+- **A spawn inside a loop counted as one thread.** A thread id was handed out
+  per static call site, so a worker pool came out single-producer. A spawn
+  site now counts as possibly many threads when it is inside a loop or a CFG
+  cycle, or in a function that may itself run more than once
+  (`spawn-in-loop.mlir`, `spawn-in-helper-called-twice.mlir`).
+- **The main thread was not a thread.** A push from `main`, or from a function
+  `main` calls, was discarded. `main` now has a thread of its own
+  (`main-thread.mlir`: two producers against two consumers, not one).
+- **A parameter index was ignored.** Every access through a function's second
+  queue parameter was attributed to its first. Each parameter is now bound to
+  the argument at its own position (`two-queue-params.mlir`).
 
-**The main thread is not a thread.** Only functions passed to the spawn shim
-receive a context. A push from `main`, or from a function `main` calls
-directly, is discarded with a diagnostic and never counted. If `main` pushes,
-one worker pushes and two pop, the verdict is one producer against two
-consumers when the truth is two against two.
+Two of the four precision problems are fixed as well:
 
-**A parameter index is ignored.** Resolving a queue held in a function
-parameter checks only that the block argument belongs to the function, never
-which parameter it is, and takes operand zero of the call regardless. For a
-function taking two queues, every access to the second is attributed to the
-first.
+- Two queues reaching the same function on the same thread no longer collapse
+  into the first (`same-function-two-queues.mlir`).
+- Thread contexts are computed to a fixed point rather than by recursion over
+  a cache seeded with empty placeholders, so results no longer depend on
+  traversal order (`mutual-recursion.mlir`).
 
-Three further problems cost precision rather than correctness:
+Still open:
 
-- Two queues reaching the same function on the same thread collapse: the search
-  takes the first instance with a matching thread id and stops, so the second
-  queue records no accesses at all.
-- The recursion guard writes an empty value into the cache before computing,
-  and entries derived from a poisoned one stay incomplete permanently. Results
-  depend on traversal order.
-- The call graph is built from symbol references, so function pointers,
-  lambdas, `std::function` and virtual calls are invisible, silently.
+- Indirect calls are still not followed. They are no longer invisible,
+  though: a function whose address is used for anything but a spawn, and a
+  function nothing in the module calls, run on an "unknown" thread, and any
+  queue they touch is classified UNKNOWN (`escaping-function-address.mlir`,
+  `unresolved-thread-context.mlir`). That errs safe, at the cost of verdicts
+  for programs built around function pointers, lambdas or `std::function`.
+- A queue whose address is passed to code the module cannot see may be used
+  there by any thread. Nothing tracks that escape yet.
 - Thread lifetime is not modelled. Two threads that never overlap in time count
   as two. This one errs safe.
 
@@ -81,10 +83,11 @@ survive templates or nesting.
 ## The analysis result goes nowhere
 
 The classification is printed to standard output. Nothing is written into the
-IR, no MLIR diagnostics are used, and analyses are not marked preserved. A
-subsequent pass cannot read the result, so the pipeline stops exactly where
-specialisation would begin. Output order is also unstable, because the results
-are held in a hash map.
+IR and no MLIR diagnostics are used. A subsequent pass cannot read the result,
+so the pipeline stops exactly where specialisation would begin.
+
+Fixed: output order follows the order queues are first accessed in the IR,
+rather than a hash map's, and the pass marks analyses preserved.
 
 ## The path from real C++, measured
 
@@ -123,7 +126,7 @@ passed as a hidden first pointer argument, so the call is
 cir.call @_ZN3wtc5spawnEPFvvE(%ret_slot, %fn) : (!cir.ptr<!rec_std..thread>, !cir.ptr<!cir.func<()>>) -> ()
 ```
 
-The analysis reads operand zero expecting a `cir.get_global` naming the thread
+The analysis read operand zero expecting a `cir.get_global` naming the thread
 entry point. Operand zero is the return slot, so the lookup fails and the call
 is skipped. All six spawns are skipped, no thread ever gets an identifier, and
 the analysis prints nothing at all.
@@ -142,6 +145,11 @@ hidden argument `llvm.sret`, so lifting reads the queue from the argument
 after it and lifts to a `wtc.queue_pop` that writes through the slot; lowering
 puts the slot back, attribute included
 (`test/Transforms/LiftCIRToWTC/sret-try-pop.mlir`).
+
+Nor does the analysis miss the spawns: it takes a spawn's entry from the
+first argument that is a function's address, not from operand zero. On the
+prototype's example, emitted for either target, it now finds all six threads
+and gives the known answer, SPSC for `q1` and MPMC for `q2`.
 
 **The hidden argument depends on the target.** Measured at the pin on an
 AArch64 macOS host: the same source gives `try_pop` and `spawn` their record
@@ -179,6 +187,7 @@ Fixed before the move into this repository:
 - `shim/queue.hpp` did not compile under any compiler: the move constructor was
   written `= operator delete`.
 
-Still open: there is no end-to-end example from C++ source, the tests cover
-only cases the code already handles, and one test uses unordered matching that
-would accept two queues having their verdicts swapped.
+Still open: there is no end-to-end example from C++ source, and the tests
+cover only cases the code already handles. Fixed: `multi-queue.mlir` used
+unordered matching that would have accepted two queues with their verdicts
+swapped; each verdict is now checked against the line naming its queue.

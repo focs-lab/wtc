@@ -18,7 +18,7 @@ what exists is one vertical slice and it is not finished:
 | --- | --- |
 | `wtc` dialect: `mutex` and `queue<T>` types, `lock`, `unlock`, `queue_push`, `queue_pop` | defined; no verifiers, no memory-effect or progress semantics yet |
 | Lifting CIR calls into the dialect | works on hand-written IR; the C++ path is not yet exercised end to end |
-| Queue ownership analysis: SPSC / MPSC / SPMC / MPMC | prints a verdict; known to be wrong for a spawn inside a loop, for the main thread, and for functions taking more than one queue |
+| Queue ownership analysis: SPSC / MPSC / SPMC / MPMC | prints a verdict; sound for direct calls, UNKNOWN wherever a function's address escapes; thread lifetime and escaping queues not modelled |
 | Lowering back to CIR | faithful round trip; crashes on operations that carry no source-type attribute |
 | Specialised implementations | none yet |
 
