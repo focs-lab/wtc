@@ -20,7 +20,7 @@ what exists is one vertical slice and it is not finished:
 | Lifting CIR calls into the dialect | works on hand-written IR; the C++ path is not yet exercised end to end |
 | Queue ownership analysis: SPSC / MPSC / SPMC / MPMC | prints a verdict; sound for direct calls, UNKNOWN wherever a function's address escapes; thread lifetime and escaping queues not modelled |
 | Lowering back to CIR | faithful round trip; crashes on operations that carry no source-type attribute |
-| Specialised implementations | none yet |
+| Specialised implementations | an unbounded SPSC queue, substituted for a global `wtc::queue<T>` proven SPSC; 3.6x throughput on one producer and one consumer (`benchmarks/`) |
 
 `docs/audit.md` lists the known defects in full. Do not build anything on top of
 the analysis verdict until they are closed.

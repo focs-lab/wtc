@@ -23,8 +23,11 @@
 // once it has drained it and seen the next one; publishing `next` is the
 // producer's last access to a block, so nothing touches a freed block.
 //
-// Measured numbers: not yet. See benchmarks/README.md once they are taken at
-// the pinned toolchain.
+// Measured, against wtc::queue<T> on one producer and one consumer, at the
+// pin on an Apple M1 Pro (benchmarks/README.md): 3.6 times the throughput
+// when substituted by the compiler, which keeps try_pop's shared_ptr and so
+// allocates once per item; 20.9 times when used by hand through
+// try_pop_optional, which does not.
 
 #include <atomic>
 #include <cstddef>
