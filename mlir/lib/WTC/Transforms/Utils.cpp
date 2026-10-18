@@ -31,6 +31,30 @@ namespace mlir::wtc {
         return false;
     }
 
+    bool funcHasAnnotation(cir::FuncOp funcOp, StringRef annotation) {
+        if (!funcOp)
+            return false;
+        auto annotations = funcOp.getAnnotationsAttr();
+        if (!annotations)
+            return false;
+        for (auto attr : annotations) {
+            auto annotAttr = mlir::dyn_cast<cir::AnnotationAttr>(attr);
+            if (annotAttr && annotAttr.getName().getValue() == annotation)
+                return true;
+        }
+        return false;
+    }
+
+    Type deriveQueueElementTypeFromPush(cir::FuncOp pushFunc) {
+        if (!pushFunc || pushFunc.getNumArguments() < 2)
+            return {};
+        // From the signature, not the entry block: a declaration has none.
+        auto valuePtrType = mlir::dyn_cast<cir::PointerType>(pushFunc.getFunctionType().getInput(1));
+        if (!valuePtrType)
+            return {};
+        return valuePtrType.getPointee();
+    }
+
     SemanticOpKind getSemanticKind(cir::FuncOp funcOp) {
         if (!funcOp) return SemanticOpKind::Unknown;
         

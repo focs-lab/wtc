@@ -191,6 +191,32 @@ this, and treat a call with no result as a case to handle rather than one to
 assume away. None of that is attempted in this document; it is the work, not
 the diagnosis.
 
+## The first specialisation: SPSC queues — October 2026
+
+`--select-queue-impl` substitutes `runtime/spsc_queue.hpp` for a global
+`wtc::queue<T>` whose verdict is SPSC. Built from 253a2bc, with these
+changes measured or found on the way:
+
+- **A shared destructor was retargeted for every queue.** Two globals of the
+  same type share a destructor, and the earlier version rewrote every
+  reference to it, so substituting one queue registered the substitute's
+  destructor for the other too. Retargeting now follows the substituted
+  global's own `__cxa_atexit` registration
+  (`test/Transforms/SelectQueueImplementation/global-spsc.mlir`).
+- **Any other use of the global was left with the wrong type.** The global's
+  type changes, so a use the pass does not retarget would read the new
+  storage as the old type. Such a global is now not substituted, and the
+  remark names the use (`refusals.mlir`).
+- **The substitute was bounded and dropped items when full.** It is now
+  unbounded, like the queue it replaces.
+- **The program had to name the substitute.** The shim now makes it
+  available, through an anchor the pass erases.
+- **Alignment.** The data layout of a CIR record type does not see `alignas`;
+  `cir.record_layouts` does, and is what the pass uses.
+
+Only globals are substituted. A queue on the stack or reached only through
+parameters keeps its implementation.
+
 ## Infrastructure
 
 Fixed before the move into this repository:

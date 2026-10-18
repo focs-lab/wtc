@@ -6,6 +6,7 @@ namespace mlir::wtc {
     void registerLiftCIRToWTCPass();
     void registerLowerWTCToCIRPass();
     void registerQueueOwnershipAnalysisPass();
+    void registerSelectQueueImplementationPass();
     void analyseQueues(ModuleOp module);
 }
 

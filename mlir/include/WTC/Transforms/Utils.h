@@ -19,6 +19,12 @@ namespace mlir::wtc {
 
     bool isWTCAnnotatedCall(cir::CallOp op, StringRef annotation);
 
+    bool funcHasAnnotation(cir::FuncOp funcOp, StringRef annotation);
+
+    // The element type of a queue whose push is pushFunc: the pointee of the
+    // reference it takes the value by.
+    Type deriveQueueElementTypeFromPush(cir::FuncOp pushFunc);
+
     SemanticOpKind getSemanticKind(cir::FuncOp funcOp);
 
     // The argument through which funcOp returns its value indirectly, if it

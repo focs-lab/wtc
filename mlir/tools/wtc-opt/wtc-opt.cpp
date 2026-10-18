@@ -20,6 +20,7 @@ int main(int argc, char **argv) {
   mlir::wtc::registerLiftCIRToWTCPass();
   mlir::wtc::registerLowerWTCToCIRPass();
   mlir::wtc::registerQueueOwnershipAnalysisPass();
+  mlir::wtc::registerSelectQueueImplementationPass();
 
   return mlir::asMainReturnCode(
       mlir::MlirOptMain(argc, argv, "wtc-opt: the Well-tempered Compiler optimizer driver\n", registry));

@@ -2,6 +2,7 @@ add_mlir_library(MLIRWTCTransforms
   LiftCIRToWTC.cpp
   LowerWTCToCIR.cpp
   QueueOwnershipAnalysis.cpp
+  SelectQueueImplementation.cpp
   Utils.cpp
   LINK_LIBS PUBLIC
   MLIRWTC
@@ -11,6 +12,7 @@ add_mlir_library(MLIRWTCTransforms
   # wtc-opt linked MLIRCIR itself; a second consumer would not be so lucky.
   MLIRCIR
   MLIRCIRInterfaces
+  MLIRDataLayoutInterfaces
 
   MLIRIR
   MLIRPass
