@@ -26,10 +26,8 @@ struct LowerMutexLockPattern : public OpConversionPattern<LockOp> {
         auto calleeAttr = op.getFallbackImplAttr();
         auto sourceMutexType = op.getSourceMutexTypeAttr().getValue();
 
-        Value mutexAsCir = rewriter.create<mlir::UnrealizedConversionCastOp>(
-            op.getLoc(),
-            sourceMutexType,
-            adaptor.getMutex()
+        Value mutexAsCir = mlir::UnrealizedConversionCastOp::create(
+            rewriter, op.getLoc(), sourceMutexType, adaptor.getMutex()
         ).getResult(0);
 
         rewriter.replaceOpWithNewOp<cir::CallOp>(
@@ -55,10 +53,8 @@ struct LowerMutexUnlockPattern : public OpConversionPattern<UnlockOp> {
 
         auto sourceMutexType = op.getSourceMutexTypeAttr().getValue();
 
-        Value mutexAsCir = rewriter.create<mlir::UnrealizedConversionCastOp>(
-            op.getLoc(),
-            sourceMutexType,
-            adaptor.getMutex()
+        Value mutexAsCir = mlir::UnrealizedConversionCastOp::create(
+            rewriter, op.getLoc(), sourceMutexType, adaptor.getMutex()
         ).getResult(0);
 
         rewriter.replaceOpWithNewOp<cir::CallOp>(
@@ -83,10 +79,8 @@ struct LowerQueuePushPattern : public OpConversionPattern<QueuePushOp> {
         auto calleeAttr = op.getFallbackImplAttr();
         auto sourceQueueType = op.getSourceQueueTypeAttr().getValue();
 
-        Value queueAsCir = rewriter.create<mlir::UnrealizedConversionCastOp>(
-            op.getLoc(),
-            sourceQueueType,
-            adaptor.getQueue()
+        Value queueAsCir = mlir::UnrealizedConversionCastOp::create(
+            rewriter, op.getLoc(), sourceQueueType, adaptor.getQueue()
         ).getResult(0);
 
         rewriter.replaceOpWithNewOp<cir::CallOp>(
@@ -111,10 +105,8 @@ struct LowerQueuePopPattern : public OpConversionPattern<QueuePopOp> {
         auto calleeAttr = op.getFallbackImplAttr();
         auto sourceQueueType = op.getSourceQueueTypeAttr().getValue();
 
-        Value queueAsCir = rewriter.create<mlir::UnrealizedConversionCastOp>(
-            op.getLoc(),
-            sourceQueueType,
-            adaptor.getQueue()
+        Value queueAsCir = mlir::UnrealizedConversionCastOp::create(
+            rewriter, op.getLoc(), sourceQueueType, adaptor.getQueue()
         ).getResult(0);
 
         rewriter.replaceOpWithNewOp<cir::CallOp>(

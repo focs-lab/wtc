@@ -1,8 +1,10 @@
-# Build trees
+# Build trees and staged installs
 /build/
 /build-*/
 /install/
 /output/
+/stage/
+/*.log
 
 # Editors and OS
 /.vscode/
