@@ -23,11 +23,12 @@
 // once it has drained it and seen the next one; publishing `next` is the
 // producer's last access to a block, so nothing touches a freed block.
 //
-// Measured, against wtc::queue<T> on one producer and one consumer, at the
-// pin on an Apple M1 Pro (benchmarks/README.md): 3.6 times the throughput
-// when substituted by the compiler, which keeps try_pop's shared_ptr and so
-// allocates once per item; 20.9 times when used by hand through
-// try_pop_optional, which does not.
+// Measured against wtc::queue<T> by benchmarks/run.sh, results in
+// benchmarks/RESULTS.md: about 2.4 to 3 times the throughput when the
+// compiler substitutes it, which keeps try_pop's shared_ptr and so
+// allocates once per item, and 11 to 16 times when used by hand through
+// try_pop_optional, which does not. Push-to-pop latency at p99 falls from
+// hundreds of microseconds to about one.
 
 #include <atomic>
 #include <cstddef>
