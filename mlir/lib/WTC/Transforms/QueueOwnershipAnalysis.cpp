@@ -53,6 +53,29 @@ struct QueueAccessInfo {
     llvm::SmallSetVector<unsigned, 4> consumers;
 };
 
+// A verdict as three facts, so that joining two is a bitwise or: an op
+// reaching one SPSC and one MPSC queue is MPSC, one reaching an MPSC and an
+// SPMC queue is MPMC, and anything joined with UNKNOWN is UNKNOWN.
+struct QueueKind {
+    bool multiProducer = false;
+    bool multiConsumer = false;
+    bool unknown = false;
+
+    QueueKind join(const QueueKind &other) const {
+        return {multiProducer || other.multiProducer,
+                multiConsumer || other.multiConsumer,
+                unknown || other.unknown};
+    }
+
+    StringRef str() const {
+        if (unknown)
+            return "UNKNOWN";
+        if (multiProducer)
+            return multiConsumer ? "MPMC" : "MPSC";
+        return multiConsumer ? "SPMC" : "SPSC";
+    }
+};
+
 struct SpawnSite {
     cir::FuncOp entry;
     // Index into the call's arguments of the context argument, if any.
@@ -75,6 +98,10 @@ struct QueueOwnershipAnalysisPass
     // Set when some access could not be attributed to a queue: it may touch
     // any of them, so no verdict can be trusted.
     bool unattributedAccess = false;
+    // Every queue each push and pop can reach, and the ops for which some
+    // access reached no queue the analysis could name.
+    llvm::MapVector<Operation *, llvm::SetVector<Operation *>> opRoots;
+    llvm::SmallPtrSet<Operation *, 4> opsWithUnresolvedAccess;
 
     StringRef getArgument() const final {
         return "queue-ownership-analysis";
@@ -388,6 +415,7 @@ struct QueueOwnershipAnalysisPass
                 << caller.getSymName()
                 << "\n";
             unattributedAccess = true;
+            opsWithUnresolvedAccess.insert(op);
             return;
         }
 
@@ -408,10 +436,12 @@ struct QueueOwnershipAnalysisPass
                     << threadId
                     << "\n";
                 unattributedAccess = true;
+                opsWithUnresolvedAccess.insert(op);
                 continue;
             }
 
             for (Operation *root : roots) {
+                opRoots[op].insert(root);
                 QueueAccessInfo &info = queueAccesses[root];
                 if (isPush)
                     info.producers.insert(threadId);
@@ -468,6 +498,8 @@ struct QueueOwnershipAnalysisPass
                 << "Some access could not be attributed to a queue; "
                    "every queue is classified UNKNOWN\n";
 
+        llvm::DenseMap<Operation *, QueueKind> rootKinds;
+
         for (auto &[root, info] : queueAccesses) {
             SideSummary producers = summarise(info.producers);
             SideSummary consumers = summarise(info.consumers);
@@ -478,25 +510,50 @@ struct QueueOwnershipAnalysisPass
             printSide("producers", producers);
             printSide("consumers", consumers);
 
-            bool singleProducer = producers.threads == 1 && !producers.many;
-            bool singleConsumer = consumers.threads == 1 && !consumers.many;
-            bool multiProducer = producers.threads > 1 || producers.many;
-            bool multiConsumer = consumers.threads > 1 || consumers.many;
+            QueueKind kind;
+            kind.multiProducer = producers.threads > 1 || producers.many;
+            kind.multiConsumer = consumers.threads > 1 || consumers.many;
+            // A side nobody uses gives nothing to specialise for, and a
+            // queue reached from an unknown context could have any number
+            // of users on either side.
+            kind.unknown = unattributedAccess
+                || producers.unknown || consumers.unknown
+                || producers.threads == 0 || consumers.threads == 0;
+            rootKinds[root] = kind;
 
-            StringRef classification = "UNKNOWN";
-            if (unattributedAccess || producers.unknown || consumers.unknown)
-                classification = "UNKNOWN";
-            else if (singleProducer && singleConsumer)
-                classification = "SPSC";
-            else if (multiProducer && singleConsumer)
-                classification = "MPSC";
-            else if (singleProducer && multiConsumer)
-                classification = "SPMC";
-            else if (multiProducer && multiConsumer)
-                classification = "MPMC";
-
-            llvm::outs() << "  classification: " << classification << "\n";
+            llvm::outs() << "  classification: " << kind.str() << "\n";
         }
+
+        stampVerdicts(rootKinds);
+    }
+
+    // Writes the verdicts into the IR, so a later pass can read them
+    // instead of re-deriving them: each queue's root carries its own
+    // verdict, and each push or pop carries the join of the verdicts of
+    // every queue it can reach.
+    void stampVerdicts(const llvm::DenseMap<Operation *, QueueKind> &rootKinds) {
+        MLIRContext *context = &getContext();
+        auto stamp = [&](Operation *op, const QueueKind &kind) {
+            op->setAttr(kQueueKindAttrName, StringAttr::get(context, kind.str()));
+        };
+
+        for (auto &[root, kind] : rootKinds)
+            stamp(root, kind);
+
+        QueueKind unknown;
+        unknown.unknown = true;
+
+        for (auto &[op, roots] : opRoots) {
+            QueueKind kind;
+            for (Operation *root : roots)
+                kind = kind.join(rootKinds.lookup(root));
+            if (opsWithUnresolvedAccess.contains(op))
+                kind = kind.join(unknown);
+            stamp(op, kind);
+        }
+        for (Operation *op : opsWithUnresolvedAccess)
+            if (!opRoots.contains(op))
+                stamp(op, unknown);
     }
 };
 

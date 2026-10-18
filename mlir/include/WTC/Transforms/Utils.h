@@ -11,6 +11,12 @@ namespace mlir::wtc {
         ThreadSpawn
     };
 
+    // The ownership verdict, written by --queue-ownership-analysis onto each
+    // queue's root (its cir.global or cir.alloca) and onto each push and pop:
+    // one of "SPSC", "MPSC", "SPMC", "MPMC" or "UNKNOWN". An op that can
+    // reach several queues carries the weakest of their verdicts.
+    inline constexpr StringRef kQueueKindAttrName = "wtc.queue_kind";
+
     bool isWTCAnnotatedCall(cir::CallOp op, StringRef annotation);
 
     SemanticOpKind getSemanticKind(cir::FuncOp funcOp);

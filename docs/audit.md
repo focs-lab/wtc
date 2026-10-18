@@ -80,14 +80,19 @@ diagnostic, not a crash. Shim functions
 are matched by exact string comparison against a record name, which will not
 survive templates or nesting.
 
-## The analysis result goes nowhere
+## The analysis result went nowhere — fixed
 
-The classification is printed to standard output. Nothing is written into the
-IR and no MLIR diagnostics are used. A subsequent pass cannot read the result,
-so the pipeline stops exactly where specialisation would begin.
+The classification used to be printed to standard output and nowhere else,
+so a subsequent pass could not read it, and the pipeline stopped exactly where
+specialisation would begin.
 
-Fixed: output order follows the order queues are first accessed in the IR,
-rather than a hash map's, and the pass marks analyses preserved.
+Fixed: each queue's root, its `cir.global` or `cir.alloca`, now carries its
+verdict as `wtc.queue_kind`, and so does each push and pop. An op that can
+reach several queues carries the weakest of their verdicts
+(`queue-kind-attribute.mlir`, `queue-kind-join.mlir`). Output order follows
+the IR rather than a hash map, and the pass marks analyses preserved.
+
+Still open: the report is plain standard output, not MLIR diagnostics.
 
 ## The path from real C++, measured
 
