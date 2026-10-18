@@ -3,7 +3,26 @@
 #include <memory>
 #include <mutex>
 
+#include "../runtime/spsc_queue.hpp"
+
 namespace wtc {
+
+namespace detail {
+
+// Never called. Its only job is to make the compiler emit, in every module
+// that uses queue<T>, the implementations --select-queue-impl may substitute
+// for it, so that a program never has to name them. queue<T>'s constructor
+// takes its address, which is enough for it, and through it spsc_queue<T>,
+// to be instantiated and emitted. The pass erases it afterwards.
+template <typename T>
+[[gnu::used, clang::annotate("wtc_anchor")]]
+void alternatives(const T &value) {
+    runtime::spsc_queue<T> spsc;
+    spsc.push(value);
+    (void)spsc.try_pop();
+}
+
+}
 
 template <typename T>
 class queue {
@@ -35,7 +54,9 @@ private:
 
 public:
     [[clang::annotate("wtc_queue_construction")]]
-    queue() : head(new node), tail(head.get()) {}
+    queue() : head(new node), tail(head.get()) {
+        (void)&detail::alternatives<T>;
+    }
 
     queue(const queue&) = delete;
     queue& operator=(const queue&) = delete;
