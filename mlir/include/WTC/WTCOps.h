@@ -3,6 +3,8 @@
 
 #include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/OpDefinition.h"
+#include "mlir/IR/SymbolTable.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 
 #include "WTC/WTCDialect.h"
 #include "WTC/WTCTypes.h"

@@ -53,8 +53,16 @@ point. An operation currently amounts to a tagged call: one attribute holds the
 original function's name, another its original type. Nothing is expressed that
 CIR did not already say.
 
-Typing is inconsistent: the queue operations constrain their operand to the
-queue type, while `lock` and `unlock` accept anything.
+Typing was inconsistent: the queue operations constrained their operand to the
+queue type, while `lock` and `unlock` accepted anything.
+
+Fixed in October 2026, the mechanical part: `lock` and `unlock` take a
+`!wtc.mutex`; push and pop check their values against the queue's element
+type; `fallback_impl` must name a `cir.func` that implements the same
+operation and takes the arguments lowering will pass; each op declares that
+it reads and writes memory (`test/Dialect/invalid.mlir`). The concurrency
+semantics proper are still open, and
+`decisions/0003-concurrency-semantics-of-the-wtc-ops.md` proposes them.
 
 ## Lowering crashes on hand-written IR — fixed
 

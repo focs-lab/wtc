@@ -9,7 +9,11 @@ add_mlir_dialect_library(MLIRWTC
   MLIRWTCTypesIncGen
 
   LINK_LIBS PUBLIC
+  # The verifiers check push and pop against CIR types and fallback_impl
+  # against the cir.func it names.
+  MLIRCIR
   MLIRIR
+  MLIRSideEffectInterfaces
 )
 
 add_subdirectory(Transforms)
