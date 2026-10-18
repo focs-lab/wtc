@@ -70,6 +70,12 @@ and on the M1 Pro they still measured 10 to 13 percent apart, in either run
 order. A difference that size between any two columns is not evidence of
 anything. `RESULTS.md` states the figure for each run.
 
+Tail latency is noisier still. On the M1 Pro, one run in five can be
+disturbed by something else on the machine, moving every variant at once,
+and even undisturbed runs put the substituted queue's p99 anywhere from
+about 2 to 25 µs. The medians are robust to one bad run; `RESULTS.md` also
+lists each run's p99, so it can be seen rather than assumed.
+
 The gap between optimized and direct is mostly one allocation per item. The
 substitute keeps `wtc::queue<T>::try_pop`'s interface, which returns a
 `std::shared_ptr<T>`, so every pop builds one; the hand-written consumer

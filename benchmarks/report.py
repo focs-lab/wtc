@@ -161,6 +161,21 @@ def main(raw_path, env_path, substitution_path, workloads_dir, out_path):
                 cells = [median(w, v, m) for m in ("p50_ns", "p99_ns", "p999_ns", "max_ns")]
                 out.append(f"| `{w}` | {v} | " + " | ".join(duration(c) for c in cells) + " |")
         out.append("")
+        out.append(
+            "Tail latency varies far more from run to run than throughput does, and one "
+            "disturbed run moves every variant at once. The p99 of each run:"
+        )
+        out.append("")
+        out.append("| Workload | Variant | " + " | ".join(f"run {i}" for i in range(1, int(env["runs"]) + 1)) + " |")
+        out.append("| --- | --- | " + " | ".join("---:" for _ in range(int(env["runs"]))) + " |")
+        for w in latency_workloads:
+            for v in VARIANTS:
+                if (w, v) not in runs:
+                    continue
+                by_run = {r["run"]: float(r["p99_ns"]) for r in runs[(w, v)]}
+                cells = [duration(by_run[str(i)]) if str(i) in by_run else "—" for i in range(1, int(env["runs"]) + 1)]
+                out.append(f"| `{w}` | {v} | " + " | ".join(cells) + " |")
+        out.append("")
 
     out.append("## Spread")
     out.append("")

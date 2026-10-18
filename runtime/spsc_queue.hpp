@@ -27,8 +27,10 @@
 // benchmarks/RESULTS.md: about 2.4 to 3 times the throughput when the
 // compiler substitutes it, which keeps try_pop's shared_ptr and so
 // allocates once per item, and 11 to 16 times when used by hand through
-// try_pop_optional, which does not. Push-to-pop latency at p99 falls from
-// hundreds of microseconds to about one.
+// try_pop_optional, which does not. Median push-to-pop latency falls from
+// microseconds to about 200 ns, and the p99 from hundreds of microseconds
+// to microseconds or tens of them; substituted, the tail varies from run
+// to run far more than it does used by hand.
 
 #include <atomic>
 #include <cstddef>
