@@ -69,9 +69,12 @@ Operands were taken by index with no arity check. That is fixed: lifting
 checks each call's shape and names the call when it is unexpected
 (`test/Transforms/LiftCIRToWTC/arity-mismatch.mlir`).
 
-Still open: the element type for a pop is recovered by taking field zero of
-`std::shared_ptr`, an assumption about its layout. A deviation now produces a
-diagnostic rather than a crash, but it is still an assumption. Shim functions
+Still open: the element type for a pop is recovered from the layout of
+`std::shared_ptr`, as the first pointer reached through its leading members.
+That covers libc++, where `T*` is shared_ptr's first member, and libstdc++,
+where it is the first member of the `std::__shared_ptr` base (found by CI on
+Linux). It is still an assumption about layout; a deviation produces a
+diagnostic, not a crash. Shim functions
 are matched by exact string comparison against a record name, which will not
 survive templates or nesting.
 

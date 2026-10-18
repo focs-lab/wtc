@@ -146,17 +146,22 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
             if (auto valuePtrType = mlir::dyn_cast<cir::PointerType>(args[self + 1].getType()))
                 elementType = valuePtrType.getPointee();
         } else {
-            // try_pop returns std::shared_ptr<T>, whose first member is T*.
+            // try_pop returns std::shared_ptr<T>, whose T* comes first, but
+            // not always directly: libc++ puts it first in shared_ptr itself,
+            // libstdc++ first in the std::__shared_ptr base that shared_ptr's
+            // first member is. Look through leading records until a pointer.
             Type returned;
             if (!sret)
                 returned = op.getResult().getType();
             else if (auto sretType = mlir::dyn_cast<TypeAttr>(callee.getArgAttr(*sret, "llvm.sret")))
                 returned = sretType.getValue();
-            if (auto recordType = mlir::dyn_cast_if_present<cir::RecordType>(returned)) {
-                auto members = recordType.getMembers();
-                if (!members.empty())
-                    if (auto objectPtrType = mlir::dyn_cast<cir::PointerType>(members[0]))
-                        elementType = objectPtrType.getPointee();
+            for (int depth = 0; depth < 4 && returned && !elementType; ++depth) {
+                auto recordType = mlir::dyn_cast<cir::RecordType>(returned);
+                if (!recordType || recordType.getMembers().empty())
+                    break;
+                returned = recordType.getMembers()[0];
+                if (auto objectPtrType = mlir::dyn_cast<cir::PointerType>(returned))
+                    elementType = objectPtrType.getPointee();
             }
         }
         if (!elementType) {
