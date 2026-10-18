@@ -36,5 +36,7 @@ int main() {
 // REMARK-DAG: remark: not substituted: the queue is MPMC
 
 // IR-NOT: wtc_anchor
-// IR-DAG: cir.global external @single = #cir.zero : !rec_wtc3A3Aruntime3A3Aspsc_queue
-// IR-DAG: cir.global external @shared = #cir.zero : !rec_wtc3A3Aqueue
+// Linkage keywords differ by target (ELF globals are dso_local), so only the
+// name and the type are matched.
+// IR-DAG: cir.global {{.*}}@single = #cir.zero : !rec_wtc3A3Aruntime3A3Aspsc_queue
+// IR-DAG: cir.global {{.*}}@shared = #cir.zero : !rec_wtc3A3Aqueue
