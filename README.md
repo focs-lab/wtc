@@ -17,13 +17,14 @@ what exists is one vertical slice and it is not finished:
 | Piece | State |
 | --- | --- |
 | `wtc` dialect: `mutex` and `queue<T>` types, `lock`, `unlock`, `queue_push`, `queue_pop` | defined and verified, including each op's `fallback_impl`; ordering and progress semantics proposed in `decisions/0003`, not yet adopted |
-| Lifting CIR calls into the dialect | works on hand-written IR; the C++ path is not yet exercised end to end |
+| Lifting CIR calls into the dialect | works on real compiler output, with or without a hidden result argument; tested end to end from C++ |
 | Queue ownership analysis: SPSC / MPSC / SPMC / MPMC | prints a verdict; sound for direct calls, UNKNOWN wherever a function's address escapes; thread lifetime and escaping queues not modelled |
-| Lowering back to CIR | faithful round trip; crashes on operations that carry no source-type attribute |
+| Lowering back to CIR | faithful round trip, sret included; an op missing what it needs is a diagnostic |
 | Specialised implementations | an unbounded SPSC queue, substituted for a global `wtc::queue<T>` proven SPSC; 3.6x throughput on one producer and one consumer (`benchmarks/`) |
 
-`docs/audit.md` lists the known defects in full. Do not build anything on top of
-the analysis verdict until they are closed.
+`docs/audit.md` lists the known defects in full, fixed and open. The analysis
+verdict is now safe to substitute on for the cases it claims; what it does not
+model yet is listed there.
 
 ## Building
 

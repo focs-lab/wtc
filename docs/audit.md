@@ -226,7 +226,12 @@ Fixed before the move into this repository:
 - `shim/queue.hpp` did not compile under any compiler: the move constructor was
   written `= operator delete`.
 
-Still open: there is no end-to-end example from C++ source, and the tests
-cover only cases the code already handles. Fixed: `multi-queue.mlir` used
+Fixed: there are end-to-end tests from C++ source (`test/EndToEnd/`). The
+prototype's example is compiled by the pinned clang for the host and for
+x86-64, so both return conventions are tested on any machine, and the
+known verdicts are checked; a second program goes through the whole
+pipeline, substitution included, down to the LLVM dialect.
+
+Still open: the tests cover only cases the code already handles. Fixed: `multi-queue.mlir` used
 unordered matching that would have accepted two queues with their verdicts
 swapped; each verdict is now checked against the line naming its queue.
