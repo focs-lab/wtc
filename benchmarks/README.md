@@ -64,11 +64,15 @@ refuse to substitute.
 
 ## Reading the results
 
-`mpsc_control` is the yardstick. Its two builds run the same queue code (the
-only difference is that the optimized one has had the shim's anchor erased),
-and on the M1 Pro they still measured 10 to 13 percent apart, in either run
-order. A difference that size between any two columns is not evidence of
-anything. `RESULTS.md` states the figure for each run.
+`mpsc_control` is the yardstick. Its two builds run the same queue code;
+the only difference is that the optimized one has had the shim's anchor
+erased, and with it the unused substitute's code. On the M1 Pro they
+measured 6, 13 and 18 percent apart in three sessions, and in all three the
+optimized build was the faster, whichever ran first. That is a systematic
+difference between two binaries, most likely their layout, rather than
+noise, but the conclusion is the same: a difference of that size between
+any two columns is not evidence that the queue made it. `RESULTS.md` states
+the figure for its own session.
 
 Tail latency is noisier still. On the M1 Pro, one run in five can be
 disturbed by something else on the machine, moving every variant at once,
