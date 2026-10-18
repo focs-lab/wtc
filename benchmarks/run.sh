@@ -61,7 +61,9 @@ link "$out/queue_bench_baseline.cir" queue_bench_baseline
 "$wtc_opt" "$out/queue_bench.cir" --mlir-print-op-on-diagnostic=false \
   --lift-cir-to-wtc --queue-ownership-analysis --select-queue-impl --lower-wtc-to-cir \
   --reconcile-unrealized-casts -o "$out/queue_bench_optimized.cir" > /dev/null
-grep -q 'cir.global external @g_queue = #cir.zero : !rec_wtc3A3Aruntime' "$out/queue_bench_optimized.cir" \
+# Linkage keywords differ by target (ELF globals are dso_local), so match
+# only the name and the type.
+grep -qE 'cir\.global .*@g_queue = #cir\.zero : !rec_wtc3A3Aruntime' "$out/queue_bench_optimized.cir" \
   || { echo "--select-queue-impl did not substitute g_queue" >&2; exit 1; }
 link "$out/queue_bench_optimized.cir" queue_bench_optimized
 
