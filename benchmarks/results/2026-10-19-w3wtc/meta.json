@@ -1,0 +1,13 @@
+{
+  "leg": "w3wtc", "date": "2026-10-19T08:57:27Z",
+  "git_sha": "e6581d1d0e4b36045f3b228008253327eec35069", "git_dirty": true,
+  "kernel": "6.8.0-40-generic",
+  "cpu_model": "Intel(R) Xeon(R) w9-3495X",
+  "sockets": "1", "numa_nodes": "1",
+  "allowed_cpus": "4-6",
+  "smt_control": "on",
+  "smt_siblings": "offline or reserved",
+  "load_average": "3.28 3.03 2.49",
+  "build": "built by wtc-cc",
+  "reps": 5
+}

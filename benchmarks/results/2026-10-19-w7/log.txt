@@ -1,0 +1,181 @@
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 907966) -- timing measurement
+W7 generic_plain  E8     1.03 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908055) -- timing measurement
+W7 generic_batch  E8     1.96 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908101) -- timing measurement
+W7 spsc_plain     E8     3.55 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908125) -- timing measurement
+W7 spsc_batch     E8     3.18 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908147) -- timing measurement
+W7 inline_plain   E8    70.50 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908157) -- timing measurement
+W7 inline_batch   E8    71.38 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908167) -- timing measurement
+W7 generic_plain  E64     1.02 Mops/s  p50    8782  p99    89143 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908281) -- timing measurement
+W7 generic_batch  E64     2.09 Mops/s  p50   31068  p99    34980 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908300) -- timing measurement
+W7 spsc_plain     E64     3.07 Mops/s  p50    1426  p99     2796 ns
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908337) -- timing measurement
+W7 spsc_batch     E64     3.09 Mops/s  p50   20800  p99    24350 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908355) -- timing measurement
+W7 inline_plain   E64    15.67 Mops/s  p50     451  p99     2126 ns
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908366) -- timing measurement
+W7 inline_batch   E64    54.04 Mops/s  p50    2075  p99     3671 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908376) -- timing measurement
+W7 generic_plain  E8     1.00 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908456) -- timing measurement
+W7 generic_batch  E8     1.74 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908504) -- timing measurement
+W7 spsc_plain     E8     3.31 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908532) -- timing measurement
+W7 spsc_batch     E8     3.79 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908551) -- timing measurement
+W7 inline_plain   E8    70.00 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908572) -- timing measurement
+W7 inline_batch   E8    71.44 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908583) -- timing measurement
+W7 generic_plain  E64     0.99 Mops/s  p50    5176  p99    34002 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908629) -- timing measurement
+W7 generic_batch  E64     1.91 Mops/s  p50   34125  p99    40002 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908668) -- timing measurement
+W7 spsc_plain     E64     3.30 Mops/s  p50    1479  p99     2874 ns
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908721) -- timing measurement
+W7 spsc_batch     E64     3.38 Mops/s  p50   19006  p99    22238 ns
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908766) -- timing measurement
+W7 inline_plain   E64    16.72 Mops/s  p50     456  p99     1898 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908777) -- timing measurement
+W7 inline_batch   E64    53.45 Mops/s  p50    2093  p99     3814 ns
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908797) -- timing measurement
+W7 generic_plain  E8     1.12 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 9s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908904) -- timing measurement
+W7 generic_batch  E8     1.65 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 7s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908947) -- timing measurement
+W7 spsc_plain     E8     3.39 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908959) -- timing measurement
+W7 spsc_batch     E8     3.49 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 908998) -- timing measurement
+W7 inline_plain   E8    69.54 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909010) -- timing measurement
+W7 inline_batch   E8    71.41 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909020) -- timing measurement
+W7 generic_plain  E64     1.02 Mops/s  p50    2893  p99    10716 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909122) -- timing measurement
+W7 generic_batch  E64     1.85 Mops/s  p50   35137  p99    40512 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909161) -- timing measurement
+W7 spsc_plain     E64     3.25 Mops/s  p50     560  p99     2266 ns
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909188) -- timing measurement
+W7 spsc_batch     E64     3.60 Mops/s  p50   17885  p99    21039 ns
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909202) -- timing measurement
+W7 inline_plain   E64    16.62 Mops/s  p50     465  p99     1941 ns
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909213) -- timing measurement
+W7 inline_batch   E64    54.15 Mops/s  p50    2071  p99     3842 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909232) -- timing measurement
+W7 generic_plain  E8     0.97 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909315) -- timing measurement
+W7 generic_batch  E8     1.70 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909369) -- timing measurement
+W7 spsc_plain     E8     3.49 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909381) -- timing measurement
+W7 spsc_batch     E8     3.48 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909413) -- timing measurement
+W7 inline_plain   E8    70.05 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909430) -- timing measurement
+W7 inline_batch   E8    71.32 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909441) -- timing measurement
+W7 generic_plain  E64     0.97 Mops/s  p50    2791  p99    11493 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909494) -- timing measurement
+W7 generic_batch  E64     1.77 Mops/s  p50   37511  p99  1893624 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909550) -- timing measurement
+W7 spsc_plain     E64     2.99 Mops/s  p50     623  p99     2061 ns
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909600) -- timing measurement
+W7 spsc_batch     E64     3.69 Mops/s  p50   17477  p99    20561 ns
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909627) -- timing measurement
+W7 inline_plain   E64    15.37 Mops/s  p50     452  p99     1998 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909638) -- timing measurement
+W7 inline_batch   E64    54.40 Mops/s  p50    2061  p99     3814 ns
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909648) -- timing measurement
+W7 generic_plain  E8     1.03 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909703) -- timing measurement
+W7 generic_batch  E8     1.90 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 6s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909731) -- timing measurement
+W7 spsc_plain     E8     3.46 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909763) -- timing measurement
+W7 spsc_batch     E8     3.47 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909801) -- timing measurement
+W7 inline_plain   E8    70.01 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909818) -- timing measurement
+W7 inline_batch   E8    71.42 Mops/s  p50       0  p99        0 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909830) -- timing measurement
+W7 generic_plain  E64     0.98 Mops/s  p50    2907  p99    12632 ns
+machine-lock: released after 10s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909930) -- timing measurement
+W7 generic_batch  E64     2.11 Mops/s  p50   30756  p99    34540 ns
+machine-lock: released after 5s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909974) -- timing measurement
+W7 spsc_plain     E64     3.37 Mops/s  p50     883  p99     2193 ns
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 909987) -- timing measurement
+W7 spsc_batch     E64     3.11 Mops/s  p50   20671  p99    23984 ns
+machine-lock: released after 4s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 910008) -- timing measurement
+W7 inline_plain   E64    19.87 Mops/s  p50     509  p99     2049 ns
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 910018) -- timing measurement
+W7 inline_batch   E64    52.61 Mops/s  p50    2125  p99     3989 ns
+machine-lock: released after 1s (exit 0)
+distinct checksums across all runs: 3 (must be 1)

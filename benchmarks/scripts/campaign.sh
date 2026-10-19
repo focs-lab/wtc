@@ -178,7 +178,9 @@ case "$LEG" in
         lock "$BUILD/w3_$f" --flavour "$f" --rate 2000000 --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt" >>"$OUT/checksums.txt"
       done
     done
-    echo "distinct checksums across all runs: $(sort -u "$OUT/checksums.txt" | wc -l) (must be 1)" | tee -a "$OUT/log.txt"
+    # Each line also names the implementation the run carried, which
+    # differs between builds by design: compare the checksums alone.
+    echo "distinct checksums across all runs: $(awk '{print $2}' "$OUT/checksums.txt" | sort -u | wc -l) (must be 1)" | tee -a "$OUT/log.txt"
     ;;
   w1mvp)
     # The queue numbers the MVP quotes, and only those: the general-purpose
@@ -208,7 +210,9 @@ case "$LEG" in
         done
       done
     done
-    echo "distinct checksums across all runs: $(sort -u "$OUT/checksums.txt" | wc -l) (must be 1)" | tee -a "$OUT/log.txt"
+    # Each line also names the implementation the run carried, which
+    # differs between builds by design: compare the checksums alone.
+    echo "distinct checksums across all runs: $(awk '{print $2}' "$OUT/checksums.txt" | sort -u | wc -l) (must be 1)" | tee -a "$OUT/log.txt"
     ;;
   smt)
     # The two threads on one physical core, sharing its caches. A spinning
