@@ -2,6 +2,8 @@
 #define WTC_OPS_TD
 
 include "mlir/IR/OpBase.td"
+include "mlir/IR/SymbolInterfaces.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
 include "WTC/WTCDialect.td"
 include "WTC/WTCTypes.td"
 include "WTC/WTCAttrs.td"
@@ -19,7 +21,18 @@ class WTC_Op<string mnemonic, list<Trait> traits = []> :
 // the gate; the topology attribute is the first fact the dialect carries
 // that CIR did not.
 
-def LockOp : WTC_Op<"lock"> {
+// Every operation stands for a call it can be lowered back to. When
+// fallback_impl is present it is checked against the cir.func it names:
+// that function implements the same operation and takes the arguments
+// lowering will pass. Each operation reads and writes the object it is
+// given; nothing finer is claimed, so other passes treat it as they would
+// the call it came from.
+class WTC_ObjectOp<string mnemonic, list<Trait> traits = []> :
+    WTC_Op<mnemonic, !listconcat(traits, [
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+        MemoryEffects<[MemRead, MemWrite]>])>;
+
+def LockOp : WTC_ObjectOp<"lock"> {
     let summary = "A mutex lock operation";
     let arguments = (ins WTC_MutexType:$mutex,
         OptionalAttr<FlatSymbolRefAttr>:$fallback_impl,
@@ -27,7 +40,7 @@ def LockOp : WTC_Op<"lock"> {
         OptionalAttr<ArrayAttr>:$source_arg_attrs);
 }
 
-def UnlockOp : WTC_Op<"unlock"> {
+def UnlockOp : WTC_ObjectOp<"unlock"> {
     let summary = "A mutex unlock operation";
     let arguments = (ins WTC_MutexType:$mutex,
         OptionalAttr<FlatSymbolRefAttr>:$fallback_impl,
@@ -35,7 +48,7 @@ def UnlockOp : WTC_Op<"unlock"> {
         OptionalAttr<ArrayAttr>:$source_arg_attrs);
 }
 
-def QueuePushOp : WTC_Op<"queue_push", []> {
+def QueuePushOp : WTC_ObjectOp<"queue_push"> {
     let summary = "A queue push operation";
     let arguments = (ins WTC_QueueType:$queue, AnyType:$value,
         OptionalAttr<FlatSymbolRefAttr>:$fallback_impl,
@@ -43,9 +56,10 @@ def QueuePushOp : WTC_Op<"queue_push", []> {
         OptionalAttr<ArrayAttr>:$source_arg_attrs,
         OptionalAttr<WTC_TopologyAttr>:$topology);
     let results = (outs);
+    let hasVerifier = 1;
 }
 
-def QueuePopOp : WTC_Op<"queue_pop", []> {
+def QueuePopOp : WTC_ObjectOp<"queue_pop"> {
     let summary = "A non-blocking queue pop; a null result means empty";
     let description = [{
         Two forms, exactly one of which is present. With a result, the popped
