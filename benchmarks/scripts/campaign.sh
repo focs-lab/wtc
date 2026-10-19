@@ -30,7 +30,7 @@ mkdir -p "$OUT"
 RUNS="$OUT/runs.jsonl"
 : > "$RUNS"
 
-VARIANTS_SPSC="orig_generic shim_generic shim_spsc ring_sp ring_inline std_mutex moodycamel_rw_sp moodycamel_rw_inline moodycamel_cq_sp rigtorp_sp rigtorp_inline boost_spsc_sp boost_ms_queue"
+VARIANTS_SPSC="orig_generic shim_generic shim_spsc shim_spsc_inline ring_sp ring_borrowed ring_inline std_mutex moodycamel_rw_sp moodycamel_rw_inline moodycamel_cq_sp rigtorp_sp rigtorp_inline boost_spsc_sp boost_ms_queue"
 
 lock() {
   # Exclusive measurement lock for one run. --no-scope: inside a bench shell a
@@ -87,6 +87,8 @@ elems_for() {
   case "$1" in
     rigtorp_inline)       echo 400000000 ;;
     ring_inline)          echo 200000000 ;;
+    ring_borrowed)        echo 200000000 ;;
+    shim_spsc_inline)     echo 100000000 ;;
     moodycamel_rw_inline) echo  40000000 ;;
     *)                    echo  20000000 ;;
   esac
@@ -164,12 +166,12 @@ case "$LEG" in
     ;;
   w3wtc)
     # The compiler-selected comparison. Needs a 3-core reservation and the
-    # three flavours already built by build_wtc_flavours.sh; BUILD is the
+    # flavours already built by build_wtc_flavours.sh; BUILD is the
     # directory holding them.
     "$HERE/check_env.sh" 3 || exit 1
     meta
     for rep in $(seq 0 $((REPS-1))); do
-      for f in generic hand compiler; do
+      for f in generic hand hand-inline compiler; do
         lock "$BUILD/w3_$f" --flavour "$f" --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt" >>"$OUT/checksums.txt"
         lock "$BUILD/w3_$f" --flavour "$f" --rate 2000000 --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt" >>"$OUT/checksums.txt"
       done

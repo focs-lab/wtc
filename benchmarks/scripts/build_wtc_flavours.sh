@@ -4,9 +4,11 @@
 # compiler pick the implementation, and does its pick cost what the human's
 # pick costs":
 #
-#   generic   source unmodified, specialisation off      -> the fallback
-#   hand      source sets the tag itself                 -> the human's pick
-#   compiler  source unmodified, the verdict sets the tag -> ours
+#   generic      source unmodified, specialisation off      -> the fallback
+#   hand         source sets the tag to spsc itself         -> the human's pick
+#   hand-inline  source sets spsc_inline itself              -> the human's
+#                pick with elements held in the ring
+#   compiler     source unmodified, the verdict sets the tag -> ours
 #
 # All three go through the same pipeline, so a difference between them is
 # the substitution and not a difference between compilers.
@@ -39,6 +41,7 @@ build() { # name, extra wtc-cc args...
 
 build generic  --no-specialize
 build hand     --no-specialize -DWTC_HAND
+build hand-inline --no-specialize -DWTC_HAND_INLINE
 build compiler
 
 echo
@@ -48,12 +51,13 @@ echo "=== which implementation each build actually uses ==="
 # symbols in every build, so comparing the pipeline's own functions shows
 # nothing: the first version of this check called three identical builds
 # "identical" and counted it as success.
-for f in generic hand compiler; do
-  printf '  %-9s ' "$f"
+for f in generic hand hand-inline compiler; do
+  printf '  %-11s ' "$f"
   "$OUT/w3_$f" --n 200000 --warm 20000 --json /dev/null 2>/dev/null
 done
 echo
-echo "  generic must say generic,generic; hand and compiler must both say spsc,spsc."
+echo "  generic must say generic,generic; hand and compiler must both say spsc,spsc;"
+echo "  hand-inline must say spsc_inline,spsc_inline."
 echo
 echo "=== and the binaries themselves ==="
 # The strongest form of the claim, and the cheapest to check: if the

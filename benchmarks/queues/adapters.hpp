@@ -54,6 +54,15 @@ template <class T> struct shim_spsc {
     bool try_pop(T& out) { auto p = q.try_pop(); if (!p) return false; out = *p; return true; }
 };
 
+// hand-inline: the shim with the tag set to spsc_inline, elements held in
+// the ring and each pop borrowed in place. The copy into out is the
+// consumer's own use of the element, as in every other variant.
+template <class T> struct shim_spsc_inline {
+    wtc::queue<T> q{wtc::topology::spsc_inline};
+    void push(const T& v) { q.push(v); }
+    bool try_pop(T& out) { auto p = q.try_pop(); if (!p) return false; out = *p; return true; }
+};
+
 // B0-orig: the original file, before the tag existed.
 template <class T> struct orig_generic {
     wtc_orig::queue<T> q;
@@ -157,12 +166,21 @@ template <class T> struct ring_sp {
     bool try_pop(T& out) { std::shared_ptr<T> p; if (!q.try_pop(p)) return false; out = *p; return true; }
 };
 
+// and our ring holding T inline, popped by borrowing in place, at the
+// shim's block size: shim_spsc_inline without the tag branch and the
+// owner-less shared_ptr, to price those two.
+template <class T> struct ring_borrowed {
+    wtc::rt::spsc_ring<T> q;
+    void push(const T& v) { q.push(v); }
+    bool try_pop(T& out) { T* p = q.try_pop_borrow(); if (!p) return false; out = *p; return true; }
+};
+
 inline const std::vector<std::string>& variant_names() {
     static const std::vector<std::string> v = {
-        "shim_generic", "shim_spsc", "orig_generic", "std_mutex",
+        "shim_generic", "shim_spsc", "shim_spsc_inline", "orig_generic", "std_mutex",
         "moodycamel_rw_sp", "moodycamel_rw_inline", "moodycamel_cq_sp",
         "rigtorp_sp", "rigtorp_inline", "boost_spsc_sp", "boost_ms_queue",
-        "ring_inline", "ring_sp",
+        "ring_inline", "ring_sp", "ring_borrowed",
 #if defined(WTC_HAVE_TBB)
         "onetbb_cq_sp",
 #endif
@@ -175,6 +193,7 @@ template <class T, class F>
 bool with_variant(const std::string& name, F&& f) {
     if (name == "shim_generic")          { f.template run<shim_generic<T>>(); return true; }
     if (name == "shim_spsc")             { f.template run<shim_spsc<T>>(); return true; }
+    if (name == "shim_spsc_inline")      { f.template run<shim_spsc_inline<T>>(); return true; }
     if (name == "orig_generic")          { f.template run<orig_generic<T>>(); return true; }
     if (name == "std_mutex")             { f.template run<std_mutex_queue<T>>(); return true; }
     if (name == "moodycamel_rw_sp")      { f.template run<moodycamel_rw_sp<T>>(); return true; }
@@ -186,6 +205,7 @@ bool with_variant(const std::string& name, F&& f) {
     if (name == "boost_ms_queue")        { f.template run<boost_ms_queue<T>>(); return true; }
     if (name == "ring_inline")           { f.template run<ring_inline<T>>(); return true; }
     if (name == "ring_sp")               { f.template run<ring_sp<T>>(); return true; }
+    if (name == "ring_borrowed")         { f.template run<ring_borrowed<T>>(); return true; }
 #if defined(WTC_HAVE_TBB)
     if (name == "onetbb_cq_sp")          { f.template run<onetbb_cq_sp<T>>(); return true; }
 #endif
