@@ -47,10 +47,12 @@ no constructor call of its own for the specialisation to rewrite, and stays
 unknown (`queue-in-a-struct.cpp`). That is the safe direction, and it still
 gives up on programs that keep their queues in a struct.
 
-**The dialect still says nothing CIR did not.** The operations carry no
-memory ordering, no progress guarantee and no linearisation point; the
-topology attribute is the first fact in the dialect that CIR did not already
-have. The static checks the vision describes need the rest.
+**The dialect carries no memory ordering.** The operations carry the
+contract of `decisions/0003` (a push happens before its pop, each queue is
+linearisable, each producer's elements stay in order) and the progress each
+implementation guarantees (`decisions/0004`), but no ordering attribute: a
+transformation that would move memory accesses across an operation has
+only the contract's happens-before to go on.
 
 **The ring's block size was chosen by measurement, not derived.** Below a few
 thousand slots the ring has a slow regime; `runtime/spsc_ring.hpp` records
