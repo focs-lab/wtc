@@ -16,6 +16,7 @@ using namespace mlir::wtc;
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallSet.h"
+#include "llvm/Demangle/Demangle.h"
 
 // For every queue object the module touches, how many threads push to it
 // and how many pop from it, as a verdict written into the IR:
@@ -32,11 +33,32 @@ using namespace mlir::wtc;
 //
 // The walk over dynamic thread and function instances, which is the subtle
 // part and is shared with every other analysis here, is in ThreadInstances.
+//
+// A program can also state the topology itself, by passing a tag other than
+// generic to the queue's constructor. That is a claim, and it is checked:
+// when the threads that use the queue certainly break it -- two threads the
+// module accounts for push to it, or one that certainly stands for many --
+// the build fails, naming each thread and where it touches the queue; when
+// the analysis cannot tell, a warning says why; when it agrees, a remark
+// says the declaration is verified.
 
 namespace {
 
+// One access of a queue by one thread, kept for the declared-topology
+// check, which has to name the threads it finds.
+struct Access {
+    Operation *op;
+    unsigned thread;
+    bool many;          // the thread certainly stands for several
+    bool speculative;   // a thread the module cannot account for
+    std::string entry;  // the function the thread starts in, demangled
+    Location started;   // the spawn that starts it, or the entry for main
+    bool spawned;
+};
+
 struct SideInfo {
     llvm::SmallSetVector<unsigned, 4> threads;
+    llvm::SmallVector<Access, 4> accesses;
     bool anyMany = false;
     // 0 if nobody touches this side, 2 for "many", else 1.
     unsigned count() const {
@@ -70,6 +92,7 @@ private:
     ModuleOp module;
     llvm::MapVector<Operation *, RootInfo> roots;  // GlobalOp or AllocaOp, in discovery order
     llvm::DenseSet<Type> poisonedTypes;            // queue object types with an unresolvable access
+    llvm::DenseMap<Type, std::string> poisonWhy;   // the first reason, for the declared-topology check
     llvm::DenseMap<Operation *, llvm::SmallSetVector<Operation *, 2>> opRoots;
     bool globalPoison = false;   // an access with no type to poison
     unsigned remarks = 0;
@@ -90,7 +113,7 @@ private:
 
     void poison(Operation *op, const Twine &why) {
         Type t = queueObjectTypeOfOp(op);
-        if (t) poisonedTypes.insert(t);
+        if (t && poisonedTypes.insert(t).second) poisonWhy[t] = why.str();
         else globalPoison = true;
         op->emitRemark() << "wtc: queue access is unresolvable (" << why
                          << "); every queue of this type is now unknown";
@@ -119,11 +142,100 @@ private:
     }
 
     void writeVerdicts(bool capExceeded);
+    // False when a declared topology is certainly broken.
+    bool checkDeclared(Operation *root, const RootInfo &info, Topology verdict, const std::string &label,
+                       llvm::ArrayRef<cir::CallOp> ctors, bool capExceeded);
+    static Access accessOf(Operation *op, const Instance &inst);
 };
+
+// A location as a person reads it: file:line:column, from the first file
+// position a fused or named location carries.
+static std::string whereOf(Location loc) {
+    if (auto f = dyn_cast<FileLineColLoc>(loc))
+        return (f.getFilename().getValue() + ":" + Twine(f.getLine()) + ":" + Twine(f.getColumn())).str();
+    if (auto f = dyn_cast<FusedLoc>(loc))
+        for (Location inner : f.getLocations())
+            if (std::string w = whereOf(inner); !w.empty()) return w;
+    if (auto n = dyn_cast<NameLoc>(loc)) return whereOf(n.getChildLoc());
+    if (auto c = dyn_cast<CallSiteLoc>(loc)) return whereOf(c.getCallee());
+    return "";
+}
+
+Access QueueOwnershipAnalysisPass::accessOf(Operation *op, const Instance &inst) {
+    // The instance that began this thread: up the chain while the thread
+    // stays the same.
+    const Instance *r = &inst;
+    while (r->parent && r->parent->thread == r->thread) r = r->parent;
+    const bool many = inst.threadMult == Mult::Many && !inst.execUnknown;
+    cir::FuncOp entry = r->func;
+    cir::CallOp site = r->site;
+    return Access{op,
+                  inst.thread,
+                  many,
+                  inst.speculative,
+                  llvm::demangle(entry.getSymName().str()),
+                  site ? site.getLoc() : entry.getLoc(),
+                  static_cast<bool>(site)};
+}
+
+bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &info, Topology verdict,
+                                               const std::string &label,
+                                               llvm::ArrayRef<cir::CallOp> ctors, bool capExceeded) {
+    auto tag = constructorTag(ctors);
+    if (!tag || *tag == 0) return true;  // nothing declared, or nothing readable
+    cir::CallOp ctor = ctors.front();
+    const char *declared = *tag == 2 ? "spsc_inline" : "spsc";
+    if (verdict == Topology::spsc) {
+        ctor.emitRemark() << "wtc: queue " << label << ": declared " << declared << ", verified";
+        ++remarks;
+        return true;
+    }
+    // Certainly broken: on one side, two threads the module accounts for,
+    // or one that certainly stands for several.
+    for (const SideInfo *side : {&info.producers, &info.consumers}) {
+        const bool pushes = side == &info.producers;
+        llvm::SmallVector<const Access *, 4> firstOfThread;
+        llvm::SmallSet<unsigned, 4> seen;
+        bool certainMany = false;
+        for (const Access &a : side->accesses) {
+            if (a.speculative) continue;
+            if (a.many) certainMany = true;
+            if (seen.insert(a.thread).second) firstOfThread.push_back(&a);
+        }
+        if (firstOfThread.size() < 2 && !certainMany) continue;
+        InFlightDiagnostic d = ctor.emitError()
+                               << "wtc: queue " << label << " is declared " << declared << " but ";
+        if (certainMany) d << "many threads ";
+        else d << firstOfThread.size() << " threads ";
+        d << (pushes ? "push to it" : "pop from it");
+        for (const Access *a : firstOfThread) {
+            Diagnostic &n = d.attachNote(a->op->getLoc());
+            n << (pushes ? "push" : "pop") << " on a thread that starts in " << a->entry;
+            if (a->many) n << ", one of several started";
+            if (a->spawned) {
+                std::string w = whereOf(a->started);
+                n << " at " << (w.empty() ? std::string("a spawn") : w);
+            }
+            else n << " (the program's own thread)";
+        }
+        return false;
+    }
+    // Not spsc, but nothing certain: say why it could not be checked.
+    InFlightDiagnostic w = ctor.emitWarning()
+                           << "wtc: queue " << label << " is declared " << declared << "; cannot verify: ";
+    const Type objTy = queueObjectType(root);
+    if (capExceeded) w << "the program has too many function instances";
+    else if (globalPoison) w << "an access to some queue could not be attributed";
+    else if (auto it = poisonWhy.find(objTy); it != poisonWhy.end()) w << it->second;
+    else w << "a thread that uses it is one the module cannot account for (its caller is not visible)";
+    return true;
+}
 
 void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
     MLIRContext *ctx = &getContext();
     llvm::DenseMap<Operation *, Topology> verdictOf;
+    auto ctorsOf = collectQueueConstructors(module);
+    bool contractsHold = true;
 
     for (auto &[root, info] : roots) {
         Topology t;
@@ -151,7 +263,10 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
                            << " (producers: " << (p == 2 ? "many" : std::to_string(p))
                            << ", consumers: " << (c == 2 ? "many" : std::to_string(c)) << ")";
         ++remarks;
+        if (auto it = ctorsOf.find(root); it != ctorsOf.end())
+            contractsHold &= checkDeclared(root, info, t, label, it->second, capExceeded);
     }
+    if (!contractsHold) signalPassFailure();
 
     // Each operation gets the meet over every root it may refer to.
     for (auto &[op, rs] : opRoots) {
@@ -181,7 +296,7 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
 
 void QueueOwnershipAnalysisPass::runOnOperation() {
     module = getOperation();
-    roots.clear(); poisonedTypes.clear(); opRoots.clear();
+    roots.clear(); poisonedTypes.clear(); poisonWhy.clear(); opRoots.clear();
     globalPoison = false; remarks = 0;
 
     // A function that cannot reach a queue operation cannot affect a verdict.
@@ -211,6 +326,7 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
                 RootInfo &info = roots[root];
                 SideInfo &side = isa<QueuePushOp>(op) ? info.producers : info.consumers;
                 side.threads.insert(inst.thread);
+                side.accesses.push_back(accessOf(op, inst));
                 if (inst.threadMult == Mult::Many) side.anyMany = true;
                 opRoots[op].insert(root);
             });

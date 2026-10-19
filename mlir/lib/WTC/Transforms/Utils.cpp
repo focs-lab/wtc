@@ -465,4 +465,32 @@ void memoryAccesses(Operation *op, llvm::SmallVectorImpl<MemoryAccess> &out) {
         out.push_back({mm.getDst(), lengthType(mm.getLen(), mm.getDst()), true});
     }
 }
+
+llvm::DenseMap<Operation *, llvm::SmallVector<cir::CallOp, 2>>
+collectQueueConstructors(ModuleOp module) {
+    llvm::DenseMap<Operation *, llvm::SmallVector<cir::CallOp, 2>> ctorsOf;
+    module.walk([&](cir::CallOp call) {
+        if (getSemanticKind(lookupCallee(call)) != SemanticOpKind::QueueConstruction) return;
+        if (call.getNumOperands() == 0 || firstRealOperand(call) != 0) return;
+        Value t = traceToRoot(call.getOperand(0));
+        Operation *root = nullptr;
+        if (auto gg = t.getDefiningOp<cir::GetGlobalOp>())
+            root = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr()).getOperation();
+        else if (auto a = t.getDefiningOp<cir::AllocaOp>())
+            root = a.getOperation();
+        if (root) ctorsOf[root].push_back(call);
+    });
+    return ctorsOf;
 }
+
+std::optional<int64_t> constructorTag(llvm::ArrayRef<cir::CallOp> ctors) {
+    if (ctors.size() != 1) return std::nullopt;
+    cir::CallOp ctor = ctors.front();
+    if (ctor.getNumOperands() != 2) return std::nullopt;
+    auto c = ctor.getOperand(1).getDefiningOp<cir::ConstantOp>();
+    auto v = c ? dyn_cast<cir::IntAttr>(c.getValue()) : cir::IntAttr();
+    if (!v) return std::nullopt;
+    return v.getSInt();
+}
+
+} // namespace mlir::wtc
