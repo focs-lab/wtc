@@ -10,14 +10,15 @@
 // globals, which is what an application-shaped program looks like and what
 // the analysis can follow.
 //
-// Three builds from this one source:
+// Four builds from this one source:
 //
 //   generic   tools/wtc-cc --no-specialize        tag stays generic
 //   hand      tools/wtc-cc --no-specialize -DWTC_HAND   source sets the tag
-//   compiler  tools/wtc-cc                        the verdict sets the tag
+//   hand-inline  tools/wtc-cc --no-specialize -DWTC_HAND_INLINE  spsc_inline
+//   compiler  tools/wtc-cc                        the verdicts set the tag
 //
-// The claim is that the third is indistinguishable from the second, and the
-// checksum is identical in all three.
+// The claim is that compiler is indistinguishable from hand-inline, and the
+// checksum is identical in all four.
 //
 //   w3_pipeline_wtc [--n N] [--rate R] [--work W] [--cpus a,b,c] [--json F]
 

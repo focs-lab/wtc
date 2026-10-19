@@ -178,6 +178,21 @@ case "$LEG" in
     done
     echo "distinct checksums across all runs: $(sort -u "$OUT/checksums.txt" | wc -l) (must be 1)" | tee -a "$OUT/log.txt"
     ;;
+  w7)
+    # Batching a producer's pushes: twelve flavours built by
+    # build_w7_flavours.sh into BUILD (three implementations, batched or
+    # not, two element sizes). Needs a 2-core reservation.
+    "$HERE/check_env.sh" 2 || exit 1
+    meta
+    for rep in $(seq 0 $((REPS-1))); do
+      for e in e8 e64; do
+        for f in generic_plain generic_batch spsc_plain spsc_batch inline_plain inline_batch; do
+          lock "$BUILD/w7_${f}_$e" --flavour "$f" --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt" >>"$OUT/checksums.txt"
+        done
+      done
+    done
+    echo "distinct checksums across all runs: $(sort -u "$OUT/checksums.txt" | wc -l) (must be 1)" | tee -a "$OUT/log.txt"
+    ;;
   smt)
     # The two threads on one physical core, sharing its caches. A spinning
     # consumer steals the issue slots its sibling needs, which is the leg
