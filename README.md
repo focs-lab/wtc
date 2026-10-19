@@ -17,6 +17,15 @@ construction to use a wait-free ring, and the program still produces the same
 output. How much that is worth was measured, under the protocol
 `docs/gate.md` describes.
 
+Since then the dialect has learned what its operations promise, and the
+compiler uses it for more than the topology. It proves that a consumer
+only borrows what it pops and then holds the queue's elements inline, so
+that nothing is allocated per element; it batches the pushes of a loop
+when the program allows it; and it checks two promises a program can make,
+a declared topology and a lock-free function, failing the build with the
+threads or the call chain that break them. `docs/mvp.md` walks through
+each with the command to run.
+
 The second direction, memory layout by owner, has its analysis and its
 first result. The analysis reports pairs of fields that different threads
 repeatedly touch in one cache line, counts every member access it cannot place,
@@ -26,13 +35,16 @@ and a census of what seventeen codebases pad by hand.
 
 | Piece | State |
 | --- | --- |
-| `wtc` dialect: `mutex` and `queue<T>` types, four operations, a topology attribute | the operations are still tagged calls; no memory ordering or progress semantics yet |
+| `wtc` dialect: `mutex` and `queue<T>` types, seven operations, topology and implementation attributes | each operation is verified against the call it lowers to, carries the contract of `decisions/0003`, and answers what it guarantees about progress under its implementation (`decisions/0004`); no memory-ordering attribute yet |
 | Lifting CIR calls into the dialect | reads operands through the calling convention, including calls with a hidden return slot; driven from C++ source by the tests |
-| Queue ownership analysis | thread instances by call string; a spawn in a loop is many threads, `main` is a thread, parameters resolve by index; whatever it cannot resolve is `unknown` |
-| Specialisation | rewrites the topology tag of every queue proved SPSC; anything unclear keeps the general-purpose implementation |
+| Queue ownership analysis | thread instances by call string; a spawn in a loop is many threads, `main` is a thread, parameters resolve by index; whatever it cannot resolve is `unknown`. A topology the program declares is checked: certainly broken fails the build, naming the threads |
+| Borrow analysis | proves, for each pop of an spsc queue, that the program keeps neither the returned `shared_ptr` nor a pointer into the element past its next pop |
+| Specialisation | rewrites the topology tag of every queue proved SPSC, to inline storage when its consumer borrows and the element type allows it; anything unclear keeps the general-purpose implementation |
+| Batching | in a function marked `WTC_BATCH`, a loop of pushes in which nothing can wait for an unpublished element becomes one batched run |
+| Progress check | a function marked `WTC_LOCK_FREE` that can reach a blocking operation fails the build with the call chain |
 | Lowering back to CIR | faithful, restores the original argument attributes, and leaves no attribute of ours behind |
-| Specialised implementations | `runtime/spsc_ring.hpp`, an unbounded wait-free ring, with its own tests |
-| Measurements | harness, five workloads and eleven baselines in `benchmarks/`; results under `benchmarks/results/` |
+| Specialised implementations | `runtime/spsc_ring.hpp`, an unbounded wait-free ring holding elements in raw storage, popped by moving or by borrowing, published per element or per run; tested plain, under ThreadSanitizer and with its contract checks, in CI |
+| Measurements | harness, six workloads and eleven baselines in `benchmarks/`; results under `benchmarks/results/`. On the pipeline benchmark the compiler's inline choice runs at 8.4× the general-purpose queue; batching gains 1.9× on it and 3.3× on the inline ring (`docs/mvp.md`) |
 | False-sharing diagnosis | the same thread walk over field accesses; `definite`, `possible` and `cold` verdicts, each a claim with a test; arrays and heap objects are counted as unidentified, not guessed at |
 | Alignment by owner | raises a global a different thread repeatedly touches to a line of its own; kept as a measurement, since on memcached it is close to a build flag |
 

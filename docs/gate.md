@@ -28,6 +28,13 @@ quoted from a run made outside a reservation.
 | the compiler's binary against a human's | **byte for byte identical** |
 | where the proof fails | the general-purpose queue, at no cost |
 
+Re-measured on 19 October 2026 (`benchmarks/results/2026-10-19-w1mvp`),
+the first row came out at 2.64×: 2.81 against 1.07 million elements a
+second, medians of five. The summaries print "smt on", and so did those of
+the September legs: that is the machine-wide switch, while the reservation
+takes each reserved core's sibling offline; the environment check now
+verifies the siblings and records the answer in `meta.json`.
+
 ## The criteria, and what happened
 
 ### Correctness comes first
