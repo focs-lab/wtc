@@ -6,7 +6,7 @@
 //
 // RUN: %wtc_cc %examples/inline_pipeline.cpp -o %t.exe 2>&1 | FileCheck %s --check-prefix=PASSES
 // RUN: %t.exe | FileCheck %s
-// RUN: %wtc_cc -O2 %examples/inline_pipeline.cpp -o %t.o2.exe
+// RUN: %wtc_cc -O2 %examples/inline_pipeline.cpp -o %t.o2.exe 2>&1 | FileCheck %s --check-prefix=PASSES
 // RUN: %t.o2.exe | FileCheck %s
 // RUN: %wtc_cc -DWTC_CHECK %examples/inline_pipeline.cpp -o %t.check.exe
 // RUN: %t.check.exe | FileCheck %s
