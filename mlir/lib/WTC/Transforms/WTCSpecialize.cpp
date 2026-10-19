@@ -15,9 +15,11 @@ using namespace mlir::wtc;
 
 // The substitution. For each queue object the analysis marked spsc, find
 // the one call that constructs it and rewrite the constant it passes as the
-// topology tag from generic (0) to spsc (1). Nothing else in the program
-// changes: the shim's constructor selects the implementation from the tag,
-// and every later operation on that object follows it.
+// topology tag from generic (0) to spsc (1), or to spsc_inline (2) when the
+// borrow analysis proved that every pop only borrows its element and the
+// element type may be held inline. Nothing else in the program changes: the
+// shim's constructor selects the implementation from the tag, and every
+// later operation on that object follows it.
 //
 // The pattern, as ClangIR emits it for a defaulted enum argument:
 //
@@ -60,6 +62,12 @@ public:
                        "on each operation, the implementation its queue runs as the program "
                        "stands: the build of an unmodified source.")};
 
+    ListOption<std::string> forceInline{
+        *this, "force-inline",
+        llvm::cl::desc("Global queue symbols to tag spsc_inline regardless of the verdicts. "
+                       "For the negative control only: a consumer that keeps what it pops then "
+                       "reads an element that has been destroyed.")};
+
     ListOption<std::string> forceSpsc{
         *this, "force-spsc",
         llvm::cl::desc("Global queue symbols to tag spsc regardless of the verdict. "
@@ -87,12 +95,15 @@ public:
         module.walk([&](Operation *root) {
             if (!rewrite) return;
             if (!isa<cir::GlobalOp, cir::AllocaOp>(root)) return;
-            bool wanted = false;
+            bool wanted = false, forcedInline = false;
             if (auto t = root->getAttrOfType<TopologyAttr>(kTopologyAttrName))
                 wanted = t.getValue() == Topology::spsc;
-            if (auto g = dyn_cast<cir::GlobalOp>(root))
+            if (auto g = dyn_cast<cir::GlobalOp>(root)) {
                 for (const std::string &s : forceSpsc)
                     if (g.getSymName() == s) wanted = true;
+                for (const std::string &s : forceInline)
+                    if (g.getSymName() == s) wanted = forcedInline = true;
+            }
             if (!wanted) return;
 
             auto it = ctorsOf.find(root);
@@ -121,18 +132,44 @@ public:
                                   << tagVal.getSInt() << "); left as declared";
                 return;
             }
+            // Inline storage needs both the borrow proof and an element type
+            // the shim can hold inline, which its constructor says by calling
+            // a marker; without either, plain spsc.
+            Impl to = Impl::spsc;
+            if (forcedInline) {
+                to = Impl::spsc_inline;
+            } else if (root->hasAttr(kBorrowedAttrName)) {
+                if (marksInlineOk(lookupCallee(ctor)))
+                    to = Impl::spsc_inline;
+                else
+                    ctor.emitRemark() << "wtc: every pop borrows, but this element type cannot be "
+                                         "held inline; plain spsc";
+            }
             // A fresh constant rather than a mutation of the existing one: at
             // -O0 each use has its own, but nothing guarantees that.
             OpBuilder b(ctor);
-            auto spsc = cir::ConstantOp::create(b, ctor.getLoc(), tagConst.getType(),
-                                                cir::IntAttr::get(tagConst.getType(), 1));
-            ctor->setOperand(1, spsc.getResult());
+            auto tag = cir::ConstantOp::create(
+                b, ctor.getLoc(), tagConst.getType(),
+                cir::IntAttr::get(tagConst.getType(), static_cast<int64_t>(to)));
+            ctor->setOperand(1, tag.getResult());
             root->setAttr(kSpecializedAttrName, TopologyAttr::get(ctx, Topology::spsc));
-            ctor.emitRemark() << "wtc: specialised: constructor tag rewritten to spsc";
+            ctor.emitRemark() << "wtc: specialised: constructor tag rewritten to "
+                              << stringifyImpl(to);
             ++rewritten;
         });
         (void)rewritten;
         recordImplementations(module, ctorsOf);
+    }
+
+    // The shim's constructor calls a function annotated wtc_queue_inline_ok
+    // exactly when its element type may be held inline.
+    static bool marksInlineOk(cir::FuncOp ctor) {
+        if (!ctor || ctor.getBody().empty()) return false;
+        bool found = false;
+        ctor.walk([&](cir::CallOp call) {
+            if (hasAnnotation(lookupCallee(call), "wtc_queue_inline_ok")) found = true;
+        });
+        return found;
     }
 
     // What each numbered queue runs, read back from the tag its one

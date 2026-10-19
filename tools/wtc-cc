@@ -3,7 +3,8 @@
 # The whole pipeline, one C++ file to one executable:
 #
 #   clang++ -fclangir -emit-cir        C++ -> CIR, with the shim's annotations
-#   wtc-opt                            lift, analyse, specialise, lower
+#   wtc-opt                            lift, analyse ownership and borrowing,
+#                                      specialise, lower
 #   cir-translate --cir-to-llvmir      CIR -> LLVM IR
 #   clang++                            LLVM IR -> executable
 #
@@ -15,6 +16,8 @@
 #                      "generic" build of an unmodified source)
 #   --force-spsc SYMS  tag these global queues spsc regardless of the verdict
 #                      (negative control; pass a comma-separated list)
+#   --force-inline SYMS  tag these global queues spsc_inline regardless of
+#                      the verdicts (negative control, as above)
 #   --toolchain DIR    where clang++, wtc-opt, cir-translate live (default:
 #                      wtc-opt from the build tree next to this repo, the
 #                      rest from PATH)
@@ -27,12 +30,13 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)
 
-KEEP=""; SPECIALIZE=1; FORCE=""; TOOLCHAIN=""; OUT="a.out"; SRC=""; PASSTHRU=()
+KEEP=""; SPECIALIZE=1; FORCE=""; FORCE_INLINE=""; TOOLCHAIN=""; OUT="a.out"; SRC=""; PASSTHRU=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --keep) KEEP=$2; shift 2 ;;
     --no-specialize) SPECIALIZE=0; shift ;;
     --force-spsc) FORCE=$2; shift 2 ;;
+    --force-inline) FORCE_INLINE=$2; shift 2 ;;
     --toolchain) TOOLCHAIN=$2; shift 2 ;;
     -o) OUT=$2; shift 2 ;;
     *.cpp|*.cc|*.cxx) SRC=$1; shift ;;
@@ -64,15 +68,17 @@ base=$(basename "${SRC%.*}")
 
 "$CLANGXX" -std=c++17 -I"$ROOT/shim" -fclangir -emit-cir "${PASSTHRU[@]}" "$SRC" -o "$WORK/$base.cir"
 
-PASSES="--lift-cir-to-wtc --queue-ownership-analysis"
+PASSES=(--lift-cir-to-wtc --queue-ownership-analysis --wtc-borrow-analysis)
 if (( SPECIALIZE )); then
-  if [ -n "$FORCE" ]; then PASSES="$PASSES --wtc-specialize=force-spsc=$FORCE"; else PASSES="$PASSES --wtc-specialize"; fi
+  OPTS=""
+  [ -n "$FORCE" ] && OPTS="force-spsc=$FORCE"
+  [ -n "$FORCE_INLINE" ] && OPTS="${OPTS:+$OPTS }force-inline=$FORCE_INLINE"
+  PASSES+=("--wtc-specialize${OPTS:+=$OPTS}")
 else
-  PASSES="$PASSES --wtc-specialize=rewrite=false"
+  PASSES+=(--wtc-specialize=rewrite=false)
 fi
-PASSES="$PASSES --lower-wtc-to-cir --reconcile-unrealized-casts"
-# shellcheck disable=SC2086
-"$WTCOPT" "$WORK/$base.cir" $PASSES -o "$WORK/$base.wtc.cir"
+PASSES+=(--lower-wtc-to-cir --reconcile-unrealized-casts)
+"$WTCOPT" "$WORK/$base.cir" "${PASSES[@]}" -o "$WORK/$base.wtc.cir"
 
 "$CIRTR" --cir-to-llvmir "$WORK/$base.wtc.cir" -o "$WORK/$base.raw.ll"
 sed '/^target datalayout/d' "$WORK/$base.raw.ll" > "$WORK/$base.ll"
