@@ -123,9 +123,98 @@ void moved_out_slot_is_empty() {
   EXPECT(s.size() == 100);
 }
 
+// Counts live objects, so that a test can see every element constructed
+// is destroyed exactly once, whichever way it left the ring.
+struct tracked {
+  static int live;
+  std::uint64_t v;
+  explicit tracked(std::uint64_t x) : v(x) { ++live; }
+  tracked(const tracked& o) : v(o.v) { ++live; }
+  tracked(tracked&& o) noexcept : v(o.v) { ++live; }
+  tracked& operator=(const tracked&) = default;
+  tracked& operator=(tracked&&) = default;
+  ~tracked() { --live; }
+};
+int tracked::live = 0;
+
+void element_without_default_constructor() {
+  // Slots are raw storage, so the element type needs no default
+  // constructor; a block no longer constructs one per slot.
+  struct only_from_int {
+    explicit only_from_int(int x) : v(x) {}
+    int v;
+  };
+  wtc::rt::spsc_ring<only_from_int, 4> q;
+  for (int i = 0; i < 10; ++i) q.push(only_from_int(i));
+  only_from_int out(-1);
+  for (int i = 0; i < 10; ++i) {
+    EXPECT(q.try_pop(out));
+    EXPECT(out.v == i);
+  }
+  EXPECT(!q.try_pop(out));
+}
+
+void every_element_destroyed_once() {
+  {
+    wtc::rt::spsc_ring<tracked, 4> q;
+    for (std::uint64_t i = 0; i < 37; ++i) q.push(tracked(i)); // several blocks
+    EXPECT(tracked::live == 37);
+    tracked out(0);
+    for (std::uint64_t i = 0; i < 10; ++i) EXPECT(q.try_pop(out) && out.v == i);
+    EXPECT(tracked::live == 27 + 1); // the 27 still queued, and out
+    for (std::uint64_t i = 10; i < 15; ++i) {
+      tracked* b = q.try_pop_borrow();
+      EXPECT(b && b->v == i);
+    }
+    EXPECT(tracked::live == 22 + 1 + 1); // queued, out, and the one lent
+  }
+  // The destructor ended the 22 still queued and the one lent; out is gone
+  // with its scope.
+  EXPECT(tracked::live == 0);
+}
+
+void borrowed_element_lives_until_the_next_pop() {
+  wtc::rt::spsc_ring<tracked, 8> q;
+  q.push(tracked(1));
+  q.push(tracked(2));
+  tracked* first = q.try_pop_borrow();
+  EXPECT(first && first->v == 1);
+  EXPECT(tracked::live == 2); // still alive, in place
+  q.push(tracked(3));         // a push does not disturb it
+  EXPECT(first->v == 1);
+  tracked* second = q.try_pop_borrow();
+  EXPECT(second && second->v == 2);
+  EXPECT(tracked::live == 2); // first destroyed, 2 lent, 3 queued
+  EXPECT(q.try_pop_borrow() != nullptr);
+  EXPECT(q.try_pop_borrow() == nullptr); // empty, and 3 released
+  EXPECT(tracked::live == 0);
+}
+
+void borrowed_element_survives_the_producer_moving_on() {
+  // Two slots per block: the element lent from the last slot of a block
+  // must stay intact while the producer fills new blocks, because the
+  // consumer has not yet announced that it left the block it lives in.
+  wtc::rt::spsc_ring<std::uint64_t, 2> q;
+  q.push(0);
+  q.push(1);
+  EXPECT(*q.try_pop_borrow() == 0);
+  std::uint64_t* lent = q.try_pop_borrow();
+  EXPECT(lent && *lent == 1);
+  for (std::uint64_t i = 2; i < 40; ++i) q.push(i);
+  EXPECT(*lent == 1);
+  for (std::uint64_t i = 2; i < 40; ++i) {
+    std::uint64_t* b = q.try_pop_borrow();
+    EXPECT(b && *b == i);
+  }
+}
+
 } // namespace
 
 int main() {
+  element_without_default_constructor();
+  every_element_destroyed_once();
+  borrowed_element_lives_until_the_next_pop();
+  borrowed_element_survives_the_producer_moving_on();
   empty_queue_pops_nothing();
   fifo_across_many_blocks();
   interleaved_reuses_blocks_without_growing();

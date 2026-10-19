@@ -21,6 +21,18 @@
 // never fails; try_pop never blocks and returns false only when the queue
 // was empty at some instant during the call; no capacity.
 //
+// Two ways to pop. try_pop moves the element out into the caller's object.
+// try_pop_borrow leaves it where it is and returns its address: the
+// element stays alive, in place, until the consumer's next try_pop or
+// try_pop_borrow, or the destructor, and is destroyed then. That is what
+// lets an element be held inline and handed over without a copy or an
+// allocation; the price is the contract that the caller keeps no pointer
+// into it past its next pop, which the compiler has to prove (with
+// WTC_CHECK the slot is overwritten with 0xDB when it is released, so a
+// pointer kept too long reads garbage rather than a plausible element).
+// The lent slot is always in the consumer's current block, which the
+// consumer has not announced as left, so the producer never reuses it.
+//
 // Design. Elements are numbered from zero. Blocks of kSlots slots are linked
 // in a ring; slot i of a block holds element (block.end - kSlots + i). The
 // producer owns its current block and the pointer out of it; the consumer
@@ -59,7 +71,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <new>
+#include <type_traits>
 #include <utility>
 
 #ifdef WTC_CHECK
@@ -88,14 +102,24 @@ namespace wtc::rt {
 // theory that this processor's prefetcher pairs adjacent lines. It made no
 // difference beyond the noise, so kLine stays at the real line size.
 //
-// None of this matters for the shim, whose slots are shared pointers: there
-// the allocator dominates and every block size measures the same, 3.2 to
-// 3.4 million a second. It matters for a future slot type held inline. For
-// the shim's slots 4096 costs 64 KiB per block, 128 KiB per queue at rest.
+// None of this matters for the shim's spsc queue, whose slots are shared
+// pointers: there the allocator dominates and every block size measures the
+// same, 3.2 to 3.4 million a second. It matters for elements held inline.
+// For shared-pointer slots 4096 costs 64 KiB per block, 128 KiB per queue
+// at rest.
 template <class Slot, unsigned kSlots = 4096, unsigned kLine = 64>
 class spsc_ring {
   static_assert(kSlots >= 2, "a block needs at least two slots");
   static_assert((kLine & (kLine - 1)) == 0, "kLine must be a power of two");
+
+  // Raw storage for one element: an element exists in a slot only between
+  // the push that constructs it and the pop that destroys it, so a block
+  // costs no constructor per slot and the element type needs no default
+  // constructor. Same size and alignment as Slot, so the layout is that of
+  // a Slot array.
+  struct cell {
+    alignas(Slot) unsigned char raw[sizeof(Slot)];
+  };
 
   struct alignas(kLine) block {
     // Written by the producer only: once at construction and once per
@@ -109,7 +133,7 @@ class spsc_ring {
     // exactly one line and no line is shared by two consecutive slots.
     // Without this, 64-byte elements straddled two lines each, both sides
     // touched every line, and throughput fell by forty times, measured.
-    alignas(kLine) Slot slots[kSlots];
+    alignas(kLine) cell slots[kSlots];
 
     block() : next(nullptr), end(0) {}
   };
@@ -125,6 +149,7 @@ class spsc_ring {
     std::uint64_t count;       // elements popped so far
     unsigned off;              // next slot to read in blk
     std::uint64_t cached_push; // last value read from push_pub_
+    Slot* lent;                // the element try_pop_borrow handed out, if any
   };
 
   alignas(kLine) producer_state p_;
@@ -163,6 +188,41 @@ class spsc_ring {
 
   static block* make_block() { return new block(); }
 
+  static Slot* at(block* b, unsigned i) {
+    return std::launder(reinterpret_cast<Slot*>(b->slots[i].raw));
+  }
+
+  // Ends the life of the element the last try_pop_borrow lent out.
+  void release_lent() {
+    if (!c_.lent) return;
+    c_.lent->~Slot();
+#ifdef WTC_CHECK
+    std::memset(static_cast<void*>(c_.lent), 0xDB, sizeof(Slot));
+#endif
+    c_.lent = nullptr;
+  }
+
+  // The next element, or null if the queue was empty; advances past it.
+  Slot* advance() {
+    if (c_.count == c_.cached_push) {
+      c_.cached_push = push_pub_.load(std::memory_order_acquire);
+      if (c_.count == c_.cached_push) return nullptr;
+    }
+    if (c_.off == kSlots) {
+      // Element c_.count lives in the next block. Leave this one, then tell
+      // the producer it may reuse everything below c_.count. The store must
+      // follow the load of next: after it, the producer may write this
+      // block's next pointer again.
+      c_.blk = c_.blk->next.load(std::memory_order_acquire);
+      c_.off = 0;
+      pop_pub_.store(c_.count, std::memory_order_release);
+    }
+    Slot* e = at(c_.blk, c_.off);
+    ++c_.off;
+    ++c_.count;
+    return e;
+  }
+
 public:
   spsc_ring() : push_pub_(0), pop_pub_(0)
 #ifdef WTC_CHECK
@@ -178,16 +238,29 @@ public:
     // reads as drained one lap later, and is reused under the consumer.
     a->end = kSlots;
     p_ = producer_state{a, 0, 0, 0};
-    c_ = consumer_state{a, 0, 0, 0};
+    c_ = consumer_state{a, 0, 0, 0, nullptr};
   }
 
   spsc_ring(const spsc_ring&) = delete;
   spsc_ring& operator=(const spsc_ring&) = delete;
 
-  // By contract, no other thread is inside push or try_pop now. Walking from
-  // the consumer's block around the ring visits every block exactly once;
-  // the slot destructors release whatever was still queued.
+  // By contract, no other thread is inside push or try_pop now. The elements
+  // still queued are the ones from the consumer's position up to the
+  // producer's, along the path the consumer would take; then walking from
+  // the consumer's block around the ring visits every block exactly once.
   ~spsc_ring() {
+    release_lent();
+    if constexpr (!std::is_trivially_destructible_v<Slot>) {
+      block* b = c_.blk;
+      unsigned off = c_.off;
+      for (std::uint64_t n = c_.count; n < p_.count; ++n) {
+        if (off == kSlots) {
+          b = b->next.load(std::memory_order_relaxed);
+          off = 0;
+        }
+        at(b, off++)->~Slot();
+      }
+    }
     block* start = c_.blk;
     block* b = start;
     do {
@@ -205,7 +278,7 @@ public:
     claim(owner_p_, "producer");
 #endif
     if (p_.off == kSlots) turn_over();
-    p_.blk->slots[p_.off] = std::forward<S>(s);
+    ::new (static_cast<void*>(p_.blk->slots[p_.off].raw)) Slot(std::forward<S>(s));
     ++p_.off;
     ++p_.count;
     // Publishes the slot just written and, if turn_over inserted a block,
@@ -217,23 +290,25 @@ public:
 #ifdef WTC_CHECK
     claim(owner_c_, "consumer");
 #endif
-    if (c_.count == c_.cached_push) {
-      c_.cached_push = push_pub_.load(std::memory_order_acquire);
-      if (c_.count == c_.cached_push) return false;
-    }
-    if (c_.off == kSlots) {
-      // Element c_.count lives in the next block. Leave this one, then tell
-      // the producer it may reuse everything below c_.count. The store must
-      // follow the load of next: after it, the producer may write this
-      // block's next pointer again.
-      c_.blk = c_.blk->next.load(std::memory_order_acquire);
-      c_.off = 0;
-      pop_pub_.store(c_.count, std::memory_order_release);
-    }
-    out = std::move(c_.blk->slots[c_.off]);
-    ++c_.off;
-    ++c_.count;
+    release_lent();
+    Slot* e = advance();
+    if (!e) return false;
+    out = std::move(*e);
+    e->~Slot();
     return true;
+  }
+
+  // The next element in place, or null if the queue was empty. It stays
+  // valid until this consumer's next pop of either kind, or the destructor.
+  // The previously lent element is destroyed first, so it must not be
+  // referenced any more when this is called.
+  Slot* try_pop_borrow() {
+#ifdef WTC_CHECK
+    claim(owner_c_, "consumer");
+#endif
+    release_lent();
+    c_.lent = advance();
+    return c_.lent;
   }
 
   // Not synchronised; a hint for the owning threads only.

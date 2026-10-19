@@ -3,7 +3,9 @@
 // burst length so block turnovers land at every phase relative to the
 // consumer. Run it under ThreadSanitizer as well: with a correct ring TSan
 // is silent, and with a second producer (WTC_STRESS_TWO_PRODUCERS) it must
-// report a race, which is the test that the test can fail.
+// report a race, which is the test that the test can fail. With
+// WTC_STRESS_BORROW the elements are held inline and the consumer borrows
+// each one in place instead of moving it out.
 
 #include "spsc_ring.hpp"
 
@@ -21,7 +23,11 @@ struct payload {
   std::uint64_t pad[7];
 };
 
+#ifdef WTC_STRESS_BORROW
+using ring = wtc::rt::spsc_ring<payload, 64>;
+#else
 using ring = wtc::rt::spsc_ring<std::shared_ptr<payload>, 64>;
+#endif
 
 std::uint64_t parse_count(int argc, char** argv, std::uint64_t dflt) {
   return argc > 1 ? std::strtoull(argv[1], nullptr, 10) : dflt;
@@ -37,9 +43,15 @@ int main(int argc, char** argv) {
   auto producer = [&](std::uint64_t first, std::uint64_t step) {
     unsigned burst = 1;
     for (std::uint64_t i = first; i < n; i += step) {
+#ifdef WTC_STRESS_BORROW
+      payload p{};
+      p.seq = i;
+      q.push(p);
+#else
       auto p = std::make_shared<payload>();
       p->seq = i;
       q.push(std::move(p));
+#endif
       if (--burst == 0) {
         burst = 1 + static_cast<unsigned>(i % 97);
         std::this_thread::yield();
@@ -61,8 +73,13 @@ int main(int argc, char** argv) {
   // is not mistaken for a stall.
   auto last_progress = std::chrono::steady_clock::now();
   while (expect < n) {
+#ifdef WTC_STRESS_BORROW
+    payload* p = q.try_pop_borrow();
+    if (!p) {
+#else
     std::shared_ptr<payload> p;
     if (!q.try_pop(p)) {
+#endif
       if (++spins % 4096 == 0) {
         std::this_thread::yield();
         if (std::chrono::steady_clock::now() - last_progress >
@@ -95,8 +112,12 @@ int main(int argc, char** argv) {
   const auto dt = std::chrono::steady_clock::now() - t0;
   const double s = std::chrono::duration<double>(dt).count();
 
+#ifdef WTC_STRESS_BORROW
+  if (!failed && q.try_pop_borrow()) {
+#else
   std::shared_ptr<payload> leftover;
   if (!failed && q.try_pop(leftover)) {
+#endif
     std::fprintf(stderr, "queue not empty after %llu pops\n",
                  static_cast<unsigned long long>(n));
     failed = true;
