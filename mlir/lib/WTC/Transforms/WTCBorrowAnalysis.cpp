@@ -292,6 +292,7 @@ std::optional<Refusal> BorrowChecker::checkPointer(Value p, unsigned depth) {
         // A push copies the value it is given (decisions/0003), so the
         // element pushed on is read, not kept.
         if (auto push = dyn_cast<QueuePushOp>(user); push && push.getValue() == p) continue;
+        if (auto push = dyn_cast<QueuePushDeferredOp>(user); push && push.getValue() == p) continue;
         if (isa<cir::ReturnOp>(user))
             return Refusal{user, "a pointer into the element is returned"};
         return Refusal{user, "a pointer into the element is used by " +

@@ -35,6 +35,9 @@ struct CirToWTCConversionTarget : public ConversionTarget {
             case SemanticOpKind::MutexUnlock:
             case SemanticOpKind::QueuePush:
             case SemanticOpKind::QueueTryPop:
+            case SemanticOpKind::QueueBatchBegin:
+            case SemanticOpKind::QueuePushDeferred:
+            case SemanticOpKind::QueueBatchEnd:
                 return false;
             default:
                 return true;
@@ -86,7 +89,10 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
     LogicalResult matchAndRewrite(cir::CallOp op, OpAdaptor adaptor,
                                   ConversionPatternRewriter &rewriter) const override {
         const SemanticOpKind kind = getSemanticKind(lookupCallee(op));
-        if (kind != SemanticOpKind::QueuePush && kind != SemanticOpKind::QueueTryPop)
+        const bool batchOp = kind == SemanticOpKind::QueueBatchBegin ||
+                             kind == SemanticOpKind::QueuePushDeferred ||
+                             kind == SemanticOpKind::QueueBatchEnd;
+        if (kind != SemanticOpKind::QueuePush && kind != SemanticOpKind::QueueTryPop && !batchOp)
             return failure();
 
         const unsigned k = firstRealOperand(op);
@@ -102,6 +108,29 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
         auto sourceType = TypeAttr::get(op.getOperand(k).getType());
         auto argAttrs = op.getArgAttrsAttr();
         auto fallback = fallbackOf(op, getContext());
+
+        if (batchOp) {
+            const unsigned want = kind == SemanticOpKind::QueuePushDeferred ? 3 : 2;
+            if (op.getNumOperands() != k + want)
+                return op.emitError("wtc: a batch operation takes the queue, the batch")
+                       << (want == 3 ? " and one value" : "") << "; this call has "
+                       << op.getNumOperands() << " operand(s)";
+            Value batch = adaptor.getOperands()[k + 1];
+            if (kind == SemanticOpKind::QueueBatchBegin)
+                rewriter.replaceOpWithNewOp<QueueBatchBeginOp>(op, queue, batch, fallback, sourceType,
+                                                               argAttrs, TopologyAttr(), IntegerAttr(),
+                                                               ImplAttr());
+            else if (kind == SemanticOpKind::QueueBatchEnd)
+                rewriter.replaceOpWithNewOp<QueueBatchEndOp>(op, queue, batch, fallback, sourceType,
+                                                             argAttrs, TopologyAttr(), IntegerAttr(),
+                                                             ImplAttr());
+            else
+                rewriter.replaceOpWithNewOp<QueuePushDeferredOp>(op, queue, batch,
+                                                                 adaptor.getOperands()[k + 2], fallback,
+                                                                 sourceType, argAttrs, TopologyAttr(),
+                                                                 IntegerAttr(), ImplAttr());
+            return success();
+        }
 
         if (kind == SemanticOpKind::QueuePush) {
             if (op.getNumOperands() != k + 2)

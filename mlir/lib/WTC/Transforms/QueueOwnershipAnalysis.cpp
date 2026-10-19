@@ -97,7 +97,18 @@ private:
     bool globalPoison = false;   // an access with no type to poison
     unsigned remarks = 0;
 
-    static bool isQueueOp(Operation *op) { return isa<QueuePushOp, QueuePopOp>(op); }
+    // Every operation on a queue. Only a pop consumes; push and the three
+    // operations of a batched run are the producer's side.
+    static bool isQueueOp(Operation *op) {
+        return isa<QueuePushOp, QueuePopOp, QueueBatchBeginOp, QueuePushDeferredOp, QueueBatchEndOp>(op);
+    }
+    static Value queueOf(Operation *op) {
+        if (auto o = dyn_cast<QueuePushOp>(op)) return o.getQueue();
+        if (auto o = dyn_cast<QueuePopOp>(op)) return o.getQueue();
+        if (auto o = dyn_cast<QueueBatchBeginOp>(op)) return o.getQueue();
+        if (auto o = dyn_cast<QueuePushDeferredOp>(op)) return o.getQueue();
+        return cast<QueueBatchEndOp>(op).getQueue();
+    }
 
     static Type queueObjectType(Operation *root) {
         if (auto g = dyn_cast<cir::GlobalOp>(root)) return g.getSymType();
@@ -106,7 +117,7 @@ private:
     }
 
     static Type queueObjectTypeOfOp(Operation *op) {
-        Value q = isa<QueuePushOp>(op) ? cast<QueuePushOp>(op).getQueue() : cast<QueuePopOp>(op).getQueue();
+        Value q = queueOf(op);
         if (auto qt = dyn_cast<QueueType>(q.getType())) return qt.getElementType();
         return Type();
     }
@@ -277,20 +288,17 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
             if (first) { t = rt; first = false; }
             else if (rt != t) { t = Topology::unknown; }
         }
-        if (auto push = dyn_cast<QueuePushOp>(op)) push.setTopologyAttr(TopologyAttr::get(ctx, t));
-        else cast<QueuePopOp>(op).setTopologyAttr(TopologyAttr::get(ctx, t));
+        op->setAttr("topology", TopologyAttr::get(ctx, t));
         // An operation that may act on several queues names none of them:
         // a later pass reading queue_id would otherwise treat the others'
         // operations as unrelated to this one.
         if (rs.size() != 1) continue;
-        auto id = IntegerAttr::get(IntegerType::get(ctx, 64), idOf(rs.front()));
-        if (auto push = dyn_cast<QueuePushOp>(op)) push.setQueueIdAttr(id);
-        else cast<QueuePopOp>(op).setQueueIdAttr(id);
+        op->setAttr("queue_id", IntegerAttr::get(IntegerType::get(ctx, 64), idOf(rs.front())));
     }
     // Poisoned operations that resolved to nothing: unknown, explicitly.
     module.walk([&](Operation *op) {
-        if (auto push = dyn_cast<QueuePushOp>(op)) { if (!push.getTopologyAttr()) push.setTopologyAttr(TopologyAttr::get(ctx, Topology::unknown)); }
-        else if (auto pop = dyn_cast<QueuePopOp>(op)) { if (!pop.getTopologyAttr()) pop.setTopologyAttr(TopologyAttr::get(ctx, Topology::unknown)); }
+        if (isQueueOp(op) && !op->getAttr("topology"))
+            op->setAttr("topology", TopologyAttr::get(ctx, Topology::unknown));
     });
 }
 
@@ -312,8 +320,7 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
         [&](Instance &inst) {
             inst.func.walk([&](Operation *op) {
                 if (!isQueueOp(op)) return;
-                Value q = isa<QueuePushOp>(op) ? cast<QueuePushOp>(op).getQueue()
-                                               : cast<QueuePopOp>(op).getQueue();
+                Value q = queueOf(op);
                 Operation *root = walk.resolveRoot(q, &inst);
                 // The walk now resolves a heap pointer to the call that
                 // allocated it. This pass has no notion of an allocation
@@ -324,7 +331,7 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
                 if (root && isa<cir::CallOp>(root)) root = nullptr;
                 if (!root) { poison(op, "the queue object could not be identified"); return; }
                 RootInfo &info = roots[root];
-                SideInfo &side = isa<QueuePushOp>(op) ? info.producers : info.consumers;
+                SideInfo &side = isa<QueuePopOp>(op) ? info.consumers : info.producers;
                 side.threads.insert(inst.thread);
                 side.accesses.push_back(accessOf(op, inst));
                 if (inst.threadMult == Mult::Many) side.anyMany = true;

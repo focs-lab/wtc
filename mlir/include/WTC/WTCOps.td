@@ -106,4 +106,35 @@ def QueuePopOp : WTC_ObjectOp<"queue_pop"> {
     let hasVerifier = 1;
 }
 
+// A producer's run of deferred pushes (shim/queue.hpp): batch_begin, a
+// push_deferred per element, batch_end. Each element is appended as by
+// queue_push, under the same contract, but becomes visible to consumers
+// only when the run is published: at batch_end, or every WTC_BATCH_K
+// elements. `batch` is the producer's own storage for the run. All three
+// are the producer's side of the queue, for every analysis that counts
+// producers.
+class WTC_BatchOp<string mnemonic, dag extra> : WTC_ObjectOp<mnemonic> {
+    let arguments = !con((ins WTC_QueueType:$queue, AnyType:$batch), extra,
+        (ins OptionalAttr<FlatSymbolRefAttr>:$fallback_impl,
+        OptionalAttr<TypeAttr>:$source_queue_type,
+        OptionalAttr<ArrayAttr>:$source_arg_attrs,
+        OptionalAttr<WTC_TopologyAttr>:$topology,
+        OptionalAttr<I64Attr>:$queue_id,
+        OptionalAttr<WTC_ImplAttr>:$impl));
+    let results = (outs);
+    let hasVerifier = 1;
+}
+
+def QueueBatchBeginOp : WTC_BatchOp<"queue_batch_begin", (ins)> {
+    let summary = "Starts a producer's run of deferred pushes";
+}
+
+def QueuePushDeferredOp : WTC_BatchOp<"queue_push_deferred", (ins AnyType:$value)> {
+    let summary = "Appends a copy of `value` to the run, visible when the run is published";
+}
+
+def QueueBatchEndOp : WTC_BatchOp<"queue_batch_end", (ins)> {
+    let summary = "Publishes what is left of the run and ends it";
+}
+
 #endif // WTC_OPS_TD

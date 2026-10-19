@@ -95,6 +95,28 @@ LogicalResult QueuePopOp::verify() {
     return verifySourceQueueType(*this, getQueue().getType(), getSourceQueueType());
 }
 
+LogicalResult QueueBatchBeginOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+    return verifyFallbackImpl(*this, getFallbackImplAttr(), "wtc_queue_batch_begin", "batch_begin", 2,
+                              symbolTable);
+}
+LogicalResult QueuePushDeferredOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+    return verifyFallbackImpl(*this, getFallbackImplAttr(), "wtc_queue_push_deferred", "push_deferred",
+                              3, symbolTable);
+}
+LogicalResult QueueBatchEndOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+    return verifyFallbackImpl(*this, getFallbackImplAttr(), "wtc_queue_batch_end", "batch_end", 2,
+                              symbolTable);
+}
+LogicalResult QueueBatchBeginOp::verify() {
+    return verifySourceQueueType(*this, getQueue().getType(), getSourceQueueType());
+}
+LogicalResult QueuePushDeferredOp::verify() {
+    return verifySourceQueueType(*this, getQueue().getType(), getSourceQueueType());
+}
+LogicalResult QueueBatchEndOp::verify() {
+    return verifySourceQueueType(*this, getQueue().getType(), getSourceQueueType());
+}
+
 // ---------------------------------------------------------------------------
 // Progress (decisions/0004). One table: what each operation's algorithm can
 // wait for, and whether it may call the allocator, under the implementation
@@ -141,5 +163,35 @@ bool QueuePopOp::mayCallAllocator() { return implOf(getImpl()) == ::mlir::wtc::I
 std::string QueuePopOp::getBlockingReason() {
     if (implOf(getImpl()) == ::mlir::wtc::Impl::generic)
         return "takes the queue's mutexes and frees the node it unlinks";
+    return "";
+}
+
+Progress QueueBatchBeginOp::getProgress() { return Progress::wait_free; }
+bool QueueBatchBeginOp::mayCallAllocator() { return false; }
+std::string QueueBatchBeginOp::getBlockingReason() { return ""; }
+
+Progress QueuePushDeferredOp::getProgress() {
+    return implOf(getImpl()) == ::mlir::wtc::Impl::generic ? Progress::blocking : Progress::wait_free;
+}
+bool QueuePushDeferredOp::mayCallAllocator() { return true; }
+std::string QueuePushDeferredOp::getBlockingReason() {
+    switch (implOf(getImpl())) {
+    case ::mlir::wtc::Impl::spsc:
+        return "allocates the element it pushes (make_shared), and a new block when the "
+               "current one is full";
+    case ::mlir::wtc::Impl::spsc_inline:
+        return "allocates a new block when the current one is full: the queue is unbounded";
+    default:
+        return "allocates a node and the element, and takes the queue's mutex when it publishes";
+    }
+}
+
+Progress QueueBatchEndOp::getProgress() {
+    return implOf(getImpl()) == ::mlir::wtc::Impl::generic ? Progress::blocking : Progress::wait_free;
+}
+bool QueueBatchEndOp::mayCallAllocator() { return false; }
+std::string QueueBatchEndOp::getBlockingReason() {
+    if (implOf(getImpl()) == ::mlir::wtc::Impl::generic)
+        return "takes the queue's mutex to splice the run in";
     return "";
 }
