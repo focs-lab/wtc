@@ -113,8 +113,7 @@ std::optional<Refusal> LegalityChecker::callee(cir::FuncOp f) {
     memo[f] = std::nullopt;
     std::optional<Refusal> found;
     f.walk([&](Operation *o) {
-        if (isa<QueuePushOp, QueuePopOp, QueueBatchBeginOp, QueuePushDeferredOp, QueueBatchEndOp, LockOp,
-                UnlockOp>(o))
+        if (isa<WTCDialect>(o->getDialect()))
             found = Refusal{o, "it acts on a queue or a mutex"};
         else
             found = op(o);

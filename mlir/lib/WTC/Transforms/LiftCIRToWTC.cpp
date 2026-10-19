@@ -33,6 +33,9 @@ struct CirToWTCConversionTarget : public ConversionTarget {
             switch (getSemanticKind(lookupCallee(op))) {
             case SemanticOpKind::MutexLock:
             case SemanticOpKind::MutexUnlock:
+            case SemanticOpKind::MutexBatchBegin:
+            case SemanticOpKind::MutexBatchStep:
+            case SemanticOpKind::MutexBatchEnd:
             case SemanticOpKind::QueuePush:
             case SemanticOpKind::QueueTryPop:
             case SemanticOpKind::QueueBatchBegin:
@@ -62,12 +65,17 @@ struct LiftMutexCallPattern : public OpConversionPattern<cir::CallOp> {
     LogicalResult matchAndRewrite(cir::CallOp op, OpAdaptor adaptor,
                                   ConversionPatternRewriter &rewriter) const override {
         const SemanticOpKind kind = getSemanticKind(lookupCallee(op));
-        if (kind != SemanticOpKind::MutexLock && kind != SemanticOpKind::MutexUnlock)
+        const bool batchOp = kind == SemanticOpKind::MutexBatchBegin ||
+                             kind == SemanticOpKind::MutexBatchStep || kind == SemanticOpKind::MutexBatchEnd;
+        if (kind != SemanticOpKind::MutexLock && kind != SemanticOpKind::MutexUnlock && !batchOp)
             return failure();
 
         const unsigned k = firstRealOperand(op);
-        if (op.getNumOperands() != k + 1)
-            return op.emitError("wtc: a mutex operation takes exactly the mutex; this call has ")
+        const unsigned want = batchOp ? 2 : 1;
+        if (op.getNumOperands() != k + want)
+            return op.emitError(batchOp ? "wtc: a mutex batch operation takes the mutex and the batch; "
+                                          "this call has "
+                                        : "wtc: a mutex operation takes exactly the mutex; this call has ")
                    << op.getNumOperands() << " operand(s)";
 
         Value mutex = castTo(rewriter, op.getLoc(), MutexType::get(rewriter.getContext()),
@@ -75,6 +83,17 @@ struct LiftMutexCallPattern : public OpConversionPattern<cir::CallOp> {
         auto sourceType = TypeAttr::get(op.getOperand(k).getType());
         auto argAttrs = op.getArgAttrsAttr();
 
+        if (batchOp) {
+            Value batch = adaptor.getOperands()[k + 1];
+            auto fallback = fallbackOf(op, getContext());
+            if (kind == SemanticOpKind::MutexBatchBegin)
+                rewriter.replaceOpWithNewOp<LockBatchBeginOp>(op, mutex, batch, fallback, sourceType, argAttrs);
+            else if (kind == SemanticOpKind::MutexBatchStep)
+                rewriter.replaceOpWithNewOp<LockBatchStepOp>(op, mutex, batch, fallback, sourceType, argAttrs);
+            else
+                rewriter.replaceOpWithNewOp<LockBatchEndOp>(op, mutex, batch, fallback, sourceType, argAttrs);
+            return success();
+        }
         if (kind == SemanticOpKind::MutexLock)
             rewriter.replaceOpWithNewOp<LockOp>(op, mutex, fallbackOf(op, getContext()), sourceType, argAttrs);
         else
