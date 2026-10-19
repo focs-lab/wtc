@@ -4,6 +4,7 @@ add_mlir_library(MLIRWTCTransforms
   QueueOwnershipAnalysis.cpp
   ThreadInstances.cpp
   WTCAlignByOwner.cpp
+  WTCBatchPushes.cpp
   WTCBorrowAnalysis.cpp
   WTCCheckProgress.cpp
   WTCFalseSharingDiagnose.cpp
