@@ -108,7 +108,7 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
                 return op.emitError("wtc: push takes the queue and one value; this call has ")
                        << op.getNumOperands() << " operand(s)";
             rewriter.replaceOpWithNewOp<QueuePushOp>(op, queue, adaptor.getOperands()[k + 1],
-                                                     fallback, sourceType, argAttrs, TopologyAttr());
+                                                     fallback, sourceType, argAttrs, TopologyAttr(), IntegerAttr());
             return success();
         }
 
@@ -119,14 +119,14 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
                 return op.emitError("wtc: try_pop with a return slot must have two operands and no result");
             rewriter.replaceOpWithNewOp<QueuePopOp>(op, /*resultTypes=*/TypeRange{},
                                                     queue, adaptor.getOperands()[0],
-                                                    fallback, sourceType, argAttrs, TopologyAttr());
+                                                    fallback, sourceType, argAttrs, TopologyAttr(), IntegerAttr());
             return success();
         }
         if (op.getNumOperands() != 1 || op.getNumResults() != 1)
             return op.emitError("wtc: try_pop without a return slot must have one operand and one result");
         rewriter.replaceOpWithNewOp<QueuePopOp>(op, TypeRange{op.getResult().getType()},
                                                 queue, /*out=*/Value(),
-                                                fallback, sourceType, argAttrs, TopologyAttr());
+                                                fallback, sourceType, argAttrs, TopologyAttr(), IntegerAttr());
         return success();
     }
 };

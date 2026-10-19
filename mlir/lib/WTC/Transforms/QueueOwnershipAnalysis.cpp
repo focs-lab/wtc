@@ -112,6 +112,12 @@ private:
         }
     }
 
+    // A root's number is its position in discovery order, which follows
+    // the walk and is therefore deterministic.
+    int64_t idOf(Operation *root) const {
+        return static_cast<int64_t>(roots.find(root) - roots.begin());
+    }
+
     void writeVerdicts(bool capExceeded);
 };
 
@@ -135,6 +141,7 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
             t = Topology::mpmc;
         verdictOf[root] = t;
         root->setAttr(kTopologyAttrName, TopologyAttr::get(ctx, t));
+        root->setAttr(kQueueIdAttrName, IntegerAttr::get(IntegerType::get(ctx, 64), idOf(root)));
 
         std::string label;
         if (auto g = dyn_cast<cir::GlobalOp>(root)) label = ("@" + g.getSymName()).str();
@@ -157,6 +164,13 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
         }
         if (auto push = dyn_cast<QueuePushOp>(op)) push.setTopologyAttr(TopologyAttr::get(ctx, t));
         else cast<QueuePopOp>(op).setTopologyAttr(TopologyAttr::get(ctx, t));
+        // An operation that may act on several queues names none of them:
+        // a later pass reading queue_id would otherwise treat the others'
+        // operations as unrelated to this one.
+        if (rs.size() != 1) continue;
+        auto id = IntegerAttr::get(IntegerType::get(ctx, 64), idOf(rs.front()));
+        if (auto push = dyn_cast<QueuePushOp>(op)) push.setQueueIdAttr(id);
+        else cast<QueuePopOp>(op).setQueueIdAttr(id);
     }
     // Poisoned operations that resolved to nothing: unknown, explicitly.
     module.walk([&](Operation *op) {
