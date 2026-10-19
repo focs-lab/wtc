@@ -58,6 +58,42 @@ jobs:
           CPP
           clang++ -std=c++17 -Ishim -fsyntax-only -Wall -Werror /tmp/all.cpp
 
+  # The runtime is what a substitution puts into a program, and a defect in
+  # it races rather than slows down, so it is exercised three ways: plain,
+  # under ThreadSanitizer, and with its contract checks compiled in, each
+  # with the test that proves the checker fires. Plain C++, no toolchain of
+  # ours.
+  runtime:
+    name: Runtime under ThreadSanitizer and its contract checks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install compilers
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build
+      - name: Let ThreadSanitizer map its shadow
+        # TSan of LLVM 18 fails to start on kernels that randomise more
+        # address bits than it expects; 6.x runners default to 32.
+        run: sudo sysctl vm.mmap_rnd_bits=28
+      - name: Compile every runtime header on its own
+        run: |
+          set -e
+          for h in runtime/*.hpp; do
+            echo "== $h"
+            printf '#include "%s"\nint main(){}\n' "$h" > /tmp/tu.cpp
+            clang++ -std=c++17 -I. -fsyntax-only -Wall -Wextra -Werror /tmp/tu.cpp
+          done
+      - name: Plain, sanitized, checked
+        run: |
+          set -e
+          for cfg in plain:"" thread:"-DWTC_RT_SANITIZE=thread" check:"-DWTC_CHECK=ON"; do
+            name=${cfg%%:*}; flags=${cfg#*:}
+            echo "== $name"
+            # shellcheck disable=SC2086
+            cmake -S runtime/test -B "build-rt-$name" -G Ninja -DCMAKE_CXX_COMPILER=clang++ $flags
+            cmake --build "build-rt-$name"
+            ctest --test-dir "build-rt-$name" --output-on-failure
+          done
+
   # Which toolchain image this commit needs, derived from the submodule pin
   # rather than configured separately. The two cannot drift apart.
   toolchain:
