@@ -6,6 +6,7 @@ namespace mlir::wtc {
     void registerLowerWTCToCIRPass();
     void registerQueueOwnershipAnalysisPass();
     void registerWTCSpecializePass();
+    void registerWTCBorrowAnalysisPass();
     void registerWTCFalseSharingDiagnosePass();
     void registerWTCAlignByOwnerPass();
 }
