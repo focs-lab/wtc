@@ -40,7 +40,10 @@ inline std::uint64_t mix(std::uint64_t x) {
 
 // Two stage queues. Globals, and constructed once, which is the case the
 // specialisation pass can rewrite.
-#ifdef WTC_HAND
+#if defined(WTC_HAND_INLINE)
+wtc::queue<E64> stage1(wtc::topology::spsc_inline);
+wtc::queue<E64> stage2(wtc::topology::spsc_inline);
+#elif defined(WTC_HAND)
 wtc::queue<E64> stage1(wtc::topology::spsc);
 wtc::queue<E64> stage2(wtc::topology::spsc);
 #else
@@ -142,8 +145,15 @@ int main(int argc, char** argv) {
     // shim's member functions, which are the same symbols in every build, so
     // comparing the pipeline's own functions proves nothing about the
     // substitution; this does.
-    const char *tag1 = stage1.tag() == wtc::topology::spsc ? "spsc" : "generic";
-    const char *tag2 = stage2.tag() == wtc::topology::spsc ? "spsc" : "generic";
+    auto name = [](wtc::topology t) {
+        switch (t) {
+        case wtc::topology::spsc: return "spsc";
+        case wtc::topology::spsc_inline: return "spsc_inline";
+        default: return "generic";
+        }
+    };
+    const char *tag1 = name(stage1.tag());
+    const char *tag2 = name(stage2.tag());
     r.set("tags", std::string(tag1) + "," + tag2);
     r.write(json);
     std::printf("checksum %llu tags %s,%s\n", static_cast<unsigned long long>(g_checksum), tag1, tag2);

@@ -11,9 +11,19 @@ namespace wtc {
 // The underlying type is int on purpose: ClangIR materialises a defaulted
 // argument at the call site as `cir.const #cir.int<0> : !s32i`, and the
 // specialisation pass matches exactly that.
+//
+// spsc_inline is spsc with the elements held inline in the ring, so that a
+// push allocates nothing. It is only correct when every consumer of the
+// object borrows what it pops: it keeps no copy of the returned shared_ptr
+// and no pointer into the element past its next try_pop, because the
+// element is destroyed in place then. The compiler proves that before it
+// writes this tag. An element type that is not trivially destructible runs
+// as spsc instead, since its destructor would otherwise run later than the
+// program expects.
 enum class topology : int {
     generic = 0,
     spsc = 1,
+    spsc_inline = 2,
 };
 
 }
