@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+import sys
 import tempfile
 
 import lit.formats
@@ -52,6 +53,26 @@ llvm_config.add_tool_substitutions(tools, tool_dirs)
 # The pinned ClangIR clang, from the same tools directory as cir-translate.
 clangxx = os.path.join(config.llvm_tools_dir, "clang++")
 config.substitutions.append(("%clangxx", clangxx))
+# The return convention depends on the target: on x86-64 try_pop returns its
+# shared_ptr through a hidden first pointer, so the queue is the second
+# operand. A test that reads that shape emits CIR for x86-64 explicitly, so
+# that it checks it on any host whose headers allow it: natively on x86-64
+# Linux, by target on macOS. Everything else emits for the host.
+_x86_64 = "x86_64-apple-macosx" if sys.platform == "darwin" else "x86_64-unknown-linux-gnu"
+def _x86_64_cir_works():
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, "t.cpp")
+            with open(src, "w") as f:
+                f.write("#include <memory>\nstd::shared_ptr<int> f() { return {}; }\n")
+            return subprocess.run([clangxx, "--target=" + _x86_64, "-std=c++17", "-fclangir",
+                                   "-emit-cir", src, "-o", os.path.join(d, "t.cir")],
+                                  capture_output=True).returncode == 0
+    except OSError:
+        return False
+if _x86_64_cir_works():
+    config.available_features.add("x86_64-cir")
+    config.substitutions.append(("%cir_x86_64_cxx", clangxx + " --target=" + _x86_64))
 # %clang for C sources: the C++ driver rejects -std=gnu11 outright.
 config.substitutions.append(("%clang", os.path.join(config.llvm_tools_dir, "clang")))
 # wtc-cc takes clang++ and cir-translate from the toolchain (the parent of
