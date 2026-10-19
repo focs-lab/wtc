@@ -274,6 +274,18 @@ public:
   // straight in by forwarding.
   template <class S>
   void push(S&& s) {
+    push_deferred(std::forward<S>(s));
+    publish();
+  }
+
+  // push without publishing: the element is in its slot, but the consumer
+  // cannot see it, or anything pushed after it, until publish. A run of
+  // these followed by one publish costs one release store for the run
+  // instead of one per element; the elements become visible together and
+  // in order, which is what pushing them one by one with the consumer
+  // looking away would have shown.
+  template <class S>
+  void push_deferred(S&& s) {
 #ifdef WTC_CHECK
     claim(owner_p_, "producer");
 #endif
@@ -281,10 +293,12 @@ public:
     ::new (static_cast<void*>(p_.blk->slots[p_.off].raw)) Slot(std::forward<S>(s));
     ++p_.off;
     ++p_.count;
-    // Publishes the slot just written and, if turn_over inserted a block,
-    // the next pointer that leads to it.
-    push_pub_.store(p_.count, std::memory_order_release);
   }
+
+  // Publishes every element pushed so far and, if turn_over inserted a
+  // block on the way, the next pointer that leads to it: the consumer reads
+  // that pointer only after it has acquired a count beyond the block.
+  void publish() { push_pub_.store(p_.count, std::memory_order_release); }
 
   bool try_pop(Slot& out) {
 #ifdef WTC_CHECK

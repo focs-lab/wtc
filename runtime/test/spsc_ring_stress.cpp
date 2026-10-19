@@ -5,7 +5,8 @@
 // is silent, and with a second producer (WTC_STRESS_TWO_PRODUCERS) it must
 // report a race, which is the test that the test can fail. With
 // WTC_STRESS_BORROW the elements are held inline and the consumer borrows
-// each one in place instead of moving it out.
+// each one in place instead of moving it out. With WTC_STRESS_DEFERRED the
+// producer publishes once per run of 64 pushes.
 
 #include "spsc_ring.hpp"
 
@@ -43,7 +44,12 @@ int main(int argc, char** argv) {
   auto producer = [&](std::uint64_t first, std::uint64_t step) {
     unsigned burst = 1;
     for (std::uint64_t i = first; i < n; i += step) {
-#ifdef WTC_STRESS_BORROW
+#if defined(WTC_STRESS_DEFERRED)
+      auto p = std::make_shared<payload>();
+      p->seq = i;
+      q.push_deferred(std::move(p));
+      if (i % 64 == 63 || i + step >= n) q.publish();
+#elif defined(WTC_STRESS_BORROW)
       payload p{};
       p.seq = i;
       q.push(p);

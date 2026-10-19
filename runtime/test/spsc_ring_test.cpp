@@ -208,9 +208,23 @@ void borrowed_element_survives_the_producer_moving_on() {
   }
 }
 
+void deferred_pushes_appear_at_publish() {
+  wtc::rt::spsc_ring<std::uint64_t, 4> q;
+  for (std::uint64_t i = 0; i < 10; ++i) q.push_deferred(i);  // across blocks
+  std::uint64_t v = ~0ull;
+  EXPECT(!q.try_pop(v));  // nothing visible yet
+  q.publish();
+  for (std::uint64_t i = 0; i < 10; ++i) {
+    EXPECT(q.try_pop(v));
+    EXPECT(v == i);
+  }
+  EXPECT(!q.try_pop(v));
+}
+
 } // namespace
 
 int main() {
+  deferred_pushes_appear_at_publish();
   element_without_default_constructor();
   every_element_destroyed_once();
   borrowed_element_lives_until_the_next_pop();
