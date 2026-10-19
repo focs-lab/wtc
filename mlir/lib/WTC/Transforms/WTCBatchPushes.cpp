@@ -52,6 +52,29 @@ using namespace mlir::wtc;
 // the allocation fails mid-run, the elements still waiting to be published
 // are lost with the exception. A program that survives running out of
 // memory in a producer loop should not be marked WTC_BATCH.
+//
+// The same reasoning batches critical sections (--wtc-batch-locks, below):
+// a loop that takes and lets go of one mutex on every iteration pays for
+// both each time, and in a function marked WTC_BATCH the compiler holds the
+// mutex across the loop instead, letting it go every WTC_LOCK_BATCH_K
+// sections and at the end (shim/mutex.hpp). Every interleaving of the
+// result is one the original allows -- other threads only happen not to
+// take the mutex in between -- so no critical section computes anything
+// new. What can change is progress: code between the sections now runs
+// with the mutex held, and if it waited for a thread that needs the mutex
+// the two would wait for each other. The rules are therefore stricter:
+//
+//   - the loop holds exactly two wtc operations, a lock and an unlock of
+//     one mutex whose handle the loop does not change, in one block, the
+//     lock first, on every iteration;
+//   - nothing in the loop synchronises or throws, as above, and every
+//     function it calls without a body here is one that cannot wait for
+//     another thread: the allocator, or one that only touches the memory
+//     it is given;
+//   - nothing leaves the loop but its end or a break outside the critical
+//     section: no continue, return or goto, and no break between the lock
+//     and the unlock, which would leave with the mutex held in the
+//     original and let it go twice here.
 
 namespace {
 
@@ -74,8 +97,22 @@ bool synchronises(Operation *op) {
     return false;
 }
 
+// Functions without a body here that cannot wait for another thread: the
+// allocator, and those that only touch the memory they are given.
+bool cannotWait(cir::FuncOp f) {
+    static const llvm::StringSet<> names = {
+        "memcpy", "memmove", "memset", "memcmp", "strlen", "strcmp", "strncmp", "memchr",
+        "abs", "labs", "llabs", "sqrt", "sqrtf", "fabs", "fabsf", "free"};
+    if (isAllocator(f) || names.contains(f.getSymName())) return true;
+    const std::string name = llvm::demangle(f.getSymName().str());
+    return llvm::StringRef(name).starts_with("operator delete");
+}
+
 class LegalityChecker {
 public:
+    // Strict: every external call must also be one that cannot wait.
+    explicit LegalityChecker(bool strict = false) : strict(strict) {}
+
     // Why a function, called from a loop being batched, is unfit: it could
     // synchronise, throw, or act on a queue. Memoised; a cycle is optimistic,
     // since every operation on it is still checked by its own walk.
@@ -84,6 +121,7 @@ public:
     std::optional<Refusal> op(Operation *op);
 
 private:
+    bool strict;
     llvm::DenseMap<Operation *, std::optional<Refusal>> memo;
 };
 
@@ -102,6 +140,8 @@ std::optional<Refusal> LegalityChecker::call(cir::CallOp c) {
         if (synchronisingExternal(f.getSymName()))
             return Refusal{c, "it calls into the threading library (" + name + ")"};
         if (!c.getNothrow()) return Refusal{c, "it calls " + name + ", which may throw"};
+        if (strict && !cannotWait(f))
+            return Refusal{c, "it calls " + name + ", which may wait for another thread"};
         return std::nullopt;
     }
     if (auto r = callee(f)) return Refusal{c, "it calls " + llvm::demangle(f.getSymName().str()) + ", where " + r->why};
@@ -271,8 +311,174 @@ private:
     static constexpr const char *kBatchNote = "WTC_BATCH_K (64)";
 };
 
+// The value a mutex operation's handle was cast from.
+Value handleSource(Value v) {
+    if (auto cast = v.getDefiningOp<UnrealizedConversionCastOp>()) return cast.getInputs().front();
+    return v;
+}
+
+class WTCBatchLocksPass : public PassWrapper<WTCBatchLocksPass, OperationPass<ModuleOp>> {
+public:
+    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(WTCBatchLocksPass)
+
+    StringRef getArgument() const final { return "wtc-batch-locks"; }
+    StringRef getDescription() const final {
+        return "Hold a mutex across the critical sections of loops in functions marked WTC_BATCH where "
+               "nothing in the loop can wait for another thread (run after --lift-cir-to-wtc)";
+    }
+    void getDependentDialects(DialectRegistry &registry) const override {
+        registry.insert<mlir::wtc::WTCDialect>();
+        registry.insert<cir::CIRDialect>();
+    }
+
+    void runOnOperation() override {
+        ModuleOp module = getOperation();
+        LegalityChecker legal(/*strict=*/true);
+        llvm::SmallVector<std::tuple<cir::LoopOpInterface, LockOp, UnlockOp>, 4> todo;
+
+        module.walk([&](cir::FuncOp f) {
+            if (!hasAnnotation(f, "wtc_batch") || f.getBody().empty()) return;
+            f.walk([&](cir::LoopOpInterface loop) {
+                llvm::SmallVector<Operation *, 2> wtcOps;
+                loop->walk([&](Operation *o) {
+                    if (isa<WTCDialect>(o->getDialect())) wtcOps.push_back(o);
+                });
+                // Loops that take no mutex are not this pass's; a loop whose
+                // only lock sits in an inner loop is left to that loop.
+                LockOp lock;
+                for (Operation *o : wtcOps)
+                    if (auto l = dyn_cast<LockOp>(o)) { lock = l; break; }
+                if (!lock || enclosingLoop(lock) != loop.getOperation()) return;
+                UnlockOp unlock;
+                if (auto r = check(loop, wtcOps, legal, unlock)) {
+                    InFlightDiagnostic d = loop->emitRemark()
+                                           << "wtc: critical sections in this loop not batched: " << r->why;
+                    if (r->at != loop.getOperation()) d.attachNote(r->at->getLoc()) << "here";
+                    return;
+                }
+                todo.push_back({loop, lock, unlock});
+            });
+        });
+        for (auto &[loop, lock, unlock] : todo)
+            if (failed(rewrite(module, loop, lock, unlock))) return signalPassFailure();
+    }
+
+private:
+    static Operation *enclosingLoop(Operation *op) {
+        for (Operation *p = op->getParentOp(); p; p = p->getParentOp())
+            if (isa<cir::LoopOpInterface>(p)) return p;
+        return nullptr;
+    }
+
+    // One mutex: the same handle, or the address of the same global.
+    static bool sameMutex(Value a, Value b) {
+        a = handleSource(a);
+        b = handleSource(b);
+        if (a == b) return true;
+        auto ga = a.getDefiningOp<cir::GetGlobalOp>(), gb = b.getDefiningOp<cir::GetGlobalOp>();
+        return ga && gb && ga.getName() == gb.getName();
+    }
+
+    static bool handleInvariant(cir::LoopOpInterface loop, Value v) {
+        v = handleSource(v);
+        if (!loop->isAncestor(v.getParentBlock()->getParentOp())) return true;
+        return static_cast<bool>(v.getDefiningOp<cir::GetGlobalOp>());
+    }
+
+    std::optional<Refusal> check(cir::LoopOpInterface loop, llvm::ArrayRef<Operation *> wtcOps,
+                                 LegalityChecker &legal, UnlockOp &unlockOut) {
+        LockOp lock;
+        UnlockOp unlock;
+        for (Operation *o : wtcOps) {
+            if (auto l = dyn_cast<LockOp>(o); l && !lock) { lock = l; continue; }
+            if (auto u = dyn_cast<UnlockOp>(o); u && !unlock) { unlock = u; continue; }
+            return Refusal{o, "the loop acts on queues or mutexes other than through one lock and one unlock"};
+        }
+        if (!unlock) return Refusal{lock, "the loop takes the mutex and does not let it go"};
+        if (!sameMutex(lock.getMutex(), unlock.getMutex()))
+            return Refusal{unlock, "the loop lets go of a different mutex than it takes"};
+        if (!handleInvariant(loop, lock.getMutex()))
+            return Refusal{lock, "the loop may change which mutex it takes"};
+        // On every iteration, lock first: one block, reached from the body
+        // only through scopes.
+        Block *block = lock->getBlock();
+        if (unlock->getBlock() != block || !lock->isBeforeInBlock(unlock))
+            return Refusal{unlock, "the unlock does not follow the lock in the same block"};
+        for (Operation *p = lock->getParentOp(); p != loop.getOperation(); p = p->getParentOp())
+            if (!isa<cir::ScopeOp, cir::CleanupScopeOp>(p))
+                return Refusal{p, "the critical section is not entered on every iteration"};
+        std::optional<Refusal> found;
+        loop->walk([&](Operation *o) {
+            if (isa<cir::ContinueOp>(o)) {
+                found = Refusal{o, "a continue skips the critical section on some iterations"};
+            } else if (isa<cir::ReturnOp, cir::GotoOp, cir::LabelOp>(o)) {
+                found = Refusal{o, "control can leave the loop other than at its end or a break"};
+            } else if (isa<cir::BreakOp>(o)) {
+                Operation *at = block->findAncestorOpInBlock(*o);
+                if (at && lock->isBeforeInBlock(at) && at->isBeforeInBlock(unlock))
+                    found = Refusal{o, "a break between the lock and the unlock leaves with the mutex held"};
+            } else if (!isa<WTCDialect>(o->getDialect())) {
+                found = legal.op(o);
+            }
+            return found ? WalkResult::interrupt() : WalkResult::advance();
+        });
+        unlockOut = unlock;
+        return found;
+    }
+
+    LogicalResult rewrite(ModuleOp module, cir::LoopOpInterface loop, LockOp lock, UnlockOp unlock) {
+        auto sourceType = lock.getSourceMutexTypeAttr();
+        if (!sourceType) return lock.emitError("wtc: a lock to batch carries no source type");
+        Type mutexPtr = sourceType.getValue();
+        cir::FuncOp begin = shimFunction(module, "wtc_mutex_batch_begin", mutexPtr);
+        cir::FuncOp step = shimFunction(module, "wtc_mutex_batch_step", mutexPtr);
+        cir::FuncOp end = shimFunction(module, "wtc_mutex_batch_end", mutexPtr);
+        if (!begin || !step || !end || begin.getNumArguments() != 2) {
+            loop->emitRemark() << "wtc: critical sections in this loop not batched: the shim's batch "
+                                  "functions for this mutex are not in the module";
+            return success();
+        }
+        MLIRContext *ctx = &getContext();
+        auto batchPtr = cast<cir::PointerType>(begin.getArgumentTypes()[1]);
+
+        auto fn = loop->getParentOfType<cir::FuncOp>();
+        OpBuilder top(&fn.getBody().front(), fn.getBody().front().begin());
+        auto slot = cir::AllocaOp::create(top, loop.getLoc(), batchPtr, "wtc.lock_batch",
+                                          top.getI64IntegerAttr(4));
+
+        // The handle outside the loop, as for a batched push.
+        OpBuilder before(loop.getOperation());
+        Value inner = lock.getMutex();
+        Value outer = inner;
+        if (auto cast = inner.getDefiningOp<UnrealizedConversionCastOp>(); cast && loop->isAncestor(cast)) {
+            Value src = cast.getInputs().front();
+            if (Operation *def = src.getDefiningOp(); def && loop->isAncestor(def)) {
+                auto gg = src.getDefiningOp<cir::GetGlobalOp>();
+                src = before.clone(*gg)->getResult(0);
+            }
+            outer = UnrealizedConversionCastOp::create(before, loop.getLoc(), inner.getType(), src).getResult(0);
+        }
+
+        auto ref = [&](cir::FuncOp f) { return FlatSymbolRefAttr::get(ctx, f.getSymName()); };
+        LockBatchBeginOp::create(before, loop.getLoc(), outer, slot.getResult(), ref(begin), sourceType,
+                                 ArrayAttr());
+        OpBuilder at(unlock);
+        LockBatchStepOp::create(at, unlock.getLoc(), unlock.getMutex(), slot.getResult(), ref(step),
+                                sourceType, ArrayAttr());
+        unlock.erase();
+        lock.erase();
+        OpBuilder after(loop->getBlock(), std::next(Block::iterator(loop.getOperation())));
+        LockBatchEndOp::create(after, loop.getLoc(), outer, slot.getResult(), ref(end), sourceType,
+                               ArrayAttr());
+        loop->emitRemark() << "wtc: critical sections in this loop batched: the mutex is let go every "
+                              "WTC_LOCK_BATCH_K (64) sections and at the end";
+        return success();
+    }
+};
+
 } // namespace
 
 namespace mlir::wtc {
 void registerWTCBatchPushesPass() { PassRegistration<WTCBatchPushesPass>(); }
+void registerWTCBatchLocksPass() { PassRegistration<WTCBatchLocksPass>(); }
 } // namespace mlir::wtc

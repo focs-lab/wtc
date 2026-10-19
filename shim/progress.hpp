@@ -14,7 +14,11 @@
 // loops (--wtc-batch-pushes): elements are then published every WTC_BATCH_K
 // pushes and when the loop ends, rather than one at a time, so a consumer
 // sees each one later. Only loops in which nothing could be waiting for an
-// unpublished element are touched.
+// unpublished element are touched. It also allows the compiler to hold a
+// mutex across the critical sections of a loop (--wtc-batch-locks),
+// letting it go every WTC_LOCK_BATCH_K sections and when the loop ends, so
+// another thread waits longer for it. Only loops in which nothing could
+// wait for another thread are touched.
 //
 // Without the WTC passes the attributes do nothing.
 #define WTC_LOCK_FREE [[clang::annotate("wtc_progress_lock_free")]]

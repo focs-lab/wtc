@@ -62,7 +62,7 @@ reused slot (`test/Integration/borrowed_retained.cpp`). On the pipeline
 benchmark both queues are borrowed, and the compiler's build is byte for
 byte the build whose source asks for inline storage itself.
 
-## 3. Batching the pushes of a loop
+## 3. Batching the pushes and the critical sections of a loop
 
 A loop that pushes on every iteration pays one synchronisation per element.
 In a function marked `WTC_BATCH` the compiler turns such a loop into one
@@ -80,6 +80,27 @@ remark: wtc: pushes in this loop batched: published every WTC_BATCH_K (64) pushe
 A loop that spins on an atomic, calls into the threading library, can
 throw, returns from the middle or pushes only sometimes is left alone,
 with the reason (`test/Transforms/Batch/refusals.cpp`).
+
+The same mark lets the compiler hold a mutex across the critical sections
+of a loop that takes and lets go of it on every iteration, letting it go
+every 64 sections and at the end:
+
+```sh
+tools/wtc-cc --toolchain build-llvm examples/lock_loop.cpp -o prog
+```
+
+```
+remark: wtc: critical sections in this loop batched: the mutex is let go every WTC_LOCK_BATCH_K (64) sections and at the end
+```
+
+Every interleaving of the result is one the original allows, so no
+critical section computes anything new; what changes is how long another
+thread waits, and that the code between the sections now runs with the
+mutex held. If that code waited for a thread that needs the mutex, the two
+would wait for each other, so the rules are stricter than for pushes:
+nothing in the loop may do input or output, sleep, or call anything the
+compiler cannot see into other than the allocator and functions that only
+touch the memory they are given (`test/Transforms/BatchLocks/refusals.cpp`).
 
 ## 4. Promises the build holds the program to
 
