@@ -77,7 +77,7 @@ if (( SPECIALIZE )); then
 else
   PASSES+=(--wtc-specialize=rewrite=false)
 fi
-PASSES+=(--lower-wtc-to-cir --reconcile-unrealized-casts)
+PASSES+=(--wtc-check-progress --lower-wtc-to-cir --reconcile-unrealized-casts)
 "$WTCOPT" "$WORK/$base.cir" "${PASSES[@]}" -o "$WORK/$base.wtc.cir"
 
 "$CIRTR" --cir-to-llvmir "$WORK/$base.wtc.cir" -o "$WORK/$base.raw.ll"
