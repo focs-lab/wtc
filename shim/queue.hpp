@@ -10,6 +10,10 @@
 #include "topology.hpp"
 #include "../runtime/spsc_ring.hpp"
 
+#ifndef WTC_BATCH_K
+#define WTC_BATCH_K 64
+#endif
+
 namespace wtc {
 
 // A queue with one API and two implementations, chosen per object at
@@ -29,6 +33,15 @@ namespace wtc {
 // which is the contract the compiler proves before choosing it. With
 // WTC_CHECK the pointer shares a per-queue guard instead, and a try_pop
 // that finds it still referenced aborts.
+//
+// A run of pushes from one producer can be batched: batch_begin, then
+// push_deferred for each element, then batch_end. The elements become
+// visible to consumers together, in order, at batch_end or every
+// WTC_BATCH_K elements, whichever comes first; until then they are the
+// producer's. One mutex acquisition (general-purpose) or one release store
+// (the rings) per run instead of one per element. The compiler rewrites a
+// loop of pushes into this shape where the program allows it (WTC_BATCH,
+// shim/progress.hpp); a program may also write it by hand.
 template <typename T>
 class queue {
 private:
@@ -124,6 +137,24 @@ private:
 #endif
 
 public:
+    // A producer's run of deferred pushes. Raw storage that batch_begin
+    // brings to life and batch_end ends, so that it can live in memory the
+    // compiler set aside without running a constructor, and costs nothing
+    // to declare by hand.
+    class batch {
+        friend class queue;
+        struct state {
+            // General-purpose: the element for the queue's current dummy
+            // node, and the chain that follows it, ending in a new dummy.
+            std::shared_ptr<T> first;
+            std::unique_ptr<typename generic_impl::node> rest;
+            typename generic_impl::node* rest_tail = nullptr;
+            unsigned pending = 0;
+        };
+        alignas(state) unsigned char raw[sizeof(state)];
+        state& get() { return *std::launder(reinterpret_cast<state*>(raw)); }
+    };
+
     [[clang::annotate("wtc_queue_construction")]]
     explicit queue(topology tag = topology::generic) : tag_(tag) {
         if constexpr (kInlineOk) inline_ok();
@@ -175,6 +206,34 @@ public:
 
     topology tag() const { return tag_; }
 
+private:
+    // Makes the run so far visible: one release store on a ring, one splice
+    // under the tail lock on the general-purpose list, whose result is the
+    // list the same pushes made one by one would have built.
+    void publish(typename batch::state& st) {
+        st.pending = 0;
+        switch (tag_) {
+        case topology::spsc_inline:
+            if constexpr (kInlineOk) impl_.inl.publish();
+            return;
+        case topology::spsc:
+            impl_.spsc.publish();
+            return;
+        default:
+            if (!st.first) return;
+            {
+                std::lock_guard<std::mutex> tail_lock(impl_.generic.tail_mutex);
+                impl_.generic.tail->data = std::move(st.first);
+                impl_.generic.tail->next = std::move(st.rest);
+                impl_.generic.tail = st.rest_tail;
+            }
+            st.rest_tail = nullptr;
+            return;
+        }
+    }
+
+public:
+
     [[clang::annotate("wtc_queue_try_pop")]]
     std::shared_ptr<T> try_pop() {
         if (tag_ == topology::spsc_inline) {
@@ -195,6 +254,46 @@ public:
             return out;
         }
         return impl_.generic.try_pop();
+    }
+
+    // gnu::used: the compiler calls these where the program allows it, so
+    // they must be in every module that uses the queue, called or not.
+    [[gnu::used, clang::annotate("wtc_queue_batch_begin")]]
+    void batch_begin(batch& b) { ::new (static_cast<void*>(b.raw)) typename batch::state(); }
+
+    [[gnu::used, clang::annotate("wtc_queue_push_deferred")]]
+    void push_deferred(batch& b, const T& new_value) {
+        typename batch::state& st = b.get();
+        switch (tag_) {
+        case topology::spsc_inline:
+            if constexpr (kInlineOk) impl_.inl.push_deferred(new_value);
+            break;
+        case topology::spsc:
+            impl_.spsc.push_deferred(std::make_shared<T>(new_value));
+            break;
+        default: {
+            // The nodes and the element are allocated here, outside the
+            // lock; only the splice at the end of the run takes it.
+            using node = typename generic_impl::node;
+            if (!st.first) {
+                st.first = std::make_shared<T>(new_value);
+                st.rest.reset(new node);
+                st.rest_tail = st.rest.get();
+            } else {
+                st.rest_tail->data = std::make_shared<T>(new_value);
+                st.rest_tail->next.reset(new node);
+                st.rest_tail = st.rest_tail->next.get();
+            }
+            break;
+        }
+        }
+        if (++st.pending == WTC_BATCH_K) publish(st);
+    }
+
+    [[gnu::used, clang::annotate("wtc_queue_batch_end")]]
+    void batch_end(batch& b) {
+        publish(b.get());
+        b.get().~state();
     }
 
     [[clang::annotate("wtc_queue_push")]]

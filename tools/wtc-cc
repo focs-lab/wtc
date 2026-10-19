@@ -78,7 +78,9 @@ else
   PASSES+=(--wtc-specialize=rewrite=false)
 fi
 PASSES+=(--wtc-check-progress --lower-wtc-to-cir --reconcile-unrealized-casts)
-"$WTCOPT" "$WORK/$base.cir" "${PASSES[@]}" -o "$WORK/$base.wtc.cir"
+# Diagnostics name their place; printing the whole operation after each one
+# repeats a queue's type, hundreds of characters, on every line.
+"$WTCOPT" --mlir-print-op-on-diagnostic=false "$WORK/$base.cir" "${PASSES[@]}" -o "$WORK/$base.wtc.cir"
 
 "$CIRTR" --cir-to-llvmir "$WORK/$base.wtc.cir" -o "$WORK/$base.raw.ll"
 sed '/^target datalayout/d' "$WORK/$base.raw.ll" > "$WORK/$base.ll"

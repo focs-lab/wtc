@@ -23,6 +23,9 @@ enum class SemanticOpKind {
     QueueConstruction,
     QueuePush,
     QueueTryPop,
+    QueueBatchBegin,
+    QueuePushDeferred,
+    QueueBatchEnd,
     MutexLock,
     MutexUnlock,
 };

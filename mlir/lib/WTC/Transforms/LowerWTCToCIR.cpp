@@ -8,6 +8,8 @@ using namespace mlir::wtc;
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
+#include <type_traits>
+
 // Lowers wtc operations back to the CIR calls they were lifted from. The
 // call is rebuilt from what lifting recorded: the callee, the handle's CIR
 // type, and the original argument attributes, which restore the hidden
@@ -111,6 +113,26 @@ struct LowerQueuePopPattern : public OpConversionPattern<QueuePopOp> {
     }
 };
 
+// The three batch operations lower alike: the queue cast back to its source
+// type, then the batch and, for push_deferred, the value.
+template <class Op>
+struct LowerQueueBatchPattern : public OpConversionPattern<Op> {
+    using OpConversionPattern<Op>::OpConversionPattern;
+    LogicalResult matchAndRewrite(Op op, typename Op::Adaptor adaptor,
+                                  ConversionPatternRewriter &rewriter) const override {
+        if (failed(requireFallback(op, op.getFallbackImplAttr(), op.getSourceQueueTypeAttr())))
+            return failure();
+        Value queue = mlir::UnrealizedConversionCastOp::create(
+            rewriter, op.getLoc(), op.getSourceQueueTypeAttr().getValue(), adaptor.getQueue()).getResult(0);
+        llvm::SmallVector<Value, 3> operands{queue, adaptor.getBatch()};
+        if constexpr (std::is_same_v<Op, QueuePushDeferredOp>) operands.push_back(adaptor.getValue());
+        rebuildCall(rewriter, op.getLoc(), op.getFallbackImplAttr(), Type{}, operands,
+                    op.getSourceArgAttrsAttr());
+        rewriter.eraseOp(op);
+        return success();
+    }
+};
+
 struct LowerWTCToCIRPass : public PassWrapper<LowerWTCToCIRPass, OperationPass<ModuleOp>> {
     MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerWTCToCIRPass)
 
@@ -130,7 +152,10 @@ struct LowerWTCToCIRPass : public PassWrapper<LowerWTCToCIRPass, OperationPass<M
         WTCToCirConversionTarget target(*context);
         RewritePatternSet patterns(context);
         patterns.add<LowerMutexLockPattern, LowerMutexUnlockPattern,
-                     LowerQueuePushPattern, LowerQueuePopPattern>(context);
+                     LowerQueuePushPattern, LowerQueuePopPattern,
+                     LowerQueueBatchPattern<QueueBatchBeginOp>,
+                     LowerQueueBatchPattern<QueuePushDeferredOp>,
+                     LowerQueueBatchPattern<QueueBatchEndOp>>(context);
         if (failed(applyPartialConversion(getOperation(), target, std::move(patterns))))
             return signalPassFailure();
 

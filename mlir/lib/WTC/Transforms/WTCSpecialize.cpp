@@ -185,10 +185,9 @@ public:
             return it == implOf.end() ? Impl::generic : it->second;
         };
         module.walk([&](Operation *op) {
-            if (auto push = dyn_cast<QueuePushOp>(op))
-                push.setImplAttr(ImplAttr::get(ctx, implFor(push.getQueueIdAttr())));
-            else if (auto pop = dyn_cast<QueuePopOp>(op))
-                pop.setImplAttr(ImplAttr::get(ctx, implFor(pop.getQueueIdAttr())));
+            if (!isa<QueuePushOp, QueuePopOp, QueueBatchBeginOp, QueuePushDeferredOp, QueueBatchEndOp>(op))
+                return;
+            op->setAttr("impl", ImplAttr::get(ctx, implFor(op->getAttrOfType<IntegerAttr>("queue_id"))));
         });
     }
 };
