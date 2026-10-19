@@ -11,12 +11,15 @@
 #include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <pthread.h>
+#include <unistd.h>
 
 wtc::mutex m;
 std::atomic<long> counter{0};
 long plain = 0;
 void (*hook)() = nullptr;
 void opaque();
+pthread_mutex_t raw = PTHREAD_MUTEX_INITIALIZER;
 
 // CHECK-DAG: error: wtc: locked() is declared lock-free but can block
 // CHECK-DAG: note: which takes a mutex
@@ -35,6 +38,26 @@ WTC_LOCK_FREE void allocates() { plain += reinterpret_cast<long>(new long(1)); }
 // CHECK-DAG: error: wtc: hooked() is declared lock-free but can block
 // CHECK-DAG: note: which makes an indirect call whose target is not known here
 WTC_LOCK_FREE void hooked() { hook(); }
+
+// An indirect call whose targets are known is judged by them: the step
+// here is a local pointer set once, to a function that only counts.
+// CHECK-DAG: remark: wtc: known_target() is declared lock-free: nothing it reaches blocks
+void count_one() { counter.fetch_add(1, std::memory_order_relaxed); }
+WTC_LOCK_FREE void known_target() { void (*step)() = count_one; step(); }
+
+// ... and when the one target can block, the chain goes through the call.
+// CHECK-DAG: error: wtc: known_blocking_target() is declared lock-free but can block
+// CHECK-DAG: note: calls log_plain() through a pointer
+void log_plain() { log_value(plain); }
+WTC_LOCK_FREE void known_blocking_target() { void (*step)() = log_plain; step(); }
+
+// CHECK-DAG: error: wtc: waits() is declared lock-free but can block
+// CHECK-DAG: note: which waits in the threading library (pthread_mutex_lock)
+WTC_LOCK_FREE void waits() { pthread_mutex_lock(&raw); ++plain; pthread_mutex_unlock(&raw); }
+
+// CHECK-DAG: error: wtc: sleeps() is declared lock-free but can block
+// CHECK-DAG: note: which sleeps or yields (usleep)
+WTC_LOCK_FREE void sleeps() { usleep(1); }
 
 // A throw is spelled as operations, not as a call into the runtime, and
 // blocks all the same.
@@ -64,4 +87,7 @@ WTC_LOCK_FREE void clean() {
 // CHECK-NOT: undeclared
 void undeclared() { std::printf("x\n"); }
 
-int main() { locked(); logs(); allocates(); hooked(); unseen(); recursive(0); clean(); undeclared(); throws(); }
+int main() {
+    locked(); logs(); allocates(); hooked(); unseen(); recursive(0); clean(); undeclared();
+    throws(); known_target(); known_blocking_target(); waits(); sleeps();
+}

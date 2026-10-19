@@ -11,6 +11,7 @@
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/Demangle/Demangle.h"
 
@@ -49,6 +50,7 @@ struct Finding {
     Operation *leaf;
     std::string why;
     llvm::SmallVector<Operation *, 8> chain;  // the calls from the function to the leaf
+    llvm::SmallVector<cir::FuncOp, 8> via;    // the function each of them enters
 };
 
 bool startsWith(const std::string &s, llvm::StringRef p) { return llvm::StringRef(s).starts_with(p); }
@@ -155,6 +157,7 @@ std::optional<Finding> ProgressChecker::blockingAt(Operation *op) {
         if (auto f = blockingIn(t)) {
             Finding out = *f;
             out.chain.insert(out.chain.begin(), op);
+            out.via.insert(out.via.begin(), t);
             return out;
         }
     }
@@ -208,11 +211,10 @@ public:
             }
             failed = true;
             InFlightDiagnostic d = f.emitError() << "wtc: " << name << " is declared lock-free but can block";
-            for (Operation *call : found->chain) {
-                std::string callee = "an indirect callee";
-                if (auto c = dyn_cast<cir::CallOp>(call))
-                    if (cir::FuncOp t = lookupCallee(c)) callee = llvm::demangle(t.getSymName().str());
-                d.attachNote(call->getLoc()) << "calls " << callee;
+            for (auto [call, target] : llvm::zip(found->chain, found->via)) {
+                const bool indirect = !lookupCallee(cast<cir::CallOp>(call));
+                d.attachNote(call->getLoc()) << "calls " << llvm::demangle(target.getSymName().str())
+                                             << (indirect ? " through a pointer" : "");
             }
             d.attachNote(found->leaf->getLoc()) << "which " << found->why;
         });
