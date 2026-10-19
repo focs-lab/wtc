@@ -1,7 +1,11 @@
 #pragma once
 
 #include "clang/CIR/Dialect/IR/CIRDialect.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringRef.h"
+
+#include <optional>
 
 namespace mlir::wtc {
 
@@ -133,5 +137,17 @@ bool addressEscapes(cir::AllocaOp slot);
 // through, at every direct call of the enclosing function. Empty when any
 // of that is unknown, or the enclosing function's own address is taken.
 llvm::SmallVector<cir::FuncOp, 4> indirectCallees(cir::CallOp call);
+
+// Every call to a shim queue constructor, keyed by the object it constructs:
+// a cir.global, or a cir.alloca, reached from the constructor's `this`
+// through traceToRoot. Constructors whose object is anything else are left
+// out, so a queue missing from the map has no constructor this can name.
+llvm::DenseMap<Operation *, llvm::SmallVector<cir::CallOp, 2>>
+collectQueueConstructors(ModuleOp module);
+
+// The topology tag a queue's one constructor passes, if it is a constant;
+// nullopt when there is not exactly one constructor of the two-operand
+// shape, or its tag is not a constant.
+std::optional<int64_t> constructorTag(llvm::ArrayRef<cir::CallOp> ctors);
 
 }

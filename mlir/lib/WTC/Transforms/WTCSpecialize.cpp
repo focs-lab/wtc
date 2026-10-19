@@ -78,18 +78,7 @@ public:
         MLIRContext *ctx = &getContext();
 
         // Every constructor call, keyed by the root object it constructs.
-        llvm::DenseMap<Operation *, llvm::SmallVector<cir::CallOp, 2>> ctorsOf;
-        module.walk([&](cir::CallOp call) {
-            if (getSemanticKind(lookupCallee(call)) != SemanticOpKind::QueueConstruction) return;
-            if (call.getNumOperands() == 0 || firstRealOperand(call) != 0) return;
-            Value t = traceToRoot(call.getOperand(0));
-            Operation *root = nullptr;
-            if (auto gg = t.getDefiningOp<cir::GetGlobalOp>())
-                root = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr()).getOperation();
-            else if (auto a = t.getDefiningOp<cir::AllocaOp>())
-                root = a.getOperation();
-            if (root) ctorsOf[root].push_back(call);
-        });
+        auto ctorsOf = collectQueueConstructors(module);
 
         unsigned rewritten = 0;
         module.walk([&](Operation *root) {
@@ -186,12 +175,8 @@ public:
             auto id = root->getAttrOfType<IntegerAttr>(kQueueIdAttrName);
             if (!id) continue;
             Impl impl = Impl::generic;
-            cir::CallOp ctor = ctors.size() == 1 ? ctors.front() : cir::CallOp();
-            if (ctor && ctor.getNumOperands() == 2)
-                if (auto c = ctor.getOperand(1).getDefiningOp<cir::ConstantOp>())
-                    if (auto v = dyn_cast<cir::IntAttr>(c.getValue()); v && v.getSInt() >= 0)
-                        if (auto known = symbolizeImpl(static_cast<uint32_t>(v.getSInt())))
-                            impl = *known;
+            if (auto tag = constructorTag(ctors); tag && *tag >= 0)
+                if (auto known = symbolizeImpl(static_cast<uint32_t>(*tag))) impl = *known;
             implOf[id.getInt()] = impl;
         }
         auto implFor = [&](IntegerAttr id) {
