@@ -359,16 +359,19 @@ public:
             auto topo = root->getAttrOfType<TopologyAttr>(kTopologyAttrName);
             if (!id || !topo || topo.getValue() != Topology::spsc) return;
             const std::string label = labelOf(root);
-            auto it = popsOf.find(id.getInt());
-            if (it == popsOf.end() || it->second.empty()) {
-                root->emitRemark() << "wtc: queue " << label << ": not borrowed: nothing pops it";
-                return;
-            }
-            Type queueType = cast<QueueType>(it->second.front().getQueue().getType()).getElementType();
+            // Asked first: a queue whose only pop may also act on another
+            // has no pop of its own, and "nothing pops it" would be wrong.
+            Type queueType = isa<cir::GlobalOp>(root) ? cast<cir::GlobalOp>(root).getSymType()
+                                                      : cast<cir::AllocaOp>(root).getAllocaType();
             if (anonymousPopTypes.contains(queueType)) {
                 root->emitRemark() << "wtc: queue " << label
                                    << ": not borrowed: a pop that may act on several queues of its "
                                       "type was not checked";
+                return;
+            }
+            auto it = popsOf.find(id.getInt());
+            if (it == popsOf.end() || it->second.empty()) {
+                root->emitRemark() << "wtc: queue " << label << ": not borrowed: nothing pops it";
                 return;
             }
             for (QueuePopOp pop : it->second) {

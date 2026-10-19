@@ -15,6 +15,7 @@ using namespace mlir::wtc;
 
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/MapVector.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/Demangle/Demangle.h"
 
@@ -54,6 +55,7 @@ struct Access {
     std::string entry;  // the function the thread starts in, demangled
     Location started;   // the spawn that starts it, or the entry for main
     bool spawned;
+    bool oneOf = false;  // the operation may act on this queue or another
 };
 
 struct SideInfo {
@@ -209,7 +211,7 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
         llvm::SmallSet<unsigned, 4> seen;
         bool certainMany = false;
         for (const Access &a : side->accesses) {
-            if (a.speculative) continue;
+            if (a.speculative || a.oneOf) continue;
             if (a.many) certainMany = true;
             if (seen.insert(a.thread).second) firstOfThread.push_back(&a);
         }
@@ -238,6 +240,9 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
     if (capExceeded) w << "the program has too many function instances";
     else if (globalPoison) w << "an access to some queue could not be attributed";
     else if (auto it = poisonWhy.find(objTy); it != poisonWhy.end()) w << it->second;
+    else if (llvm::any_of(info.producers.accesses, [](const Access &a) { return a.oneOf; }) ||
+             llvm::any_of(info.consumers.accesses, [](const Access &a) { return a.oneOf; }))
+        w << "an operation may act on it or on another queue";
     else w << "a thread that uses it is one the module cannot account for (its caller is not visible)";
     return true;
 }
@@ -316,29 +321,56 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
     ThreadInstanceWalk walk(module, relevant);
     self = &walk;
 
+    // Every queue operation under every instance, resolved once the walk
+    // is over: a pointer loaded from a field is placed under each instance
+    // of every function that stores it, and in the middle of the walk some
+    // of those instances do not exist yet.
+    llvm::SmallVector<std::pair<Operation *, Instance *>, 32> visits;
     walk.run(
         [&](Instance &inst) {
             inst.func.walk([&](Operation *op) {
-                if (!isQueueOp(op)) return;
-                Value q = queueOf(op);
-                Operation *root = walk.resolveRoot(q, &inst);
-                // The walk now resolves a heap pointer to the call that
-                // allocated it. This pass has no notion of an allocation
-                // that runs once against one that runs many times, and a
-                // queue proved SPSC on the strength of one site that hands
-                // out many objects would be wrong; until it reasons about
-                // that, a heap queue stays unknown, as before.
-                if (root && isa<cir::CallOp>(root)) root = nullptr;
-                if (!root) { poison(op, "the queue object could not be identified"); return; }
-                RootInfo &info = roots[root];
-                SideInfo &side = isa<QueuePopOp>(op) ? info.consumers : info.producers;
-                side.threads.insert(inst.thread);
-                side.accesses.push_back(accessOf(op, inst));
-                if (inst.threadMult == Mult::Many) side.anyMany = true;
-                opRoots[op].insert(root);
+                if (isQueueOp(op)) visits.push_back({op, &inst});
             });
         },
         [&](cir::FuncOp f) { poisonReachable(f); });
+
+    for (auto [op, inst] : visits) {
+        // A handle may name one of several queues -- loaded from a field or
+        // a slot written in more than one place -- and then the access is
+        // counted on each of them: a thread too many on a queue it does not
+        // touch costs a specialisation, a thread missing from one it does
+        // would let a race through.
+        llvm::SmallVector<Operation *, 4> rs;
+        const char *why = nullptr;
+        for (const Place &pl : walk.resolvePlaces(queueOf(op), inst)) {
+            // The walk resolves a heap pointer to the call that allocated
+            // it. This pass has no notion of an allocation that runs once
+            // against one that runs many times, and a queue proved SPSC on
+            // the strength of one site that hands out many objects would
+            // be wrong; until it reasons about that, a heap queue stays
+            // unknown.
+            if (!pl.root || isa<cir::CallOp>(pl.root)) { why = "the queue object could not be identified"; break; }
+            // A queue inside a larger object, or one element of an array
+            // of them: the verdict is kept per object and its constructor,
+            // and this one has neither of its own.
+            if (pl.offset != 0 || pl.unknownIndex || pl.loop ||
+                queueObjectType(pl.root) != queueObjectTypeOfOp(op)) {
+                why = "the queue is part of a larger object";
+                break;
+            }
+            rs.push_back(pl.root);
+        }
+        if (why) { poison(op, why); continue; }
+        for (Operation *root : rs) {
+            RootInfo &info = roots[root];
+            SideInfo &side = isa<QueuePopOp>(op) ? info.consumers : info.producers;
+            side.threads.insert(inst->thread);
+            side.accesses.push_back(accessOf(op, *inst));
+            side.accesses.back().oneOf = rs.size() > 1;
+            if (inst->threadMult == Mult::Many) side.anyMany = true;
+            opRoots[op].insert(root);
+        }
+    }
 
     remarks += walk.remarks();
 

@@ -16,7 +16,7 @@ Read "Still open" and the October section before building anything on top of a v
 | `main` was not a thread and its accesses were discarded | `main` and the functions global constructors run are thread roots | `test/Integration/main_pushes.cpp`, `unresolved-thread-context.mlir` |
 | A parameter index was ignored, so a two-queue function credited everything to the first | parameters resolve through the call site of the instance, by index | `test/Integration/two_queues_one_worker.cpp` |
 | Two queues on one thread through one function collapsed | same mechanism; there is no per-function cache to collapse them | `param-passed-multi-instance.mlir` |
-| An unresolved access was dropped, turning "I don't know" into "nobody" | an unresolvable access poisons the queue's type; every queue of it becomes unknown | `unresolved-queue.mlir`, `test/Integration/queue_via_struct.cpp` |
+| An unresolved access was dropped, turning "I don't know" into "nobody" | an unresolvable access poisons the queue's type; every queue of it becomes unknown | `unresolved-queue.mlir`, `queue-in-a-struct.cpp` |
 | Function pointers and virtual calls were invisible | a function whose address is taken other than as a spawn entry is a root callable from any thread | covered by the same poison path |
 | The spawn entry had to be a bare `cir.get_global` | the operand is traced through casts | `test/Integration/*` (the real shape) |
 | Real `spawn` and `try_pop` were not understood at all | operands read through the calling convention; the hidden return slot is recognised | every `test/Integration` test |
@@ -37,11 +37,15 @@ not compile under any compiler because its move constructor was written
 **One translation unit is assumed.** A second unit touching the same global
 queue is invisible. Nothing enforces this; `wtc-cc` compiles one file.
 
-**Queues reached through a member or the heap are `unknown`.** Tracing stops
-at a load that is not from a stack slot written once. That is the safe
-direction, and it is also the direction that gives up on a large class of
-real programs. `test/Integration/queue_via_struct.cpp` pins the current
-behaviour so that improving it is a visible change.
+**A queue inside a larger object or on the heap is `unknown`.** A queue
+pointer loaded from a field, or from a slot or a global written in several
+places, is followed to every write of it, constant initialisers included,
+and an operation that may act on one of several queues counts on each
+(`test/Integration/queue_via_struct.cpp`, `one-of-field.cpp`). A queue that
+is itself a member of a struct, an element of an array or a heap object has
+no constructor call of its own for the specialisation to rewrite, and stays
+unknown (`queue-in-a-struct.cpp`). That is the safe direction, and it still
+gives up on programs that keep their queues in a struct.
 
 **The dialect still says nothing CIR did not.** The operations carry no
 memory ordering, no progress guarantee and no linearisation point; the
