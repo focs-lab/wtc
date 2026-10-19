@@ -80,6 +80,8 @@ def _tsan_works():
                     continue
                 if subprocess.run([exe], capture_output=True).returncode == 0:
                     config.substitutions.append(("%tsan_cxx", cc))
+                    # wtc-cc --tsan links with it too.
+                    config.environment["WTC_TSAN_CXX"] = cc
                     return True
         except OSError:
             continue
