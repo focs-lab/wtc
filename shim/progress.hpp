@@ -10,5 +10,12 @@
 // lock-freedom, not a proof of it: a loop that spins waiting for another
 // thread is not judged.
 //
-// Without the WTC passes the attribute does nothing.
+// WTC_BATCH on a function allows the compiler to batch the pushes of its
+// loops (--wtc-batch-pushes): elements are then published every WTC_BATCH_K
+// pushes and when the loop ends, rather than one at a time, so a consumer
+// sees each one later. Only loops in which nothing could be waiting for an
+// unpublished element are touched.
+//
+// Without the WTC passes the attributes do nothing.
 #define WTC_LOCK_FREE [[clang::annotate("wtc_progress_lock_free")]]
+#define WTC_BATCH [[clang::annotate("wtc_batch")]]

@@ -68,7 +68,7 @@ base=$(basename "${SRC%.*}")
 
 "$CLANGXX" -std=c++17 -I"$ROOT/shim" -fclangir -emit-cir "${PASSTHRU[@]}" "$SRC" -o "$WORK/$base.cir"
 
-PASSES=(--lift-cir-to-wtc --queue-ownership-analysis --wtc-borrow-analysis)
+PASSES=(--lift-cir-to-wtc --wtc-batch-pushes --queue-ownership-analysis --wtc-borrow-analysis)
 if (( SPECIALIZE )); then
   OPTS=""
   [ -n "$FORCE" ] && OPTS="force-spsc=$FORCE"
