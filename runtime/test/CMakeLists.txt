@@ -45,6 +45,12 @@ target_link_libraries(spsc_ring_borrow_stress PRIVATE wtc_rt_flags)
 target_compile_definitions(spsc_ring_borrow_stress PRIVATE WTC_STRESS_BORROW=1)
 add_test(NAME spsc_ring_borrow_stress COMMAND spsc_ring_borrow_stress 2000000)
 
+# The same, publishing once per run of pushes.
+add_executable(spsc_ring_deferred_stress spsc_ring_stress.cpp)
+target_link_libraries(spsc_ring_deferred_stress PRIVATE wtc_rt_flags)
+target_compile_definitions(spsc_ring_deferred_stress PRIVATE WTC_STRESS_DEFERRED=1)
+add_test(NAME spsc_ring_deferred_stress COMMAND spsc_ring_deferred_stress 2000000)
+
 # The test that proves the tests can fail: two producers must be caught, and
 # the test asserts the exact message of the catcher rather than "it failed
 # somehow". With WTC_CHECK the catcher is the contract check, which aborts;
