@@ -87,6 +87,14 @@ private:
     static constexpr bool kInlineOk =
         std::is_trivially_destructible_v<T> && std::is_copy_constructible_v<T>;
 
+    // Called by the constructor only when kInlineOk holds, so that the
+    // compiler can tell from the constructor's body whether this element
+    // type may be held inline. It is a call rather than an argument of the
+    // constructor's annotation because ClangIR does not carry annotation
+    // arguments yet.
+    [[clang::annotate("wtc_queue_inline_ok")]]
+    static void inline_ok() {}
+
     // Exactly one member is alive, the one tag_ names. The union's own
     // constructor and destructor do nothing; the enclosing class constructs
     // and destroys the chosen member explicitly.
@@ -118,6 +126,7 @@ private:
 public:
     [[clang::annotate("wtc_queue_construction")]]
     explicit queue(topology tag = topology::generic) : tag_(tag) {
+        if constexpr (kInlineOk) inline_ok();
         switch (tag_) {
         case topology::spsc_inline:
             if constexpr (kInlineOk) {

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Builds the three flavours of the pipeline workload that answer "does the
+# Builds the four flavours of the pipeline workload that answer "does the
 # compiler pick the implementation, and does its pick cost what the human's
 # pick costs":
 #
@@ -8,9 +8,11 @@
 #   hand         source sets the tag to spsc itself         -> the human's pick
 #   hand-inline  source sets spsc_inline itself              -> the human's
 #                pick with elements held in the ring
-#   compiler     source unmodified, the verdict sets the tag -> ours
+#   compiler     source unmodified, the verdicts set the tag -> ours; both
+#                queues are spsc and their consumers only borrow, so it
+#                must choose spsc_inline, exactly as hand-inline does
 #
-# All three go through the same pipeline, so a difference between them is
+# All four go through the same pipeline, so a difference between them is
 # the substitution and not a difference between compilers.
 #
 #   build_wtc_flavours.sh <out-dir>
@@ -35,7 +37,7 @@ build() { # name, extra wtc-cc args...
   machine-lock --lane wtc --cores 4 --mem 8G --minutes 15 --why "wtc flavour $name" -- \
     "$CC" --toolchain "$ROOT/build-llvm" $INC -O2 "$@" "$SRC" -o "$OUT/w3_$name" \
     2>"$OUT/$name.log" || { echo "  FAILED; last lines:"; tail -5 "$OUT/$name.log"; return 1; }
-  grep -oE 'wtc: (queue @[a-z0-9]+: [a-z]+|specialised[^;]*|not specialised[^;]*)' "$OUT/$name.log" \
+  grep -oE 'wtc: (queue @[A-Za-z0-9_]+: [a-z_ ]+|specialised[^;]*|not specialised[^;]*)' "$OUT/$name.log" \
     | sort | uniq -c | sed 's/^/  /' || true
 }
 
@@ -56,18 +58,18 @@ for f in generic hand hand-inline compiler; do
   "$OUT/w3_$f" --n 200000 --warm 20000 --json /dev/null 2>/dev/null
 done
 echo
-echo "  generic must say generic,generic; hand and compiler must both say spsc,spsc;"
-echo "  hand-inline must say spsc_inline,spsc_inline."
+echo "  generic must say generic,generic; hand spsc,spsc; hand-inline and compiler"
+echo "  must both say spsc_inline,spsc_inline."
 echo
 echo "=== and the binaries themselves ==="
 # The strongest form of the claim, and the cheapest to check: if the
 # compiler's build and the human's are the same bytes, no measurement can
 # separate them and none needs to. The generic build must differ, or
 # nothing was substituted at all.
-if cmp -s "$OUT/w3_hand" "$OUT/w3_compiler"; then
-  echo "  hand and compiler: byte for byte identical"
+if cmp -s "$OUT/w3_hand-inline" "$OUT/w3_compiler"; then
+  echo "  hand-inline and compiler: byte for byte identical"
 else
-  echo "  hand and compiler: DIFFER — the compiler did not reproduce the human's choice"
+  echo "  hand-inline and compiler: DIFFER — the compiler did not reproduce the human's choice"
 fi
 if cmp -s "$OUT/w3_generic" "$OUT/w3_compiler"; then
   echo "  generic and compiler: IDENTICAL — nothing was substituted"
