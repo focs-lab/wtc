@@ -5,7 +5,8 @@
 #   campaign.sh <leg> <build-dir> [reps]
 #
 # Legs: w1 (throughput), w2 (open-loop latency at 1 us and 10 us), w2pp
-# (ping-pong), smoke (everything once, tiny sizes, no environment check).
+# (ping-pong), smoke (everything once, tiny sizes, no environment check);
+# the MVP's own: w1mvp, w3wtc, w7, w8.
 #
 # Run this INSIDE a `bench` reservation (see benchmarks/README.md) and never
 # build inside one. Every measured run takes the host's exclusive measurement
@@ -295,6 +296,24 @@ case "$LEG" in
         lock "$BUILD/w6_ring_shape" --config "$cfg" --n 60000000 --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt"
       done
     done
+    ;;
+  w8)
+    # Critical sections held as one: the two builds by build_w8_flavours.sh
+    # into BUILD, alone and with two threads contending, with no work of
+    # their own between sections and with some. Needs a 2-core reservation.
+    "$HERE/check_env.sh" 2 || exit 1
+    meta
+    for rep in $(seq 0 $((REPS-1))); do
+      for t in 1 2; do
+        for w in 0 64; do
+          for f in plain batched; do
+            lock "$BUILD/w8_$f" --flavour "$f" --threads "$t" --work "$w" --rep "$rep" --json "$RUNS" \
+              2>>"$OUT/log.txt" >>"$OUT/checksums.txt"
+          done
+        done
+      done
+    done
+    echo "distinct checksums per thread count: $(sort -u "$OUT/checksums.txt" | wc -l) (must be 2, one per count)" | tee -a "$OUT/log.txt"
     ;;
   w5)
     # needs a 4-core reservation
