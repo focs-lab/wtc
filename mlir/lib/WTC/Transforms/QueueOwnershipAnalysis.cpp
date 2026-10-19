@@ -285,8 +285,9 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
         ++remarks;
         return true;
     }
-    // Certainly broken: on one side, two threads the module accounts for,
-    // or one that certainly stands for several.
+    // Certainly broken: on one side, two threads the module accounts for
+    // that can both exist, or one that certainly stands for several.
+    const char *exclusiveSide = nullptr;
     for (const SideInfo *side : {&info.producers, &info.consumers}) {
         if (summary) break;
         const bool pushes = side == &info.producers;
@@ -298,7 +299,17 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
             if (a.many) certainMany = true;
             if (seen.insert(a.thread).second) firstOfThread.push_back(&a);
         }
-        if (firstOfThread.size() < 2 && !certainMany) continue;
+        // Threads started on different arms of one branch cannot both
+        // exist (ThreadInstanceWalk::exclusive), and two of those are no
+        // proof of two producers.
+        bool coexist = false;
+        for (size_t i = 0; i < firstOfThread.size() && !coexist; ++i)
+            for (size_t j = i + 1; j < firstOfThread.size() && !coexist; ++j)
+                coexist = !walk->exclusive(firstOfThread[i]->thread, firstOfThread[j]->thread);
+        if (!certainMany && !coexist) {
+            if (firstOfThread.size() >= 2) exclusiveSide = pushes ? "push to it" : "pop from it";
+            continue;
+        }
         InFlightDiagnostic d = ctor.emitError()
                                << "wtc: queue " << label << " is declared " << declared << " but ";
         if (certainMany) d << "many threads ";
@@ -328,6 +339,9 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
     else if (llvm::any_of(info.producers.accesses, [](const Access &a) { return a.oneOf; }) ||
              llvm::any_of(info.consumers.accesses, [](const Access &a) { return a.oneOf; }))
         w << "an operation may act on it or on another queue";
+    else if (exclusiveSide)
+        w << "the threads that " << exclusiveSide << " are started on different arms of one branch, so "
+          << "at most one of them exists, which the count does not tell";
     else w << "a thread that uses it is one the module cannot account for (its caller is not visible)";
     return true;
 }
