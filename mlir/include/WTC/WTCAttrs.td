@@ -40,6 +40,18 @@ def WTC_ImplEnum : I32EnumAttr<"Impl", "the implementation a queue object runs",
   let genSpecializedAttr = 0;
 }
 
+// What an operation's algorithm guarantees about progress
+// (ProgressOpInterface, decisions/0004).
+def WTC_ProgressBlocking : I32EnumAttrCase<"blocking", 0>;
+def WTC_ProgressLockFree : I32EnumAttrCase<"lock_free", 1>;
+def WTC_ProgressWaitFree : I32EnumAttrCase<"wait_free", 2>;
+
+def WTC_ProgressEnum : I32EnumAttr<"Progress", "the progress an operation guarantees",
+    [WTC_ProgressBlocking, WTC_ProgressLockFree, WTC_ProgressWaitFree]> {
+  let cppNamespace = "::mlir::wtc";
+  let genSpecializedAttr = 0;
+}
+
 // Printed as #wtc.impl<spsc>.
 def WTC_ImplAttr : EnumAttr<WTC_Dialect, WTC_ImplEnum, "impl"> {
   let assemblyFormat = "`<` $value `>`";

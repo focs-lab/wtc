@@ -7,6 +7,7 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 include "WTC/WTCDialect.td"
 include "WTC/WTCTypes.td"
 include "WTC/WTCAttrs.td"
+include "WTC/WTCInterfaces.td"
 
 class WTC_Op<string mnemonic, list<Trait> traits = []> :
     Op<WTC_Dialect, mnemonic, traits>;
@@ -31,6 +32,7 @@ class WTC_Op<string mnemonic, list<Trait> traits = []> :
 class WTC_ObjectOp<string mnemonic, list<Trait> traits = []> :
     WTC_Op<mnemonic, !listconcat(traits, [
         DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+        DeclareOpInterfaceMethods<WTC_ProgressOpInterface>,
         MemoryEffects<[MemRead, MemWrite]>])>;
 
 def LockOp : WTC_ObjectOp<"lock"> {

@@ -94,3 +94,52 @@ LogicalResult QueuePopOp::verify() {
         return emitOpError("needs exactly one of an `out` operand or a result");
     return verifySourceQueueType(*this, getQueue().getType(), getSourceQueueType());
 }
+
+// ---------------------------------------------------------------------------
+// Progress (decisions/0004). One table: what each operation's algorithm can
+// wait for, and whether it may call the allocator, under the implementation
+// recorded on it. No #wtc.impl means the general-purpose implementation.
+
+namespace {
+
+::mlir::wtc::Impl implOf(std::optional<::mlir::wtc::Impl> impl) {
+    return impl.value_or(::mlir::wtc::Impl::generic);
+}
+
+} // namespace
+
+Progress LockOp::getProgress() { return Progress::blocking; }
+bool LockOp::mayCallAllocator() { return false; }
+std::string LockOp::getBlockingReason() { return "takes a mutex"; }
+
+Progress UnlockOp::getProgress() { return Progress::blocking; }
+bool UnlockOp::mayCallAllocator() { return false; }
+std::string UnlockOp::getBlockingReason() {
+    return "releases a mutex, which is half of a blocking protocol";
+}
+
+Progress QueuePushOp::getProgress() {
+    return implOf(getImpl()) == ::mlir::wtc::Impl::generic ? Progress::blocking : Progress::wait_free;
+}
+bool QueuePushOp::mayCallAllocator() { return true; }
+std::string QueuePushOp::getBlockingReason() {
+    switch (implOf(getImpl())) {
+    case ::mlir::wtc::Impl::spsc:
+        return "allocates the element it pushes (make_shared), and a new block when the "
+               "current one is full";
+    case ::mlir::wtc::Impl::spsc_inline:
+        return "allocates a new block when the current one is full: the queue is unbounded";
+    default:
+        return "takes the queue's mutex and allocates a node and the element";
+    }
+}
+
+Progress QueuePopOp::getProgress() {
+    return implOf(getImpl()) == ::mlir::wtc::Impl::generic ? Progress::blocking : Progress::wait_free;
+}
+bool QueuePopOp::mayCallAllocator() { return implOf(getImpl()) == ::mlir::wtc::Impl::generic; }
+std::string QueuePopOp::getBlockingReason() {
+    if (implOf(getImpl()) == ::mlir::wtc::Impl::generic)
+        return "takes the queue's mutexes and frees the node it unlinks";
+    return "";
+}

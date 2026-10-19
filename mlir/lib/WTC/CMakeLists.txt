@@ -1,12 +1,14 @@
 add_mlir_dialect_library(MLIRWTC
   WTCAttrs.cpp
   WTCDialect.cpp
+  WTCInterfaces.cpp
   WTCOps.cpp
   WTCTypes.cpp
 
   DEPENDS
   MLIRWTCDialectIncGen
   MLIRWTCAttrsIncGen
+  MLIRWTCInterfacesIncGen
   MLIRWTCOpsIncGen
   MLIRWTCTypesIncGen
 

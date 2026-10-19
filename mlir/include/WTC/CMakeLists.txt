@@ -14,6 +14,13 @@ mlir_tablegen(WTCAttrs.cpp.inc -gen-attrdef-defs -attrdefs-dialect=wtc)
 
 add_public_tablegen_target(MLIRWTCAttrsIncGen)
 
+set(LLVM_TARGET_DEFINITIONS WTCInterfaces.td)
+
+mlir_tablegen(WTCInterfaces.h.inc -gen-op-interface-decls)
+mlir_tablegen(WTCInterfaces.cpp.inc -gen-op-interface-defs)
+
+add_public_tablegen_target(MLIRWTCInterfacesIncGen)
+
 set(LLVM_TARGET_DEFINITIONS WTCOps.td)
 
 mlir_tablegen(WTCOps.h.inc -gen-op-decls)

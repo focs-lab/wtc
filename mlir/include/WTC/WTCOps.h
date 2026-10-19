@@ -8,6 +8,7 @@
 
 #include "WTC/WTCAttrs.h"
 #include "WTC/WTCDialect.h"
+#include "WTC/WTCInterfaces.h"
 #include "WTC/WTCTypes.h"
 
 #define GET_OP_CLASSES
