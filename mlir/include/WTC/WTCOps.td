@@ -51,12 +51,24 @@ def UnlockOp : WTC_ObjectOp<"unlock"> {
 
 def QueuePushOp : WTC_ObjectOp<"queue_push"> {
     let summary = "A queue push operation";
+    let description = [{
+        Appends a copy of `value` to the queue. What every implementation
+        of it promises (decisions/0003): the push happens before the pop
+        that returns its item; operations on one queue are linearisable;
+        items from one producer leave in the order that producer pushed
+        them. Nothing is promised about the order against operations on
+        any other object, nor about progress. A program that relies on
+        more is outside the contract and is not a candidate for
+        substitution. `impl`, when present, is the implementation the
+        queue runs.
+    }];
     let arguments = (ins WTC_QueueType:$queue, AnyType:$value,
         OptionalAttr<FlatSymbolRefAttr>:$fallback_impl,
         OptionalAttr<TypeAttr>:$source_queue_type,
         OptionalAttr<ArrayAttr>:$source_arg_attrs,
         OptionalAttr<WTC_TopologyAttr>:$topology,
-        OptionalAttr<I64Attr>:$queue_id);
+        OptionalAttr<I64Attr>:$queue_id,
+        OptionalAttr<WTC_ImplAttr>:$impl);
     let results = (outs);
     let hasVerifier = 1;
 }
@@ -64,6 +76,10 @@ def QueuePushOp : WTC_ObjectOp<"queue_push"> {
 def QueuePopOp : WTC_ObjectOp<"queue_pop"> {
     let summary = "A non-blocking queue pop; a null result means empty";
     let description = [{
+        Removes the oldest item, under the same contract as queue_push
+        (decisions/0003); an empty queue gives a null result, which says
+        only that no item was available at the pop's linearisation point.
+
         Two forms, exactly one of which is present. With a result, the popped
         value is the result: the shape hand-written IR uses. With the `out`
         operand and no result, the popped value is written through `out`: the
@@ -77,7 +93,8 @@ def QueuePopOp : WTC_ObjectOp<"queue_pop"> {
         OptionalAttr<TypeAttr>:$source_queue_type,
         OptionalAttr<ArrayAttr>:$source_arg_attrs,
         OptionalAttr<WTC_TopologyAttr>:$topology,
-        OptionalAttr<I64Attr>:$queue_id);
+        OptionalAttr<I64Attr>:$queue_id,
+        OptionalAttr<WTC_ImplAttr>:$impl);
     let results = (outs Optional<AnyType>:$value);
     let hasVerifier = 1;
 }

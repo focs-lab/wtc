@@ -30,6 +30,10 @@ using namespace mlir::wtc;
 // call found for the object, or more than one. Leaving the generic
 // implementation in place is always correct, so every doubt resolves that
 // way.
+//
+// Afterwards every queue operation records, as `impl`, the implementation
+// its queue runs, so that later passes need not find the constructor
+// again.
 
 namespace {
 
@@ -49,6 +53,12 @@ public:
         registry.insert<mlir::wtc::WTCDialect>();
         registry.insert<cir::CIRDialect>();
     }
+
+    Option<bool> rewrite{
+        *this, "rewrite", llvm::cl::init(true),
+        llvm::cl::desc("Rewrite the tags of queues proved spsc. With false the pass only records, "
+                       "on each operation, the implementation its queue runs as the program "
+                       "stands: the build of an unmodified source.")};
 
     ListOption<std::string> forceSpsc{
         *this, "force-spsc",
@@ -75,6 +85,7 @@ public:
 
         unsigned rewritten = 0;
         module.walk([&](Operation *root) {
+            if (!rewrite) return;
             if (!isa<cir::GlobalOp, cir::AllocaOp>(root)) return;
             bool wanted = false;
             if (auto t = root->getAttrOfType<TopologyAttr>(kTopologyAttrName))
@@ -121,6 +132,42 @@ public:
             ++rewritten;
         });
         (void)rewritten;
+        recordImplementations(module, ctorsOf);
+    }
+
+    // What each numbered queue runs, read back from the tag its one
+    // constructor passes once the rewriting above is done, and written on
+    // every operation that can only act on that queue. Anything else -- no
+    // constructor found, several, a tag that is not a constant, an
+    // operation that may act on several queues -- is the general-purpose
+    // implementation: the answer that is never wrong to assume.
+    static void recordImplementations(
+        ModuleOp module, const llvm::DenseMap<Operation *, llvm::SmallVector<cir::CallOp, 2>> &ctorsOf) {
+        MLIRContext *ctx = module.getContext();
+        llvm::DenseMap<int64_t, Impl> implOf;
+        for (auto &[root, ctors] : ctorsOf) {
+            auto id = root->getAttrOfType<IntegerAttr>(kQueueIdAttrName);
+            if (!id) continue;
+            Impl impl = Impl::generic;
+            cir::CallOp ctor = ctors.size() == 1 ? ctors.front() : cir::CallOp();
+            if (ctor && ctor.getNumOperands() == 2)
+                if (auto c = ctor.getOperand(1).getDefiningOp<cir::ConstantOp>())
+                    if (auto v = dyn_cast<cir::IntAttr>(c.getValue()); v && v.getSInt() >= 0)
+                        if (auto known = symbolizeImpl(static_cast<uint32_t>(v.getSInt())))
+                            impl = *known;
+            implOf[id.getInt()] = impl;
+        }
+        auto implFor = [&](IntegerAttr id) {
+            if (!id) return Impl::generic;
+            auto it = implOf.find(id.getInt());
+            return it == implOf.end() ? Impl::generic : it->second;
+        };
+        module.walk([&](Operation *op) {
+            if (auto push = dyn_cast<QueuePushOp>(op))
+                push.setImplAttr(ImplAttr::get(ctx, implFor(push.getQueueIdAttr())));
+            else if (auto pop = dyn_cast<QueuePopOp>(op))
+                pop.setImplAttr(ImplAttr::get(ctx, implFor(pop.getQueueIdAttr())));
+        });
     }
 };
 
