@@ -354,15 +354,20 @@ public:
 
         BorrowChecker checker(module);
         module.walk([&](Operation *root) {
-            if (!isa<cir::GlobalOp, cir::AllocaOp>(root)) return;
+            // A queue's root: the global or the slot that is the queue, or
+            // the one constructor call that builds a member or heap queue.
+            const bool built = isa<cir::CallOp>(root) && root->hasAttr(kTopologyAttrName);
+            if (!isa<cir::GlobalOp, cir::AllocaOp>(root) && !built) return;
             auto id = root->getAttrOfType<IntegerAttr>(kQueueIdAttrName);
             auto topo = root->getAttrOfType<TopologyAttr>(kTopologyAttrName);
             if (!id || !topo || topo.getValue() != Topology::spsc) return;
             const std::string label = labelOf(root);
             // Asked first: a queue whose only pop may also act on another
             // has no pop of its own, and "nothing pops it" would be wrong.
-            Type queueType = isa<cir::GlobalOp>(root) ? cast<cir::GlobalOp>(root).getSymType()
-                                                      : cast<cir::AllocaOp>(root).getAllocaType();
+            Type queueType;
+            if (auto g = dyn_cast<cir::GlobalOp>(root)) queueType = g.getSymType();
+            else if (auto a = dyn_cast<cir::AllocaOp>(root)) queueType = a.getAllocaType();
+            else queueType = cast<cir::PointerType>(root->getOperand(0).getType()).getPointee();
             if (anonymousPopTypes.contains(queueType)) {
                 root->emitRemark() << "wtc: queue " << label
                                    << ": not borrowed: a pop that may act on several queues of its "
@@ -394,6 +399,7 @@ private:
     static std::string labelOf(Operation *root) {
         if (auto g = dyn_cast<cir::GlobalOp>(root)) return ("@" + g.getSymName()).str();
         if (auto a = dyn_cast<cir::AllocaOp>(root)) return ("%" + a.getName()).str();
+        if (auto n = root->getAttrOfType<StringAttr>(kQueueNameAttrName)) return n.str();
         return "<queue>";
     }
 };

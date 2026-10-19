@@ -35,17 +35,26 @@ not compile under any compiler because its move constructor was written
 ## Still open
 
 **One translation unit is assumed.** A second unit touching the same global
-queue is invisible. Nothing enforces this; `wtc-cc` compiles one file.
+queue is invisible. Nothing enforces this; `wtc-cc` compiles one file. A
+rewritten constructor call may sit in an inline function -- a struct's
+constructor -- that another unit also emits, and the linker keeps one copy.
 
-**A queue inside a larger object or on the heap is `unknown`.** A queue
-pointer loaded from a field, or from a slot or a global written in several
-places, is followed to every write of it, constant initialisers included,
-and an operation that may act on one of several queues counts on each
-(`test/Integration/queue_via_struct.cpp`, `one-of-field.cpp`). A queue that
-is itself a member of a struct, an element of an array or a heap object has
-no constructor call of its own for the specialisation to rewrite, and stays
-unknown (`queue-in-a-struct.cpp`). That is the safe direction, and it still
-gives up on programs that keep their queues in a struct.
+**A queue in an array, or built by a shared constructor, is not
+specialised.** A queue pointer loaded from a field, or from a slot or a
+global written in several places, is followed to every write of it,
+constant initialisers included, and an operation that may act on one of
+several queues counts on each (`test/Integration/queue_via_struct.cpp`,
+`one-of-field.cpp`). A queue that is a member of a struct or a heap object
+is the place its constructor call builds, and that call carries its verdict
+(`queue-in-a-struct.cpp`, `queue-on-the-heap.cpp`). One call that builds two
+queues -- a struct's constructor run for two objects -- passes one tag for
+both, so neither is specialised (`struct-constructor-shared.cpp`); an
+element of an array of queues is not told apart from the others, and every
+queue of its type is unknown (`array-of-queues.cpp`). All the objects one
+allocation site makes are one queue to the analysis: sound for counting,
+since the threads of each are among the threads of all, but a per-thread
+queue made in a loop is many producers' queue to it, and a declared spsc
+there cannot be verified (`one-per-thread.cpp`).
 
 **The dialect carries no memory ordering.** The operations carry the
 contract of `decisions/0003` (a push happens before its pop, each queue is
