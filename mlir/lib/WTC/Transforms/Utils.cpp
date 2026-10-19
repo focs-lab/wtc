@@ -4,6 +4,7 @@
 #include "mlir/IR/BuiltinOps.h"
 
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/StringSet.h"
 
 namespace mlir::wtc {
 
@@ -315,6 +316,14 @@ unsigned spawnEntryOperand(cir::CallOp op) {
 
 unsigned spawnFirstArgOperand(cir::CallOp op) {
     return spawnEntryOperand(op) + 1;
+}
+
+bool touchesOnlyItsArguments(cir::FuncOp f) {
+    if (!f || !f.getBody().empty()) return false;
+    static const llvm::StringSet<> names = {
+        "memcpy", "memmove", "memset", "memcmp", "memchr", "strlen", "strcmp", "strncmp",
+        "abs", "labs", "llabs", "sqrt", "sqrtf", "fabs", "fabsf"};
+    return names.contains(f.getSymName());
 }
 
 bool isAllocator(cir::FuncOp f) {

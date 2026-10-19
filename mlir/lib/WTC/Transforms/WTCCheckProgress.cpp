@@ -55,15 +55,6 @@ struct Finding {
 
 bool startsWith(const std::string &s, llvm::StringRef p) { return llvm::StringRef(s).starts_with(p); }
 
-// Functions without a body here that cannot block: they touch only the
-// memory they are given.
-bool harmlessExternal(llvm::StringRef name) {
-    static const llvm::StringSet<> names = {
-        "memcpy", "memmove", "memset", "memcmp", "strlen", "strcmp", "strncmp",
-        "abs", "labs", "llabs", "sqrt", "sqrtf", "fabs", "fabsf"};
-    return names.contains(name);
-}
-
 // Why a function without a body here blocks, by its name. Known offenders
 // get their reason; everything else gets the default, since a function
 // that cannot be seen into cannot be cleared.
@@ -151,7 +142,7 @@ std::optional<Finding> ProgressChecker::blockingAt(Operation *op) {
     }
     for (cir::FuncOp t : targets) {
         if (t.getBody().empty()) {
-            if (harmlessExternal(t.getSymName())) continue;
+            if (touchesOnlyItsArguments(t)) continue;
             return Finding{op, externalReason(t.getSymName()), {}};
         }
         if (auto f = blockingIn(t)) {
