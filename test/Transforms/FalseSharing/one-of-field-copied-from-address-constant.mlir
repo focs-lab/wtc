@@ -1,10 +1,12 @@
 // RUN: wtc-opt %s --wtc-false-sharing-diagnose 2>&1 >/dev/null | FileCheck %s
 
 // The record holding the pointer field is copied whole out of a constant
-// that names an object, `c = { &u }`: the copy writes the field with an
-// address no store lists, so the list says nothing and the load stays
-// unplaced. The guard for the copy-from-a-constant rule, which admits only
-// constants without an address in them.
+// that names an object, `c = { &u }`: the copy writes the field with that
+// address, which is listed with the two stores, so the load is one of
+// {s, t, u}. The guard for the copy-from-a-constant rule: a constant with
+// an address in it must not pass for one without, which would leave the set
+// {s, t} and u out of it. Before the constant's members were read, the
+// copy made the list say nothing and the load stayed unplaced.
 
 !s32i = !cir.int<s, 32>
 !s64i = !cir.int<s, 64>
@@ -65,6 +67,10 @@ module {
       %ft = cir.get_member %pt[1] {name = "b"} : !cir.ptr<!rec_S> -> !cir.ptr<!s64i>
       %vt = cir.const #cir.int<3> : !s64i
       cir.store %vt, %ft : !s64i, !cir.ptr<!s64i>
+      %pu = cir.get_global @u : !cir.ptr<!rec_S>
+      %fu = cir.get_member %pu[1] {name = "b"} : !cir.ptr<!rec_S> -> !cir.ptr<!s64i>
+      %vu = cir.const #cir.int<4> : !s64i
+      cir.store %vu, %fu : !s64i, !cir.ptr<!s64i>
       cir.yield
     } step {
       cir.yield
@@ -93,5 +99,7 @@ module {
   }
 }
 
-// CHECK-NOT: possible false sharing
-// CHECK: false sharing: 0 definite, 0 possible, 0 cold{{.*}}, 1 field accesses on objects that could not be identified{{.*}}; of the unidentified, 1 through a pointer loaded from a field{{.*}}; 0 accesses placed as one of several objects
+// CHECK-DAG: possible false sharing in @s: 'a' and 'b' share one 64-byte line{{.*}}through a pointer that may name one of several objects, this among them
+// CHECK-DAG: possible false sharing in @t: 'a' and 'b' share one 64-byte line{{.*}}through a pointer that may name one of several objects, this among them
+// CHECK-DAG: possible false sharing in @u: 'a' and 'b' share one 64-byte line{{.*}}through a pointer that may name one of several objects, this among them
+// CHECK: false sharing: 0 definite, 3 possible, 0 cold{{.*}}, 0 field accesses on objects that could not be identified{{.*}}; 1 accesses placed as one of several objects

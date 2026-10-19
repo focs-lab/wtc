@@ -322,6 +322,9 @@ private:
                       llvm::SmallVectorImpl<Place> &out, Unplaced &why) const;
     bool resolveSources(llvm::ArrayRef<cir::StoreOp> stores, Instance *ctx, bool perInstance,
                         unsigned depth, llvm::SmallVectorImpl<Place> &out, Unplaced &why) const;
+    // The place a constant pointer names: a global, whole. False for
+    // anything else, a view into part of a global included.
+    bool placeConstant(Attribute a, llvm::SmallVectorImpl<Place> &out) const;
     void computeFieldStores() const;
     llvm::ArrayRef<Instance *> instancesOf(cir::FuncOp f) const;
     // Whether `index` is the induction variable of `loop`: a slot whose
@@ -356,6 +359,9 @@ private:
     // would not be seen, or the record is written as a whole.
     struct FieldStores {
         llvm::SmallVector<cir::StoreOp, 4> stores;
+        // Values the field takes from a constant: a global's initialiser,
+        // or a copy out of a constant global (`pair p{&a, &b}`).
+        llvm::SmallVector<Attribute, 2> constants;
         bool poisoned = false;
     };
     using FieldKey = std::pair<Type, unsigned>;
