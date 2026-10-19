@@ -4,9 +4,14 @@ add_mlir_library(MLIRWTCTransforms
   QueueOwnershipAnalysis.cpp
   ThreadInstances.cpp
   WTCAlignByOwner.cpp
+  WTCBorrowAnalysis.cpp
   WTCFalseSharingDiagnose.cpp
   WTCSpecialize.cpp
   Utils.cpp
+
+  LINK_COMPONENTS
+  Demangle
+
   LINK_LIBS PUBLIC
   MLIRWTC
 

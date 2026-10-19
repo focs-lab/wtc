@@ -21,6 +21,7 @@ int main(int argc, char **argv) {
   mlir::wtc::registerLowerWTCToCIRPass();
   mlir::wtc::registerQueueOwnershipAnalysisPass();
   mlir::wtc::registerWTCSpecializePass();
+  mlir::wtc::registerWTCBorrowAnalysisPass();
   mlir::wtc::registerWTCFalseSharingDiagnosePass();
   mlir::wtc::registerWTCAlignByOwnerPass();
 

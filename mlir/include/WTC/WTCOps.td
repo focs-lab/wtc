@@ -86,6 +86,10 @@ def QueuePopOp : WTC_ObjectOp<"queue_pop"> {
         shape the compiler emits, because the shim's try_pop returns a
         shared_ptr by value and the calling convention passes that through a
         hidden first pointer argument.
+
+        `borrowed` says the program only borrows what this pop returns: it
+        keeps no copy of the shared_ptr and no pointer into the element past
+        the consumer's next pop of the same queue (WTCBorrowAnalysis.cpp).
     }];
     let arguments = (ins WTC_QueueType:$queue,
         Optional<AnyType>:$out,
@@ -94,7 +98,8 @@ def QueuePopOp : WTC_ObjectOp<"queue_pop"> {
         OptionalAttr<ArrayAttr>:$source_arg_attrs,
         OptionalAttr<WTC_TopologyAttr>:$topology,
         OptionalAttr<I64Attr>:$queue_id,
-        OptionalAttr<WTC_ImplAttr>:$impl);
+        OptionalAttr<WTC_ImplAttr>:$impl,
+        UnitAttr:$borrowed);
     let results = (outs Optional<AnyType>:$value);
     let hasVerifier = 1;
 }
