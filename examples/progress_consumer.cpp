@@ -11,6 +11,13 @@
 //       means it is not borrowed, so it lives in a shared_ptr whose release
 //       may free it
 //   wtc-cc -DLOG progress_consumer.cpp           fails: printf
+//
+// The producer's side never passes, and -DPRODUCER shows it: each push may
+// find its block full and allocate the next one, since the queue has no
+// capacity to run out of.
+//
+//   wtc-cc -DPRODUCER progress_consumer.cpp      fails: the push may
+//       allocate a block
 
 #include "progress.hpp"
 #include "queue.hpp"
@@ -33,8 +40,13 @@ std::shared_ptr<sample> last;
 
 constexpr std::uint64_t kCount = 100000;
 
+#ifdef PRODUCER
+WTC_LOCK_FREE
+#endif
+void produce_one(std::uint64_t i) { q.push(sample{i, 0.5 * static_cast<double>(i)}); }
+
 void produce() {
-    for (std::uint64_t i = 0; i < kCount; ++i) q.push(sample{i, 0.5 * static_cast<double>(i)});
+    for (std::uint64_t i = 0; i < kCount; ++i) produce_one(i);
 }
 
 WTC_LOCK_FREE bool consume_one() {
