@@ -30,7 +30,7 @@ using namespace mlir::wtc;
 //     for another thread or may call the allocator (ProgressOpInterface);
 //   - a call to a function without a body here that is known to block or
 //     allocate: the allocator, the threading library's waits, input and
-//     output, sleeping, throwing;
+//     output, sleeping, throwing; and a throw itself;
 //   - any other function without a body here, and any indirect call whose
 //     targets are not known: what cannot be seen is counted as blocking;
 //   - inline assembly.
@@ -130,6 +130,9 @@ std::optional<Finding> ProgressChecker::blockingAt(Operation *op) {
     }
     if (op->getName().getStringRef().contains("asm"))
         return Finding{op, "runs inline assembly, which is not looked into", {}};
+    // ClangIR spells a throw as operations, not as calls into the runtime.
+    if (isa<cir::ThrowOp, cir::AllocExceptionOp>(op))
+        return Finding{op, "throws: the C++ runtime allocates the exception and unwinds the stack", {}};
     auto call = dyn_cast<cir::CallOp>(op);
     if (!call) return std::nullopt;
 

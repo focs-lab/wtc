@@ -36,6 +36,12 @@ WTC_LOCK_FREE void allocates() { plain += reinterpret_cast<long>(new long(1)); }
 // CHECK-DAG: note: which makes an indirect call whose target is not known here
 WTC_LOCK_FREE void hooked() { hook(); }
 
+// A throw is spelled as operations, not as a call into the runtime, and
+// blocks all the same.
+// CHECK-DAG: error: wtc: throws() is declared lock-free but can block
+// CHECK-DAG: note: which throws: the C++ runtime allocates the exception and unwinds the stack
+WTC_LOCK_FREE void throws() { if (plain < 0) throw plain; }
+
 // CHECK-DAG: error: wtc: unseen() is declared lock-free but can block
 // CHECK-DAG: note: which calls opaque(), whose body is not visible here, so it is counted as blocking
 WTC_LOCK_FREE void unseen() { opaque(); }
@@ -58,4 +64,4 @@ WTC_LOCK_FREE void clean() {
 // CHECK-NOT: undeclared
 void undeclared() { std::printf("x\n"); }
 
-int main() { locked(); logs(); allocates(); hooked(); unseen(); recursive(0); clean(); undeclared(); }
+int main() { locked(); logs(); allocates(); hooked(); unseen(); recursive(0); clean(); undeclared(); throws(); }
