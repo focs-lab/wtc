@@ -67,6 +67,8 @@ base=$(basename "${SRC%.*}")
 PASSES="--lift-cir-to-wtc --queue-ownership-analysis"
 if (( SPECIALIZE )); then
   if [ -n "$FORCE" ]; then PASSES="$PASSES --wtc-specialize=force-spsc=$FORCE"; else PASSES="$PASSES --wtc-specialize"; fi
+else
+  PASSES="$PASSES --wtc-specialize=rewrite=false"
 fi
 PASSES="$PASSES --lower-wtc-to-cir --reconcile-unrealized-casts"
 # shellcheck disable=SC2086

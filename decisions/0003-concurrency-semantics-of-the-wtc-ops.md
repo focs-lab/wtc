@@ -1,7 +1,8 @@
 # 3. What a wtc operation promises about concurrency
 
-Proposed 2026-10-18. **Not yet taken**: written for discussion before any of
-it is implemented.
+Proposed 2026-10-18. Taken 2026-10-19: option 2, the minimal contract
+below, written into the description of each queue operation in
+`mlir/include/WTC/WTCOps.td`. The last question, at the end, stays open.
 
 ## Context
 

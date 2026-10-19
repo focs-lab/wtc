@@ -26,4 +26,23 @@ def WTC_TopologyAttr : EnumAttr<WTC_Dialect, WTC_TopologyEnum, "topology"> {
   let assemblyFormat = "`<` $value `>`";
 }
 
+// Which implementation a queue object runs: the shim's topology tag, as its
+// constructor receives it (shim/topology.hpp). An operation carries the
+// implementation of the one queue it acts on; without the attribute it is
+// the general-purpose one, which is the safe reading for any pass.
+def WTC_ImplGeneric    : I32EnumAttrCase<"generic", 0>;
+def WTC_ImplSPSC       : I32EnumAttrCase<"spsc", 1>;
+def WTC_ImplSPSCInline : I32EnumAttrCase<"spsc_inline", 2>;
+
+def WTC_ImplEnum : I32EnumAttr<"Impl", "the implementation a queue object runs",
+    [WTC_ImplGeneric, WTC_ImplSPSC, WTC_ImplSPSCInline]> {
+  let cppNamespace = "::mlir::wtc";
+  let genSpecializedAttr = 0;
+}
+
+// Printed as #wtc.impl<spsc>.
+def WTC_ImplAttr : EnumAttr<WTC_Dialect, WTC_ImplEnum, "impl"> {
+  let assemblyFormat = "`<` $value `>`";
+}
+
 #endif // WTC_ATTRS_TD
