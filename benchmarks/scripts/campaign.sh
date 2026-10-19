@@ -53,6 +53,8 @@ meta() {
     echo "  \"sockets\": \"$(lscpu | sed -n 's/^Socket(s): *//p')\", \"numa_nodes\": \"$(lscpu | sed -n 's/^NUMA node(s): *//p')\","
     echo "  \"allowed_cpus\": \"$(taskset -pc $$ | sed 's/.*: //')\","
     echo "  \"smt_control\": \"$(cat /sys/devices/system/cpu/smt/control 2>/dev/null || echo unknown)\","
+    echo "  \"smt_siblings\": \"$("$HERE/check_env.sh" 2>/dev/null | sed -n 's/^ *smt siblings *//p')\","
+    echo "  \"load_average\": \"$(cut -d' ' -f1-3 /proc/loadavg)\","
     echo "  \"build\": \"$(tr '\n' ';' < "$BUILD/build-info.txt" 2>/dev/null || echo 'built by wtc-cc')\","
     echo "  \"reps\": $REPS"
     echo "}"
@@ -176,7 +178,41 @@ case "$LEG" in
         lock "$BUILD/w3_$f" --flavour "$f" --rate 2000000 --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt" >>"$OUT/checksums.txt"
       done
     done
-    echo "distinct checksums across all runs: $(sort -u "$OUT/checksums.txt" | wc -l) (must be 1)" | tee -a "$OUT/log.txt"
+    # Each line also names the implementation the run carried, which
+    # differs between builds by design: compare the checksums alone.
+    echo "distinct checksums across all runs: $(awk '{print $2}' "$OUT/checksums.txt" | sort -u | wc -l) (must be 1)" | tee -a "$OUT/log.txt"
+    ;;
+  w1mvp)
+    # The queue numbers the MVP quotes, and only those: the general-purpose
+    # shim, its spsc and spsc_inline tags, and the bare ring popped by moving
+    # and by borrowing, at 8 and 64 bytes. Needs a 2-core reservation.
+    "$HERE/check_env.sh" 2 || exit 1
+    meta
+    warmup
+    for rep in $(seq 0 $((REPS-1))); do
+      for elem in 8 64; do
+        for v in shim_generic shim_spsc shim_spsc_inline ring_borrowed ring_inline; do
+          run_w1 "$rep" "$v" "$elem" spin
+        done
+      done
+    done
+    ;;
+  w7)
+    # Batching a producer's pushes: twelve flavours built by
+    # build_w7_flavours.sh into BUILD (three implementations, batched or
+    # not, two element sizes). Needs a 2-core reservation.
+    "$HERE/check_env.sh" 2 || exit 1
+    meta
+    for rep in $(seq 0 $((REPS-1))); do
+      for e in e8 e64; do
+        for f in generic_plain generic_batch spsc_plain spsc_batch inline_plain inline_batch; do
+          lock "$BUILD/w7_${f}_$e" --flavour "$f" --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt" >>"$OUT/checksums.txt"
+        done
+      done
+    done
+    # Each line also names the implementation the run carried, which
+    # differs between builds by design: compare the checksums alone.
+    echo "distinct checksums across all runs: $(awk '{print $2}' "$OUT/checksums.txt" | sort -u | wc -l) (must be 1)" | tee -a "$OUT/log.txt"
     ;;
   smt)
     # The two threads on one physical core, sharing its caches. A spinning
