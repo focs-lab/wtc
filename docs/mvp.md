@@ -194,10 +194,35 @@ second, closed loop, and the delay of every 64th element:
 | spsc_inline | 16.62 | 54.04 | 3.25× | 0.5 → 2.1 µs |
 
 At 8 bytes the gain is 1.69× on the general-purpose queue and within 2% on
-the two rings. Batching pays where synchronisation is the cost: the mutex
+the two rings.
+
+**Critical sections held as one** (`w8_lock_batch_wtc`), million sections
+a second, closed loop, measured on 20 October 2026 (local time) in the
+same way on four reserved cores:
+
+| threads, work between sections | as written | batched | gain | finish spread, batched |
+|---|---|---|---|---|
+| one, none | 35.2 | 599 | 17.0× | — |
+| one, about 15 ns | 33.4 | 58.8 | 1.76× | — |
+| two, none | 7.08 | 201 | 28.4× | 0.6% |
+| two, about 15 ns | 7.65 | 41.8 | 5.46× | 2.0% |
+
+Two threads that take one mutex on every iteration hand its line back and
+forth on every section; held for 64 sections at a time, it changes hands
+64 times less often. The price is that the other thread waits longer for
+it; here the threads still finished within 3.6% of the run of each other
+(`benchmarks/results/2026-10-19-w8`). Batching pays where synchronisation is the cost: the mutex
 queue, and the inline ring, where nothing else is left; on the spsc queue
 the allocation per element still dominates. The delay is the price, and
 the reason batching is the program's choice to make.
+
+**Latency** (`w2_latency`, 64 bytes, one element every microsecond, open
+loop): p99 of 11.7 µs for the general-purpose queue, 1.9 µs for the spsc
+tag and 0.34 µs for spsc_inline, 0.03× the general-purpose queue's; at one
+element every ten microseconds, 4.5, 1.6 and 0.33 µs. The tag's third arm
+costs the general-purpose queue nothing: with two producers and two
+consumers it runs at 0.93 million elements a second, as in the gate's
+legs (`benchmarks/results/2026-10-19-w2mvp`, `-w5`).
 
 **The queue alone** (`w1_throughput`, 64 bytes): the shim's spsc tag runs
 at 2.64× the general-purpose queue (2.81 against 1.07 million a second),

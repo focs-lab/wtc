@@ -44,7 +44,7 @@ and a census of what seventeen codebases pad by hand.
 | Progress check | a function marked `WTC_LOCK_FREE` that can reach a blocking operation fails the build with the call chain |
 | Lowering back to CIR | faithful, restores the original argument attributes, and leaves no attribute of ours behind |
 | Specialised implementations | `runtime/spsc_ring.hpp`, an unbounded wait-free ring holding elements in raw storage, popped by moving or by borrowing, published per element or per run; tested plain, under ThreadSanitizer and with its contract checks, in CI |
-| Measurements | harness, six workloads and eleven baselines in `benchmarks/`; results under `benchmarks/results/`. On the pipeline benchmark the compiler's inline choice runs at 8.4× the general-purpose queue; batching gains 1.9× on it and 3.3× on the inline ring (`docs/mvp.md`) |
+| Measurements | harness, six workloads and eleven baselines in `benchmarks/`; results under `benchmarks/results/`. On the pipeline benchmark the compiler's inline choice runs at 8.4× the general-purpose queue; batching gains 1.9× on it and 3.3× on the inline ring; holding a contended mutex across a loop's sections, 5.5× with work between them and 28× without (`docs/mvp.md`) |
 | False-sharing diagnosis | the same thread walk over field accesses; `definite`, `possible` and `cold` verdicts, each a claim with a test; arrays and heap objects are counted as unidentified, not guessed at |
 | Alignment by owner | raises a global a different thread repeatedly touches to a line of its own; kept as a measurement, since on memcached it is close to a build flag |
 
