@@ -18,6 +18,10 @@ namespace mlir::wtc {
 inline constexpr llvm::StringLiteral kTopologyAttrName = "wtc.topology";
 // Left by the specialisation pass on a root it rewrote.
 inline constexpr llvm::StringLiteral kSpecializedAttrName = "wtc.specialized";
+// The number the ownership analysis gives each queue root (a global or an
+// alloca), in discovery order; an operation that can only act on that
+// queue carries the same number in its queue_id.
+inline constexpr llvm::StringLiteral kQueueIdAttrName = "wtc.queue_id";
 
 } // namespace mlir::wtc
 

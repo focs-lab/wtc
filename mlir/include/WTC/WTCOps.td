@@ -19,7 +19,8 @@ class WTC_Op<string mnemonic, list<Trait> traits = []> :
 // A lifted operation is still, for now, a tagged call: nothing here states
 // memory ordering or a progress guarantee. That is deliberate scope for
 // the gate; the topology attribute is the first fact the dialect carries
-// that CIR did not.
+// that CIR did not. queue_id, when present, names the one queue the
+// operation acts on: the number the ownership analysis gave its root.
 
 // Every operation stands for a call it can be lowered back to. When
 // fallback_impl is present it is checked against the cir.func it names:
@@ -54,7 +55,8 @@ def QueuePushOp : WTC_ObjectOp<"queue_push"> {
         OptionalAttr<FlatSymbolRefAttr>:$fallback_impl,
         OptionalAttr<TypeAttr>:$source_queue_type,
         OptionalAttr<ArrayAttr>:$source_arg_attrs,
-        OptionalAttr<WTC_TopologyAttr>:$topology);
+        OptionalAttr<WTC_TopologyAttr>:$topology,
+        OptionalAttr<I64Attr>:$queue_id);
     let results = (outs);
     let hasVerifier = 1;
 }
@@ -74,7 +76,8 @@ def QueuePopOp : WTC_ObjectOp<"queue_pop"> {
         OptionalAttr<FlatSymbolRefAttr>:$fallback_impl,
         OptionalAttr<TypeAttr>:$source_queue_type,
         OptionalAttr<ArrayAttr>:$source_arg_attrs,
-        OptionalAttr<WTC_TopologyAttr>:$topology);
+        OptionalAttr<WTC_TopologyAttr>:$topology,
+        OptionalAttr<I64Attr>:$queue_id);
     let results = (outs Optional<AnyType>:$value);
     let hasVerifier = 1;
 }
