@@ -7,8 +7,8 @@
 # Legs: w1 (throughput), w2 (open-loop latency at 1 us and 10 us), w2pp
 # (ping-pong), smoke (everything once, tiny sizes, no environment check);
 # the MVP's own: w1mvp, w2mvp, w3wtc, w7, w8; the evaluation's: eval-w1,
-# eval-w1smt, eval-w2, eval-w3, eval-w7, eval-w8, eval-w9, eval-ferret,
-# each with the question it answers in its comment below.
+# eval-w1smt, eval-w2, eval-w3, eval-w3grain, eval-w7, eval-w8, eval-w9,
+# eval-ferret, each with the question it answers in its comment below.
 #
 # Legs that run builds made by tools/wtc-cc take the directory holding them
 # as BUILD and need the CMake build too, for the controls and the
@@ -536,6 +536,37 @@ case "$LEG" in
         for f in batched_k8 hand_k8 batched_k512 hand_k512; do
           lock "$BUILD/w8_$f" --flavour "$f" --threads 2 --work-ns "$w" --n 2000000 --rep "$rep" --json "$RUNS" \
             2>>"$OUT/log.txt" >>"$OUT/checksums-t2.txt"
+        done
+      done
+    done
+    control 901
+    for f in "$OUT"/checksums-*.txt; do
+      echo "$(basename "$f"): $(sort -u "$f" | wc -l) distinct checksum(s) (must be 1)" | tee -a "$OUT/log.txt"
+    done
+    ;;
+  eval-w3grain)
+    # RQ2: where the gain goes. The pipeline with each stage's own work swept
+    # from none to about 250 us a record (--work rounds of about 15 ns), the
+    # adapter pipeline with a queue of each class beside the compiler's
+    # pipeline in its four builds (FLAVOURS). A real pipeline sits somewhere
+    # on this axis: ferret, at about 10 ms a record, far to the right.
+    # Needs a 3-core reservation.
+    "$HERE/check_env.sh" 3 || exit 1
+    FLAVOURS=${FLAVOURS:?FLAVOURS=<dir of the W3 flavours>}
+    meta
+    warmup; control 900
+    grain_n() { case "$1" in 0|4) echo 10000000 ;; 16) echo 4000000 ;; 64) echo 2000000 ;; 256) echo 500000 ;;
+                             1024) echo 150000 ;; 4096) echo 40000 ;; *) echo 10000 ;; esac; }
+    for rep in $(seq 0 $((REPS-1))); do
+      for work in 0 4 16 64 256 1024 4096 16384; do
+        n=$(grain_n "$work")
+        for v in shim_generic $(have_tbb && echo onetbb_cq_sp) moodycamel_rw_inline rigtorp_inline shim_spsc shim_spsc_inline; do
+          lock "$BUILD/w3_pipeline" --variant "$v" --work "$work" --n "$n" --rep "$rep" --json "$RUNS" \
+            2>>"$OUT/log.txt" >>"$OUT/checksums-w$work.txt"
+        done
+        for f in generic hand hand-inline compiler; do
+          lock "$FLAVOURS/w3_$f" --flavour "$f" --work "$work" --n "$n" --rep "$rep" --json "$RUNS" \
+            2>>"$OUT/log.txt" | awk '{print $1, $2}' >>"$OUT/checksums-w$work.txt"
         done
       done
     done
