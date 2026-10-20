@@ -44,6 +44,7 @@ scripts/
                       and summary.csv for the figures
   plot.py             summary.csv -> figures: bars, latency against load,
                       sweeps, latency distributions
+  compile_cost.sh     wtc-cc's time per step and per pass, and code size
   in_bench.py         drives a reservation without a terminal
   build_wtc_flavours.sh  the generic, hand-tagged and compiler-tagged builds
   build_w7_flavours.sh   W7 for each implementation: plain, batched by the
@@ -127,6 +128,12 @@ are the ceiling.
   wait included. Holding the mutex across sections also holds it across
   the work between them, so batching loses once that work is long enough:
   the sweep over `--work-ns` is where that shows.
+- **W9** `w9_mpmc_scaling`: the general-purpose queues alone, as threads are
+  added: `--mode split` with P producers and C consumers (order checked per
+  producer), and `--mode pairwise`, where every thread pushes then pops, as
+  in the lock-free queue literature. Every queue the compiler cannot prove
+  keeps the shim's general-purpose one, so this is where it is compared with
+  the libraries a developer would otherwise use.
 
 Every results line also records the process's peak resident set
 (`peak_rss_kib`). The latency workloads record the whole distribution as
@@ -164,7 +171,11 @@ benchmarks/scripts/campaign.sh w1 build-bench 10
 ```
 
 Legs: `w1`, `w2`, `w2pp`, `w3`, `w3wtc`, `w5`, `w6`, `smt`, `far`, `tbb`,
-`w1check`, and `smoke`, which runs everything once, tiny, unreserved.
+`w1check`, and `smoke`, which runs everything once, tiny, unreserved. The
+evaluation's legs are `eval-w1`, `eval-w1smt`, `eval-w2`, `eval-w3`,
+`eval-w3grain`, `eval-w7`, `eval-w8`, `eval-w9`, `eval-ferret` and
+`eval-dedup`; each one's comment in `campaign.sh` says which question it
+answers and what it needs.
 
 Figures come from a summarised leg:
 
