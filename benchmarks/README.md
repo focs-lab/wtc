@@ -34,6 +34,9 @@ workloads/
   w7_batch_wtc        a producer loop's pushes, batched by the compiler or not
   w8_lock_batch_wtc   a loop's critical sections, held as one by the
                       compiler or not, with one or two threads
+  w9_mpmc_scaling     the general-purpose queues as threads are added
+apps/ferret/          PARSEC ferret ported onto the shim (GPL, see there)
+apps/dedup/           PARSEC dedup ported onto the shim (BSD-3, see there)
 scripts/
   check_env.sh        refuses to measure in an unfit environment
   campaign.sh         one leg: interleaved reps, control runs, results dir
