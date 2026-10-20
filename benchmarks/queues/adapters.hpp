@@ -71,6 +71,14 @@ template <class T> struct shim_mpsc {
     bool try_pop(T& out) { auto p = q.try_pop(); if (!p) return false; out = *p; return true; }
 };
 
+// And for one producer and many consumers: the ring whose consumers take
+// turns (runtime/spmc_ring.hpp).
+template <class T> struct shim_spmc {
+    wtc::queue<T> q{wtc::topology::spmc};
+    void push(const T& v) { q.push(v); }
+    bool try_pop(T& out) { auto p = q.try_pop(); if (!p) return false; out = *p; return true; }
+};
+
 // B0-orig: the original file, before the tag existed.
 template <class T> struct orig_generic {
     wtc_orig::queue<T> q;
@@ -185,7 +193,7 @@ template <class T> struct ring_borrowed {
 
 inline const std::vector<std::string>& variant_names() {
     static const std::vector<std::string> v = {
-        "shim_generic", "shim_spsc", "shim_spsc_inline", "shim_mpsc", "orig_generic", "std_mutex",
+        "shim_generic", "shim_spsc", "shim_spsc_inline", "shim_mpsc", "shim_spmc", "orig_generic", "std_mutex",
         "moodycamel_rw_sp", "moodycamel_rw_inline", "moodycamel_cq_sp",
         "rigtorp_sp", "rigtorp_inline", "boost_spsc_sp", "boost_ms_queue",
         "ring_inline", "ring_sp", "ring_borrowed",
@@ -203,6 +211,7 @@ bool with_variant(const std::string& name, F&& f) {
     if (name == "shim_spsc")             { f.template run<shim_spsc<T>>(); return true; }
     if (name == "shim_spsc_inline")      { f.template run<shim_spsc_inline<T>>(); return true; }
     if (name == "shim_mpsc")             { f.template run<shim_mpsc<T>>(); return true; }
+    if (name == "shim_spmc")             { f.template run<shim_spmc<T>>(); return true; }
     if (name == "orig_generic")          { f.template run<orig_generic<T>>(); return true; }
     if (name == "std_mutex")             { f.template run<std_mutex_queue<T>>(); return true; }
     if (name == "moodycamel_rw_sp")      { f.template run<moodycamel_rw_sp<T>>(); return true; }

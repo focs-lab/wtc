@@ -467,7 +467,8 @@ case "$LEG" in
     # shim's, which every unproved queue keeps, is a fair baseline beside the
     # libraries, and what shapes the compiler leaves to it (one producer into
     # many, many into many); with one consumer, the shim's list for many
-    # producers as well, which the compiler substitutes for an mpsc verdict.
+    # producers as well, which the compiler substitutes for an mpsc verdict,
+    # and with one producer its ring for many consumers (spmc).
     # Split producers and consumers, and the pairwise workload of the
     # lock-free queue literature. Needs a 16-core reservation.
     "$HERE/check_env.sh" 16 || exit 1
@@ -476,9 +477,10 @@ case "$LEG" in
     warmup; control 900
     for rep in $(seq 0 $((REPS-1))); do
       for pc in 1:1 2:2 4:4 8:8 1:2 1:4 1:8 2:1 4:1 8:1; do
-        # With one consumer, the shim's list for many producers too: what
-        # the compiler substitutes for an mpsc verdict.
-        vs=$MPMC; [ "${pc##*:}" = 1 ] && vs="$vs shim_mpsc"
+        # With one consumer, the shim's list for many producers too, and
+        # with one producer its ring for many consumers: what the compiler
+        # substitutes for an mpsc or an spmc verdict.
+        vs=$MPMC; [ "${pc##*:}" = 1 ] && vs="$vs shim_mpsc"; [ "${pc%%:*}" = 1 ] && vs="$vs shim_spmc"
         for v in $vs; do
           lock "$BUILD/w9_mpmc_scaling" --variant "$v" --mode split --producers "${pc%%:*}" --consumers "${pc##*:}" \
             --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt"
