@@ -73,3 +73,44 @@ elseif(WTC_RT_SANITIZE STREQUAL "thread")
   set_tests_properties(spsc_ring_two_producers_is_caught PROPERTIES
                        ENVIRONMENT "TSAN_OPTIONS=halt_on_error=1:symbolize=0")
 endif()
+
+# The list for many producers and one consumer, and its test that must
+# fail: a second consumer, caught as the ring's second producer is.
+add_executable(mpsc_list_stress mpsc_list_stress.cpp)
+target_link_libraries(mpsc_list_stress PRIVATE wtc_rt_flags)
+add_test(NAME mpsc_list_stress COMMAND mpsc_list_stress 1000000)
+
+add_executable(mpsc_list_two_consumers mpsc_list_stress.cpp)
+target_link_libraries(mpsc_list_two_consumers PRIVATE wtc_rt_flags)
+target_compile_definitions(mpsc_list_two_consumers PRIVATE WTC_STRESS_TWO_CONSUMERS=1)
+if(WTC_CHECK)
+  add_test(NAME mpsc_list_two_consumers_is_caught
+           COMMAND sh -c "$<TARGET_FILE:mpsc_list_two_consumers> 200000 2>&1 | grep -q 'MPSC contract violated'")
+elseif(WTC_RT_SANITIZE STREQUAL "thread")
+  # A second consumer can free a node the first is still reading, which
+  # TSan reports as a heap-use-after-free rather than a data race; either
+  # is the race caught.
+  add_test(NAME mpsc_list_two_consumers_is_caught
+           COMMAND sh -c "$<TARGET_FILE:mpsc_list_two_consumers> 200000 2>&1 | grep -qE 'ThreadSanitizer: (data race|heap-use-after-free)'")
+  set_tests_properties(mpsc_list_two_consumers_is_caught PROPERTIES
+                       ENVIRONMENT "TSAN_OPTIONS=halt_on_error=1:symbolize=0")
+endif()
+
+# The ring for one producer and many consumers, and its test that must
+# fail: a second producer.
+add_executable(spmc_ring_stress spmc_ring_stress.cpp)
+target_link_libraries(spmc_ring_stress PRIVATE wtc_rt_flags)
+add_test(NAME spmc_ring_stress COMMAND spmc_ring_stress 1000000)
+
+add_executable(spmc_ring_two_producers spmc_ring_stress.cpp)
+target_link_libraries(spmc_ring_two_producers PRIVATE wtc_rt_flags)
+target_compile_definitions(spmc_ring_two_producers PRIVATE WTC_STRESS_TWO_PRODUCERS=1)
+if(WTC_CHECK)
+  add_test(NAME spmc_ring_two_producers_is_caught
+           COMMAND sh -c "$<TARGET_FILE:spmc_ring_two_producers> 200000 2>&1 | grep -q 'SPMC contract violated'")
+elseif(WTC_RT_SANITIZE STREQUAL "thread")
+  add_test(NAME spmc_ring_two_producers_is_caught
+           COMMAND sh -c "$<TARGET_FILE:spmc_ring_two_producers> 200000 2>&1 | grep -qE 'ThreadSanitizer: (data race|heap-use-after-free)'")
+  set_tests_properties(spmc_ring_two_producers_is_caught PROPERTIES
+                       ENVIRONMENT "TSAN_OPTIONS=halt_on_error=1:symbolize=0")
+endif()
