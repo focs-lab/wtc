@@ -142,10 +142,12 @@ in `eval-w7`.
   from a published image of the PARSEC tree, pinned by digest and checked
   by checksum; dedup has no simlarge there and runs on its native input, a
   public disc image checked against the archive's signed checksum.
-- **Specialisation needs a single producer.** Until the shim has
-  multi-producer and multi-consumer rings, the applications gain only
-  where a stage has one thread; with more, the verdicts are exact but
-  there is nothing to substitute.
+- **Many on both sides keeps the general queue.** A queue with one
+  producer or one consumer has a substitute (the ring, the list for many
+  producers, or the ring whose consumers take turns); one with several of
+  each keeps the general-purpose queue
+  whatever the analysis proves, so a pipeline whose middle stages each
+  have several threads gains only at its ends.
 - **The inline ring is bimodal** in some placements (`runtime/spsc_ring.hpp`);
   distributions are reported, not only medians.
 - **The oracle is a reading.** Each queue's topology in

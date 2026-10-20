@@ -23,12 +23,15 @@ namespace wtc {
 //
 // mpsc is for any number of producers and one consumer: a linked list
 // without locks, whose producers each swap their node into the tail
-// (runtime/mpsc_list.hpp).
+// (runtime/mpsc_list.hpp). spmc is for one producer and any number of
+// consumers: the spsc ring, whose consumers take turns under a spin lock
+// (runtime/spmc_ring.hpp).
 enum class topology : int {
     generic = 0,
     spsc = 1,
     spsc_inline = 2,
     mpsc = 3,
+    spmc = 4,
 };
 
 }

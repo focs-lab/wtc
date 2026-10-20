@@ -356,11 +356,15 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
     auto tag = constructorTag(ctors);
     if (!tag || *tag == 0) return true;  // nothing declared, or nothing readable
     cir::CallOp ctor = ctors.front();
-    // mpsc promises one consumer and any number of producers; the others,
-    // one of each.
-    const bool declaredMpsc = *tag == 3;
-    const char *declared = *tag == 2 ? "spsc_inline" : declaredMpsc ? "mpsc" : "spsc";
-    if (verdict == Topology::spsc || (declaredMpsc && verdict == Topology::mpsc)) {
+    // mpsc promises one consumer and any number of producers, spmc one
+    // producer and any number of consumers; the others, one of each.
+    const bool declaredMpsc = *tag == 3, declaredSpmc = *tag == 4;
+    const char *declared = *tag == 2       ? "spsc_inline"
+                           : declaredMpsc ? "mpsc"
+                           : declaredSpmc ? "spmc"
+                                          : "spsc";
+    if (verdict == Topology::spsc || (declaredMpsc && verdict == Topology::mpsc) ||
+        (declaredSpmc && verdict == Topology::spmc)) {
         ctor.emitRemark() << "wtc: queue " << label << ": declared " << declared << ", verified";
         ++remarks;
         return true;
@@ -371,7 +375,7 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
     for (const SideInfo *side : {&info.producers, &info.consumers}) {
         if (summary) break;
         const bool pushes = side == &info.producers;
-        if (pushes && declaredMpsc) continue;
+        if ((pushes && declaredMpsc) || (!pushes && declaredSpmc)) continue;
         llvm::SmallVector<const Access *, 4> firstOfThread;
         llvm::SmallSet<unsigned, 4> seen;
         bool certainMany = false;

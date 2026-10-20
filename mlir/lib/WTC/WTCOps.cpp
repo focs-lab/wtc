@@ -176,6 +176,7 @@ bool QueuePushOp::mayCallAllocator() { return true; }
 std::string QueuePushOp::getBlockingReason() {
     switch (implOf(getImpl())) {
     case ::mlir::wtc::Impl::spsc:
+    case ::mlir::wtc::Impl::spmc:
         return "allocates the element it pushes (make_shared), and a new block when the "
                "current one is full";
     case ::mlir::wtc::Impl::spsc_inline:
@@ -188,7 +189,9 @@ std::string QueuePushOp::getBlockingReason() {
 }
 
 Progress QueuePopOp::getProgress() {
-    return implOf(getImpl()) == ::mlir::wtc::Impl::generic ? Progress::blocking : Progress::wait_free;
+    const ::mlir::wtc::Impl impl = implOf(getImpl());
+    return impl == ::mlir::wtc::Impl::generic || impl == ::mlir::wtc::Impl::spmc ? Progress::blocking
+                                                                                 : Progress::wait_free;
 }
 bool QueuePopOp::mayCallAllocator() {
     const ::mlir::wtc::Impl impl = implOf(getImpl());
@@ -200,6 +203,8 @@ std::string QueuePopOp::getBlockingReason() {
         return "takes the queue's mutexes and frees the node it unlinks";
     case ::mlir::wtc::Impl::mpsc:
         return "frees the node it moves past";
+    case ::mlir::wtc::Impl::spmc:
+        return "waits for another consumer's pop under the consumers' spin lock";
     default:
         return "";
     }
@@ -216,6 +221,7 @@ bool QueuePushDeferredOp::mayCallAllocator() { return true; }
 std::string QueuePushDeferredOp::getBlockingReason() {
     switch (implOf(getImpl())) {
     case ::mlir::wtc::Impl::spsc:
+    case ::mlir::wtc::Impl::spmc:
         return "allocates the element it pushes (make_shared), and a new block when the "
                "current one is full";
     case ::mlir::wtc::Impl::spsc_inline:

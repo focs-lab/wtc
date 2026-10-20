@@ -9,6 +9,7 @@
 
 #include "topology.hpp"
 #include "../runtime/mpsc_list.hpp"
+#include "../runtime/spmc_ring.hpp"
 #include "../runtime/spsc_ring.hpp"
 
 #ifndef WTC_BATCH_K
@@ -20,10 +21,12 @@ namespace wtc {
 // A queue with one API and several implementations, chosen per object at
 // construction by a topology tag. The general-purpose one is a two-lock
 // linked list; the single-producer single-consumer one is a wait-free ring
-// from runtime/, and the one for many producers and one consumer a list
-// without locks (mpsc). The tag is the whole substitution mechanism: the
-// compiler rewrites the constant at one constructor call and every
-// operation on that object follows it through one predictable branch.
+// from runtime/, the one for many producers and one consumer a list without
+// locks (mpsc), and the one for one producer and many consumers the same
+// ring with its consumers taking turns (spmc). The tag is the whole
+// substitution mechanism: the compiler rewrites the constant at one
+// constructor call and every operation on that object follows it through
+// one predictable branch.
 //
 // The API is that of the original queue: push copies its argument into a
 // shared_ptr, try_pop hands that shared_ptr back or a null one when empty.
@@ -97,6 +100,7 @@ private:
     using spsc_impl = rt::spsc_ring<std::shared_ptr<T>>;
     using inline_impl = rt::spsc_ring<T>;
     using mpsc_impl = rt::mpsc_list<std::shared_ptr<T>>;
+    using spmc_impl = rt::spmc_ring<std::shared_ptr<T>>;
 
     // Inline storage needs the element's end to be invisible: it is
     // destroyed in place at the next pop, not when the last shared_ptr to
@@ -120,6 +124,7 @@ private:
         spsc_impl spsc;
         inline_impl inl;
         mpsc_impl mpsc;
+        spmc_impl spmc;
         storage() {}
         ~storage() {}
     };
@@ -183,6 +188,9 @@ public:
         case topology::mpsc:
             new (&impl_.mpsc) mpsc_impl();
             break;
+        case topology::spmc:
+            new (&impl_.spmc) spmc_impl();
+            break;
         case topology::generic:
         default:
             tag_ = topology::generic;
@@ -211,6 +219,9 @@ public:
         case topology::mpsc:
             impl_.mpsc.~mpsc_impl();
             break;
+        case topology::spmc:
+            impl_.spmc.~spmc_impl();
+            break;
         default:
             impl_.generic.~generic_impl();
             break;
@@ -234,6 +245,9 @@ private:
             return;
         case topology::mpsc:
             impl_.mpsc.publish(st.run);
+            return;
+        case topology::spmc:
+            impl_.spmc.publish();
             return;
         default:
             if (!st.first) return;
@@ -274,6 +288,11 @@ public:
             impl_.mpsc.try_pop(out);
             return out;
         }
+        if (tag_ == topology::spmc) {
+            std::shared_ptr<T> out;
+            impl_.spmc.try_pop(out);
+            return out;
+        }
         return impl_.generic.try_pop();
     }
 
@@ -294,6 +313,9 @@ public:
             break;
         case topology::mpsc:
             impl_.mpsc.push_deferred(st.run, std::make_shared<T>(new_value));
+            break;
+        case topology::spmc:
+            impl_.spmc.push_deferred(std::make_shared<T>(new_value));
             break;
         default: {
             // The nodes and the element are allocated here, outside the
@@ -332,6 +354,10 @@ public:
         }
         if (tag_ == topology::mpsc) {
             impl_.mpsc.push(std::make_shared<T>(new_value));
+            return;
+        }
+        if (tag_ == topology::spmc) {
+            impl_.spmc.push(std::make_shared<T>(new_value));
             return;
         }
         impl_.generic.push(new_value);

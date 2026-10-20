@@ -39,6 +39,12 @@ first. Its pop can report empty while a push that started earlier is
 between its two steps, even when later pushes have finished; a consumer
 that spins on the pop sees them once it finishes.
 
+The ring substituted for one producer and many consumers
+(`runtime/spmc_ring.hpp`, added later still) is the SPSC ring with its
+consumers taking turns under a spin lock: FIFO in the producer's order and
+linearisable, and a pop that reports empty does so when every published
+element has been popped.
+
 **Progress.** The shim queue blocks on a mutex; the substitute is lock-free
 on the consumer side, and its producer allocates. A program cannot observe
 progress except as deadlock or starvation, and a substitution can only make

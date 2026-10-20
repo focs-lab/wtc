@@ -17,11 +17,12 @@ using namespace mlir::wtc;
 // the one call that constructs it and rewrite the constant it passes as the
 // topology tag from generic (0) to spsc (1), or to spsc_inline (2) when the
 // borrow analysis proved that every pop only borrows its element and the
-// element type may be held inline; for one marked mpsc, to mpsc (3). An
-// spmc or mpmc queue, or one the analysis could not decide, keeps the
-// general-purpose implementation. Nothing else in the program changes: the
-// shim's constructor selects the implementation from the tag, and every
-// later operation on that object follows it.
+// element type may be held inline; for one marked mpsc, to mpsc (3), and
+// for one marked spmc, to spmc (4). An mpmc queue, or one the analysis
+// could not decide, keeps the general-purpose implementation. Nothing else
+// in the program changes: the shim's constructor selects the
+// implementation from the tag, and every later operation on that object
+// follows it.
 //
 // The pattern, as ClangIR emits it for a defaulted enum argument:
 //
@@ -50,8 +51,8 @@ public:
 
     StringRef getArgument() const final { return "wtc-specialize"; }
     StringRef getDescription() const final {
-        return "Rewrite the constructor tag of every queue the analysis proved spsc "
-               "(run after --queue-ownership-analysis)";
+        return "Rewrite the constructor tag of every queue the analysis proved to have one "
+               "producer or one consumer (run after --queue-ownership-analysis)";
     }
     void getDependentDialects(DialectRegistry &registry) const override {
         registry.insert<mlir::wtc::WTCDialect>();
@@ -60,7 +61,7 @@ public:
 
     Option<bool> rewrite{
         *this, "rewrite", llvm::cl::init(true),
-        llvm::cl::desc("Rewrite the tags of queues proved spsc or mpsc. With false the pass only records, "
+        llvm::cl::desc("Rewrite the tags of queues proved spsc, mpsc or spmc. With false the pass only records, "
                        "on each operation, the implementation its queue runs as the program "
                        "stands: the build of an unmodified source.")};
 
@@ -97,7 +98,8 @@ public:
             Topology verdict = Topology::unknown;
             if (auto t = root->getAttrOfType<TopologyAttr>(kTopologyAttrName)) {
                 verdict = t.getValue();
-                wanted = verdict == Topology::spsc || verdict == Topology::mpsc;
+                wanted = verdict == Topology::spsc || verdict == Topology::mpsc ||
+                         verdict == Topology::spmc;
             }
             if (auto g = dyn_cast<cir::GlobalOp>(root)) {
                 for (const std::string &s : forceSpsc)
@@ -136,12 +138,15 @@ public:
             // Inline storage needs both the borrow proof and an element type
             // the shim can hold inline, which its constructor says by calling
             // a marker; without either, plain spsc. Many producers and one
-            // consumer is the list without locks, whatever the pops do.
-            const bool mpsc = verdict == Topology::mpsc && !forced && !forcedInline;
-            Impl to = mpsc ? Impl::mpsc : Impl::spsc;
+            // consumer is the list without locks, one producer and many
+            // consumers the ring whose consumers take turns, whatever the
+            // pops do.
+            const bool manySide = (verdict == Topology::mpsc || verdict == Topology::spmc) &&
+                                  !forced && !forcedInline;
+            Impl to = !manySide ? Impl::spsc : verdict == Topology::mpsc ? Impl::mpsc : Impl::spmc;
             if (forcedInline) {
                 to = Impl::spsc_inline;
-            } else if (!mpsc && root->hasAttr(kBorrowedAttrName)) {
+            } else if (!manySide && root->hasAttr(kBorrowedAttrName)) {
                 if (marksInlineOk(lookupCallee(ctor)))
                     to = Impl::spsc_inline;
                 else
@@ -155,7 +160,7 @@ public:
                 b, ctor.getLoc(), tagConst.getType(),
                 cir::IntAttr::get(tagConst.getType(), static_cast<int64_t>(to)));
             ctor->setOperand(1, tag.getResult());
-            root->setAttr(kSpecializedAttrName, TopologyAttr::get(ctx, mpsc ? Topology::mpsc : Topology::spsc));
+            root->setAttr(kSpecializedAttrName, TopologyAttr::get(ctx, manySide ? verdict : Topology::spsc));
             ctor.emitRemark() << "wtc: specialised: constructor tag rewritten to "
                               << stringifyImpl(to);
             ++rewritten;
