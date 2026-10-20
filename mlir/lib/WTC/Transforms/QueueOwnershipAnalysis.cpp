@@ -109,6 +109,7 @@ private:
     ModuleOp module;
     llvm::MapVector<Key, RootInfo> roots;          // in discovery order
     llvm::DenseSet<Type> poisonedTypes;            // queue object types with an unresolvable access
+    llvm::DenseSet<Operation *> poisonedOps;       // accesses already reported unresolvable
     llvm::DenseMap<Type, std::string> poisonWhy;   // the first reason, for the declared-topology check
     llvm::DenseMap<Operation *, llvm::SmallSetVector<Key, 2>> opRoots;
     // Which queues each constructor call builds, under every instance of
@@ -171,10 +172,16 @@ private:
     Operation *carrierOf(const Key &k, const char *&why) const;
     std::string labelOf(const Key &k, bool whole) const;
 
+    // An operation is poisoned once: the walk can meet the same recursive
+    // function along several call strings. Only an access with no type is
+    // everyone's problem; one whose type is already poisoned is not, and
+    // treating the second sighting as the first case made every queue in
+    // the program unknown.
     void poison(Operation *op, const Twine &why) {
+        if (!poisonedOps.insert(op).second) return;
         Type t = queueObjectTypeOfOp(op);
-        if (t && poisonedTypes.insert(t).second) poisonWhy[t] = why.str();
-        else globalPoison = true;
+        if (!t) globalPoison = true;
+        else if (poisonedTypes.insert(t).second) poisonWhy[t] = why.str();
         op->emitRemark() << "wtc: queue access is unresolvable (" << why
                          << "); every queue of this type is now unknown";
         ++remarks;
@@ -428,6 +435,7 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
     roots.clear(); poisonedTypes.clear(); poisonWhy.clear(); opRoots.clear();
     ctorKeys.clear(); keyCtors.clear(); ctorUnplaced.clear(); keyType.clear();
     globalPoison = false; remarks = 0;
+    poisonedOps.clear();
 
     // A function that can reach neither a queue operation nor a queue's
     // constructor cannot affect a verdict, nor which call builds a queue.
