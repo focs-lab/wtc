@@ -48,7 +48,7 @@ meta() {
   {
     echo "{"
     echo "  \"leg\": \"$LEG\", \"date\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
-    echo "  \"git_sha\": \"$(git -C "$ROOT" rev-parse HEAD)\", \"git_dirty\": $([ -z "$(git -C "$ROOT" status --porcelain)" ] && echo false || echo true),"
+    echo "  \"git_sha\": \"$(git -c safe.directory="$ROOT" -C "$ROOT" rev-parse HEAD)\", \"git_dirty\": $([ -z "$(git -c safe.directory="$ROOT" -C "$ROOT" status --porcelain)" ] && echo false || echo true),"
     echo "  \"kernel\": \"$(uname -r)\","
     echo "  \"cpu_model\": \"$(lscpu | sed -n 's/^Model name: *//p')\","
     echo "  \"sockets\": \"$(lscpu | sed -n 's/^Socket(s): *//p')\", \"numa_nodes\": \"$(lscpu | sed -n 's/^NUMA node(s): *//p')\","
@@ -57,6 +57,17 @@ meta() {
     echo "  \"smt_siblings\": \"$("$HERE/check_env.sh" 2>/dev/null | sed -n 's/^ *smt siblings *//p')\","
     echo "  \"load_average\": \"$(cut -d' ' -f1-3 /proc/loadavg)\","
     echo "  \"build\": \"$(tr '\n' ';' < "$BUILD/build-info.txt" 2>/dev/null || echo 'built by wtc-cc')\","
+    # What the numbers depend on beyond the source: the frequency policy the
+    # environment check enforced, and the versions of everything compared.
+    local cpu0
+    cpu0=$(taskset -pc $$ | sed 's/.*: //' | cut -d, -f1 | cut -d- -f1)
+    echo "  \"governor\": \"$(cat /sys/devices/system/cpu/cpu$cpu0/cpufreq/scaling_governor 2>/dev/null || echo unknown)\","
+    echo "  \"no_turbo\": \"$(cat /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null || echo "boost=$(cat /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || echo unknown)")\","
+    echo "  \"freq_khz\": \"$(cat /sys/devices/system/cpu/cpu$cpu0/cpufreq/scaling_cur_freq 2>/dev/null || echo unknown)\","
+    echo "  \"llvm_sha\": \"$(git -c safe.directory="$ROOT" -C "$ROOT" submodule status llvm 2>/dev/null | awk '{print $1}' | tr -d '+-')\","
+    echo "  \"boost\": \"$(sed -n 's/^#define BOOST_LIB_VERSION \"\(.*\)\"/\1/p' /usr/include/boost/version.hpp 2>/dev/null)\","
+    echo "  \"tbb\": \"$(dpkg-query -W -f='${Version}' libtbb12 2>/dev/null || echo none)\","
+    echo "  \"vendored\": \"$(sed -n 's/^| \([a-z]*\)\/ | [^|]* | \([0-9a-f]\{12\}\).*/\1@\2/p' "$ROOT/benchmarks/third_party/VENDORED.md" | tr '\n' ' ')\","
     echo "  \"reps\": $REPS"
     echo "}"
   } > "$OUT/meta.json"
