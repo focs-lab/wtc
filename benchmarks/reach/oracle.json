@@ -1,0 +1,65 @@
+{
+  "about": "The topology of every queue in the programs the evaluation compiles, read from their sources by hand: how many threads push to it and how many pop from it, '1' or 'many' (many: more than one, or a number fixed only at run time). 'cause' says, where the analysis cannot reach the oracle, what in the program stands in its way, as established by the builds that remove it (benchmarks/apps/*/README.md). reach_table.py compares the analysis's verdicts with this.",
+  "programs": [
+    {"program": "examples/queue_example.cpp", "log": "queue_example.log",
+     "queues": [
+       {"queue": "q1", "producers": "1", "consumers": "1"},
+       {"queue": "q2", "producers": "many", "consumers": "many"}]},
+    {"program": "examples/inline_pipeline.cpp", "log": "inline_pipeline.log",
+     "queues": [{"queue": "q", "producers": "1", "consumers": "1"}]},
+    {"program": "examples/progress_consumer.cpp", "log": "progress_consumer.log",
+     "queues": [{"queue": "q", "producers": "1", "consumers": "1"}]},
+    {"program": "examples/batch_loop.cpp", "log": "batch_loop.log",
+     "queues": [{"queue": "q", "producers": "1", "consumers": "1"}]},
+    {"program": "examples/batch_by_hand.cpp", "log": "batch_by_hand.log",
+     "queues": [{"queue": "q", "producers": "1", "consumers": "1"}]},
+    {"program": "W3 pipeline (benchmarks/workloads/w3_pipeline_wtc.cpp)", "log": "w3_pipeline_wtc.log",
+     "queues": [
+       {"queue": "stage1", "producers": "1", "consumers": "1"},
+       {"queue": "stage2", "producers": "1", "consumers": "1"}]},
+    {"program": "W7 batched pushes (benchmarks/workloads/w7_batch_wtc.cpp)", "log": "w7_batch_wtc.log",
+     "queues": [{"queue": "q", "producers": "1", "consumers": "1"}]},
+
+    {"program": "PARSEC ferret, one thread per stage", "log": "ferret-compiler-one.log",
+     "queues": [
+       {"queue": "q_load_seg", "producers": "1", "consumers": "1",
+        "cause": "the loader pushes from inside its recursive directory scan"},
+       {"queue": "q_seg_extract", "producers": "1", "consumers": "1"},
+       {"queue": "q_extract_vec", "producers": "1", "consumers": "1"},
+       {"queue": "q_vec_rank", "producers": "1", "consumers": "1"},
+       {"queue": "q_rank_out", "producers": "1", "consumers": "1"}]},
+    {"program": "PARSEC ferret, threads per middle stage from argv", "log": "ferret-compiler.log",
+     "queues": [
+       {"queue": "q_load_seg", "producers": "1", "consumers": "many",
+        "cause": "the loader pushes from inside its recursive directory scan"},
+       {"queue": "q_seg_extract", "producers": "many", "consumers": "many"},
+       {"queue": "q_extract_vec", "producers": "many", "consumers": "many"},
+       {"queue": "q_vec_rank", "producers": "many", "consumers": "many"},
+       {"queue": "q_rank_out", "producers": "many", "consumers": "1"}]},
+
+    {"program": "PARSEC dedup as written, threads per stage from argv", "log": "dedup-compiler.log",
+     "queues": [
+       {"queue": "refine_que", "producers": "1", "consumers": "many", "cause": "the queues are elements of arrays, indexed at run time"},
+       {"queue": "deduplicate_que", "producers": "many", "consumers": "many", "cause": "the queues are elements of arrays, indexed at run time"},
+       {"queue": "compress_que", "producers": "many", "consumers": "many", "cause": "the queues are elements of arrays, indexed at run time"},
+       {"queue": "reorder_que", "producers": "many", "consumers": "1", "cause": "the queues are elements of arrays, indexed at run time"}]},
+    {"program": "PARSEC dedup, one thread per stage", "log": "dedup-compiler-one.log",
+     "queues": [
+       {"queue": "refine_que", "producers": "1", "consumers": "1", "cause": "the queues are elements of arrays, indexed at run time"},
+       {"queue": "deduplicate_que", "producers": "1", "consumers": "1", "cause": "the queues are elements of arrays, indexed at run time"},
+       {"queue": "compress_que", "producers": "1", "consumers": "1", "cause": "the queues are elements of arrays, indexed at run time"},
+       {"queue": "reorder_que", "producers": "many", "consumers": "1", "cause": "the queues are elements of arrays, indexed at run time"}]},
+    {"program": "PARSEC dedup, one thread per stage, queues as globals", "log": "dedup-compiler-flat-one.log",
+     "queues": [
+       {"queue": "refine_que", "producers": "1", "consumers": "1", "cause": "the threads start in Encode, which only main, in another file, calls"},
+       {"queue": "deduplicate_que", "producers": "1", "consumers": "1", "cause": "the threads start in Encode, which only main, in another file, calls"},
+       {"queue": "compress_que", "producers": "1", "consumers": "1", "cause": "the threads start in Encode, which only main, in another file, calls"},
+       {"queue": "reorder_que", "producers": "many", "consumers": "1", "cause": "the threads start in Encode, which only main, in another file, calls"}]},
+    {"program": "PARSEC dedup, one thread per stage, queues as globals, one translation unit", "log": "dedup-compiler-flat-one-unity.log",
+     "queues": [
+       {"queue": "refine_que", "producers": "1", "consumers": "1"},
+       {"queue": "deduplicate_que", "producers": "1", "consumers": "1"},
+       {"queue": "compress_que", "producers": "1", "consumers": "1"},
+       {"queue": "reorder_que", "producers": "many", "consumers": "1"}]}
+  ]
+}
