@@ -7,8 +7,8 @@
 # Legs: w1 (throughput), w2 (open-loop latency at 1 us and 10 us), w2pp
 # (ping-pong), smoke (everything once, tiny sizes, no environment check);
 # the MVP's own: w1mvp, w2mvp, w3wtc, w7, w8; the evaluation's: eval-w1,
-# eval-w1smt, eval-w2, eval-w3, each with the question it answers in its
-# comment below.
+# eval-w1smt, eval-w2, eval-w3, eval-w7, eval-w8, eval-w9, each with the
+# question it answers in its comment below.
 #
 # Legs that run builds made by tools/wtc-cc take the directory holding them
 # as BUILD and need the CMake build too, for the controls and the
@@ -457,6 +457,89 @@ case "$LEG" in
     done
     for f in generic compiler; do
       mech "$FLAVOURS/w3_$f" --flavour "$f" --n 4000000 --rep 0 --json "$RUNS" 2>>"$OUT/log.txt" >/dev/null
+    done
+    ;;
+  eval-w9)
+    # RQ2/RQ5: the general-purpose queues as threads are added -- whether the
+    # shim's, which every unproved queue keeps, is a fair baseline beside the
+    # libraries, and what shapes the compiler leaves to it (many producers
+    # into one consumer, one producer into many). Split producers and
+    # consumers, and the pairwise workload of the lock-free queue
+    # literature. Needs a 16-core reservation.
+    "$HERE/check_env.sh" 16 || exit 1
+    meta
+    MPMC="shim_generic orig_generic std_mutex moodycamel_cq_sp boost_ms_queue $(have_tbb && echo onetbb_cq_sp)"
+    warmup; control 900
+    for rep in $(seq 0 $((REPS-1))); do
+      for pc in 1:1 2:2 4:4 8:8 1:2 1:4 1:8 2:1 4:1 8:1; do
+        for v in $MPMC; do
+          lock "$BUILD/w9_mpmc_scaling" --variant "$v" --mode split --producers "${pc%%:*}" --consumers "${pc##*:}" \
+            --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt"
+        done
+      done
+      for t in 1 2 4 8 16; do
+        for v in $MPMC; do
+          lock "$BUILD/w9_mpmc_scaling" --variant "$v" --mode pairwise --threads "$t" --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt"
+        done
+      done
+    done
+    control 901
+    ;;
+  eval-w7)
+    # RQ4: batching a producer's pushes. Every flavour build_w7_flavours.sh
+    # made (BUILD): as fast as it can, then paced at one element a
+    # microsecond, where the delay an element waits for its batch shows.
+    # Needs a 2-core reservation and CONTROL_BUILD.
+    "$HERE/check_env.sh" 2 || exit 1
+    meta
+    warmup; control 900
+    w7_n() { case "$1" in *generic*) echo 3000000 ;; *spsc*) echo 5000000 ;; *) echo 20000000 ;; esac; }
+    for rep in $(seq 0 $((REPS-1))); do
+      for b in "$BUILD"/w7_*; do
+        [ -x "$b" ] || continue
+        f=$(basename "$b"); f=${f#w7_}
+        # The checksum depends on the element type and the count, which
+        # differs by implementation: one file per pair, one checksum each.
+        lock "$b" --flavour "$f" --n "$(w7_n "$f")" --rep "$rep" --json "$RUNS" \
+          2>>"$OUT/log.txt" | awk '{print $1, $2}' >>"$OUT/checksums-${f##*_}-n$(w7_n "$f").txt"
+        case "$f" in *_e64)
+          lock "$b" --flavour "$f" --n 2000000 --rate 1000000 --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt" >/dev/null ;;
+        esac
+      done
+    done
+    control 901
+    for f in "$OUT"/checksums-*.txt; do
+      echo "$(basename "$f"): $(sort -u "$f" | wc -l) distinct checksum(s) (must be 1)" | tee -a "$OUT/log.txt"
+    done
+    ;;
+  eval-w8)
+    # RQ4: batching a loop's critical sections, against the thread count and
+    # the work between sections, where holding the mutex across that work
+    # stops paying; then the batch size at two threads. Every flavour
+    # build_w8_flavours.sh made (BUILD). Needs an 8-core reservation and
+    # CONTROL_BUILD.
+    "$HERE/check_env.sh" 8 || exit 1
+    meta
+    warmup; control 900
+    for rep in $(seq 0 $((REPS-1))); do
+      for t in 1 2 4 8; do
+        for w in 0 20 50 100 200 500; do
+          for f in plain batched hand; do
+            lock "$BUILD/w8_$f" --flavour "$f" --threads "$t" --work-ns "$w" --n 2000000 --rep "$rep" --json "$RUNS" \
+              2>>"$OUT/log.txt" >>"$OUT/checksums-t$t.txt"
+          done
+        done
+      done
+      for w in 0 20 50 100 200 500; do
+        for f in batched_k8 hand_k8 batched_k512 hand_k512; do
+          lock "$BUILD/w8_$f" --flavour "$f" --threads 2 --work-ns "$w" --n 2000000 --rep "$rep" --json "$RUNS" \
+            2>>"$OUT/log.txt" >>"$OUT/checksums-t2.txt"
+        done
+      done
+    done
+    control 901
+    for f in "$OUT"/checksums-*.txt; do
+      echo "$(basename "$f"): $(sort -u "$f" | wc -l) distinct checksum(s) (must be 1)" | tee -a "$OUT/log.txt"
     done
     ;;
   *) echo "unknown leg $LEG" >&2; exit 2 ;;
