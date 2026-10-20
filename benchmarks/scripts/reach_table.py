@@ -18,8 +18,8 @@ names them (benchmarks/scripts/reach.sh collects them). A verdict is
 
 The cause column is the oracle's: what in the program stands between the
 analysis and the oracle, as the builds that remove it have shown. The last
-column is the analysis's own account where it gave one (the reason of an
-unresolvable access in the same build).
+column is the analysis's own account where it gave one: why it counted
+many on a side, or the reason of an unresolvable access in the same build.
 """
 import json
 import re
@@ -29,6 +29,7 @@ from pathlib import Path
 
 VERDICT = re.compile(r"wtc: queue (\S+): (spsc|spmc|mpsc|mpmc|unknown) \(producers: (\w+), consumers: (\w+)\)")
 UNRESOLVED = re.compile(r"wtc: queue access is unresolvable \(([^)]*)\)")
+WHY_MANY = re.compile(r"wtc: queue (\S+): many (producers|consumers): (.*)$", re.M)
 
 
 def side(n):
@@ -54,6 +55,7 @@ def main():
         text = path.read_text(errors="replace") if path.exists() else None
         verdicts = VERDICT.findall(text or "")
         reasons = sorted(set(UNRESOLVED.findall(text or "")))
+        why_many = WHY_MANY.findall(text or "")
         for q in prog["queues"]:
             o = topology(q["producers"], q["consumers"])
             found = [v for v in verdicts if label_matches(v[0], q["queue"])]
@@ -78,9 +80,14 @@ def main():
                 counts["exact spsc"] += 1
             if o == "spsc":
                 counts["oracle spsc"] += 1
+            account = ""
+            if outcome == "conservative":
+                account = "; ".join(f"{side}: {why}" for label, side, why in why_many
+                                    if label_matches(label, q["queue"]) and q[side] == "1")
+            elif outcome == "refused":
+                account = "; ".join(reasons)
             rows.append((prog["program"], q["queue"], f"{o} ({q['producers']}, {q['consumers']})", said, outcome,
-                         q.get("cause", "") if outcome != "exact" else "",
-                         "; ".join(reasons) if outcome in ("refused", "conservative") else ""))
+                         q.get("cause", "") if outcome != "exact" else "", account))
 
     print("| program | queue | oracle | verdict | outcome | cause | the analysis's account |")
     print("|---|---|---|---|---|---|---|")
