@@ -837,6 +837,54 @@ annotations on one member (90%), 28 groups by begin-macro and 27 by
 brace. The precision sample is not redrawn; the 74% [65%, 82%] of v4
 stands as v4's figure.
 
+### How the corpus synchronises (21 October, a-p13)
+
+`tools/corpus-sync-census.py` reads the same files as the census above
+(the same walk, the same tests set aside) and counts the lines that name
+each synchronisation idiom: mutexes, condition variables, thread starts,
+and the queues of the libraries a program would otherwise use. It counts
+lines, not objects: an array of mutexes is one line, and a `std::mutex`
+named in a `lock_guard<std::mutex>` is a line too. It answers which of
+the analysis's inputs unported code holds most of.
+
+| tree | files | tests | `pthread_mutex_t` | spinlock | `std::mutex` | `pthread_cond_t` | `std::condition_variable` | `pthread_create` | `std::thread` | tbb queue | moodycamel | folly queue | boost lockfree | DPDK ring | ck ring |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| abseil | 596 | 280 | 3 | 0 | 10 | 1 | 1 | 0 | 8 | 0 | 0 | 0 | 0 | 0 | 0 |
+| dpdk | 4,914 | 393 | 98 | 3 | 0 | 8 | 0 | 8 | 0 | 0 | 0 | 0 | 0 | 81 | 0 |
+| folly | 1,428 | 929 | 17 | 0 | 78 | 13 | 10 | 2 | 87 | 0 | 0 | 3 | 0 | 0 | 0 |
+| jemalloc | 242 | 204 | 2 | 0 | 0 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| leveldb | 98 | 35 | 0 | 0 | 2 | 0 | 1 | 0 | 4 | 0 | 0 | 0 | 0 | 0 | 0 |
+| libuv | 152 | 217 | 3 | 0 | 0 | 1 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| linux | 60,436 | 4,072 | 23 | 2 | 0 | 10 | 0 | 23 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| llvm-project | 28,124 | 45,290 | 68 | 26 | 2,690 | 57 | 51 | 21 | 96 | 0 | 0 | 0 | 0 | 0 | 0 |
+| memcached | 96 | 0 | 46 | 0 | 0 | 12 | 0 | 15 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| mysql | 9,684 | 1,703 | 84 | 0 | 487 | 15 | 22 | 16 | 92 | 0 | 0 | 0 | 0 | 0 | 0 |
+| nginx | 411 | 0 | 1 | 0 | 0 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| onetbb | 479 | 226 | 17 | 0 | 48 | 0 | 5 | 9 | 20 | 1 | 0 | 0 | 0 | 0 | 0 |
+| parsec | 7,774 | 856 | 119 | 9 | 0 | 40 | 0 | 55 | 0 | 2 | 0 | 0 | 0 | 0 | 0 |
+| postgres | 2,407 | 158 | 27 | 0 | 0 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| rocksdb | 1,135 | 272 | 5 | 0 | 256 | 3 | 22 | 2 | 18 | 0 | 0 | 0 | 0 | 0 | 0 |
+| sqlite | 312 | 78 | 5 | 0 | 0 | 2 | 0 | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| **all** | | | **518** | 40 | **3,571** | 165 | 112 | 161 | 325 | 3 | 0 | 3 | 0 | 81 | 0 |
+
+At abseil 843b28efde9c, dpdk 9a45341f18a1, folly 514205c87be3, jemalloc
+6390a79a935f, leveldb bb74ef739973, libuv a267f5688be2, linux
+70dd4ee72eb2, llvm-project 83ee07799c34, memcached 2d51e364799b, mysql
+d69a12a94538, nginx 1725db9059e8, onetbb af14bb56c642, parsec
+2e492f771c67, postgres 26bd08fb5c06, rocksdb a3b0f187ff4b, sqlite
+9d7c5df7f0e4.
+
+Library queues are rare outside the libraries that define them: six lines
+in all, folly's in folly and two of the three oneTBB ones in PARSEC.
+DPDK's 81 ring creations are DPDK's own and choose single- or
+multi-producer by flag at the call, which is the programmer stating the
+topology. What the corpus is full of is mutexes and condition variables,
+which is what hand-written queues such as PARSEC's are made of (a buffer
+under a mutex, with a condition variable for each side), though this
+count does not tell such a queue from any other use of a mutex. Either
+way, recognising mutexes by name in unmodified code reaches further than
+modelling the libraries' queues.
+
 ## What it changes
 
 **A count of zero is not a count of no problem.** SQLite and memcached have no
