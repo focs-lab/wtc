@@ -100,6 +100,13 @@ own CIR emission, and the ownership analysis takes 0.2 seconds a
 workload. The specialised build's code is under 0.4% larger than the
 general build's on the workloads.
 
+**RQ6** (`benchmarks/results/2026-10-21-tsan-apps`). The compiler's
+builds of dedup and ferret, inline rings included, run under
+ThreadSanitizer without a report and with PARSEC's output, at every
+thread count tried; the lit suite runs every positive integration test's
+program the same way, and a negative control shows the build reports a
+race when a ring is forced on a queue with two producers.
+
 **RQ2, applications, first look.** Both PARSEC programs are
 coarse-grained: a dedup chunk spends tens of microseconds in compression
 per queue operation, and ferret's stages take milliseconds per image. In
