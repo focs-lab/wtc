@@ -162,7 +162,10 @@ compiler would check that compiler's code instead. A silent run proves
 nothing unless the same path can report, so the test suite holds it to two
 races it must find: a plain one on a global, which only instrumented loads
 and stores can see, and the forced two-producer queue
-(`test/Integration/tsan_own_build_caught.cpp`).
+(`test/Integration/tsan_own_build_caught.cpp`). The test suite also runs,
+wherever a ThreadSanitizer runtime is found, the compiler's build of every
+program a positive integration test runs; the one program with a single
+thread is the exception.
 
 ## What it is worth
 

@@ -10,7 +10,10 @@
 // RUN: %t.o2.exe | FileCheck %s
 // RUN: %wtc_cc -DWTC_CHECK %examples/inline_pipeline.cpp -o %t.check.exe
 // RUN: %t.check.exe | FileCheck %s
+// RUN: %if tsan %{ %wtc_cc --tsan -O2 -g %examples/inline_pipeline.cpp -o %t.tsan.exe 2>&1 | FileCheck %s --check-prefix=PASSES %}
+// RUN: %if tsan %{ env TSAN_OPTIONS=halt_on_error=1:symbolize=0 %t.tsan.exe 2>&1 | FileCheck %s --check-prefixes=TSAN,CHECK %}
 //
 // PASSES: queue @q: every pop only borrows its element (1 pop)
 // PASSES: tag rewritten to spsc_inline
+// TSAN-NOT: ThreadSanitizer
 // CHECK: tag spsc_inline in_order 1 sum 59999700000

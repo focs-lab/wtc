@@ -5,6 +5,11 @@
 // is the same as in the other tests; what is checked here is the code the
 // compiler generated, not a build of the source by another compiler.
 //
+// The other positive tests that run a program run it under
+// ThreadSanitizer too, beside the ordinary run (`%if tsan`); this file
+// holds the builds whose point is the substitution itself. mutex_basic.cpp
+// alone has no such run: its program has one thread.
+//
 // REQUIRES: tsan
 // RUN: %wtc_cc --tsan -O1 -g %examples/inline_pipeline.cpp -o %t.inline.exe 2>&1 | FileCheck %s --check-prefix=INLINE-BUILD
 // RUN: env TSAN_OPTIONS=halt_on_error=1:symbolize=0 %t.inline.exe 2>&1 | FileCheck %s --check-prefix=INLINE

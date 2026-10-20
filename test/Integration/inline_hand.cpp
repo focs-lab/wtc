@@ -8,6 +8,9 @@
 // RUN: %t.exe | FileCheck %s
 // RUN: %wtc_cc -DDECLARE_INLINE -DWTC_CHECK %examples/inline_pipeline.cpp -o %t.check.exe
 // RUN: %t.check.exe | FileCheck %s
+// RUN: %if tsan %{ %wtc_cc --tsan -O1 -g -DDECLARE_INLINE %examples/inline_pipeline.cpp -o %t.tsan.exe %}
+// RUN: %if tsan %{ env TSAN_OPTIONS=halt_on_error=1:symbolize=0 %t.tsan.exe 2>&1 | FileCheck %s --check-prefixes=TSAN,CHECK %}
 //
 // 3 * (0 + 1 + ... + 199999) = 59999700000
+// TSAN-NOT: ThreadSanitizer
 // CHECK: tag spsc_inline in_order 1 sum 59999700000

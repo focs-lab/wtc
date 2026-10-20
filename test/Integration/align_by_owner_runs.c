@@ -14,6 +14,9 @@
    RUN: FileCheck %s --check-prefix=IR < %t.ll
    RUN: %clang %t.ll -o %t.exe -pthread
    RUN: %t.exe | FileCheck %s --check-prefix=OUT
+   RUN: %if tsan %{ %clang -O1 -fsanitize=thread -mllvm -force-attribute=sanitize_thread -c %t.ll -o %t.tsan.o %}
+   RUN: %if tsan %{ %tsan_cxx -fsanitize=thread %t.tsan.o -o %t.tsan.exe -pthread %}
+   RUN: %if tsan %{ env TSAN_OPTIONS=halt_on_error=1:symbolize=0 %t.tsan.exe 2>&1 | FileCheck %s --check-prefixes=TSAN,SUM %}
 
    The same program without the pass is the control for the answer. Not for
    the placement: whether the linker puts two 8-byte globals in one line
@@ -33,6 +36,7 @@
 
    OUT: sum 2000000
    OUT-NEXT: separate lines
+   TSAN-NOT: ThreadSanitizer
    SUM: sum 2000000
 */
 
