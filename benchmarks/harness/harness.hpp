@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -29,6 +30,17 @@ namespace wtc_bench {
 // ---- time ------------------------------------------------------------
 
 inline std::uint64_t rdtsc() { return __rdtsc(); }
+
+// A timestamp for a latency sample. rdtsc alone may execute before the load
+// that delivered the element, or after later work has started; the fences
+// order it against both, so the sample brackets exactly the operation.
+// Pacing loops use the plain read, which is cheaper and needs no order.
+inline std::uint64_t rdtsc_fenced() {
+    _mm_lfence();
+    const std::uint64_t t = __rdtsc();
+    _mm_lfence();
+    return t;
+}
 
 inline void cpu_relax() { _mm_pause(); }
 
@@ -132,6 +144,41 @@ inline percentiles compute_percentiles(std::vector<std::uint64_t>& v, double sca
     std::sort(v.begin(), v.end());
     auto at = [&](double q) { std::size_t i = static_cast<std::size_t>(q * (v.size() - 1)); return v[i] * scale; };
     return {at(0.50), at(0.90), at(0.99), at(0.999), at(0.9999), v.back() * scale};
+}
+
+// The whole distribution, not only its percentiles: the samples counted in
+// log-linear buckets of the scaled value (ns), eight per power of two, so a
+// bucket is at most 12.5% wide. Written as "lower:count" pairs for the
+// non-empty buckets, which is enough to draw the distribution and to read
+// any percentile back to within a bucket. Expects v sorted, as
+// compute_percentiles leaves it.
+inline std::string log_histogram(const std::vector<std::uint64_t>& v, double scale) {
+    constexpr int kSub = 8;
+    auto lower_of = [](double x) {
+        if (x < 1.0) return 0.0;
+        int e = 0;
+        double m = std::frexp(x, &e);           // x = m * 2^e, m in [0.5, 1)
+        double base = std::ldexp(1.0, e - 1);   // the power of two below x
+        double frac = (m * 2.0) - 1.0;          // position within [base, 2*base)
+        return base * (1.0 + std::floor(frac * kSub) / kSub);
+    };
+    std::string out;
+    double cur = -1.0;
+    std::uint64_t count = 0;
+    auto flush = [&] {
+        if (count == 0) return;
+        char b[64];
+        std::snprintf(b, sizeof b, "%s%.6g:%llu", out.empty() ? "" : ",", cur,
+                      static_cast<unsigned long long>(count));
+        out += b;
+    };
+    for (std::uint64_t t : v) {
+        const double lo = lower_of(static_cast<double>(t) * scale);
+        if (lo != cur) { flush(); cur = lo; count = 0; }
+        ++count;
+    }
+    flush();
+    return out;
 }
 
 // ---- in-flight throttle ---------------------------------------------

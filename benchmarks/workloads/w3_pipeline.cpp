@@ -7,7 +7,10 @@
 //
 // generate produces 64-byte records from a seeded generator, either as fast
 // as it can (closed loop, the default) or one every 1/rate seconds by
-// busy-waiting on the TSC (open loop). transform does a fixed amount of
+// busy-waiting on the TSC (open loop). In the open loop a record's latency
+// runs from the time it was due, so a generator held back by a full
+// pipeline charges the delay to the records it held up; a run that did not
+// sustain the offered rate is marked saturated. transform does a fixed amount of
 // arithmetic on each record (--work rounds of a mixing function, about 15
 // ns each) and forwards it. sink accumulates a checksum, which is the output
 // oracle: every build flavour of this program must print the same number,
@@ -58,11 +61,12 @@ struct runner {
             std::uint64_t s = 0x1234567ull;
             std::uint64_t next = rdtsc();
             for (std::uint64_t i = 0; i < n; ++i) {
-                if (interval_ticks) { while (rdtsc() < next) cpu_relax(); next += interval_ticks; }
+                std::uint64_t due = 0;
+                if (interval_ticks) { while (rdtsc() < next) cpu_relax(); due = next; next += interval_ticks; }
                 if (i == warm) t_start.store(now_ns(), std::memory_order_relaxed);
                 e.seq = i;
                 for (auto& p : e.pad) { s = mix(s + i); p = s; }
-                e.set_tsc(rdtsc());
+                e.set_tsc(interval_ticks ? due : rdtsc_fenced());
                 q1.push(e);
                 th1.producer_wait(i + 1);
             }
@@ -87,7 +91,7 @@ struct runner {
             std::uint64_t sum = 0;
             for (std::uint64_t got = 0; got < n;) {
                 if (!q2.try_pop(e)) { wait_policy(c.wait, misses); continue; }
-                const std::uint64_t t = rdtsc();
+                const std::uint64_t t = rdtsc_fenced();
                 if (e.seq != got) { ok.store(false); break; }
                 sum += e.pad[0];
                 if (got >= warm) ticks.push_back(t - e.tsc());
@@ -121,6 +125,8 @@ struct runner {
         r.set("p50", p.p50); r.set("p90", p.p90); r.set("p99", p.p99);
         r.set("p999", p.p999); r.set("p9999", p.p9999); r.set("max_ns", p.max);
         r.set("checksum", checksum.load());
+        r.set("hist_ns", log_histogram(ticks, 1e9 / c.tsc_hz));
+        if (c.rate) r.set("saturated", mrec * 1e6 < 0.95 * static_cast<double>(c.rate) ? 1 : 0);
         r.set("freq_before_khz", static_cast<std::uint64_t>(f0));
         r.set("freq_after_khz", static_cast<std::uint64_t>(f1));
         r.set("tsc_hz", c.tsc_hz);

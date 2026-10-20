@@ -20,6 +20,12 @@
 // The claim is that compiler is indistinguishable from hand-inline, and the
 // checksum is identical in all four.
 //
+// The shape is the adapter pipeline's (w3_pipeline.cpp), so the two can be
+// read side by side: the same in-flight bound, and in the open loop latency
+// from each record's due time, with a run that did not sustain the offered
+// rate marked saturated. Without the bound the generic build's closed loop
+// measured a backlog of seconds, not the queue.
+//
 //   w3_pipeline_wtc [--n N] [--rate R] [--work W] [--cpus a,b,c] [--json F]
 
 #include "queue.hpp"
@@ -57,6 +63,7 @@ double g_tsc_hz = 0;
 std::uint64_t g_t_start = 0, g_t_end = 0, g_checksum = 0;
 bool g_order_ok = true;
 std::vector<std::uint64_t> g_ticks;
+throttle g_th1, g_th2;
 
 void generate() {
     E64 e{};
@@ -64,12 +71,14 @@ void generate() {
     const std::uint64_t interval = g_rate ? static_cast<std::uint64_t>(g_tsc_hz / g_rate) : 0;
     std::uint64_t next = rdtsc();
     for (std::uint64_t i = 0; i < g_n; ++i) {
-        if (interval) { while (rdtsc() < next) cpu_relax(); next += interval; }
+        std::uint64_t due = 0;
+        if (interval) { while (rdtsc() < next) cpu_relax(); due = next; next += interval; }
         if (i == g_warm) g_t_start = now_ns();
         e.seq = i;
         for (auto& p : e.pad) { s = mix(s + i); p = s; }
-        e.set_tsc(rdtsc());
+        e.set_tsc(interval ? due : rdtsc_fenced());
         stage1.push(e);
+        g_th1.producer_wait(i + 1);
     }
 }
 
@@ -78,12 +87,13 @@ void transform() {
         auto p = stage1.try_pop();
         if (!p) { cpu_relax(); continue; }
         E64 e = *p;
+        g_th1.consumer_progress(++got);
         std::uint64_t x = e.seq;
         for (std::uint64_t r = 0; r < g_work; ++r)
             for (auto v : e.pad) x = mix(x ^ v);
         e.pad[0] = x;
         stage2.push(e);
-        ++got;
+        g_th2.producer_wait(got);
     }
 }
 
@@ -92,11 +102,11 @@ void sink() {
     for (std::uint64_t got = 0; got < g_n;) {
         auto p = stage2.try_pop();
         if (!p) { cpu_relax(); continue; }
-        const std::uint64_t t = rdtsc();
+        const std::uint64_t t = rdtsc_fenced();
         if (p->seq != got) { g_order_ok = false; break; }
         sum += p->pad[0];
         if (got >= g_warm) g_ticks.push_back(t - p->tsc());
-        ++got;
+        g_th2.consumer_progress(++got);
     }
     g_t_end = now_ns();
     g_checksum = sum;
@@ -121,7 +131,9 @@ int main(int argc, char** argv) {
     std::thread t2 = wtc::spawn(transform);
     std::thread t3 = wtc::spawn(sink);
     pin_thread(t1, cpus[0]); pin_thread(t2, cpus[1]); pin_thread(t3, cpus[2]);
+    const long f0 = cur_freq_khz(cpus[0]);
     t1.join(); t2.join(); t3.join();
+    const long f1 = cur_freq_khz(cpus[0]);
 
     if (!g_order_ok) { std::fprintf(stderr, "FIFO broken\n"); return 1; }
     const double secs = static_cast<double>(g_t_end - g_t_start) / 1e9;
@@ -138,9 +150,15 @@ int main(int argc, char** argv) {
     r.set("rep", rep);
     r.set("n_ops", g_n - g_warm);
     r.set("mops", mrec);
-    r.set("p50", p.p50); r.set("p99", p.p99); r.set("p999", p.p999); r.set("max_ns", p.max);
+    r.set("p50", p.p50); r.set("p90", p.p90); r.set("p99", p.p99);
+    r.set("p999", p.p999); r.set("p9999", p.p9999); r.set("max_ns", p.max);
     r.set("checksum", g_checksum);
+    r.set("cpus", std::to_string(cpus[0]) + "," + std::to_string(cpus[1]) + "," + std::to_string(cpus[2]));
+    r.set("freq_before_khz", static_cast<std::uint64_t>(f0));
+    r.set("freq_after_khz", static_cast<std::uint64_t>(f1));
     r.set("tsc_hz", g_tsc_hz);
+    r.set("hist_ns", log_histogram(g_ticks, 1e9 / g_tsc_hz));
+    if (g_rate) r.set("saturated", mrec * 1e6 < 0.95 * static_cast<double>(g_rate) ? 1 : 0);
     // Which implementation each queue actually carries, asked of the object
     // rather than read off a disassembly. The tag branch lives inside the
     // shim's member functions, which are the same symbols in every build, so
