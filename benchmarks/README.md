@@ -136,7 +136,9 @@ are the ceiling.
   producer), and `--mode pairwise`, where every thread pushes then pops, as
   in the lock-free queue literature. Every queue the compiler cannot prove
   keeps the shim's general-purpose one, so this is where it is compared with
-  the libraries a developer would otherwise use.
+  the libraries a developer would otherwise use; with one consumer or one
+  producer, what the compiler substitutes there (`shim_mpsc`, `shim_spmc`)
+  runs beside them.
 
 Every results line also records the process's peak resident set
 (`peak_rss_kib`). The latency workloads record the whole distribution as
