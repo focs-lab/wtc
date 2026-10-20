@@ -32,9 +32,11 @@ With one thread per stage, four queues are proved single-producer
 single-consumer with borrowing consumers and become inline rings; the
 first, which the loader fills from inside a recursive directory scan, is
 refused ("reached through recursion"). With a thread count chosen at run
-time every queue keeps the general implementation, which is correct: a
-spawn in a loop is many threads. Run-time thread counts are what the
-conditional specialisation in the evaluation plan would address.
+time the last queue, from the rank stage's threads into the one output
+thread, becomes the shim's list for many producers, and the others keep
+the general implementation, which is correct: a spawn in a loop is many
+threads. Specialising the single-thread case of a run-time count would
+take a choice made at run time, which the compiler does not make yet.
 
 ## Building and running
 

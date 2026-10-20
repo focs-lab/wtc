@@ -18,11 +18,11 @@ still reach `malloc`, which can -- but the check treats a yes to either as
 blocking. The answers, by the implementation recorded on the operation
 (`#wtc.impl`; none means general-purpose):
 
-| operation | generic | spsc | spsc_inline |
-|---|---|---|---|
-| push | blocks: mutex; allocates | wait-free; allocates the element and new blocks | wait-free; allocates a new block when one fills |
-| pop | blocks: mutexes; frees the node | wait-free | wait-free |
-| lock, unlock | blocks | | |
+| operation | generic | spsc | spsc_inline | mpsc | spmc |
+|---|---|---|---|---|---|
+| push | blocks: mutex; allocates | wait-free; allocates the element and new blocks | wait-free; allocates a new block when one fills | wait-free; allocates the element and a node | wait-free; allocates the element and new blocks |
+| pop | blocks: mutexes; frees the node | wait-free | wait-free | wait-free; frees the node it moves past | blocks: the consumers' spin lock |
+| lock, unlock | blocks | | | | |
 
 A push to any of these queues can allocate, because they are unbounded; no
 producer passes the check. That is the honest answer, not a defect of the
