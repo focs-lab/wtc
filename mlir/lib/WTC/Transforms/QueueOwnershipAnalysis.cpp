@@ -356,8 +356,11 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
     auto tag = constructorTag(ctors);
     if (!tag || *tag == 0) return true;  // nothing declared, or nothing readable
     cir::CallOp ctor = ctors.front();
-    const char *declared = *tag == 2 ? "spsc_inline" : "spsc";
-    if (verdict == Topology::spsc) {
+    // mpsc promises one consumer and any number of producers; the others,
+    // one of each.
+    const bool declaredMpsc = *tag == 3;
+    const char *declared = *tag == 2 ? "spsc_inline" : declaredMpsc ? "mpsc" : "spsc";
+    if (verdict == Topology::spsc || (declaredMpsc && verdict == Topology::mpsc)) {
         ctor.emitRemark() << "wtc: queue " << label << ": declared " << declared << ", verified";
         ++remarks;
         return true;
@@ -368,6 +371,7 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
     for (const SideInfo *side : {&info.producers, &info.consumers}) {
         if (summary) break;
         const bool pushes = side == &info.producers;
+        if (pushes && declaredMpsc) continue;
         llvm::SmallVector<const Access *, 4> firstOfThread;
         llvm::SmallSet<unsigned, 4> seen;
         bool certainMany = false;
@@ -404,7 +408,7 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
         }
         return false;
     }
-    // Not spsc, but nothing certain: say why it could not be checked.
+    // Not as declared, but nothing certain: say why it could not be checked.
     InFlightDiagnostic w = ctor.emitWarning()
                            << "wtc: queue " << label << " is declared " << declared << "; cannot verify: ";
     auto built = dyn_cast<cir::PointerType>(ctor.getOperand(0).getType());

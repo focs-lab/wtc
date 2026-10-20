@@ -20,10 +20,15 @@ namespace wtc {
 // writes this tag. An element type that is not trivially destructible runs
 // as spsc instead, since its destructor would otherwise run later than the
 // program expects.
+//
+// mpsc is for any number of producers and one consumer: a linked list
+// without locks, whose producers each swap their node into the tail
+// (runtime/mpsc_list.hpp).
 enum class topology : int {
     generic = 0,
     spsc = 1,
     spsc_inline = 2,
+    mpsc = 3,
 };
 
 }

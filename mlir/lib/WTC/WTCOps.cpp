@@ -180,6 +180,8 @@ std::string QueuePushOp::getBlockingReason() {
                "current one is full";
     case ::mlir::wtc::Impl::spsc_inline:
         return "allocates a new block when the current one is full: the queue is unbounded";
+    case ::mlir::wtc::Impl::mpsc:
+        return "allocates the element it pushes (make_shared) and a node for it";
     default:
         return "takes the queue's mutex and allocates a node and the element";
     }
@@ -188,11 +190,19 @@ std::string QueuePushOp::getBlockingReason() {
 Progress QueuePopOp::getProgress() {
     return implOf(getImpl()) == ::mlir::wtc::Impl::generic ? Progress::blocking : Progress::wait_free;
 }
-bool QueuePopOp::mayCallAllocator() { return implOf(getImpl()) == ::mlir::wtc::Impl::generic; }
+bool QueuePopOp::mayCallAllocator() {
+    const ::mlir::wtc::Impl impl = implOf(getImpl());
+    return impl == ::mlir::wtc::Impl::generic || impl == ::mlir::wtc::Impl::mpsc;
+}
 std::string QueuePopOp::getBlockingReason() {
-    if (implOf(getImpl()) == ::mlir::wtc::Impl::generic)
+    switch (implOf(getImpl())) {
+    case ::mlir::wtc::Impl::generic:
         return "takes the queue's mutexes and frees the node it unlinks";
-    return "";
+    case ::mlir::wtc::Impl::mpsc:
+        return "frees the node it moves past";
+    default:
+        return "";
+    }
 }
 
 Progress QueueBatchBeginOp::getProgress() { return Progress::wait_free; }
@@ -210,6 +220,8 @@ std::string QueuePushDeferredOp::getBlockingReason() {
                "current one is full";
     case ::mlir::wtc::Impl::spsc_inline:
         return "allocates a new block when the current one is full: the queue is unbounded";
+    case ::mlir::wtc::Impl::mpsc:
+        return "allocates the element it pushes (make_shared) and a node for it";
     default:
         return "allocates a node and the element, and takes the queue's mutex when it publishes";
     }

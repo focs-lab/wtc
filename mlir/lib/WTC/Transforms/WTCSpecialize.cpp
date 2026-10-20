@@ -17,7 +17,9 @@ using namespace mlir::wtc;
 // the one call that constructs it and rewrite the constant it passes as the
 // topology tag from generic (0) to spsc (1), or to spsc_inline (2) when the
 // borrow analysis proved that every pop only borrows its element and the
-// element type may be held inline. Nothing else in the program changes: the
+// element type may be held inline; for one marked mpsc, to mpsc (3). An
+// spmc or mpmc queue, or one the analysis could not decide, keeps the
+// general-purpose implementation. Nothing else in the program changes: the
 // shim's constructor selects the implementation from the tag, and every
 // later operation on that object follows it.
 //
@@ -58,7 +60,7 @@ public:
 
     Option<bool> rewrite{
         *this, "rewrite", llvm::cl::init(true),
-        llvm::cl::desc("Rewrite the tags of queues proved spsc. With false the pass only records, "
+        llvm::cl::desc("Rewrite the tags of queues proved spsc or mpsc. With false the pass only records, "
                        "on each operation, the implementation its queue runs as the program "
                        "stands: the build of an unmodified source.")};
 
@@ -91,12 +93,15 @@ public:
             if (!isa<cir::GlobalOp, cir::AllocaOp>(root) &&
                 !(isa<cir::CallOp>(root) && root->hasAttr(kTopologyAttrName)))
                 return;
-            bool wanted = false, forcedInline = false;
-            if (auto t = root->getAttrOfType<TopologyAttr>(kTopologyAttrName))
-                wanted = t.getValue() == Topology::spsc;
+            bool wanted = false, forcedInline = false, forced = false;
+            Topology verdict = Topology::unknown;
+            if (auto t = root->getAttrOfType<TopologyAttr>(kTopologyAttrName)) {
+                verdict = t.getValue();
+                wanted = verdict == Topology::spsc || verdict == Topology::mpsc;
+            }
             if (auto g = dyn_cast<cir::GlobalOp>(root)) {
                 for (const std::string &s : forceSpsc)
-                    if (g.getSymName() == s) wanted = true;
+                    if (g.getSymName() == s) wanted = forced = true;
                 for (const std::string &s : forceInline)
                     if (g.getSymName() == s) wanted = forcedInline = true;
             }
@@ -130,11 +135,13 @@ public:
             }
             // Inline storage needs both the borrow proof and an element type
             // the shim can hold inline, which its constructor says by calling
-            // a marker; without either, plain spsc.
-            Impl to = Impl::spsc;
+            // a marker; without either, plain spsc. Many producers and one
+            // consumer is the list without locks, whatever the pops do.
+            const bool mpsc = verdict == Topology::mpsc && !forced && !forcedInline;
+            Impl to = mpsc ? Impl::mpsc : Impl::spsc;
             if (forcedInline) {
                 to = Impl::spsc_inline;
-            } else if (root->hasAttr(kBorrowedAttrName)) {
+            } else if (!mpsc && root->hasAttr(kBorrowedAttrName)) {
                 if (marksInlineOk(lookupCallee(ctor)))
                     to = Impl::spsc_inline;
                 else
@@ -148,7 +155,7 @@ public:
                 b, ctor.getLoc(), tagConst.getType(),
                 cir::IntAttr::get(tagConst.getType(), static_cast<int64_t>(to)));
             ctor->setOperand(1, tag.getResult());
-            root->setAttr(kSpecializedAttrName, TopologyAttr::get(ctx, Topology::spsc));
+            root->setAttr(kSpecializedAttrName, TopologyAttr::get(ctx, mpsc ? Topology::mpsc : Topology::spsc));
             ctor.emitRemark() << "wtc: specialised: constructor tag rewritten to "
                               << stringifyImpl(to);
             ++rewritten;

@@ -33,9 +33,10 @@ def WTC_TopologyAttr : EnumAttr<WTC_Dialect, WTC_TopologyEnum, "topology"> {
 def WTC_ImplGeneric    : I32EnumAttrCase<"generic", 0>;
 def WTC_ImplSPSC       : I32EnumAttrCase<"spsc", 1>;
 def WTC_ImplSPSCInline : I32EnumAttrCase<"spsc_inline", 2>;
+def WTC_ImplMPSC       : I32EnumAttrCase<"mpsc", 3>;
 
 def WTC_ImplEnum : I32EnumAttr<"Impl", "the implementation a queue object runs",
-    [WTC_ImplGeneric, WTC_ImplSPSC, WTC_ImplSPSCInline]> {
+    [WTC_ImplGeneric, WTC_ImplSPSC, WTC_ImplSPSCInline, WTC_ImplMPSC]> {
   let cppNamespace = "::mlir::wtc";
   let genSpecializedAttr = 0;
 }
