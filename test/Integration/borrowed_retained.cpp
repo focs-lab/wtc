@@ -5,11 +5,14 @@
 //
 // RUN: %wtc_cc %s -o %t.exe 2>&1 | FileCheck %s --check-prefix=PASSES
 // RUN: %t.exe | FileCheck %s
+// RUN: %if tsan %{ %wtc_cc --tsan -O1 -g %s -o %t.tsan.exe 2>&1 | FileCheck %s --check-prefix=PASSES %}
+// RUN: %if tsan %{ env TSAN_OPTIONS=halt_on_error=1:symbolize=0 %t.tsan.exe 2>&1 | FileCheck %s --check-prefixes=TSAN,CHECK %}
 // RUN: %wtc_cc -DWTC_CHECK --force-inline q %s -o %t.forced.exe
 // RUN: not --crash %t.forced.exe 2>&1 | FileCheck %s --check-prefix=CAUGHT
 //
 // PASSES: queue @q: not borrowed: the popped shared_ptr is passed to std::shared_ptr<record>::operator=
 // PASSES: tag rewritten to spsc{{$}}
+// TSAN-NOT: ThreadSanitizer
 // CHECK: tag spsc last 999
 // CAUGHT: wtc: borrowed element still referenced at the next try_pop on queue
 

@@ -21,7 +21,7 @@ const record* record::self() const { last = this; return this; }
 void opaque(const record*);
 
 wtc::queue<record> copied, stored, popped_twice, external, counted, returned,
-    called_popper, kept_by_member;
+    called_popper, kept_by_member, reset_early, as_integer;
 std::shared_ptr<record> keep;
 std::uint64_t sum = 0;
 
@@ -43,6 +43,11 @@ void c_returned() { sum += peek() != nullptr; }
 void drain() { called_popper.try_pop(); }
 void c_called_popper() { auto p = called_popper.try_pop(); drain(); if (p) sum += p->seq; }
 void c_kept_by_member() { auto p = kept_by_member.try_pop(); if (p) p->self(); }
+// Harmless on an element held inline, but not on the list of what a
+// borrower may do: the list is what is allowed, not what is known to hurt.
+void c_reset_early() { auto p = reset_early.try_pop(); p.reset(); }
+// An address turned into a number can be turned back after the next pop.
+void c_as_integer() { auto p = as_integer.try_pop(); sum += reinterpret_cast<std::uintptr_t>(p.get()); }
 
 void p1() { produce(copied); }
 void p2() { produce(stored); }
@@ -52,6 +57,8 @@ void p5() { produce(counted); }
 void p6() { produce(returned); }
 void p7() { produce(called_popper); }
 void p8() { produce(kept_by_member); }
+void p9() { produce(reset_early); }
+void p10() { produce(as_integer); }
 
 int main() {
     std::thread t[] = {wtc::spawn(p1), wtc::spawn(c_copied),        wtc::spawn(p2),
@@ -59,7 +66,8 @@ int main() {
                        wtc::spawn(p4), wtc::spawn(c_external),      wtc::spawn(p5),
                        wtc::spawn(c_counted), wtc::spawn(p6),       wtc::spawn(c_returned),
                        wtc::spawn(p7), wtc::spawn(c_called_popper), wtc::spawn(p8),
-                       wtc::spawn(c_kept_by_member)};
+                       wtc::spawn(c_kept_by_member), wtc::spawn(p9), wtc::spawn(c_reset_early),
+                       wtc::spawn(p10), wtc::spawn(c_as_integer)};
     for (auto& x : t) x.join();
     return static_cast<int>(sum & 1);
 }
@@ -72,4 +80,6 @@ int main() {
 // CHECK-DAG: queue @returned: not borrowed: a pointer into the element is returned
 // CHECK-DAG: queue @called_popper: not borrowed: a call to drain() may pop the same queue while the element is borrowed
 // CHECK-DAG: queue @kept_by_member: not borrowed: a pointer into the element is passed to record::self() const, which keeps it or passes it on
+// CHECK-DAG: queue @reset_early: not borrowed: the popped shared_ptr is passed to std::__shared_ptr<record, (__gnu_cxx::_Lock_policy)2>::reset()
+// CHECK-DAG: queue @as_integer: not borrowed: a pointer into the element is converted to an integer
 // CHECK-NOT: every pop only borrows

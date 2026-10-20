@@ -1,0 +1,126 @@
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 706361) -- timing measurement
+W1 shim_generic           E64   spin      0.96 Mops/s
+machine-lock: released after 21s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 706564) -- timing measurement
+W1 shim_generic           E64   spin      0.98 Mops/s
+machine-lock: released after 20s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 706967) -- timing measurement
+W2 open      shim_generic           E64   @ 1000ns  p50    7450  p99   44106  p99.9  442205  p99.99   539440  max    550241 ns
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 707015) -- timing measurement
+W2 open      shim_spsc              E64   @ 1000ns  p50     733  p99    1810  p99.9    3861  p99.99    56529  max    135915 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 707038) -- timing measurement
+W2 open      shim_spsc_inline       E64   @ 1000ns  p50     251  p99     372  p99.9    1554  p99.99    41718  max    128401 ns
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 707049) -- timing measurement
+W2 open      ring_borrowed          E64   @ 1000ns  p50     195  p99     315  p99.9    1586  p99.99    33236  max    112212 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 707060) -- timing measurement
+W2 open      shim_generic           E64   @10000ns  p50    1739  p99    4306  p99.9    6386  p99.99    11309  max    134246 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 707220) -- timing measurement
+W2 open      shim_spsc              E64   @10000ns  p50     643  p99    1626  p99.9    1946  p99.99     4790  max    115107 ns
+machine-lock: released after 12s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 707416) -- timing measurement
+W2 open      shim_spsc_inline       E64   @10000ns  p50     276  p99     328  p99.9     474  p99.99     3708  max    127196 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 707566) -- timing measurement
+W2 open      ring_borrowed          E64   @10000ns  p50     236  p99     283  p99.9     383  p99.99     3699  max     94275 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 707729) -- timing measurement
+W2 open      shim_generic           E64   @ 1000ns  p50    5033  p99   22852  p99.9   45609  p99.99   128345  max    146715 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 707760) -- timing measurement
+W2 open      shim_spsc              E64   @ 1000ns  p50     685  p99    1990  p99.9    3699  p99.99    59162  max    135532 ns
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 707799) -- timing measurement
+W2 open      shim_spsc_inline       E64   @ 1000ns  p50     174  p99     295  p99.9    1435  p99.99    43687  max    124020 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 707828) -- timing measurement
+W2 open      ring_borrowed          E64   @ 1000ns  p50     161  p99     279  p99.9    1571  p99.99    39896  max    121268 ns
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 707843) -- timing measurement
+W2 open      shim_generic           E64   @10000ns  p50    1525  p99    4511  p99.9    7270  p99.99    11930  max    102865 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 707978) -- timing measurement
+W2 open      shim_spsc              E64   @10000ns  p50     689  p99    1459  p99.9    1761  p99.99     4756  max    124229 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 708113) -- timing measurement
+W2 open      shim_spsc_inline       E64   @10000ns  p50     285  p99     338  p99.9     499  p99.99     3717  max    127235 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 708265) -- timing measurement
+W2 open      ring_borrowed          E64   @10000ns  p50     326  p99     373  p99.9     514  p99.99     3824  max    129211 ns
+machine-lock: released after 12s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 708433) -- timing measurement
+W2 open      shim_generic           E64   @ 1000ns  p50    3076  p99   11698  p99.9   21431  p99.99   125967  max    147551 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 708464) -- timing measurement
+W2 open      shim_spsc              E64   @ 1000ns  p50     691  p99    1908  p99.9    3656  p99.99    54437  max    135437 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 708476) -- timing measurement
+W2 open      shim_spsc_inline       E64   @ 1000ns  p50     216  p99     336  p99.9    1598  p99.99    46432  max    136869 ns
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 708504) -- timing measurement
+W2 open      ring_borrowed          E64   @ 1000ns  p50     210  p99     330  p99.9    1637  p99.99    52186  max    138124 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 708529) -- timing measurement
+W2 open      shim_generic           E64   @10000ns  p50    1668  p99    5630  p99.9    6813  p99.99    11470  max    128013 ns
+machine-lock: released after 12s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 708621) -- timing measurement
+W2 open      shim_spsc              E64   @10000ns  p50     698  p99    1561  p99.9    1829  p99.99     4882  max     58180 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 708722) -- timing measurement
+W2 open      shim_spsc_inline       E64   @10000ns  p50     286  p99     338  p99.9     505  p99.99     3833  max    129307 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 708844) -- timing measurement
+W2 open      ring_borrowed          E64   @10000ns  p50     321  p99     371  p99.9     593  p99.99     5089  max    130205 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 708943) -- timing measurement
+W2 open      shim_generic           E64   @ 1000ns  p50    2428  p99    8390  p99.9   96471  p99.99   251755  max    268726 ns
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 708967) -- timing measurement
+W2 open      shim_spsc              E64   @ 1000ns  p50     728  p99    1944  p99.9    3517  p99.99     6626  max     28992 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 708978) -- timing measurement
+W2 open      shim_spsc_inline       E64   @ 1000ns  p50     322  p99     391  p99.9    2657  p99.99    46533  max    132786 ns
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 708994) -- timing measurement
+W2 open      ring_borrowed          E64   @ 1000ns  p50     209  p99     323  p99.9    2278  p99.99    39369  max    110090 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 709019) -- timing measurement
+W2 open      shim_generic           E64   @10000ns  p50    1812  p99    6482  p99.9    7411  p99.99    15205  max    131627 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 709138) -- timing measurement
+W2 open      shim_spsc              E64   @10000ns  p50     658  p99    1921  p99.9    3078  p99.99     6449  max    127088 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 709234) -- timing measurement
+W2 open      shim_spsc_inline       E64   @10000ns  p50     189  p99     333  p99.9     498  p99.99     4937  max    133444 ns
+machine-lock: released after 12s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 709341) -- timing measurement
+W2 open      ring_borrowed          E64   @10000ns  p50     183  p99     325  p99.9     507  p99.99     5030  max    127383 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 709942) -- timing measurement
+W2 open      shim_generic           E64   @ 1000ns  p50    1709  p99    6326  p99.9   10186  p99.99    78012  max    114233 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 710055) -- timing measurement
+W2 open      shim_spsc              E64   @ 1000ns  p50     534  p99    1687  p99.9    3514  p99.99    53007  max    136568 ns
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 710075) -- timing measurement
+W2 open      shim_spsc_inline       E64   @ 1000ns  p50     225  p99     325  p99.9    1902  p99.99    51491  max    136862 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 710090) -- timing measurement
+W2 open      ring_borrowed          E64   @ 1000ns  p50     178  p99     324  p99.9    2793  p99.99   157164  max    255104 ns
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 710100) -- timing measurement
+W2 open      shim_generic           E64   @10000ns  p50    1650  p99    3436  p99.9    6265  p99.99    10345  max     32980 ns
+machine-lock: released after 12s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 710197) -- timing measurement
+W2 open      shim_spsc              E64   @10000ns  p50     656  p99    1784  p99.9    2886  p99.99     6439  max    127123 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 710300) -- timing measurement
+W2 open      shim_spsc_inline       E64   @10000ns  p50     190  p99     333  p99.9     514  p99.99     5045  max    129764 ns
+machine-lock: released after 11s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 710401) -- timing measurement
+W2 open      ring_borrowed          E64   @10000ns  p50     176  p99     312  p99.9     465  p99.99     4958  max    130536 ns
+machine-lock: released after 12s (exit 0)

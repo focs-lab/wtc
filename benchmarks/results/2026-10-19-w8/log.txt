@@ -1,0 +1,121 @@
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713065) -- timing measurement
+W8 plain    T1 W0    35.38 M sections/s  finish spread   0.0%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713081) -- timing measurement
+W8 batched  T1 W0   616.08 M sections/s  finish spread   0.0%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713090) -- timing measurement
+W8 plain    T1 W64    33.38 M sections/s  finish spread   0.0%
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713106) -- timing measurement
+W8 batched  T1 W64    58.83 M sections/s  finish spread   0.0%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713118) -- timing measurement
+W8 plain    T2 W0     7.08 M sections/s  finish spread   0.5%
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713152) -- timing measurement
+W8 batched  T2 W0   164.15 M sections/s  finish spread   0.1%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713165) -- timing measurement
+W8 plain    T2 W64     6.52 M sections/s  finish spread   0.4%
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713211) -- timing measurement
+W8 batched  T2 W64    40.80 M sections/s  finish spread   1.3%
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713224) -- timing measurement
+W8 plain    T1 W0    35.21 M sections/s  finish spread   0.0%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713234) -- timing measurement
+W8 batched  T1 W0   587.01 M sections/s  finish spread   0.0%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713243) -- timing measurement
+W8 plain    T1 W64    33.39 M sections/s  finish spread   0.0%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713252) -- timing measurement
+W8 batched  T1 W64    58.83 M sections/s  finish spread   0.0%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713261) -- timing measurement
+W8 plain    T2 W0     9.40 M sections/s  finish spread   1.7%
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713284) -- timing measurement
+W8 batched  T2 W0   165.93 M sections/s  finish spread   0.1%
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713294) -- timing measurement
+W8 plain    T2 W64     7.86 M sections/s  finish spread   1.0%
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713338) -- timing measurement
+W8 batched  T2 W64    42.42 M sections/s  finish spread   3.6%
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713355) -- timing measurement
+W8 plain    T1 W0    35.23 M sections/s  finish spread   0.0%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713371) -- timing measurement
+W8 batched  T1 W0   594.62 M sections/s  finish spread   0.0%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713380) -- timing measurement
+W8 plain    T1 W64    33.39 M sections/s  finish spread   0.0%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713389) -- timing measurement
+W8 batched  T1 W64    58.82 M sections/s  finish spread   0.0%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713398) -- timing measurement
+W8 plain    T2 W0     6.86 M sections/s  finish spread   0.5%
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713427) -- timing measurement
+W8 batched  T2 W0   200.85 M sections/s  finish spread   0.6%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713437) -- timing measurement
+W8 plain    T2 W64     7.73 M sections/s  finish spread   0.6%
+machine-lock: released after 2s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713460) -- timing measurement
+W8 batched  T2 W64    41.92 M sections/s  finish spread   1.6%
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713472) -- timing measurement
+W8 plain    T1 W0    35.24 M sections/s  finish spread   0.0%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713481) -- timing measurement
+W8 batched  T1 W0   598.53 M sections/s  finish spread   0.0%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713491) -- timing measurement
+W8 plain    T1 W64    33.38 M sections/s  finish spread   0.0%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713501) -- timing measurement
+W8 batched  T1 W64    58.86 M sections/s  finish spread   0.0%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713510) -- timing measurement
+W8 plain    T2 W0     7.11 M sections/s  finish spread   0.6%
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713555) -- timing measurement
+W8 batched  T2 W0   223.44 M sections/s  finish spread   2.4%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713565) -- timing measurement
+W8 plain    T2 W64     7.65 M sections/s  finish spread   1.2%
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713591) -- timing measurement
+W8 batched  T2 W64    41.71 M sections/s  finish spread   2.8%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713602) -- timing measurement
+W8 plain    T1 W0    35.24 M sections/s  finish spread   0.0%
+machine-lock: released after 1s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713612) -- timing measurement
+W8 batched  T1 W0   616.40 M sections/s  finish spread   0.0%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713621) -- timing measurement
+W8 plain    T1 W64    33.36 M sections/s  finish spread   0.0%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713630) -- timing measurement
+W8 batched  T1 W64    58.83 M sections/s  finish spread   0.0%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713639) -- timing measurement
+W8 plain    T2 W0     6.60 M sections/s  finish spread   0.1%
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713691) -- timing measurement
+W8 batched  T2 W0   219.84 M sections/s  finish spread   0.6%
+machine-lock: released after 0s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713702) -- timing measurement
+W8 plain    T2 W64     6.58 M sections/s  finish spread   0.2%
+machine-lock: released after 3s (exit 0)
+machine-lock: EXCLUSIVE lock held by wtc-bench (pid 713724) -- timing measurement
+W8 batched  T2 W64    41.80 M sections/s  finish spread   2.0%
+machine-lock: released after 1s (exit 0)
+distinct checksums per thread count: 2 (must be 2, one per count)

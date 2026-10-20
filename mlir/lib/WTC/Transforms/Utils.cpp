@@ -4,6 +4,7 @@
 #include "mlir/IR/BuiltinOps.h"
 
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/StringSet.h"
 
 namespace mlir::wtc {
 
@@ -83,6 +84,9 @@ SemanticOpKind getSemanticKind(cir::FuncOp funcOp) {
         if (name == "wtc_queue_batch_end")    return SemanticOpKind::QueueBatchEnd;
         if (name == "wtc_mutex_lock")         return SemanticOpKind::MutexLock;
         if (name == "wtc_mutex_unlock")       return SemanticOpKind::MutexUnlock;
+        if (name == "wtc_mutex_batch_begin")  return SemanticOpKind::MutexBatchBegin;
+        if (name == "wtc_mutex_batch_step")   return SemanticOpKind::MutexBatchStep;
+        if (name == "wtc_mutex_batch_end")    return SemanticOpKind::MutexBatchEnd;
     }
     return SemanticOpKind::Unknown;
 }
@@ -312,6 +316,14 @@ unsigned spawnEntryOperand(cir::CallOp op) {
 
 unsigned spawnFirstArgOperand(cir::CallOp op) {
     return spawnEntryOperand(op) + 1;
+}
+
+bool touchesOnlyItsArguments(cir::FuncOp f) {
+    if (!f || !f.getBody().empty()) return false;
+    static const llvm::StringSet<> names = {
+        "memcpy", "memmove", "memset", "memcmp", "memchr", "strlen", "strcmp", "strncmp",
+        "abs", "labs", "llabs", "sqrt", "sqrtf", "fabs", "fabsf"};
+    return names.contains(f.getSymName());
 }
 
 bool isAllocator(cir::FuncOp f) {

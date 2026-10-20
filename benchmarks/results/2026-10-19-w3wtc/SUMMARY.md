@@ -4,7 +4,7 @@ Intel(R) Xeon(R) w9-3495X, kernel 6.8.0-40-generic, allowed cpus 4-6, smt on, bu
 
 Drift across repetitions, median over all configurations, relative to the first: rep 0 1.000, rep 1 1.022, rep 2 1.000, rep 3 1.000, rep 4 0.999 (n=8) — no trend.  Widest single row: hand E64, 17% across repetitions.
 
-## W3wtc closed  E64
+## W3wtc closed  E64  work=4
 
 | variant | n | Mops/s | p50 | p99 | p99.9 | max | Mops/s vs generic | p99 vs generic | p99.9 vs generic |
 |---|---|---|---|---|---|---|---|---|---|
@@ -13,7 +13,7 @@ Drift across repetitions, median over all configurations, relative to the first:
 | hand | 5 | 3.18 ⚠ (2.99–3.54) | 3,384 | 14,732 | 434,954 | 573,440 | 3.48× | 1/374,283 | 1/12,744 |
 | generic | 5 | 0.91 ⚠ (0.90–0.97) | 3,936,510,000 | 5,513,970,000 | 5,542,920,000 | 5,546,140,000 | 1.00× | 1.00× | 1.00× |
 
-## W3wtc open  E64
+## W3wtc open  E64  work=4
 
 | variant | n | Mops/s | p50 | p99 | p99.9 | max | Mops/s vs generic | p99 vs generic | p99.9 vs generic |
 |---|---|---|---|---|---|---|---|---|---|

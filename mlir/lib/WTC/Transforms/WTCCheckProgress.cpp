@@ -11,6 +11,7 @@
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/Demangle/Demangle.h"
 
@@ -30,7 +31,7 @@ using namespace mlir::wtc;
 //     for another thread or may call the allocator (ProgressOpInterface);
 //   - a call to a function without a body here that is known to block or
 //     allocate: the allocator, the threading library's waits, input and
-//     output, sleeping, throwing;
+//     output, sleeping, throwing; and a throw itself;
 //   - any other function without a body here, and any indirect call whose
 //     targets are not known: what cannot be seen is counted as blocking;
 //   - inline assembly.
@@ -49,18 +50,10 @@ struct Finding {
     Operation *leaf;
     std::string why;
     llvm::SmallVector<Operation *, 8> chain;  // the calls from the function to the leaf
+    llvm::SmallVector<cir::FuncOp, 8> via;    // the function each of them enters
 };
 
 bool startsWith(const std::string &s, llvm::StringRef p) { return llvm::StringRef(s).starts_with(p); }
-
-// Functions without a body here that cannot block: they touch only the
-// memory they are given.
-bool harmlessExternal(llvm::StringRef name) {
-    static const llvm::StringSet<> names = {
-        "memcpy", "memmove", "memset", "memcmp", "strlen", "strcmp", "strncmp",
-        "abs", "labs", "llabs", "sqrt", "sqrtf", "fabs", "fabsf"};
-    return names.contains(name);
-}
 
 // Why a function without a body here blocks, by its name. Known offenders
 // get their reason; everything else gets the default, since a function
@@ -130,6 +123,9 @@ std::optional<Finding> ProgressChecker::blockingAt(Operation *op) {
     }
     if (op->getName().getStringRef().contains("asm"))
         return Finding{op, "runs inline assembly, which is not looked into", {}};
+    // ClangIR spells a throw as operations, not as calls into the runtime.
+    if (isa<cir::ThrowOp, cir::AllocExceptionOp>(op))
+        return Finding{op, "throws: the C++ runtime allocates the exception and unwinds the stack", {}};
     auto call = dyn_cast<cir::CallOp>(op);
     if (!call) return std::nullopt;
 
@@ -146,12 +142,13 @@ std::optional<Finding> ProgressChecker::blockingAt(Operation *op) {
     }
     for (cir::FuncOp t : targets) {
         if (t.getBody().empty()) {
-            if (harmlessExternal(t.getSymName())) continue;
+            if (touchesOnlyItsArguments(t)) continue;
             return Finding{op, externalReason(t.getSymName()), {}};
         }
         if (auto f = blockingIn(t)) {
             Finding out = *f;
             out.chain.insert(out.chain.begin(), op);
+            out.via.insert(out.via.begin(), t);
             return out;
         }
     }
@@ -205,11 +202,10 @@ public:
             }
             failed = true;
             InFlightDiagnostic d = f.emitError() << "wtc: " << name << " is declared lock-free but can block";
-            for (Operation *call : found->chain) {
-                std::string callee = "an indirect callee";
-                if (auto c = dyn_cast<cir::CallOp>(call))
-                    if (cir::FuncOp t = lookupCallee(c)) callee = llvm::demangle(t.getSymName().str());
-                d.attachNote(call->getLoc()) << "calls " << callee;
+            for (auto [call, target] : llvm::zip(found->chain, found->via)) {
+                const bool indirect = !lookupCallee(cast<cir::CallOp>(call));
+                d.attachNote(call->getLoc()) << "calls " << llvm::demangle(target.getSymName().str())
+                                             << (indirect ? " through a pointer" : "");
             }
             d.attachNote(found->leaf->getLoc()) << "which " << found->why;
         });

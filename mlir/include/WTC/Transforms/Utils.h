@@ -28,6 +28,9 @@ enum class SemanticOpKind {
     QueueBatchEnd,
     MutexLock,
     MutexUnlock,
+    MutexBatchBegin,
+    MutexBatchStep,
+    MutexBatchEnd,
 };
 
 // The callee of a direct call, or null for an indirect call or an
@@ -89,6 +92,14 @@ void memoryAccesses(Operation *op, llvm::SmallVectorImpl<MemoryAccess> &out);
 // for "the object allocated here", standing for every object the site
 // allocates when the site runs more than once.
 bool isAllocator(cir::FuncOp f);
+
+// Functions without a body here that read and write only the memory they
+// are handed, and do nothing else: no input or output, no allocation, no
+// waiting. One list for every pass that asks; each adds what its own
+// question also allows (the walk: functions that write no object it
+// tracks; the lock batching: the allocator, which cannot wait for a mutex
+// the program holds).
+bool touchesOnlyItsArguments(cir::FuncOp f);
 
 // The alignment the allocator guarantees for a site's result, when the
 // call says it: aligned_alloc, memalign and posix_memalign with a constant

@@ -87,3 +87,21 @@ module {
     cir.return
   }
 }
+
+// -----
+
+// So is a lock batch operation's: it lowers to a call of the mutex and the
+// batch.
+
+!s32i = !cir.int<s, 32>
+!m = !cir.struct<"m" {data !s32i}>
+!b = !cir.struct<"b" {data !s32i}>
+module {
+  cir.func private @step(!cir.ptr<!m>) [#cir.annotation<"wtc_mutex_batch_step">]
+  cir.func @step_arity(%mp: !cir.ptr<!m>, %bp: !cir.ptr<!b>) {
+    %h = builtin.unrealized_conversion_cast %mp : !cir.ptr<!m> to !wtc.mutex
+    // expected-error @+1 {{fallback_impl @step takes 1 arguments, but lowering passes 2}}
+    "wtc.lock_batch_step"(%h, %bp) {fallback_impl = @step} : (!wtc.mutex, !cir.ptr<!b>) -> ()
+    cir.return
+  }
+}

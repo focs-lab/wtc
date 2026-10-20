@@ -27,8 +27,11 @@ remark: wtc: queue @q1: every pop only borrows its element (1 pop)
 remark: wtc: specialised: constructor tag rewritten to spsc_inline
 ```
 
-`q2` has two producers and two consumers and keeps the general-purpose
-queue. `q1` goes one step further than the gate did: its consumer only
+The queue may be a global, a local, a member of a struct or a heap object,
+and the threads may reach it through parameters, struct fields or pointers
+written in several places; a pointer that may name one of several queues
+counts on each (`test/Transforms/QueueOwnershipAnalysis/`). `q2` has two
+producers and two consumers and keeps the general-purpose queue. `q1` goes one step further than the gate did: its consumer only
 tests whether a pop returned anything, so it borrows, and the next section
 is what that buys.
 
@@ -59,7 +62,7 @@ reused slot (`test/Integration/borrowed_retained.cpp`). On the pipeline
 benchmark both queues are borrowed, and the compiler's build is byte for
 byte the build whose source asks for inline storage itself.
 
-## 3. Batching the pushes of a loop
+## 3. Batching the pushes and the critical sections of a loop
 
 A loop that pushes on every iteration pays one synchronisation per element.
 In a function marked `WTC_BATCH` the compiler turns such a loop into one
@@ -77,6 +80,27 @@ remark: wtc: pushes in this loop batched: published every WTC_BATCH_K (64) pushe
 A loop that spins on an atomic, calls into the threading library, can
 throw, returns from the middle or pushes only sometimes is left alone,
 with the reason (`test/Transforms/Batch/refusals.cpp`).
+
+The same mark lets the compiler hold a mutex across the critical sections
+of a loop that takes and lets go of it on every iteration, letting it go
+every 64 sections and at the end:
+
+```sh
+tools/wtc-cc --toolchain build-llvm examples/lock_loop.cpp -o prog
+```
+
+```
+remark: wtc: critical sections in this loop batched: the mutex is let go every WTC_LOCK_BATCH_K (64) sections and at the end
+```
+
+Every interleaving of the result is one the original allows, so no
+critical section computes anything new; what changes is how long another
+thread waits, and that the code between the sections now runs with the
+mutex held. If that code waited for a thread that needs the mutex, the two
+would wait for each other, so the rules are stricter than for pushes:
+nothing in the loop may do input or output, sleep, or call anything the
+compiler cannot see into other than the allocator and functions that only
+touch the memory they are given (`test/Transforms/BatchLocks/refusals.cpp`).
 
 ## 4. Promises the build holds the program to
 
@@ -108,6 +132,40 @@ queue is spsc and borrowed, so the pop neither locks nor frees. It fails
 with `--no-specialize` (the general-purpose pop takes a mutex) and with
 `-DRETAIN` (keeping the element makes it a shared_ptr whose release may
 free it).
+
+The producer's side never passes, and `-DPRODUCER` says so: every push may
+find its block full and allocate the next one, since the queue has no
+capacity to run out of. Lock-freedom for a producer needs a bounded queue,
+which the shim does not offer.
+
+## How the substitutions are checked
+
+A faster queue that races is not a result, so every number below stands on
+`benchmarks/scripts/correctness.sh`, 27 checks, all passing on 20 October
+2026:
+
+- the ring's own tests, plain, under ThreadSanitizer and with its contract
+  checks compiled in;
+- the queue microbenchmark with every spsc and inline variant under
+  ThreadSanitizer, at three element sizes, and the pipeline: no report;
+- the compiler's own builds under ThreadSanitizer: the pipeline with both
+  queues inline, and the batched producer loop over each implementation:
+  no report;
+- the contract checks silent on correct programs, the guard against a kept
+  element included, on the compiler's inline builds;
+- the contract check firing on a queue with two producers and two
+  consumers forced to use the ring, in ten runs of ten.
+
+The third item instruments the code the compiler generated, after the whole
+pipeline (`tools/wtc-cc --tsan`); building the same source with another
+compiler would check that compiler's code instead. A silent run proves
+nothing unless the same path can report, so the test suite holds it to two
+races it must find: a plain one on a global, which only instrumented loads
+and stores can see, and the forced two-producer queue
+(`test/Integration/tsan_own_build_caught.cpp`). The test suite also runs,
+wherever a ThreadSanitizer runtime is found, the compiler's build of every
+program a positive integration test runs; the one program with a single
+thread is the exception.
 
 ## What it is worth
 
@@ -144,10 +202,35 @@ second, closed loop, and the delay of every 64th element:
 | spsc_inline | 16.62 | 54.04 | 3.25× | 0.5 → 2.1 µs |
 
 At 8 bytes the gain is 1.69× on the general-purpose queue and within 2% on
-the two rings. Batching pays where synchronisation is the cost: the mutex
+the two rings.
+
+**Critical sections held as one** (`w8_lock_batch_wtc`), million sections
+a second, closed loop, measured on 20 October 2026 (local time) in the
+same way on four reserved cores:
+
+| threads, work between sections | as written | batched | gain | finish spread, batched |
+|---|---|---|---|---|
+| one, none | 35.2 | 599 | 17.0× | — |
+| one, about 15 ns | 33.4 | 58.8 | 1.76× | — |
+| two, none | 7.08 | 201 | 28.4× | 0.6% |
+| two, about 15 ns | 7.65 | 41.8 | 5.46× | 2.0% |
+
+Two threads that take one mutex on every iteration hand its line back and
+forth on every section; held for 64 sections at a time, it changes hands
+64 times less often. The price is that the other thread waits longer for
+it; here the threads still finished within 3.6% of the run of each other
+(`benchmarks/results/2026-10-19-w8`). Batching pays where synchronisation is the cost: the mutex
 queue, and the inline ring, where nothing else is left; on the spsc queue
 the allocation per element still dominates. The delay is the price, and
 the reason batching is the program's choice to make.
+
+**Latency** (`w2_latency`, 64 bytes, one element every microsecond, open
+loop): p99 of 11.7 µs for the general-purpose queue, 1.9 µs for the spsc
+tag and 0.34 µs for spsc_inline, 0.03× the general-purpose queue's; at one
+element every ten microseconds, 4.5, 1.6 and 0.33 µs. The tag's third arm
+costs the general-purpose queue nothing: with two producers and two
+consumers it runs at 0.93 million elements a second, as in the gate's
+legs (`benchmarks/results/2026-10-19-w2mvp`, `-w5`).
 
 **The queue alone** (`w1_throughput`, 64 bytes): the shim's spsc tag runs
 at 2.64× the general-purpose queue (2.81 against 1.07 million a second),

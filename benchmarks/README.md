@@ -31,12 +31,17 @@ workloads/
                       what the compiler can reason about
   w5_mpmc_control     two producers and two consumers: the fallback
   w6_ring_shape       the ring's block size and padding, one per process
+  w7_batch_wtc        a producer loop's pushes, batched by the compiler or not
+  w8_lock_batch_wtc   a loop's critical sections, held as one by the
+                      compiler or not, with one or two threads
 scripts/
   check_env.sh        refuses to measure in an unfit environment
   campaign.sh         one leg: interleaved reps, control runs, results dir
   summarise.py        runs.jsonl -> SUMMARY.md with medians, CIs, ratios
   in_bench.py         drives a reservation without a terminal
   build_wtc_flavours.sh  the generic, hand-tagged and compiler-tagged builds
+  build_w7_flavours.sh   W7 for each implementation, batched and not
+  build_w8_flavours.sh   W8 as written and with its sections batched
   correctness.sh      sanitizer and contract-check leg
 third_party/          vendored baselines, pinned commits, licences
                       (boost and oneTBB come from system packages instead)

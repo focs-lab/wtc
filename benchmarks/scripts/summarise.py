@@ -21,7 +21,7 @@ import numpy as np
 # workload has: the adapter legs call it shim_generic, the compiler-selected
 # leg calls its untouched build generic. Naming one and leaving the columns
 # empty when it is absent is how a table comes out with no ratios at all.
-BASELINE_CANDIDATES = ("shim_generic", "generic", "orig_generic")
+BASELINE_CANDIDATES = ("shim_generic", "generic", "orig_generic", "plain")
 CEILING_CANDIDATES = ("ring_inline", "rigtorp_inline")
 
 
@@ -43,8 +43,10 @@ def load(path):
 
 
 def key_of(r):
-    return (r["workload"], r.get("mode", ""), r["elem"], r.get("wait", ""),
-            str(r.get("interval_ns", "")), str(r.get("smt", 0)))
+    # W8 has threads and work where the queues have an element size.
+    return (r["workload"], r.get("mode", ""), r.get("elem", ""), r.get("wait", ""),
+            str(r.get("interval_ns", "")), str(r.get("smt", 0)),
+            str(r.get("threads", "")), str(r.get("work", "")))
 
 
 def boot_ci(values, iters=2000, seed=1):
@@ -123,8 +125,9 @@ def main(out_dir):
         metric = "mops" if "mops" in r else ("p50" if "p50" in r else None)
         if metric is None:
             continue
-        by_cfg[(r["workload"], r.get("mode", ""), r["variant"], r["elem"],
-                r.get("wait", ""), str(r.get("interval_ns", "")))][r["rep"]] = float(r[metric])
+        by_cfg[(r["workload"], r.get("mode", ""), r["variant"], r.get("elem", ""),
+                r.get("wait", ""), str(r.get("interval_ns", "")),
+                str(r.get("threads", "")), str(r.get("work", "")))][r["rep"]] = float(r[metric])
     reps = sorted({rep for d in by_cfg.values() for rep in d})
     if len(reps) > 1:
         cells = []
@@ -178,7 +181,8 @@ def main(out_dir):
         note = ""
         if widest[1] is not None and widest[0] > 0.10:
             wk = widest[1]
-            note = (f"  Widest single row: {wk[2]} E{wk[3]}"
+            note = (f"  Widest single row: {wk[2]}" + (f" E{wk[3]}" if wk[3] else "")
+                    + (f" threads={wk[6]} work={wk[7]}" if wk[6] else "")
                     + (f" @{wk[5]}" if wk[5] and wk[5] != "0" else "")
                     + f", {widest[0]*100:.0f}% across repetitions.")
         print("Drift across repetitions, median over all configurations, relative to the first: "
@@ -190,8 +194,14 @@ def main(out_dir):
         groups[key_of(r)][r["variant"]].append(r)
 
     for key in sorted(groups):
-        workload, mode, elem, wait, interval, smt = key
-        title = f"## {workload}{(' ' + mode) if mode else ''}  E{elem}"
+        workload, mode, elem, wait, interval, smt, threads, work = key
+        title = f"## {workload}{(' ' + mode) if mode else ''}"
+        if elem:
+            title += f"  E{elem}"
+        if threads:
+            title += f"  threads={threads}"
+        if work:
+            title += f"  work={work}"
         if wait:
             title += f"  wait={wait}"
         if interval and interval != "0":
@@ -209,7 +219,7 @@ def main(out_dir):
         # percentiles, the pipeline reports both throughput and tails but
         # not every percentile, and assuming otherwise is what made this
         # script crash mid-campaign and take the two legs after it down.
-        present = [m for m in ("mops", "p50", "p90", "p99", "p999", "p9999", "max_ns")
+        present = [m for m in ("mops", "p50", "p90", "p99", "p999", "p9999", "max_ns", "finish_spread")
                    if any(summarise_metric(rows, m) for rows in variants.values())]
         if not present:
             print("_no usable measurements_\n")
@@ -217,7 +227,8 @@ def main(out_dir):
         sort_key, ascending = (("mops", False) if "mops" in present
                                else ("p99" if "p99" in present else present[0], True))
 
-        titles = {"mops": "Mops/s", "max_ns": "max", "p999": "p99.9", "p9999": "p99.99"}
+        titles = {"mops": "Mops/s", "max_ns": "max", "p999": "p99.9", "p9999": "p99.99",
+                  "finish_spread": "finish spread"}
         head = ["variant", "n"] + [titles.get(m, m) for m in present]
         ratio_cols = [m for m in ("mops", "p99", "p999") if m in present]
         head += [f"{titles.get(m, m)} vs {base_name}" for m in ratio_cols] if base else []
@@ -244,6 +255,9 @@ def main(out_dir):
                 spread = ""
                 if m == sort_key:
                     spread = f" ({fmt(s['min'])}–{fmt(s['max'])})"
+                if m == "finish_spread":   # a share of the run
+                    cells.append(f"{100 * s['median']:.1f}% (max {100 * s['max']:.1f}%)")
+                    continue
                 cells.append(f"{fmt(s['median'])}{flag}{spread}")
             if base:
                 for m in ratio_cols:
