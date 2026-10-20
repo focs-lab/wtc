@@ -147,3 +147,6 @@ moves on its own, never as a side effect.
 
 Apache License 2.0 with LLVM Exceptions, the same terms as llvm-project, so
 that anything worth sending upstream can go upstream without relicensing.
+One directory differs: `benchmarks/apps/ferret`, which derives from PARSEC's
+Ferret Toolkit, is under the GNU GPL, version 2 or later (its README says
+why).
