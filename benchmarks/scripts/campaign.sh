@@ -7,8 +7,8 @@
 # Legs: w1 (throughput), w2 (open-loop latency at 1 us and 10 us), w2pp
 # (ping-pong), smoke (everything once, tiny sizes, no environment check);
 # the MVP's own: w1mvp, w2mvp, w3wtc, w7, w8; the evaluation's: eval-w1,
-# eval-w1smt, eval-w2, eval-w3, eval-w7, eval-w8, eval-w9, each with the
-# question it answers in its comment below.
+# eval-w1smt, eval-w2, eval-w3, eval-w7, eval-w8, eval-w9, eval-ferret,
+# each with the question it answers in its comment below.
 #
 # Legs that run builds made by tools/wtc-cc take the directory holding them
 # as BUILD and need the CMake build too, for the controls and the
@@ -30,6 +30,8 @@ set -euo pipefail
 
 LEG=${1:?leg}; BUILD=${2:?build dir}; REPS=${3:-10}
 CONTROL_BUILD=${CONTROL_BUILD:-$BUILD}
+# Absolute, because a leg may run its programs from their input directory.
+BUILD=$(cd "$BUILD" && pwd); CONTROL_BUILD=$(cd "$CONTROL_BUILD" && pwd)
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 DATE=$(date -u +%Y-%m-%d)
@@ -541,6 +543,39 @@ case "$LEG" in
     for f in "$OUT"/checksums-*.txt; do
       echo "$(basename "$f"): $(sort -u "$f" | wc -l) distinct checksum(s) (must be 1)" | tee -a "$OUT/log.txt"
     done
+    ;;
+  eval-ferret)
+    # RQ2/RQ5 on an application: PARSEC ferret, simlarge, as PARSEC builds it
+    # and as the port builds it (BUILD: the bin directory of
+    # benchmarks/apps/ferret/build.sh; INPUTS: the directory of its
+    # fetch-inputs.sh). One thread per stage, where the compiler proves four
+    # of the five queues single-producer, and 2 and 4 per middle stage, where
+    # it proves none. The time is ferret's own, of its parallel region; every
+    # run's output is checked against PARSEC's. Needs 18 cores.
+    "$HERE/check_env.sh" 18 || exit 1
+    INPUTS=${INPUTS:?INPUTS=<dir of benchmarks/apps/ferret/fetch-inputs.sh>}
+    meta
+    warmup; control 900
+    cd "$INPUTS/simlarge"
+    lock "$BUILD/ferret-orig" corel lsh queries 10 20 1 reference.txt >/dev/null 2>&1
+    ferret_run() { # variant, threads per middle stage, rep
+      local v=$1 n=$2 rep=$3 t
+      t=$(lock "$BUILD/ferret-$v" corel lsh queries 10 20 "$n" out.txt 2>/dev/null | sed -n 's/^QUERY TIME: \([0-9.]*\) seconds/\1/p')
+      local same=0
+      if [ "$n" = 1 ]; then cmp -s out.txt reference.txt && same=1
+      else cmp -s <(sort out.txt) <(sort reference.txt) && same=1; fi
+      [ "$same" = 1 ] || echo "ferret-$v n=$n rep $rep: output differs from PARSEC's" | tee -a "$OUT/log.txt"
+      printf '{"workload": "ferret", "variant": "%s", "threads": %d, "rep": %d, "time_s": %s, "queries": %d, "output_ok": %d, "cmd": "%s"}\n' \
+        "$v" "$n" "$rep" "${t:-0}" "$(wc -l < out.txt)" "$same" "ferret-$v corel lsh queries 10 20 $n" >> "$RUNS"
+    }
+    for rep in $(seq 0 $((REPS-1))); do
+      for v in orig generic-one compiler-one hand-one; do ferret_run "$v" 1 "$rep"; done
+      for n in 2 4; do
+        for v in orig generic compiler; do ferret_run "$v" "$n" "$rep"; done
+      done
+    done
+    cd "$ROOT"
+    control 901
     ;;
   *) echo "unknown leg $LEG" >&2; exit 2 ;;
 esac

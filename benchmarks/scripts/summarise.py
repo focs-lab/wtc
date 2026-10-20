@@ -25,7 +25,7 @@ from pathlib import Path
 # workload has: the adapter legs call it shim_generic, the compiler-selected
 # leg calls its untouched build generic. Naming one and leaving the columns
 # empty when it is absent is how a table comes out with no ratios at all.
-BASELINE_CANDIDATES = ("shim_generic", "generic", "orig_generic", "plain")
+BASELINE_CANDIDATES = ("shim_generic", "orig", "generic", "orig_generic", "plain")
 CEILING_CANDIDATES = ("ring_inline", "rigtorp_inline")
 
 
@@ -239,16 +239,17 @@ def main(out_dir):
         # percentiles, the pipeline reports both throughput and tails but
         # not every percentile, and assuming otherwise is what made this
         # script crash mid-campaign and take the two legs after it down.
-        present = [m for m in ("mops", "p50", "p90", "p99", "p999", "p9999", "max_ns", "finish_spread")
+        present = [m for m in ("mops", "time_s", "p50", "p90", "p99", "p999", "p9999", "max_ns", "finish_spread")
                    if any(summarise_metric(rows, m) for rows in variants.values())]
         if not present:
             print("_no usable measurements_\n")
             continue
         sort_key, ascending = (("mops", False) if "mops" in present
+                               else ("time_s", True) if "time_s" in present
                                else ("p99" if "p99" in present else present[0], True))
 
         titles = {"mops": "Mops/s", "max_ns": "max", "p999": "p99.9", "p9999": "p99.99",
-                  "finish_spread": "finish spread"}
+                  "finish_spread": "finish spread", "time_s": "time (s)"}
         for v, rows in variants.items():
             for m in present:
                 st = summarise_metric(rows, m)
@@ -258,7 +259,7 @@ def main(out_dir):
         head = ["variant", "n"] + [titles.get(m, m) for m in present]
         if "mops" in present:
             head.insert(head.index("Mops/s") + 1, "ns/op")
-        ratio_cols = [m for m in ("mops", "p99", "p999") if m in present]
+        ratio_cols = [m for m in ("mops", "time_s", "p99", "p999") if m in present]
         head += [f"{titles.get(m, m)} vs {base_name}" for m in ratio_cols] if base else []
         if "mops" in present and ceil:
             head.append(f"vs {ceil_name}")
