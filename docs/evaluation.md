@@ -93,6 +93,13 @@ in unported code: 518 lines naming `pthread_mutex_t` and 3571 naming a
 `std::mutex` type, against six lines using a library queue outside DPDK's
 rings (`docs/corpus.md`).
 
+**RQ5** (`benchmarks/results/2026-10-21-compile-cost`, untimed). `wtc-cc`
+costs 1.65 times the same clang on the compiler-built workloads and 1.9
+to 2.5 times on the small examples; most of the difference is ClangIR's
+own CIR emission, and the ownership analysis takes 0.2 seconds a
+workload. The specialised build's code is under 0.4% larger than the
+general build's on the workloads.
+
 **RQ2, applications, first look.** Both PARSEC programs are
 coarse-grained: a dedup chunk spends tens of microseconds in compression
 per queue operation, and ferret's stages take milliseconds per image. In

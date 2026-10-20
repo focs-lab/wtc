@@ -13,8 +13,9 @@ about 1,200 functions each with the standard headers), and 1.9 to 2.5
 times on the small examples, where fixed costs weigh more. The largest
 step is ClangIR's own: emitting CIR takes about 2.1 of the workloads'
 4.8 seconds, `wtc-opt` about 1.0, translating back to LLVM IR 0.5, and
-code generation 1.2. The code the substitutions add is under 0.4% of
-`.text` (W3: 45,680 against 45,505 bytes).
+code generation 1.2. The specialised build's `.text` is 81 to 175 bytes
+larger than the general build's: under 0.4% on the workloads (W3: 45,680
+against 45,505 bytes), up to 1.7% on the smallest examples.
 
 Before 99ccccd the ownership analysis took 10.9 of `wtc-opt`'s 11.6
 seconds on each workload: whether a function's address is taken was
