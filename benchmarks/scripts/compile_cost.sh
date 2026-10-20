@@ -59,7 +59,7 @@ r["wtc_cc_s"] = sum(v for k, v in r.items() if k in ("cir_s", "wtc_opt_s", "cir_
 # --mlir-timing-display=list: "  0.0012 ( 3.4%)  PassName" per pass
 for line in open(f"{tmp}/timing.txt"):
     m = re.match(r"\s*([0-9.]+) \(\s*[0-9.]+%\)\s+(.+?)\s*$", line)
-    if m and m.group(2) not in ("Total",):
+    if m and m.group(2) not in ("Total", "root"):   # the enclosing timers, not passes
         r["pass:" + m.group(2)] = float(m.group(1))
 def text(exe):
     out = subprocess.run(["size", "-A", exe], capture_output=True, text=True).stdout
