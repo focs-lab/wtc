@@ -73,6 +73,20 @@ build hand-one           --no-specialize -DDEDUP_ONE -DDEDUP_HAND_TAG=spsc_inlin
 build hand-spsc-one      --no-specialize -DDEDUP_ONE -DDEDUP_HAND_TAG=spsc
 build compiler-flat-one  -DDEDUP_FLAT -DDEDUP_ONE
 OBJS=${OTHERS/obj\/dedup.o /} build compiler-flat-one-unity -DDEDUP_FLAT -DDEDUP_ONE -DDEDUP_UNITY
+# TSAN=1 adds the compiler's builds under ThreadSanitizer, every file
+# instrumented, for the safety question: the build as written, whose
+# queues stay general, and the one translation unit whose proved queues
+# are inline rings.
+if [ "${TSAN:-0}" = 1 ]; then
+  mkdir -p obj-tsan
+  for f in hashtable util dedup rabin decoder mbuffer sha binheap tree; do
+    $CC $CFLAGS -O1 -g -fsanitize=thread -w -c "$SRC/$f.c" -o "obj-tsan/$f.o"
+  done
+  $CC -O1 -g -fsanitize=thread -w -D_GNU_SOURCE -I"$HOOKS" -I"$HOOKS/include" -c "$HOOKS/hooks.c" -o obj-tsan/hooks.o
+  TOTHERS=${OTHERS//obj\//obj-tsan/}
+  OBJS=$TOTHERS build compiler-tsan --tsan -O1 -g
+  OBJS=${TOTHERS/obj-tsan\/dedup.o /} build compiler-flat-one-unity-tsan --tsan -O1 -g -DDEDUP_FLAT -DDEDUP_ONE -DDEDUP_UNITY
+fi
 {
   echo "compiler=tools/wtc-cc, ClangIR $(git -c safe.directory="$WTC" -C "$WTC" submodule status llvm 2>/dev/null | awk '{print $1}' | tr -d '+-' | cut -c1-12)"
   echo "wtc=$(git -c safe.directory="$WTC" -C "$WTC" rev-parse --short=12 HEAD 2>/dev/null)"
