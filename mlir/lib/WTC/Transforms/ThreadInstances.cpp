@@ -1473,9 +1473,11 @@ void ThreadInstanceWalk::addRootsForModule() {
         if (f.getBody().empty()) return;
         if (getSemanticKind(f) != SemanticOpKind::Unknown) return;   // shim bodies carry no wtc ops
         if (isAddressTaken(f, module_) && relevant_(f)) {
-            if (addIfRoom({f, nextThread_++, Mult::Many, Mult::Many, nullptr, nullptr, true, false}))
+            if (Instance *root = addIfRoom({f, nextThread_++, Mult::Many, Mult::Many, nullptr, nullptr, true, false})) {
+                root->manyRoot = "its address is taken, so it may run on any thread";
                 noteRemark(f, "wtc: address of this function is taken; it is treated as callable "
                               "from any thread, any number of times");
+            }
         }
     });
 }
@@ -1547,7 +1549,8 @@ void ThreadInstanceWalk::addOrphanRoots() {
             linkage == cir::GlobalLinkageKind::PrivateLinkage)
             return;
         if (!relevant_(f)) return;
-        addIfRoom({f, nextThread_++, Mult::Many, Mult::Many, nullptr, nullptr, true, false});
+        if (Instance *root = addIfRoom({f, nextThread_++, Mult::Many, Mult::Many, nullptr, nullptr, true, false}))
+            root->manyRoot = "nothing in this translation unit calls it";
     });
 }
 
