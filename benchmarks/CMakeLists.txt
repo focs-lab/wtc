@@ -74,6 +74,12 @@ foreach(w w1_throughput w2_latency w3_pipeline w5_mpmc_control w6_ring_shape)
   target_link_libraries(${w} PRIVATE wtc_bench_flags)
 endforeach()
 
+# The allocation counter: a preload for the runs that explain a result
+# (harness/alloccount.cpp). Linked into nothing, and never sanitized: it
+# replaces the allocator a sanitizer would also replace.
+add_library(wtc_alloccount SHARED harness/alloccount.cpp)
+target_compile_options(wtc_alloccount PRIVATE -O2 -Wall -Wextra -Werror -fno-builtin)
+
 # What was built, for meta.json.
 file(WRITE ${CMAKE_BINARY_DIR}/build-info.txt
   "compiler=${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}\n"
