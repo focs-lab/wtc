@@ -66,15 +66,16 @@ byte the build whose source asks for inline storage itself.
 
 A loop that pushes on every iteration pays one synchronisation per element.
 In a function marked `WTC_BATCH` the compiler turns such a loop into one
-batched run, published every 64 elements and at the end, when nothing in
-the loop can be waiting for an element it has not published.
+batched run, published every `WTC_BATCH_K` elements (64 unless the program
+sets it) and at the end, when nothing in the loop can be waiting for an
+element it has not published.
 
 ```sh
 tools/wtc-cc --toolchain build-llvm examples/batch_loop.cpp -o prog
 ```
 
 ```
-remark: wtc: pushes in this loop batched: published every WTC_BATCH_K (64) pushes and at the end
+remark: wtc: pushes in this loop batched: published every WTC_BATCH_K pushes and at the end
 ```
 
 A loop that spins on an atomic, calls into the threading library, can
@@ -83,14 +84,15 @@ with the reason (`test/Transforms/Batch/refusals.cpp`).
 
 The same mark lets the compiler hold a mutex across the critical sections
 of a loop that takes and lets go of it on every iteration, letting it go
-every 64 sections and at the end:
+every `WTC_LOCK_BATCH_K` sections (64 unless the program sets it) and at
+the end:
 
 ```sh
 tools/wtc-cc --toolchain build-llvm examples/lock_loop.cpp -o prog
 ```
 
 ```
-remark: wtc: critical sections in this loop batched: the mutex is let go every WTC_LOCK_BATCH_K (64) sections and at the end
+remark: wtc: critical sections in this loop batched: the mutex is let go every WTC_LOCK_BATCH_K sections and at the end
 ```
 
 Every interleaving of the result is one the original allows, so no
