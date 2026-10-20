@@ -18,6 +18,7 @@ ROOT=$(cd "$HERE/../.." && pwd)
 SRC="$ROOT/benchmarks/workloads/w7_batch_wtc.cpp"
 CC="$ROOT/tools/wtc-cc"
 mkdir -p "$OUT"
+: > "$OUT/flavours.txt"
 export WTC_OPT=${WTC_OPT:-$ROOT/build/bin/wtc-opt}
 INC="-I$ROOT/benchmarks/queues -I$ROOT/benchmarks/harness"
 LOCK=()
@@ -25,6 +26,7 @@ command -v machine-lock >/dev/null && LOCK=(machine-lock --lane wtc --cores 4 --
 
 build() { # name, extra wtc-cc args...
   local name=$1; shift
+  echo "flavour $name=-O2 $*" >> "$OUT/flavours.txt"
   "${LOCK[@]}" "$CC" --toolchain "$ROOT/build-llvm" $INC -O2 "$@" "$SRC" -o "$OUT/$name" \
     2>"$OUT/$name.log" || { echo "$name: FAILED"; tail -5 "$OUT/$name.log"; return 1; }
   local batched=no
@@ -45,3 +47,10 @@ done
 echo
 echo "every *_batch_* must say batched yes and every *_plain_* no; the tag must"
 echo "match the name; the checksum must agree within each element size."
+
+# What was built, for meta.json: the toolchain and each flavour's flags.
+{
+  echo "compiler=tools/wtc-cc, ClangIR $(git -c safe.directory="$ROOT" -C "$ROOT" submodule status llvm 2>/dev/null | awk '{print $1}' | tr -d '+-' | cut -c1-12)"
+  echo "wtc=$(git -c safe.directory="$ROOT" -C "$ROOT" rev-parse --short=12 HEAD 2>/dev/null)$([ -n "$(git -c safe.directory="$ROOT" -C "$ROOT" status --porcelain -- . ":(exclude)benchmarks/results" 2>/dev/null)" ] && echo ' (dirty)')"
+  cat "$OUT/flavours.txt"
+} > "$OUT/build-info.txt"

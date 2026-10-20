@@ -217,6 +217,10 @@ inline std::uint64_t peak_rss_kib() {
     return static_cast<std::uint64_t>(ru.ru_maxrss);
 }
 
+// The command line the run was started with, as JSON string content: every
+// results line carries it, so a row can be reproduced from the line alone.
+inline std::string g_cmdline;
+
 // ---- runs that explain a result ----------------------------------------
 
 // A timed run says how fast; these say why, and are kept apart from it
@@ -293,6 +297,8 @@ struct result_line {
         auto all = fields;
         if (!all.count("peak_rss_kib")) all["peak_rss_kib"] = std::to_string(peak_rss_kib());
         if (const char* pass = std::getenv("WTC_PASS")) all["pass"] = std::string("\"") + pass + "\"";
+        if (const char* where = std::getenv("WTC_PLACEMENT")) all["placement"] = std::string("\"") + where + "\"";
+        if (!g_cmdline.empty()) all["cmd"] = "\"" + g_cmdline + "\"";
         g_perf.add_to(all);
         add_alloc_counts(all);
         for (auto& [k, v] : all) { if (!first) line += ", "; first = false; line += "\"" + k + "\": " + v; }
@@ -307,6 +313,13 @@ struct result_line {
 struct args {
     std::map<std::string, std::string> kv;
     args(int argc, char** argv) {
+        for (int i = 0; i < argc; ++i) {
+            if (i) g_cmdline += ' ';
+            for (const char* c = argv[i]; *c; ++c) {
+                if (*c == '"' || *c == '\\') g_cmdline += '\\';
+                g_cmdline += *c;
+            }
+        }
         for (int i = 1; i < argc; ++i) {
             std::string a = argv[i];
             if (a.rfind("--", 0) != 0) continue;
