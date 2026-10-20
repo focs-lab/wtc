@@ -23,6 +23,8 @@ tools/wtc-cc --toolchain build-llvm examples/queue_example.cpp -o prog
 ```
 remark: wtc: queue @q1: spsc (producers: 1, consumers: 1)
 remark: wtc: queue @q2: mpmc (producers: many, consumers: many)
+remark: wtc: queue @q2: many producers: 2 threads: producer2() started at queue_example.cpp:61:22, producer2() started at queue_example.cpp:62:22
+remark: wtc: queue @q2: many consumers: 2 threads: consumer2() started at queue_example.cpp:63:22, consumer2() started at queue_example.cpp:64:22
 remark: wtc: queue @q1: every pop only borrows its element (1 pop)
 remark: wtc: specialised: constructor tag rewritten to spsc_inline
 ```
@@ -31,7 +33,10 @@ The queue may be a global, a local, a member of a struct or a heap object,
 and the threads may reach it through parameters, struct fields or pointers
 written in several places; a pointer that may name one of several queues
 counts on each (`test/Transforms/QueueOwnershipAnalysis/`). `q2` has two
-producers and two consumers and keeps the general-purpose queue. `q1` goes one step further than the gate did: its consumer only
+producers and two consumers and keeps the general-purpose queue; a side
+that counts many says why -- two threads, as here, or one that stands for
+many: started in a loop, under recursion, or from a function nothing in the
+file calls (`why-many.cpp`). `q1` goes one step further than the gate did: its consumer only
 tests whether a pop returned anything, so it borrows, and the next section
 is what that buys.
 
@@ -195,7 +200,9 @@ p99 of 2.8 µs for spsc and 1.2 µs for both inline builds, and a p99.9 of
 18.7 µs against 5.2 and 5.0 µs.
 
 **Batching** (`w7_batch_wtc`), one producer loop, million elements a
-second, closed loop, and the delay of every 64th element:
+second, closed loop, and the delay of every 64th element (which, with a
+batch of 64, is always a batch's first element and overstates the delay;
+`docs/evaluation.md`, Corrections):
 
 | implementation, 64 bytes | plain | batched | gain | delay p50 plain → batched |
 |---|---|---|---|---|
