@@ -1,16 +1,16 @@
-// A pop through a field that holds one of two queues names neither, so
-// what it does with its element cannot be charged to one queue: both are
-// proved spsc, and neither is borrowed, whatever their other pops do. The
-// consumer here keeps what it pops, which would read a reused slot if
-// either queue held its elements inline.
+// A pop through a field that holds one of two queues is a pop of each, and
+// what it does with its element is charged to both: the consumer here
+// keeps what it pops, which would read a reused slot if either queue held
+// its elements inline, so both are proved spsc and neither is borrowed.
+// (accepts-one-of-pop.cpp is the same shape with a consumer that borrows.)
 //
 // RUN: %clangxx -std=c++17 -I%shim -fclangir -emit-cir %s -o %t.cir
 // RUN: wtc-opt %t.cir --lift-cir-to-wtc --queue-ownership-analysis --wtc-borrow-analysis -o /dev/null 2>&1 | FileCheck %s
 //
 // CHECK-DAG: queue @a: spsc
 // CHECK-DAG: queue @b: spsc
-// CHECK-DAG: queue @a: not borrowed: a pop that may act on several queues of its type was not checked
-// CHECK-DAG: queue @b: not borrowed: a pop that may act on several queues of its type was not checked
+// CHECK-DAG: queue @a: not borrowed: the popped shared_ptr is passed to std::shared_ptr<int>::operator=
+// CHECK-DAG: queue @b: not borrowed: the popped shared_ptr is passed to std::shared_ptr<int>::operator=
 
 #include "queue.hpp"
 #include "thread.hpp"
