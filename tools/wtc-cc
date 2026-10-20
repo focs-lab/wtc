@@ -27,6 +27,9 @@
 #   --wtc-opt-arg ARG  pass ARG to wtc-opt (repeatable), e.g. --mlir-timing
 #
 # Object files, archives and -l/-L/-Wl, arguments go to the final link only.
+# With WTC_CC_TIMES=FILE in the environment, each step's wall time is
+# appended to FILE as "step seconds" lines (cir, wtc-opt, cir-translate,
+# backend), which is what the compile-cost measurement reads.
 #
 # --tsan exists because the pinned clang has the instrumentation but no
 # sanitizer runtime: it instruments the object, and a compiler that has the
@@ -86,7 +89,16 @@ mkdir -p "$WORK"
 [ -n "$KEEP" ] || trap 'rm -rf "$WORK"' EXIT
 base=$(basename "${SRC%.*}")
 
-"$CLANGXX" -std=c++17 -I"$ROOT/shim" -fclangir -emit-cir "${PASSTHRU[@]}" "$SRC" -o "$WORK/$base.cir"
+# Runs a step, and with WTC_CC_TIMES set records how long it took.
+step() { # name, command...
+  local name=$1; shift
+  if [ -z "${WTC_CC_TIMES:-}" ]; then "$@"; return; fi
+  local t0 t1
+  t0=$(date +%s%N); "$@"; t1=$(date +%s%N)
+  awk -v n="$name" -v a="$t0" -v b="$t1" 'BEGIN { printf "%s %.6f\n", n, (b - a) / 1e9 }' >> "$WTC_CC_TIMES"
+}
+
+step cir "$CLANGXX" -std=c++17 -I"$ROOT/shim" -fclangir -emit-cir "${PASSTHRU[@]}" "$SRC" -o "$WORK/$base.cir"
 
 PASSES=(--lift-cir-to-wtc --wtc-batch-pushes --wtc-batch-locks --queue-ownership-analysis --wtc-borrow-analysis)
 if (( SPECIALIZE )); then
@@ -100,9 +112,9 @@ fi
 PASSES+=(--wtc-check-progress --lower-wtc-to-cir --reconcile-unrealized-casts)
 # Diagnostics name their place; printing the whole operation after each one
 # repeats a queue's type, hundreds of characters, on every line.
-"$WTCOPT" --mlir-print-op-on-diagnostic=false "${OPTARGS[@]}" "$WORK/$base.cir" "${PASSES[@]}" -o "$WORK/$base.wtc.cir"
+step wtc-opt "$WTCOPT" --mlir-print-op-on-diagnostic=false "${OPTARGS[@]}" "$WORK/$base.cir" "${PASSES[@]}" -o "$WORK/$base.wtc.cir"
 
-"$CIRTR" --cir-to-llvmir "$WORK/$base.wtc.cir" -o "$WORK/$base.raw.ll"
+step cir-translate "$CIRTR" --cir-to-llvmir "$WORK/$base.wtc.cir" -o "$WORK/$base.raw.ll"
 sed '/^target datalayout/d' "$WORK/$base.raw.ll" > "$WORK/$base.ll"
 
 if (( TSAN )); then
@@ -111,7 +123,7 @@ if (( TSAN )); then
     -c "$WORK/$base.ll" -o "$( (( COMPILE_ONLY )) && echo "$OUT" || echo "$WORK/$base.o")"
   (( COMPILE_ONLY )) || "$LINKXX" -fsanitize=thread "$WORK/$base.o" "${LINKARGS[@]}" -o "$OUT" -pthread
 elif (( COMPILE_ONLY )); then
-  "$CLANGXX" "${PASSTHRU[@]}" -c "$WORK/$base.ll" -o "$OUT"
+  step backend "$CLANGXX" "${PASSTHRU[@]}" -c "$WORK/$base.ll" -o "$OUT"
 else
-  "$CLANGXX" "${PASSTHRU[@]}" "$WORK/$base.ll" "${LINKARGS[@]}" -o "$OUT" -pthread
+  step backend "$CLANGXX" "${PASSTHRU[@]}" "$WORK/$base.ll" "${LINKARGS[@]}" -o "$OUT" -pthread
 fi
