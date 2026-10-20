@@ -37,6 +37,7 @@ workloads/
   w9_mpmc_scaling     the general-purpose queues as threads are added
 apps/ferret/          PARSEC ferret ported onto the shim (GPL, see there)
 apps/dedup/           PARSEC dedup ported onto the shim (BSD-3, see there)
+reach/oracle.json     every compiled queue's topology, read from its source
 scripts/
   check_env.sh        refuses to measure in an unfit environment
   campaign.sh         one leg: interleaved reps, control runs, results dir
@@ -45,6 +46,8 @@ scripts/
   plot.py             summary.csv -> figures: bars, latency against load,
                       sweeps, latency distributions
   compile_cost.sh     wtc-cc's time per step and per pass, and code size
+  reach.sh            every queue's verdict against the oracle (RQ1);
+                      reach_table.py draws the table
   in_bench.py         drives a reservation without a terminal
   build_wtc_flavours.sh  the generic, hand-tagged and compiler-tagged builds
   build_w7_flavours.sh   W7 for each implementation: plain, batched by the
