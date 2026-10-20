@@ -8,7 +8,8 @@
 # (ping-pong), smoke (everything once, tiny sizes, no environment check);
 # the MVP's own: w1mvp, w2mvp, w3wtc, w7, w8; the evaluation's: eval-w1,
 # eval-w1smt, eval-w2, eval-w3, eval-w3grain, eval-w7, eval-w8, eval-w9,
-# eval-ferret, each with the question it answers in its comment below.
+# eval-ferret, eval-dedup, each with the question it answers in its comment
+# below.
 #
 # Legs that run builds made by tools/wtc-cc take the directory holding them
 # as BUILD and need the CMake build too, for the controls and the
@@ -606,6 +607,49 @@ case "$LEG" in
       done
     done
     cd "$ROOT"
+    control 901
+    ;;
+  eval-dedup)
+    # RQ1/RQ2 on an application the analysis must refuse as it is written:
+    # PARSEC dedup on its native input (BUILD: the bin directory of
+    # benchmarks/apps/dedup/build.sh; INPUTS: the directory of its
+    # fetch-inputs.sh). One thread per stage: the port as written (refused:
+    # its queues are elements of arrays), with its queues as globals
+    # (refused: the threads start in a function called from another
+    # file), the same in one translation unit (three of four queues proved
+    # single-producer), and tagged by hand; then 2 and 4 threads per middle
+    # stage, where no queue is single-producer. The time is PARSEC's own
+    # region of interest; the output goes to memory (SCRATCH, /dev/shm by
+    # default), so the disk is not timed, and every run's is checked against
+    # PARSEC's byte for byte. The mean chunk size, with the input's size,
+    # gives the elements the queues carry. Needs 18 cores.
+    "$HERE/check_env.sh" 18 || exit 1
+    INPUTS=${INPUTS:?INPUTS=<dir of benchmarks/apps/dedup/fetch-inputs.sh>}
+    ISO="$INPUTS/native/FC-6-x86_64-disc1.iso"
+    SCRATCH=$(mktemp -d "${SCRATCH:-/dev/shm}/wtc-dedup.XXXXXX")
+    meta
+    warmup; control 900
+    lock "$BUILD/dedup-orig" -c -p -t 1 -i "$ISO" -o "$SCRATCH/reference.ddp" >/dev/null 2>&1
+    dedup_run() { # variant, threads per middle stage, rep
+      local v=$1 n=$2 rep=$3 out t kb same=0
+      out=$(lock "$BUILD/dedup-$v" -c -p -v -t "$n" -i "$ISO" -o "$SCRATCH/out.ddp" 2>&1)
+      t=$(sed -n 's/.*Total time spent in ROI: \([0-9.]*\)s.*/\1/p' <<<"$out")
+      kb=$(sed -n 's/^Mean data chunk size: *\([0-9.]*\) KB.*/\1/p' <<<"$out")
+      cmp -s "$SCRATCH/out.ddp" "$SCRATCH/reference.ddp" && same=1
+      [ "$same" = 1 ] || echo "dedup-$v n=$n rep $rep: output differs from PARSEC's" | tee -a "$OUT/log.txt"
+      printf '{"workload": "dedup", "variant": "%s", "threads": %d, "rep": %d, "time_s": %s, "chunk_kb": %s, "input_bytes": %d, "output_ok": %d, "cmd": "%s"}\n' \
+        "$v" "$n" "$rep" "${t:-0}" "${kb:-0}" "$(stat -c %s "$ISO")" "$same" "dedup-$v -c -p -v -t $n" >> "$RUNS"
+      rm -f "$SCRATCH/out.ddp"
+    }
+    for rep in $(seq 0 $((REPS-1))); do
+      for v in orig generic-one compiler-one hand-one hand-spsc-one compiler-flat-one compiler-flat-one-unity; do
+        dedup_run "$v" 1 "$rep"
+      done
+      for n in 2 4; do
+        for v in orig generic compiler; do dedup_run "$v" "$n" "$rep"; done
+      done
+    done
+    rm -rf "$SCRATCH"
     control 901
     ;;
   *) echo "unknown leg $LEG" >&2; exit 2 ;;

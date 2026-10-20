@@ -171,8 +171,9 @@ benchmarks/scripts/campaign.sh w1 build-bench 10
 Legs: `w1`, `w2`, `w2pp`, `w3`, `w3wtc`, `w5`, `w6`, `smt`, `far`, `tbb`,
 `w1check`, and `smoke`, which runs everything once, tiny, unreserved. The
 evaluation's legs are `eval-w1`, `eval-w1smt`, `eval-w2`, `eval-w3`,
-`eval-w3grain`, `eval-w7`, `eval-w8`, `eval-w9` and `eval-ferret`; each one's
-comment in `campaign.sh` says which question it answers and what it needs.
+`eval-w3grain`, `eval-w7`, `eval-w8`, `eval-w9`, `eval-ferret` and
+`eval-dedup`; each one's comment in `campaign.sh` says which question it
+answers and what it needs.
 
 Figures come from a summarised leg:
 
