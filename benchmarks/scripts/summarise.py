@@ -2,20 +2,24 @@
 """Turn a results directory's runs.jsonl into SUMMARY.md.
 
 Groups runs by configuration, reports the median across repetitions with
-min/max and a bootstrap 95% confidence interval of the median, flags rows
-whose coefficient of variation exceeds 3%, computes ratios against the
+a bootstrap 95% confidence interval of the median, flags rows whose
+coefficient of variation exceeds 3%, computes ratios against the
 general-purpose shim (B0) and against the inline ring (the ceiling), and
-checks that the opening and closing control runs agree within 2%.
+checks that the opening and closing control runs agree within 5%.
 
-    summarise.py <results-dir>        # prints Markdown to stdout
+Runs of an explaining pass (a "pass" field, e.g. mechanism) never enter the
+timing tables or the drift checks; they get tables of their own, per
+element pushed: allocations, hardware events, peak memory.
+
+    summarise.py <results-dir>        # Markdown to stdout, summary.csv beside runs.jsonl
 """
+import csv
 import json
+import random
 import statistics
 import sys
 from collections import defaultdict
 from pathlib import Path
-
-import numpy as np
 
 # The denominator of every ratio is whichever general-purpose build this
 # workload has: the adapter legs call it shim_generic, the compiler-selected
@@ -42,20 +46,48 @@ def load(path):
     return runs
 
 
+# What makes two runs the same configuration. A field a workload does not
+# write is empty, so one key serves every workload; leaving one out is how
+# runs at different rates or batch sizes get averaged together.
+CONFIG_FIELDS = ("workload", "mode", "elem", "wait", "interval_ns", "rate", "smt", "placement",
+                 "threads", "producers", "consumers", "work", "k", "pass")
+
+
 def key_of(r):
-    # W8 has threads and work where the queues have an element size.
-    return (r["workload"], r.get("mode", ""), r.get("elem", ""), r.get("wait", ""),
-            str(r.get("interval_ns", "")), str(r.get("smt", 0)),
-            str(r.get("threads", "")), str(r.get("work", "")))
+    return tuple(str(r.get(f, "")) if f != "smt" else str(r.get("smt", 0)) for f in CONFIG_FIELDS)
 
 
+def title_of(key):
+    k = dict(zip(CONFIG_FIELDS, key))
+    title = f"## {k['workload']}{(' ' + k['mode']) if k['mode'] else ''}"
+    if k["pass"]:
+        title += f"  [{k['pass']} pass]"
+    if k["elem"]:
+        title += f"  E{k['elem']}"
+    for f in ("threads", "producers", "consumers", "work", "k", "wait"):
+        if k[f]:
+            title += f"  {f}={k[f]}"
+    if k["interval_ns"] and k["interval_ns"] != "0":
+        title += f"  interval={k['interval_ns']} ns"
+    if k["rate"] and k["rate"] != "0":
+        title += f"  rate={int(float(k['rate'])):,}/s"
+    if k["placement"]:
+        title += f"  ({k['placement']})"
+    elif k["smt"] == "1":
+        title += "  (SMT siblings)"
+    return title
+
+
+# Percentile bootstrap of the median, in plain Python: the summary has to
+# run wherever a leg ran, and the container the evaluation builds in has no
+# numpy. Seeded, so a summary regenerated from the same runs is the same.
 def boot_ci(values, iters=2000, seed=1):
-    rng = np.random.default_rng(seed)
-    a = np.asarray(values, dtype=float)
+    rng = random.Random(seed)
+    a = [float(v) for v in values]
     if len(a) < 2:
-        return (a.min(), a.max())
-    meds = [np.median(rng.choice(a, size=len(a), replace=True)) for _ in range(iters)]
-    return (float(np.percentile(meds, 2.5)), float(np.percentile(meds, 97.5)))
+        return (min(a), max(a))
+    meds = sorted(statistics.median(rng.choices(a, k=len(a))) for _ in range(iters))
+    return (meds[int(0.025 * (iters - 1))], meds[int(0.975 * (iters - 1))])
 
 
 def summarise_metric(rows, metric):
@@ -93,8 +125,9 @@ def main(out_dir):
     out = Path(out_dir)
     runs = load(out / "runs.jsonl")
     meta = json.loads((out / "meta.json").read_text()) if (out / "meta.json").exists() else {}
-    controls = [r for r in runs if r.get("rep") in (900, 901)]
-    runs = [r for r in runs if r.get("rep") not in (900, 901)]
+    controls = [r for r in runs if r.get("rep") in (900, 901) and not r.get("pass")]
+    explaining = [r for r in runs if r.get("pass")]
+    runs = [r for r in runs if r.get("rep") not in (900, 901) and not r.get("pass")]
 
     print(f"# {meta.get('leg', out.name)}  ({meta.get('date', '')})\n")
     if meta:
@@ -125,9 +158,7 @@ def main(out_dir):
         metric = "mops" if "mops" in r else ("p50" if "p50" in r else None)
         if metric is None:
             continue
-        by_cfg[(r["workload"], r.get("mode", ""), r["variant"], r.get("elem", ""),
-                r.get("wait", ""), str(r.get("interval_ns", "")),
-                str(r.get("threads", "")), str(r.get("work", "")))][r["rep"]] = float(r[metric])
+        by_cfg[key_of(r) + (r["variant"],)][r["rep"]] = float(r[metric])
     reps = sorted({rep for d in by_cfg.values() for rep in d})
     if len(reps) > 1:
         cells = []
@@ -181,9 +212,7 @@ def main(out_dir):
         note = ""
         if widest[1] is not None and widest[0] > 0.10:
             wk = widest[1]
-            note = (f"  Widest single row: {wk[2]}" + (f" E{wk[3]}" if wk[3] else "")
-                    + (f" threads={wk[6]} work={wk[7]}" if wk[6] else "")
-                    + (f" @{wk[5]}" if wk[5] and wk[5] != "0" else "")
+            note = (f"  Widest single row: {wk[-1]} in {title_of(wk[:-1])[3:].strip()}"
                     + f", {widest[0]*100:.0f}% across repetitions.")
         print("Drift across repetitions, median over all configurations, relative to the first: "
               + ", ".join(f"rep {rep} {m:.3f}" for rep, m, _ in cells)
@@ -192,23 +221,10 @@ def main(out_dir):
     groups = defaultdict(lambda: defaultdict(list))
     for r in runs:
         groups[key_of(r)][r["variant"]].append(r)
+    csv_rows = []
 
     for key in sorted(groups):
-        workload, mode, elem, wait, interval, smt, threads, work = key
-        title = f"## {workload}{(' ' + mode) if mode else ''}"
-        if elem:
-            title += f"  E{elem}"
-        if threads:
-            title += f"  threads={threads}"
-        if work:
-            title += f"  work={work}"
-        if wait:
-            title += f"  wait={wait}"
-        if interval and interval != "0":
-            title += f"  interval={interval} ns"
-        if smt == "1":
-            title += "  (SMT siblings)"
-        print(title + "\n")
+        print(title_of(key) + "\n")
         variants = groups[key]
         base_name = pick(variants, BASELINE_CANDIDATES)
         ceil_name = pick(variants, CEILING_CANDIDATES)
@@ -229,7 +245,14 @@ def main(out_dir):
 
         titles = {"mops": "Mops/s", "max_ns": "max", "p999": "p99.9", "p9999": "p99.99",
                   "finish_spread": "finish spread"}
+        for v, rows in variants.items():
+            for m in present:
+                st = summarise_metric(rows, m)
+                if st:
+                    csv_rows.append(dict(zip(CONFIG_FIELDS, key), variant=v, metric=m, **st))
         head = ["variant", "n"] + [titles.get(m, m) for m in present]
+        if "mops" in present:
+            head.insert(head.index("Mops/s") + 1, "ns/op")
         ratio_cols = [m for m in ("mops", "p99", "p999") if m in present]
         head += [f"{titles.get(m, m)} vs {base_name}" for m in ratio_cols] if base else []
         if "mops" in present and ceil:
@@ -254,11 +277,14 @@ def main(out_dir):
                 flag = " ⚠" if m == sort_key and s["cov"] > 0.03 else ""
                 spread = ""
                 if m == sort_key:
-                    spread = f" ({fmt(s['min'])}–{fmt(s['max'])})"
+                    spread = f" [{fmt(s['lo'])}–{fmt(s['hi'])}]"
                 if m == "finish_spread":   # a share of the run
                     cells.append(f"{100 * s['median']:.1f}% (max {100 * s['max']:.1f}%)")
                     continue
-                cells.append(f"{fmt(s['median'])}{flag}{spread}")
+                sat = " sat" if m == "p50" and any(int(r.get("saturated", 0)) for r in variants[v]) else ""
+                cells.append(f"{fmt(s['median'])}{flag}{spread}{sat}")
+                if m == "mops":
+                    cells.append(fmt(1000.0 / s["median"]) if s["median"] else "-")
             if base:
                 for m in ratio_cols:
                     a, b = med(variants[v], m), med(base, m)
@@ -268,9 +294,66 @@ def main(out_dir):
                 cells.append(fmt_ratio(a / c) if a and c else "-")
             print("| " + " | ".join([v, str(n)] + cells) + " |")
         print()
-    print("Medians across repetitions; each repetition is a fresh process; CI is a bootstrap of the median. "
-          "⚠ marks CoV above 3%. Latencies in ns; tails are the median across runs of each run's own percentile, "
-          "with the min–max spread of p99 in parentheses.")
+    explain(explaining, csv_rows)
+    write_csv(out / "summary.csv", csv_rows)
+    print("Medians across repetitions; each repetition is a fresh process; in brackets the bootstrap 95% CI of "
+          "the median of the column the table is sorted by. ⚠ marks CoV above 3%. ns/op is 1000 / Mops/s. "
+          "Latencies in ns; tails are the median across runs of each run's own percentile. "
+          "\"sat\" marks a row with a run that did not sustain its offered rate: its latency is a backlog.")
+
+
+# Per element pushed, counting warm-up, since the counters cover the run.
+PER_ELEMENT = (("allocs", "allocs/elem"), ("frees", "frees/elem"), ("cycles", "cycles/elem"),
+               ("instructions", "instr/elem"), ("cache_misses", "cache misses/elem"),
+               ("llc_read_misses", "LLC read misses/elem"))
+
+
+def explain(runs, csv_rows):
+    groups = defaultdict(lambda: defaultdict(list))
+    for r in runs:
+        groups[key_of(r)][r["variant"]].append(r)
+    for key in sorted(groups):
+        variants = groups[key]
+        per = {}
+        for v, rows in variants.items():
+            for m, _ in PER_ELEMENT:
+                vals = [float(r[m]) / float(r["n_total"]) for r in rows if m in r and r.get("n_total")]
+                if vals:
+                    per[(v, m)] = summarise_metric([{m: x} for x in vals], m)
+            rss = summarise_metric(rows, "peak_rss_kib")
+            if rss:
+                per[(v, "peak_rss_kib")] = rss
+        cols = [(m, t) for m, t in PER_ELEMENT if any((v, m) in per for v in variants)]
+        if not cols:
+            continue
+        print(title_of(key) + "\n")
+        head = ["variant", "n"] + [t for _, t in cols] + ["IPC", "peak RSS MiB"]
+        print("| " + " | ".join(head) + " |")
+        print("|" + "---|" * len(head))
+        for v in sorted(variants):
+            n = len(variants[v])
+            cells = [fmt(per[(v, m)]["median"]) if (v, m) in per else "-" for m, _ in cols]
+            cyc, ins = per.get((v, "cycles")), per.get((v, "instructions"))
+            cells.append(f"{ins['median'] / cyc['median']:.2f}" if cyc and ins and cyc["median"] else "-")
+            rss = per.get((v, "peak_rss_kib"))
+            cells.append(fmt(rss["median"] / 1024.0) if rss else "-")
+            print("| " + " | ".join([v, str(n)] + cells) + " |")
+            for (vv, m), st in per.items():
+                if vv == v:
+                    csv_rows.append(dict(zip(CONFIG_FIELDS, key), variant=v, metric=m + "_per_elem"
+                                         if m != "peak_rss_kib" else m, **st))
+        print()
+
+
+def write_csv(path, rows):
+    if not rows:
+        return
+    fields = list(CONFIG_FIELDS) + ["variant", "metric", "n", "median", "lo", "hi", "min", "max", "cov"]
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fields)
+        w.writeheader()
+        for r in rows:
+            w.writerow({k: r.get(k, "") for k in fields})
 
 
 if __name__ == "__main__":
