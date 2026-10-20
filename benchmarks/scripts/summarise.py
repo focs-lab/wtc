@@ -255,7 +255,8 @@ def main(out_dir):
                 st = summarise_metric(rows, m)
                 if st:
                     extra = {f: str(rows[0].get(f, "")) for f in CSV_EXTRA}
-                    csv_rows.append(dict(zip(CONFIG_FIELDS, key), variant=v, metric=m, **extra, **st))
+                    sat = sum(int(r.get("saturated", 0)) for r in rows)
+                    csv_rows.append(dict(zip(CONFIG_FIELDS, key), variant=v, metric=m, saturated=sat, **extra, **st))
         head = ["variant", "n"] + [titles.get(m, m) for m in present]
         if "mops" in present:
             head.insert(head.index("Mops/s") + 1, "ns/op")
@@ -354,7 +355,8 @@ def explain(runs, csv_rows):
 def write_csv(path, rows):
     if not rows:
         return
-    fields = list(CONFIG_FIELDS) + list(CSV_EXTRA) + ["variant", "metric", "n", "median", "lo", "hi", "min", "max", "cov"]
+    fields = list(CONFIG_FIELDS) + list(CSV_EXTRA) + ["variant", "metric", "n", "median", "lo", "hi", "min", "max", "cov",
+                                                      "saturated"]
     with open(path, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()

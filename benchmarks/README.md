@@ -37,7 +37,10 @@ workloads/
 scripts/
   check_env.sh        refuses to measure in an unfit environment
   campaign.sh         one leg: interleaved reps, control runs, results dir
-  summarise.py        runs.jsonl -> SUMMARY.md with medians, CIs, ratios
+  summarise.py        runs.jsonl -> SUMMARY.md with medians, CIs, ratios,
+                      and summary.csv for the figures
+  plot.py             summary.csv -> figures: bars, latency against load,
+                      sweeps, latency distributions
   in_bench.py         drives a reservation without a terminal
   build_wtc_flavours.sh  the generic, hand-tagged and compiler-tagged builds
   build_w7_flavours.sh   W7 for each implementation: plain, batched by the
@@ -157,6 +160,18 @@ benchmarks/scripts/campaign.sh w1 build-bench 10
 
 Legs: `w1`, `w2`, `w2pp`, `w3`, `w3wtc`, `w5`, `w6`, `smt`, `far`, `tbb`,
 `w1check`, and `smoke`, which runs everything once, tiny, unreserved.
+
+Figures come from a summarised leg:
+
+```sh
+benchmarks/scripts/summarise.py benchmarks/results/<leg>
+benchmarks/scripts/plot.py load  benchmarks/results/<leg> --workload W2 --metric p99
+benchmarks/scripts/plot.py sweep benchmarks/results/<leg> --workload W9 --x threads --where mode=pairwise
+```
+
+A figure draws one value per variant and position, so `plot.py` refuses a
+selection that leaves a configuration field open and names the field to
+fix with `--where`.
 
 `campaign.sh` checks the environment first (governor `performance`, turbo
 off, enough cores for the leg), writes `meta.json`, discards a warm-up run,
