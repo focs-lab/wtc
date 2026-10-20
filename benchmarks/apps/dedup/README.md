@@ -35,10 +35,10 @@ producer. The other files are PARSEC's, compiled as C.
 Every verdict is sound: the reorder queue has two producing stages at any
 thread count, and nothing proved wrong is specialised. The three steps
 locate dedup's two obstacles, arrays of queues and a program spread over
-several files, each an item of the evaluation plan. In the last build the
-three queues become plain `spsc`, not inline rings: the one pop, inside
-the helper every stage calls, acts on several queues of one type, and the
-check that a consumer only borrows its element is not made per queue.
+several files. In the last build the three queues become inline rings,
+the tags an expert would write by hand: the one pop, inside the helper
+every stage calls, is checked as a pop of each queue it may act on, and
+every stage copies its element out before the next pop.
 
 ## Building and running
 
