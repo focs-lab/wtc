@@ -40,8 +40,10 @@ scripts/
   summarise.py        runs.jsonl -> SUMMARY.md with medians, CIs, ratios
   in_bench.py         drives a reservation without a terminal
   build_wtc_flavours.sh  the generic, hand-tagged and compiler-tagged builds
-  build_w7_flavours.sh   W7 for each implementation, batched and not
-  build_w8_flavours.sh   W8 as written and with its sections batched
+  build_w7_flavours.sh   W7 for each implementation: plain, batched by the
+                         compiler, batched by hand; batch sizes 1 to 1024
+  build_w8_flavours.sh   W8 as written, batched by the compiler, batched by
+                         hand; batch sizes 8, 64, 512
   correctness.sh      sanitizer and contract-check leg
 third_party/          vendored baselines, pinned commits, licences
                       (boost and oneTBB come from system packages instead)
@@ -102,6 +104,21 @@ are the ceiling.
   under two producers on purpose: the negative control.
 - **W6** `w6_ring_shape`: block size and cache-line padding, which are
   template parameters rather than options, so one configuration per process.
+- **W7** `w7_batch_wtc`: a producer's loop of pushes, as written, batched by
+  the compiler (`WTC_BATCH`) and batched by hand through the shim's batch
+  calls, the bound for the compiler's. As fast as it can, the producer runs
+  ahead and latency measures the backlog; `--rate` paces it, and latency
+  from each element's due time shows batching's price: an element waits
+  for the rest of its batch. One element in 61 is timed, a prime, so the
+  sample never lines up with a batch boundary.
+- **W8** `w8_lock_batch_wtc`: threads adding to one record under one mutex,
+  with their own work between sections (`--work-ns`, calibrated rounds of
+  a step the compiler cannot fold), as written, batched by the compiler and
+  by hand. Beside the rate: Jain's fairness index over the threads' rates,
+  how far apart they finish, and the distribution of one section's time,
+  wait included. Holding the mutex across sections also holds it across
+  the work between them, so batching loses once that work is long enough:
+  the sweep over `--work-ns` is where that shows.
 
 Every results line also records the process's peak resident set
 (`peak_rss_kib`). The latency workloads record the whole distribution as
