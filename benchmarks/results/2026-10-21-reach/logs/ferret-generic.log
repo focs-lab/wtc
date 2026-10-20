@@ -1,0 +1,6 @@
+wtc: queue access is unresolvable (reached through recursion); every queue of this type is now unknown
+wtc: queue @q_seg_extract: mpmc (producers: many, consumers: many)
+wtc: queue @q_extract_vec: mpmc (producers: many, consumers: many)
+wtc: queue @q_vec_rank: mpmc (producers: many, consumers: many)
+wtc: queue @q_rank_out: mpsc (producers: many, consumers: 1)
+wtc: queue @q_load_seg: unknown (producers: 1, consumers: many)

@@ -1,0 +1,4 @@
+wtc: queue @_ZL12compress_que: mpmc (producers: many, consumers: many)
+wtc: queue @_ZL11reorder_que: mpmc (producers: many, consumers: many)
+wtc: queue @_ZL15deduplicate_que: mpmc (producers: many, consumers: many)
+wtc: queue @_ZL10refine_que: mpmc (producers: many, consumers: many)
