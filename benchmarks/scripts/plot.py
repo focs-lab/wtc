@@ -40,6 +40,7 @@ COLOURS = {
     "shim_generic": "#8a96a6", "generic": "#8a96a6", "orig_generic": "#b7c0cc", "plain": "#8a96a6",
     "shim_spsc": "#2f6fb2", "hand": "#2f6fb2",
     "shim_spsc_inline": "#c2562a", "compiler": "#c2562a", "hand-inline": "#e8a27e", "batched": "#c2562a",
+    "shim_mpsc": "#167f8a",
     "ring_inline": "#1a1a1a", "ring_borrowed": "#5a5a5a", "ring_sp": "#5d8fc4",
     "onetbb_cq_sp": "#1d5c3a", "moodycamel_cq_sp": "#4f9a6a", "boost_ms_queue": "#8cc49f", "std_mutex": "#9a9a4e",
     "rigtorp_sp": "#6b4f91", "rigtorp_inline": "#8e6fb8", "moodycamel_rw_sp": "#b08a3e",
