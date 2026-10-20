@@ -6,7 +6,13 @@
 #
 # Legs: w1 (throughput), w2 (open-loop latency at 1 us and 10 us), w2pp
 # (ping-pong), smoke (everything once, tiny sizes, no environment check);
-# the MVP's own: w1mvp, w2mvp, w3wtc, w7, w8.
+# the MVP's own: w1mvp, w2mvp, w3wtc, w7, w8; the evaluation's: eval-w1,
+# eval-w1smt, eval-w2, eval-w3, each with the question it answers in its
+# comment below.
+#
+# Legs that run builds made by tools/wtc-cc take the directory holding them
+# as BUILD and need the CMake build too, for the controls and the
+# allocation counter: CONTROL_BUILD=<cmake build dir>.
 #
 # Run this INSIDE a `bench` reservation (see benchmarks/README.md) and never
 # build inside one. Every measured run takes the host's exclusive measurement
@@ -23,6 +29,7 @@
 set -euo pipefail
 
 LEG=${1:?leg}; BUILD=${2:?build dir}; REPS=${3:-10}
+CONTROL_BUILD=${CONTROL_BUILD:-$BUILD}
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 DATE=$(date -u +%Y-%m-%d)
@@ -68,6 +75,7 @@ meta() {
     echo "  \"boost\": \"$(sed -n 's/^#define BOOST_LIB_VERSION \"\(.*\)\"/\1/p' /usr/include/boost/version.hpp 2>/dev/null)\","
     echo "  \"tbb\": \"$(dpkg-query -W -f='${Version}' libtbb12 2>/dev/null || echo none)\","
     echo "  \"vendored\": \"$(sed -n 's/^| \([a-z]*\)\/ | [^|]* | \([0-9a-f]\{12\}\).*/\1@\2/p' "$ROOT/benchmarks/third_party/VENDORED.md" | tr '\n' ' ')\","
+    echo "  \"control_build\": \"$CONTROL_BUILD\","
     echo "  \"reps\": $REPS"
     echo "}"
   } > "$OUT/meta.json"
@@ -87,9 +95,24 @@ run_w2() {
 # and shim_generic's own run-to-run spread is around 8%, so comparing two
 # single runs against a tight threshold flags every leg and means nothing.
 control() { # tag
+  if [ ! -x "$CONTROL_BUILD/w1_throughput" ]; then
+    echo "no controls: set CONTROL_BUILD to the CMake build" | tee -a "$OUT/log.txt"; return 0
+  fi
   for k in 1 2 3; do
-    lock "$BUILD/w1_throughput" --variant shim_generic --elem 64 --wait spin --rep "$1" --json "$RUNS" 2>>"$OUT/log.txt"
+    lock "$CONTROL_BUILD/w1_throughput" --variant shim_generic --elem 64 --wait spin --rep "$1" --json "$RUNS" 2>>"$OUT/log.txt"
   done
+}
+
+# Whether this build has the oneTBB baseline: a machine without oneTBB
+# builds everything else, and a leg must not die on the one variant missing.
+have_tbb() { grep -qiE '^tbb=(1|true|on)' "$CONTROL_BUILD/build-info.txt" 2>/dev/null; }
+
+# A run that explains rather than times: allocator calls through the
+# counting preload and user-space hardware counters, every line marked
+# pass=mechanism so the summary keeps it out of the timing tables. Kept
+# apart from the timed runs because counting perturbs what it counts.
+mech() {
+  WTC_PASS=mechanism WTC_PERF=1 LD_PRELOAD="$CONTROL_BUILD/libwtc_alloccount.so" lock "$@"
 }
 
 # Elements per run, by variant. A fixed count makes a run last 17 seconds for
@@ -114,8 +137,9 @@ elems_for() {
 # trend stayed flat, which is the signature of a warm-up that ended too
 # early rather than of drift. Two full-length runs, discarded.
 warmup() {
+  [ -x "$CONTROL_BUILD/w1_throughput" ] || return 0
   for k in 1 2; do
-    lock "$BUILD/w1_throughput" --variant shim_generic --elem 64 --wait spin \
+    lock "$CONTROL_BUILD/w1_throughput" --variant shim_generic --elem 64 --wait spin \
          --n 20000000 --json "" 2>>"$OUT/log.txt" >/dev/null
   done
 }
@@ -346,9 +370,93 @@ case "$LEG" in
     "$HERE/check_env.sh" 4 || exit 1
     meta
     for rep in $(seq 0 $((REPS-1))); do
-      for v in orig_generic shim_generic std_mutex moodycamel_cq_sp boost_ms_queue onetbb_cq_sp; do
+      for v in orig_generic shim_generic std_mutex moodycamel_cq_sp boost_ms_queue $(have_tbb && echo onetbb_cq_sp); do
         lock "$BUILD/w5_mpmc_control" --variant "$v" --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt"
       done
+    done
+    ;;
+  eval-w1)
+    # RQ2/RQ3: the queue alone, every baseline at three element sizes.
+    # B0 shim_generic, orig_generic; B1 the general-purpose libraries; B2
+    # the expert single-producer queues; the shim's own tags; the bare ring
+    # moved, borrowed and inline. Then the explaining pass, three runs each
+    # at a size that keeps it short. Needs a 2-core reservation.
+    "$HERE/check_env.sh" 2 || exit 1
+    meta
+    EVAL_W1="shim_generic orig_generic $(have_tbb && echo onetbb_cq_sp) moodycamel_cq_sp boost_ms_queue std_mutex rigtorp_sp rigtorp_inline moodycamel_rw_sp moodycamel_rw_inline boost_spsc_sp shim_spsc shim_spsc_inline ring_sp ring_borrowed ring_inline"
+    warmup; control 900
+    for rep in $(seq 0 $((REPS-1))); do
+      for elem in 8 64 256; do
+        for v in $EVAL_W1; do run_w1 "$rep" "$v" "$elem" spin; done
+      done
+    done
+    control 901
+    for rep in 0 1 2; do
+      for elem in 8 64 256; do
+        for v in $EVAL_W1; do
+          mech "$BUILD/w1_throughput" --variant "$v" --elem "$elem" --rep "$rep" --n 4000000 --json "$RUNS" 2>>"$OUT/log.txt"
+        done
+      done
+    done
+    ;;
+  eval-w1smt)
+    # Placement: the two threads on the SMT siblings of one core. Needs a
+    # reservation that keeps the siblings online (bench without -e).
+    "$HERE/check_env.sh" 2 || exit 1
+    meta
+    warmup; control 900
+    for rep in $(seq 0 $((REPS-1))); do
+      for v in shim_generic $(have_tbb && echo onetbb_cq_sp) rigtorp_inline moodycamel_rw_sp shim_spsc shim_spsc_inline; do
+        WTC_PLACEMENT=smt lock "$BUILD/w1_throughput" --variant "$v" --elem 64 --wait spin --rep "$rep" \
+             --n "$(elems_for "$v")" --smt-siblings --json "$RUNS" 2>>"$OUT/log.txt"
+      done
+    done
+    control 901
+    ;;
+  eval-w2)
+    # RQ2: latency against offered load, up to and past saturation, for the
+    # shim's tags and one queue of each baseline class. Latency runs from
+    # each element's due time; a saturated run is marked. Needs 2 cores.
+    "$HERE/check_env.sh" 2 || exit 1
+    meta
+    warmup; control 900
+    for rep in $(seq 0 $((REPS-1))); do
+      for interval in 100 200 300 500 700 1000 2000 5000 10000; do
+        for v in shim_generic $(have_tbb && echo onetbb_cq_sp) moodycamel_cq_sp rigtorp_inline moodycamel_rw_inline shim_spsc shim_spsc_inline ring_borrowed; do
+          run_w2 "$rep" "$v" 64 "$interval"
+        done
+      done
+    done
+    control 901
+    ;;
+  eval-w3)
+    # RQ2/RQ3 on the pipeline: the adapter pipeline with every baseline
+    # class, and the compiler's pipeline in its four builds (FLAVOURS, made
+    # by build_wtc_flavours.sh), closed loop and at five offered rates.
+    # Needs a 3-core reservation.
+    "$HERE/check_env.sh" 3 || exit 1
+    FLAVOURS=${FLAVOURS:?FLAVOURS=<dir of the W3 flavours>}
+    meta
+    warmup; control 900
+    for rep in $(seq 0 $((REPS-1))); do
+      for rate in 0 500000 1000000 2000000 3000000 4000000; do
+        n=$([ "$rate" = 0 ] && echo 10000000 || echo 4000000)
+        for v in shim_generic $(have_tbb && echo onetbb_cq_sp) moodycamel_cq_sp moodycamel_rw_sp moodycamel_rw_inline rigtorp_inline shim_spsc shim_spsc_inline; do
+          lock "$BUILD/w3_pipeline" --variant "$v" --rate "$rate" --n "$n" --rep "$rep" --json "$RUNS" \
+            2>>"$OUT/log.txt" >>"$OUT/checksums-$n.txt"
+        done
+        for f in generic hand hand-inline compiler; do
+          lock "$FLAVOURS/w3_$f" --flavour "$f" --rate "$rate" --n "$n" --rep "$rep" --json "$RUNS" \
+            2>>"$OUT/log.txt" | awk '{print $1, $2}' >>"$OUT/checksums-$n.txt"
+        done
+      done
+    done
+    control 901
+    for f in "$OUT"/checksums-*.txt; do
+      echo "$(basename "$f"): $(sort -u "$f" | wc -l) distinct checksum(s) (must be 1)" | tee -a "$OUT/log.txt"
+    done
+    for f in generic compiler; do
+      mech "$FLAVOURS/w3_$f" --flavour "$f" --n 4000000 --rep 0 --json "$RUNS" 2>>"$OUT/log.txt" >/dev/null
     done
     ;;
   *) echo "unknown leg $LEG" >&2; exit 2 ;;
