@@ -50,7 +50,11 @@ def load(path):
 # write is empty, so one key serves every workload; leaving one out is how
 # runs at different rates or batch sizes get averaged together.
 CONFIG_FIELDS = ("workload", "mode", "elem", "wait", "interval_ns", "rate", "smt", "placement",
-                 "threads", "producers", "consumers", "work", "k", "pass")
+                 "threads", "producers", "consumers", "work", "pass")
+# Recorded with every median in summary.csv, but not part of the key: the
+# batch size is in a batching flavour's name, and keying on it would put a
+# plain loop and its batched build in different tables.
+CSV_EXTRA = ("k",)
 
 
 def key_of(r):
@@ -64,7 +68,7 @@ def title_of(key):
         title += f"  [{k['pass']} pass]"
     if k["elem"]:
         title += f"  E{k['elem']}"
-    for f in ("threads", "producers", "consumers", "work", "k", "wait"):
+    for f in ("threads", "producers", "consumers", "work", "wait"):
         if k[f]:
             title += f"  {f}={k[f]}"
     if k["interval_ns"] and k["interval_ns"] != "0":
@@ -249,7 +253,8 @@ def main(out_dir):
             for m in present:
                 st = summarise_metric(rows, m)
                 if st:
-                    csv_rows.append(dict(zip(CONFIG_FIELDS, key), variant=v, metric=m, **st))
+                    extra = {f: str(rows[0].get(f, "")) for f in CSV_EXTRA}
+                    csv_rows.append(dict(zip(CONFIG_FIELDS, key), variant=v, metric=m, **extra, **st))
         head = ["variant", "n"] + [titles.get(m, m) for m in present]
         if "mops" in present:
             head.insert(head.index("Mops/s") + 1, "ns/op")
@@ -348,7 +353,7 @@ def explain(runs, csv_rows):
 def write_csv(path, rows):
     if not rows:
         return
-    fields = list(CONFIG_FIELDS) + ["variant", "metric", "n", "median", "lo", "hi", "min", "max", "cov"]
+    fields = list(CONFIG_FIELDS) + list(CSV_EXTRA) + ["variant", "metric", "n", "median", "lo", "hi", "min", "max", "cov"]
     with open(path, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
