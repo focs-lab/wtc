@@ -10,8 +10,7 @@
 #   dedup-compiler-one       the port, one spawn per stage, wtc-cc
 #   dedup-hand-one           the port, one spawn per stage, tagged by hand (B3):
 #                            spsc_inline where single-producer
-#   dedup-hand-spsc-one      the same with plain spsc, the compiler's choice
-#                            below
+#   dedup-hand-spsc-one      the same with plain spsc rings
 #   dedup-compiler-flat-one  the port with its queues as globals, one spawn
 #                            per stage, wtc-cc: what the analysis would see
 #                            if arrays of queues were no obstacle
