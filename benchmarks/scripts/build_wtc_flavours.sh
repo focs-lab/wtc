@@ -31,11 +31,15 @@ mkdir -p "$OUT"
 export WTC_OPT=${WTC_OPT:-$ROOT/build/bin/wtc-opt}
 INC="-I$ROOT/benchmarks/queues -I$ROOT/benchmarks/harness"
 
+# Through the host's build lock where there is one, as the W7 and W8
+# scripts do; a machine without it builds directly.
+LOCK=()
+command -v machine-lock >/dev/null && LOCK=(machine-lock --lane wtc --cores 4 --mem 8G --minutes 15 --why "wtc w3 build" --)
+
 build() { # name, extra wtc-cc args...
   local name=$1; shift
   echo "=== $name"
-  machine-lock --lane wtc --cores 4 --mem 8G --minutes 15 --why "wtc flavour $name" -- \
-    "$CC" --toolchain "$ROOT/build-llvm" $INC -O2 "$@" "$SRC" -o "$OUT/w3_$name" \
+  "${LOCK[@]}" "$CC" --toolchain "$ROOT/build-llvm" $INC -O2 "$@" "$SRC" -o "$OUT/w3_$name" \
     2>"$OUT/$name.log" || { echo "  FAILED; last lines:"; tail -5 "$OUT/$name.log"; return 1; }
   grep -oE 'wtc: (queue @[A-Za-z0-9_]+: [a-z_ ]+|specialised[^;]*|not specialised[^;]*)' "$OUT/$name.log" \
     | sort | uniq -c | sed 's/^/  /' || true
