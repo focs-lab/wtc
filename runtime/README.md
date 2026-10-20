@@ -19,6 +19,7 @@ Every implementation carries, in its header comment:
 |---|---|---|
 | `spsc_ring.hpp` | `wtc::queue<T>` | exactly one thread ever pushes, exactly one ever pops, and the destructor runs after both are done |
 | `mpsc_list.hpp` | `wtc::queue<T>` | exactly one thread ever pops, any number push, and the destructor runs after all are done |
+| `spmc_ring.hpp` | `wtc::queue<T>` | exactly one thread ever pushes, any number pop, and the destructor runs after all are done |
 
 `spsc_ring<Slot, kSlots>` is an unbounded wait-free ring of blocks. It keeps
 the generic queue's semantics exactly: FIFO, `push` never blocks or fails,
@@ -50,9 +51,9 @@ cmake -S runtime/test -B build-rt-tsan -DCMAKE_CXX_COMPILER=clang++-18 -DWTC_RT_
 cmake -S runtime/test -B build-rt-check -DCMAKE_CXX_COMPILER=clang++-18 -DWTC_CHECK=ON
 ```
 
-The suite includes tests that must fail: a two-producer run of the ring and a
-two-consumer run of the list, which TSan has to report and `WTC_CHECK` has to
-abort. A suite that cannot fail proves nothing, which is a lesson this
+The suite includes tests that must fail: a two-producer run of the ring, a
+two-consumer run of the mpsc list and a two-producer run of the spmc ring,
+which TSan has to report and `WTC_CHECK` has to abort. A suite that cannot fail proves nothing, which is a lesson this
 project has already paid for once.
 
 The lagging-consumer unit test found a real bug on its first run: the block
