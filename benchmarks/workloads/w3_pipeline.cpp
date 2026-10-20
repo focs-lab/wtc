@@ -121,6 +121,7 @@ struct runner {
         r.set("cpus", std::to_string(c.cpus[0]) + "," + std::to_string(c.cpus[1]) + "," + std::to_string(c.cpus[2]));
         r.set("rep", c.rep);
         r.set("n_ops", n - warm);
+        r.set("n_total", n);
         r.set("mops", mrec);
         r.set("p50", p.p50); r.set("p90", p.p90); r.set("p99", p.p99);
         r.set("p999", p.p999); r.set("p9999", p.p9999); r.set("max_ns", p.max);

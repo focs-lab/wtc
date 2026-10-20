@@ -149,6 +149,7 @@ int main(int argc, char** argv) {
     r.set("work", g_work);
     r.set("rep", rep);
     r.set("n_ops", g_n - g_warm);
+    r.set("n_total", g_n);
     r.set("mops", mrec);
     r.set("p50", p.p50); r.set("p90", p.p90); r.set("p99", p.p99);
     r.set("p999", p.p999); r.set("p9999", p.p9999); r.set("max_ns", p.max);

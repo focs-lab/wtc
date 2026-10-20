@@ -110,6 +110,15 @@ two, as `lower:count` pairs), and W1 the cost of one element
 (`ns_per_op`). Latency timestamps are fenced on both sides, so a sample
 brackets exactly the operation.
 
+Runs that explain a result rather than time it are kept apart from the
+timed ones, because counting perturbs what it counts. `WTC_PASS=mechanism`
+marks every line of such a run (`pass`); `WTC_PERF=1` adds user-space
+hardware counters for the whole process (`cycles`, `instructions`,
+`cache_misses`, `llc_read_misses`), and `LD_PRELOAD=libwtc_alloccount.so`
+(built beside the workloads) adds the allocator calls (`allocs`, `frees`,
+`alloc_bytes`). All of them count the whole run, so they are divided by
+`n_total`, the elements pushed including warm-up.
+
 oneTBB is optional. Where `libtbb-dev` is installed CMake finds it and the
 `onetbb_cq_sp` variant appears; where it is not, the configure step says so
 and everything else builds and runs unchanged. Nothing else in the tree

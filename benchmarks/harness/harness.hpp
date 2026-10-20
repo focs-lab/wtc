@@ -14,14 +14,18 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <dlfcn.h>
 #include <fstream>
+#include <linux/perf_event.h>
 #include <map>
 #include <sched.h>
 #include <pthread.h>
 #include <set>
 #include <string>
 #include <sys/resource.h>
+#include <sys/syscall.h>
 #include <thread>
+#include <unistd.h>
 #include <vector>
 #include <x86intrin.h>
 
@@ -213,9 +217,70 @@ inline std::uint64_t peak_rss_kib() {
     return static_cast<std::uint64_t>(ru.ru_maxrss);
 }
 
+// ---- runs that explain a result ----------------------------------------
+
+// A timed run says how fast; these say why, and are kept apart from it
+// because measuring perturbs what is measured. WTC_PASS names the pass in
+// every line ("mechanism"), so the summary never mixes the two.
+//
+// Hardware counters (WTC_PERF=1): opened in the main thread before any
+// worker starts, user space only (what perf_event_paranoid 2 allows), and
+// inherited, so each counts every thread of the process; a thread's share
+// is added when it exits, which every workload's threads have done by the
+// time the line is written. A counter the machine refuses is left out.
+struct perf_session {
+    struct counter { const char* name; std::uint32_t type; std::uint64_t config; int fd; };
+    std::vector<counter> counters;
+    perf_session() {
+        if (!std::getenv("WTC_PERF")) return;
+        const std::uint64_t llc_read_miss =
+            PERF_COUNT_HW_CACHE_LL | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_MISS << 16);
+        counters = {
+            {"cycles", PERF_TYPE_HARDWARE, PERF_COUNT_HW_CPU_CYCLES, -1},
+            {"instructions", PERF_TYPE_HARDWARE, PERF_COUNT_HW_INSTRUCTIONS, -1},
+            {"cache_misses", PERF_TYPE_HARDWARE, PERF_COUNT_HW_CACHE_MISSES, -1},
+            {"llc_read_misses", PERF_TYPE_HW_CACHE, llc_read_miss, -1},
+        };
+        for (auto& c : counters) {
+            perf_event_attr attr;
+            std::memset(&attr, 0, sizeof attr);
+            attr.size = sizeof attr;
+            attr.type = c.type;
+            attr.config = c.config;
+            attr.inherit = 1;
+            attr.exclude_kernel = 1;
+            attr.exclude_hv = 1;
+            c.fd = static_cast<int>(syscall(SYS_perf_event_open, &attr, 0, -1, -1, 0));
+        }
+    }
+    void add_to(std::map<std::string, std::string>& out) const {
+        for (auto& c : counters) {
+            std::uint64_t v = 0;
+            if (c.fd >= 0 && read(c.fd, &v, sizeof v) == static_cast<ssize_t>(sizeof v))
+                out[c.name] = std::to_string(v);
+        }
+    }
+};
+
+inline perf_session g_perf;
+
+// Allocator counts, when the run has the counting preload
+// (harness/alloccount.cpp); found at run time, so nothing links to it.
+inline void add_alloc_counts(std::map<std::string, std::string>& out) {
+    using counts_fn = void (*)(unsigned long*, unsigned long*, unsigned long*);
+    auto f = reinterpret_cast<counts_fn>(dlsym(RTLD_DEFAULT, "wtc_alloc_counts"));
+    if (!f) return;
+    unsigned long allocs = 0, frees = 0, bytes = 0;
+    f(&allocs, &frees, &bytes);
+    out["allocs"] = std::to_string(allocs);
+    out["frees"] = std::to_string(frees);
+    out["alloc_bytes"] = std::to_string(bytes);
+}
+
 // One JSON object per line, appended. Keys are fixed so summarise.py needs
 // no schema; values are numbers or strings. Every line carries the
-// process's peak resident set at the time it is written.
+// process's peak resident set at the time it is written, and, in a run that
+// explains rather than times, its pass and whatever it counted.
 struct result_line {
     std::map<std::string, std::string> fields;
     void set(const std::string& k, const std::string& v) { fields[k] = "\"" + v + "\""; }
@@ -227,6 +292,9 @@ struct result_line {
         bool first = true;
         auto all = fields;
         if (!all.count("peak_rss_kib")) all["peak_rss_kib"] = std::to_string(peak_rss_kib());
+        if (const char* pass = std::getenv("WTC_PASS")) all["pass"] = std::string("\"") + pass + "\"";
+        g_perf.add_to(all);
+        add_alloc_counts(all);
         for (auto& [k, v] : all) { if (!first) line += ", "; first = false; line += "\"" + k + "\": " + v; }
         line += "}\n";
         if (path.empty()) { std::fputs(line.c_str(), stdout); return; }

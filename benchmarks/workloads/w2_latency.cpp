@@ -67,6 +67,7 @@ struct runner {
         r.set("smt", c.smt ? 1 : 0);
         r.set("rep", c.rep);
         r.set("n_samples", static_cast<std::uint64_t>(ticks.size()));
+        r.set("n_total", c.warm + c.samples);
         r.set("p50", p.p50); r.set("p90", p.p90); r.set("p99", p.p99);
         r.set("p999", p.p999); r.set("p9999", p.p9999); r.set("max_ns", p.max);
         r.set("freq_before_khz", static_cast<std::uint64_t>(f0));

@@ -81,6 +81,7 @@ struct runner {
         r.set("smt", c.smt ? 1 : 0);
         r.set("rep", c.rep);
         r.set("n_ops", n - warm);
+        r.set("n_total", n);
         r.set("wall_ns", t_end.load() - t_start.load());
         r.set("mops", mops);
         r.set("ns_per_op", secs * 1e9 / static_cast<double>(n - warm));
