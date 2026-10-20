@@ -19,6 +19,7 @@
 #include <pthread.h>
 #include <set>
 #include <string>
+#include <sys/resource.h>
 #include <thread>
 #include <vector>
 #include <x86intrin.h>
@@ -156,8 +157,18 @@ struct throttle {
 
 // ---- results ---------------------------------------------------------
 
+// The process's peak resident set so far, in KiB. Measured at the end of a
+// run it bounds what the queue held at its fullest, which is the memory
+// cost an unbounded queue trades for never blocking.
+inline std::uint64_t peak_rss_kib() {
+    struct rusage ru;
+    if (getrusage(RUSAGE_SELF, &ru) != 0) return 0;
+    return static_cast<std::uint64_t>(ru.ru_maxrss);
+}
+
 // One JSON object per line, appended. Keys are fixed so summarise.py needs
-// no schema; values are numbers or strings.
+// no schema; values are numbers or strings. Every line carries the
+// process's peak resident set at the time it is written.
 struct result_line {
     std::map<std::string, std::string> fields;
     void set(const std::string& k, const std::string& v) { fields[k] = "\"" + v + "\""; }
@@ -167,7 +178,9 @@ struct result_line {
     void write(const std::string& path) const {
         std::string line = "{";
         bool first = true;
-        for (auto& [k, v] : fields) { if (!first) line += ", "; first = false; line += "\"" + k + "\": " + v; }
+        auto all = fields;
+        if (!all.count("peak_rss_kib")) all["peak_rss_kib"] = std::to_string(peak_rss_kib());
+        for (auto& [k, v] : all) { if (!first) line += ", "; first = false; line += "\"" + k + "\": " + v; }
         line += "}\n";
         if (path.empty()) { std::fputs(line.c_str(), stdout); return; }
         std::ofstream f(path, std::ios::app); f << line;

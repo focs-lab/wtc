@@ -94,6 +94,9 @@ are the ceiling.
 - **W6** `w6_ring_shape`: block size and cache-line padding, which are
   template parameters rather than options, so one configuration per process.
 
+Every results line also records the process's peak resident set
+(`peak_rss_kib`), and W1 the cost of one element (`ns_per_op`).
+
 oneTBB is optional. Where `libtbb-dev` is installed CMake finds it and the
 `onetbb_cq_sp` variant appears; where it is not, the configure step says so
 and everything else builds and runs unchanged. Nothing else in the tree
