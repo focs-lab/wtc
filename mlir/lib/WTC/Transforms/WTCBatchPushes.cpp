@@ -300,12 +300,13 @@ private:
         OpBuilder after(loop->getBlock(), std::next(Block::iterator(loop.getOperation())));
         QueueBatchEndOp::create(after, loop.getLoc(), outer, slot.getResult(), ref(end), sourceType,
                                 ArrayAttr(), TopologyAttr(), IntegerAttr(), ImplAttr());
-        loop->emitRemark() << "wtc: pushes in this loop batched: published every " << kBatchNote
-                           << " pushes and at the end";
+        // The batch size is the program's (WTC_BATCH_K, 64 unless it sets
+        // it): the shim reads it, so the remark names it rather than a number
+        // the pass does not know.
+        loop->emitRemark() << "wtc: pushes in this loop batched: published every WTC_BATCH_K pushes "
+                              "and at the end";
         return success();
     }
-
-    static constexpr const char *kBatchNote = "WTC_BATCH_K (64)";
 };
 
 // The value a mutex operation's handle was cast from.
@@ -468,7 +469,7 @@ private:
         LockBatchEndOp::create(after, loop.getLoc(), outer, slot.getResult(), ref(end), sourceType,
                                ArrayAttr());
         loop->emitRemark() << "wtc: critical sections in this loop batched: the mutex is let go every "
-                              "WTC_LOCK_BATCH_K (64) sections and at the end";
+                              "WTC_LOCK_BATCH_K sections and at the end";
         return success();
     }
 };
