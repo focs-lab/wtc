@@ -1,7 +1,8 @@
 # Reach and precision, 21 October 2026
 
-`benchmarks/scripts/reach.sh` at 651528a, with ferret and dedup built by
-their `build.sh` at the same commit. The verdicts are the analysis's, so
+`benchmarks/scripts/reach.sh` at 29bb531, with ferret and dedup built by
+their `build.sh` at the same commit. (First recorded at 651528a with the
+same verdicts; since then the analysis says why it counts many.) The verdicts are the analysis's, so
 the machine does not matter; it ran in the evaluation's container on an
 unreserved host.
 
@@ -22,8 +23,9 @@ What stands in the way, program by program:
   another file, calls, so from this file `Encode` may run any number of
   times. With `main` in the same translation unit, every verdict is exact.
   dedup's two obstacles are thus arrays of queues and a program spread
-  over several files. The conservative rows have no account from the
-  analysis of why it counted many: its remarks do not say yet.
+  over several files. On the conservative rows the analysis's own account
+  names the same cause as the oracle: the threads are started from
+  `Encode`, which nothing in the translation unit calls.
 - The examples and the compiler-built workloads: every queue exact.
 
 Not yet in the table: the mutexes (the lock-batching remarks are in the

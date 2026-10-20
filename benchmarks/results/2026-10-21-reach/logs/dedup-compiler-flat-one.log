@@ -1,4 +1,12 @@
 wtc: queue @_ZL12compress_que: mpmc (producers: many, consumers: many)
+wtc: queue @_ZL12compress_que: many producers: started from Encode, which may run any number of times: nothing in this translation unit calls it
+wtc: queue @_ZL12compress_que: many consumers: started from Encode, which may run any number of times: nothing in this translation unit calls it
 wtc: queue @_ZL11reorder_que: mpmc (producers: many, consumers: many)
+wtc: queue @_ZL11reorder_que: many producers: started from Encode, which may run any number of times: nothing in this translation unit calls it
+wtc: queue @_ZL11reorder_que: many consumers: started from Encode, which may run any number of times: nothing in this translation unit calls it
 wtc: queue @_ZL15deduplicate_que: mpmc (producers: many, consumers: many)
+wtc: queue @_ZL15deduplicate_que: many producers: started from Encode, which may run any number of times: nothing in this translation unit calls it
+wtc: queue @_ZL15deduplicate_que: many consumers: started from Encode, which may run any number of times: nothing in this translation unit calls it
 wtc: queue @_ZL10refine_que: mpmc (producers: many, consumers: many)
+wtc: queue @_ZL10refine_que: many producers: started from Encode, which may run any number of times: nothing in this translation unit calls it
+wtc: queue @_ZL10refine_que: many consumers: started from Encode, which may run any number of times: nothing in this translation unit calls it

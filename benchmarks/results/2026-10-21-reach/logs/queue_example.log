@@ -1,4 +1,6 @@
 wtc: queue @q1: spsc (producers: 1, consumers: 1)
 wtc: queue @q2: mpmc (producers: many, consumers: many)
+wtc: queue @q2: many producers: 2 threads: producer2() started at queue_example.cpp:61:22, producer2() started at queue_example.cpp:62:22
+wtc: queue @q2: many consumers: 2 threads: consumer2() started at queue_example.cpp:63:22, consumer2() started at queue_example.cpp:64:22
 wtc: queue @q1: every pop only borrows its element (1 pop)
 wtc: specialised: constructor tag rewritten to spsc_inline

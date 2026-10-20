@@ -1,7 +1,7 @@
 # Reach and precision
 
 Every queue of every program compiled, the analysis's verdict against the topology read
-from the source (benchmarks/reach/oracle.json). wtc 651528a.
+from the source (benchmarks/reach/oracle.json). wtc 29bb531.
 
 | program | queue | oracle | verdict | outcome | cause | the analysis's account |
 |---|---|---|---|---|---|---|
@@ -32,10 +32,10 @@ from the source (benchmarks/reach/oracle.json). wtc 651528a.
 | PARSEC dedup, one thread per stage | deduplicate_que | spsc (1, 1) | no verdict | refused | the queues are elements of arrays, indexed at run time | the queue is an element of an array |
 | PARSEC dedup, one thread per stage | compress_que | spsc (1, 1) | no verdict | refused | the queues are elements of arrays, indexed at run time | the queue is an element of an array |
 | PARSEC dedup, one thread per stage | reorder_que | mpsc (many, 1) | no verdict | refused | the queues are elements of arrays, indexed at run time | the queue is an element of an array |
-| PARSEC dedup, one thread per stage, queues as globals | refine_que | spsc (1, 1) | mpmc (many, many) | conservative | the threads start in Encode, which only main, in another file, calls |  |
-| PARSEC dedup, one thread per stage, queues as globals | deduplicate_que | spsc (1, 1) | mpmc (many, many) | conservative | the threads start in Encode, which only main, in another file, calls |  |
-| PARSEC dedup, one thread per stage, queues as globals | compress_que | spsc (1, 1) | mpmc (many, many) | conservative | the threads start in Encode, which only main, in another file, calls |  |
-| PARSEC dedup, one thread per stage, queues as globals | reorder_que | mpsc (many, 1) | mpmc (many, many) | conservative | the threads start in Encode, which only main, in another file, calls |  |
+| PARSEC dedup, one thread per stage, queues as globals | refine_que | spsc (1, 1) | mpmc (many, many) | conservative | the threads start in Encode, which only main, in another file, calls | producers: started from Encode, which may run any number of times: nothing in this translation unit calls it; consumers: started from Encode, which may run any number of times: nothing in this translation unit calls it |
+| PARSEC dedup, one thread per stage, queues as globals | deduplicate_que | spsc (1, 1) | mpmc (many, many) | conservative | the threads start in Encode, which only main, in another file, calls | producers: started from Encode, which may run any number of times: nothing in this translation unit calls it; consumers: started from Encode, which may run any number of times: nothing in this translation unit calls it |
+| PARSEC dedup, one thread per stage, queues as globals | compress_que | spsc (1, 1) | mpmc (many, many) | conservative | the threads start in Encode, which only main, in another file, calls | producers: started from Encode, which may run any number of times: nothing in this translation unit calls it; consumers: started from Encode, which may run any number of times: nothing in this translation unit calls it |
+| PARSEC dedup, one thread per stage, queues as globals | reorder_que | mpsc (many, 1) | mpmc (many, many) | conservative | the threads start in Encode, which only main, in another file, calls | consumers: started from Encode, which may run any number of times: nothing in this translation unit calls it |
 | PARSEC dedup, one thread per stage, queues as globals, one translation unit | refine_que | spsc (1, 1) | spsc (1, 1) | exact |  |  |
 | PARSEC dedup, one thread per stage, queues as globals, one translation unit | deduplicate_que | spsc (1, 1) | spsc (1, 1) | exact |  |  |
 | PARSEC dedup, one thread per stage, queues as globals, one translation unit | compress_que | spsc (1, 1) | spsc (1, 1) | exact |  |  |
