@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 #
-# Builds W8 (benchmarks/workloads/w8_lock_batch_wtc.cpp) as written and with
-# its loop's critical sections batched:
+# Builds W8 (benchmarks/workloads/w8_lock_batch_wtc.cpp) as written, with
+# its loop's critical sections batched by the compiler, and with the same
+# batch written out by hand:
 #
-#   w8_plain    -DW8_PLAIN
-#   w8_batched  marked WTC_BATCH
+#   w8_plain            -DW8_PLAIN
+#   w8_batched          marked WTC_BATCH, batches of 64
+#   w8_hand             -DW8_HAND_BATCH, batches of 64
+#   w8_<batched|hand>_k<K>   K: 8 512, the batch size swept
 #
-# and checks that the batched build was batched and the plain one not.
-# Never run this inside a `bench` reservation; it compiles.
+# and checks that the compiler's batched builds were batched and the others
+# not. Never run this inside a `bench` reservation; it compiles.
 #
 #   build_w8_flavours.sh <out-dir>
 set -euo pipefail
@@ -37,8 +40,14 @@ build() { # name, extra wtc-cc args...
 
 build w8_plain -DW8_PLAIN
 build w8_batched
+build w8_hand -DW8_HAND_BATCH
+for k in 8 512; do
+  build "w8_batched_k$k" -DWTC_LOCK_BATCH_K=$k
+  build "w8_hand_k$k" -DW8_HAND_BATCH -DWTC_LOCK_BATCH_K=$k
+done
 echo
-echo "w8_batched must say batched yes and w8_plain no; the checksums must agree."
+echo "every w8_batched* must say batched yes, w8_plain and w8_hand* no (the hand"
+echo "builds batch in the source); the checksums must agree."
 
 # What was built, for meta.json: the toolchain and each flavour's flags.
 {
