@@ -68,6 +68,7 @@ struct Access {
     Location started;   // the spawn that starts it, or the entry for main
     bool spawned;
     bool oneOf = false;  // the operation may act on this queue or another
+    const Instance *inst = nullptr;   // where the walk saw it, while the walk lives
 };
 
 struct SideInfo {
@@ -215,6 +216,9 @@ private:
     bool checkDeclared(Operation *root, const RootInfo &info, Topology verdict, const std::string &label,
                        llvm::ArrayRef<cir::CallOp> ctors, bool capExceeded, bool summary);
     static Access accessOf(Operation *op, const Instance &inst);
+    // Why one side of a queue counts many, in the program's own terms.
+    std::string whyMany(const SideInfo &side);
+    std::string whyThreadMany(const Instance &inst, bool &spawned);
 };
 
 // A location as a person reads it: file:line:column, from the first file
@@ -247,7 +251,73 @@ Access QueueOwnershipAnalysisPass::accessOf(Operation *op, const Instance &inst)
                   inst.speculative,
                   llvm::demangle(entry.getSymName().str()),
                   site ? site.getLoc() : entry.getLoc(),
-                  static_cast<bool>(site)};
+                  static_cast<bool>(site),
+                  false,
+                  &inst};
+}
+
+// Why one thread the walk saw stands for many: the nearest cause above the
+// instance that starts it -- a spawn or a call in a loop, recursion, or a
+// root nothing here accounts for. Empty when the cause is a guess (a goto
+// with no loop), which the count keeps but a programmer could not act on.
+// `spawned` is false when the thread is such a root itself: a function
+// another file may call directly, a weaker account than the spawn that
+// starts it here, when there is one.
+std::string QueueOwnershipAnalysisPass::whyThreadMany(const Instance &inst, bool &spawned) {
+    const Instance *start = &inst;
+    while (start->parent && start->parent->thread == start->thread) start = start->parent;
+    spawned = true;
+    for (const Instance *q = start; q; q = q->parent) {
+        cir::FuncOp f = q->func;   // op handles are not const
+        cir::CallOp site = q->site;
+        const std::string fn = llvm::demangle(f.getSymName().str());
+        if (q->recurring) return fn + " is reached again through recursion";
+        if (!site) {
+            if (!q->manyRoot) return "";
+            spawned = q != start;
+            return spawned ? "started from " + fn + ", which may run any number of times: " + q->manyRoot
+                           : fn + " may run any number of times: " + q->manyRoot;
+        }
+        bool known;
+        const Mult m = walk->siteMult(site.getOperation(), q->parent->func, known);
+        if (!known) return "";
+        if (m == Mult::Many) {
+            const bool spawn = getSemanticKind(lookupCallee(site)) == SemanticOpKind::ThreadSpawn;
+            return std::string(spawn ? "started" : "reached by a call") + " in a loop at " +
+                   whereOf(site.getLoc(), /*fileOnly=*/true);
+        }
+    }
+    return "";
+}
+
+// Two threads that each touch the side, or one that stands for many and
+// why. The first explained access answers: one cause is what a programmer
+// needs to look at, and every access of one thread shares it.
+std::string QueueOwnershipAnalysisPass::whyMany(const SideInfo &side) {
+    std::string weak;
+    for (const Access &a : side.accesses) {
+        if (!a.many || !a.inst) continue;
+        bool spawned;
+        std::string w = whyThreadMany(*a.inst, spawned);
+        if (w.empty()) continue;
+        if (spawned) return w;
+        if (weak.empty()) weak = std::move(w);
+    }
+    if (!weak.empty()) return weak;
+    if (side.threads.size() >= 2) {
+        llvm::SmallVector<std::string, 4> named;
+        llvm::SmallSet<unsigned, 4> seen;
+        for (const Access &a : side.accesses) {
+            if (!seen.insert(a.thread).second) continue;
+            std::string w = whereOf(a.started, /*fileOnly=*/true);
+            named.push_back(a.entry + (w.empty() ? "" : (a.spawned ? " started at " : " at ") + w));
+        }
+        std::string out = std::to_string(side.threads.size()) + " threads: ";
+        for (size_t i = 0; i < named.size() && i < 3; ++i) out += (i ? ", " : "") + named[i];
+        if (named.size() > 3) out += ", ...";
+        return out;
+    }
+    return "";
 }
 
 Operation *QueueOwnershipAnalysisPass::carrierOf(const Key &k, const char *&why) const {
@@ -389,6 +459,14 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
                            << " (producers: " << (p == 2 ? "many" : std::to_string(p))
                            << ", consumers: " << (c == 2 ? "many" : std::to_string(c)) << ")";
         ++remarks;
+        // What a programmer would change to get a smaller count.
+        for (auto [n, side, what] : {std::tuple{p, &info.producers, "producers"},
+                                     std::tuple{c, &info.consumers, "consumers"}})
+            if (n == 2)
+                if (std::string w = whyMany(*side); !w.empty()) {
+                    root->emitRemark() << "wtc: queue " << label << ": many " << what << ": " << w;
+                    ++remarks;
+                }
         if (!carrier && t == Topology::spsc) {
             root->emitRemark() << "wtc: queue " << label << " keeps the general-purpose implementation: "
                                << noCarrier;

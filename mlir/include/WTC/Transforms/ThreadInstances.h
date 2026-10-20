@@ -99,6 +99,12 @@ struct Instance {
     // its calls reach is not in the walk. A client that would call a pair
     // cold must not, on this thread, since the unseen calls may touch it.
     bool truncated = false;
+    // For a root standing for any number of threads, why it may run any
+    // number of times, as a remark can say it after a colon: its address
+    // is taken, or nothing in this module calls it. Null for main and the
+    // global constructors, and for every instance with a parent, whose
+    // multiplicity comes from its chain.
+    const char *manyRoot = nullptr;
 };
 
 // Where a handle points, as far as the walk can read it: a root (a
