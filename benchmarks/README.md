@@ -95,8 +95,10 @@ are the ceiling.
   sent: a producer that falls behind its schedule charges the delay to the
   elements it held up instead of hiding it (coordinated omission), and
   `svc_p50`/`svc_p99`/`svc_p999`, from the send, are the queue's own share.
-  Each line records the offered and achieved rates and marks a run that did
-  not sustain the offered rate `saturated`: such a run measures a backlog.
+  Each line records the offered rate, the rates at which the producer sent
+  and the consumer drained, and marks a run in which either fell short of
+  the offered rate `saturated`: such a run measures a backlog. The queue is
+  unbounded, so a consumer that falls behind shows only in its own rate.
   p50/p90/p99/p99.9/p99.99/max from one million samples after warm-up.
   `--pingpong` measures half a round trip over two queues as a cross-check
   that does not depend on two cores agreeing about the counter.

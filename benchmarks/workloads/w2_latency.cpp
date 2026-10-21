@@ -11,11 +11,14 @@
 // behind its schedule -- because a push took long, or the queue is
 // saturated -- charges the delay to the elements it held up instead of
 // hiding it (coordinated omission); the svc_ percentiles, from the send
-// time, are the queue's own share. The line also says what rate was
-// achieved and whether the run kept up with the one offered: a saturated
-// run measures a backlog, not the queue. Percentiles come from the
-// consumer's own samples, warm-up discarded; the sample arrays are
-// preallocated and nothing allocates on the measured path except the queue.
+// time, are the queue's own share. The line also says at what rate the
+// producer sent and the consumer drained, and whether the run kept up with
+// the rate offered: a saturated run measures a backlog, not the queue. Both
+// sides count, because the queue is unbounded: a producer always keeps its
+// schedule, and a consumer that cannot keep up shows only in its own rate.
+// Percentiles come from the consumer's own samples, warm-up discarded; the
+// sample arrays are preallocated and nothing allocates on the measured path
+// except the queue.
 //
 // --pingpong: two queues, one element in flight, the same thread sends and
 // waits for the echo; reported latency is half the round trip. It does not
@@ -47,7 +50,8 @@ struct runner {
     explicit runner(const config& cfg) : c(cfg) {}
 
     struct schedule {
-        double achieved_rate = 0;    // elements a second, over the measured part
+        double achieved_rate = 0;    // elements a second sent, over the measured part
+        double drained_rate = 0;     // elements a second received, over the same
         double lag_max_ns = 0;       // how far behind its schedule the producer fell
         double late_frac = 0;        // sends more than one interval behind
     };
@@ -80,7 +84,8 @@ struct runner {
             r.set("svc_p50", s.p50); r.set("svc_p99", s.p99); r.set("svc_p999", s.p999);
             r.set("offered_rate", offered);
             r.set("achieved_rate", sch.achieved_rate);
-            r.set("saturated", sch.achieved_rate < 0.95 * offered ? 1 : 0);
+            r.set("drained_rate", sch.drained_rate);
+            r.set("saturated", std::min(sch.achieved_rate, sch.drained_rate) < 0.95 * offered ? 1 : 0);
             r.set("lag_max_ns", sch.lag_max_ns);
             r.set("late_frac", sch.late_frac);
         }
@@ -98,6 +103,7 @@ struct runner {
         std::vector<std::uint64_t> svc; svc.reserve(c.samples);
         std::atomic<bool> order_ok{true};
         std::uint64_t first_sent = 0, last_sent = 0, lag_max = 0, late = 0;
+        std::uint64_t first_recv = 0, last_recv = 0;
 
         std::thread prod([&] {
             E e{};
@@ -124,7 +130,11 @@ struct runner {
                 if (!q.try_pop(e)) { wait_policy(c.wait, misses); continue; }
                 const std::uint64_t t = rdtsc_fenced();
                 if (e.seq != got) { order_ok.store(false); break; }
-                if (got >= c.warm) { ticks.push_back(t - e.tsc()); svc.push_back(t - e.sent()); }
+                if (got >= c.warm) {
+                    ticks.push_back(t - e.tsc()); svc.push_back(t - e.sent());
+                    if (got == c.warm) first_recv = t;
+                    last_recv = t;
+                }
                 ++got;
             }
         });
@@ -138,6 +148,8 @@ struct runner {
         const double ns_per_tick = 1e9 / c.tsc_hz;
         if (last_sent > first_sent)
             sch.achieved_rate = static_cast<double>(c.samples - 1) / (static_cast<double>(last_sent - first_sent) * ns_per_tick / 1e9);
+        if (last_recv > first_recv)
+            sch.drained_rate = static_cast<double>(c.samples - 1) / (static_cast<double>(last_recv - first_recv) * ns_per_tick / 1e9);
         sch.lag_max_ns = static_cast<double>(lag_max) * ns_per_tick;
         sch.late_frac = static_cast<double>(late) / static_cast<double>(c.samples);
         report(ticks, svc, sch, "open", f0, f1);
