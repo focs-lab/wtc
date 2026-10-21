@@ -78,16 +78,19 @@ against the same clang compiling the same source without ClangIR.
 **Provenance.** A leg's `meta.json` records the commit it ran at, and the
 NOTEs and this page name commits too. For the results recorded so far,
 those commits belong to the history the legs ran on, before the branch
-that carries them was squashed into one commit per change; the tag
-`eval-as-measured` keeps that history, so every commit a result names can
-still be checked out.
+that carries them was squashed into one commit per change; the tags
+`eval-as-measured` and, for the reach table, `reach-r6-as-measured` keep
+that history, so every commit a result names can still be checked out.
 
 ## Results so far
 
 **RQ1** (`benchmarks/results/2026-10-21-reach`). 35 queues in the
 examples, the compiler-built workloads, ferret and dedup: 21 exact, 4
 conservative, 10 refused, none wrong. Of the 22 queues a reader would call
-single-producer single-consumer, 15 are proved so and specialised. The
+single-producer single-consumer, 15 are proved so and specialised. Four
+more, ferret's with the thread count from its command line, have their
+tag chosen when they are built, from the counts of the loops that start
+their threads: inline rings at one thread per stage. The
 refusals and imprecisions have three causes, each shown by a build that
 removes it: an access reached through recursion (ferret's loader), queues
 that are elements of arrays indexed at run time (dedup), and threads
