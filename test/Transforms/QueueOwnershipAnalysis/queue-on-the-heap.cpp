@@ -9,7 +9,7 @@
 // RUN: %t.exe | FileCheck %s --check-prefix=OUT
 //
 // CHECK-NOT: unresolvable
-// CHECK: queue the heap object made at queue-on-the-heap.cpp:{{[0-9]+}}:{{[0-9]+}}: spsc (producers: 1, consumers: 1)
+// CHECK: queue *@q: spsc (producers: 1, consumers: 1)
 // CHECK: specialised: constructor tag rewritten to spsc
 // CC: tag rewritten to spsc_inline
 // OUT: tag 2 got 10

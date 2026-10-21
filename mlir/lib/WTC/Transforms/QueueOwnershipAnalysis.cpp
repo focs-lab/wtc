@@ -20,6 +20,8 @@ using namespace mlir::wtc;
 #include "llvm/Demangle/Demangle.h"
 #include "llvm/Support/Path.h"
 
+#include <optional>
+
 // For every queue object the module touches, how many threads push to it
 // and how many pop from it, as a verdict written into the IR:
 //
@@ -188,6 +190,12 @@ private:
     // null with the reason.
     Operation *carrierOf(const Key &k, const char *&why) const;
     std::string labelOf(const Key &k, bool whole) const;
+    // For an allocation whose result one pointer global holds -- stored
+    // there once, by the only store to that global -- the global's name,
+    // so that a heap queue is named after the pointer the program uses
+    // for it. Computed once.
+    llvm::StringRef pointerNaming(Operation *allocation) const;
+    mutable std::optional<llvm::DenseMap<Operation *, llvm::StringRef>> pointerNames;
 
     // An operation is poisoned once: the walk can meet the same recursive
     // function along several call strings. Only an access with no type is
@@ -346,12 +354,43 @@ Operation *QueueOwnershipAnalysisPass::carrierOf(const Key &k, const char *&why)
     return c;
 }
 
+llvm::StringRef QueueOwnershipAnalysisPass::pointerNaming(Operation *allocation) const {
+    if (!pointerNames) {
+        pointerNames.emplace();
+        llvm::DenseMap<llvm::StringRef, llvm::SmallVector<cir::StoreOp, 1>> storesOf;
+        llvm::DenseSet<llvm::StringRef> escaped;
+        ModuleOp m = module;
+        m.walk([&](cir::GetGlobalOp g) {
+            for (Operation *u : g.getResult().getUsers()) {
+                if (auto st = dyn_cast<cir::StoreOp>(u); st && st.getAddr() == g.getResult())
+                    storesOf[g.getName()].push_back(st);
+                else if (!isa<cir::LoadOp>(u))
+                    escaped.insert(g.getName());
+            }
+        });
+        for (auto &[name, stores] : storesOf) {
+            if (stores.size() != 1 || escaped.contains(name)) continue;
+            if (Operation *src = traceToRoot(stores.front().getValue()).getDefiningOp())
+                if (isa<cir::CallOp>(src)) (*pointerNames)[src] = name;
+        }
+    }
+    return pointerNames->lookup(allocation);
+}
+
 std::string QueueOwnershipAnalysisPass::labelOf(const Key &k, bool whole) const {
     Operation *root = k.first;
     std::string base;
     if (auto g = dyn_cast<cir::GlobalOp>(root)) base = ("@" + g.getSymName()).str();
     else if (auto a = dyn_cast<cir::AllocaOp>(root)) base = ("%" + a.getName()).str();
-    else base = "the heap object made at " + whereOf(root->getLoc(), /*fileOnly=*/true);
+    else if (llvm::StringRef name = pointerNaming(root); !name.empty()) base = ("*@" + name).str();
+    else {
+        // ClangIR gives an allocation the location of its function; the
+        // constructor's is the new expression's.
+        Location at = root->getLoc();
+        if (auto it = keyCtors.find(k); it != keyCtors.end() && !it->second.empty())
+            at = it->second.front()->getLoc();
+        base = "the heap object made at " + whereOf(at, /*fileOnly=*/true);
+    }
     if (whole) return base;
     // The member's name, from the address its constructor is handed.
     std::string member;
