@@ -35,6 +35,14 @@ inline constexpr llvm::StringLiteral kQueueIdsAttrName = "wtc.queue_ids";
 // Left by the borrow analysis on an spsc queue root whose every pop only
 // borrows its element (WTCBorrowAnalysis.cpp).
 inline constexpr llvm::StringLiteral kBorrowedAttrName = "wtc.borrowed";
+// For a side of a queue whose threads are all started by one counted loop
+// (countedLoop in Transforms/Utils.h), so that the side has one thread
+// exactly when the loop runs at most once: on the queue's root, the number
+// of that loop, which carries the same number in kSpawnLoopAttrName. The
+// topology beside them is what holds whatever the loop's count.
+inline constexpr llvm::StringLiteral kProducersLoopAttrName = "wtc.producers_loop";
+inline constexpr llvm::StringLiteral kConsumersLoopAttrName = "wtc.consumers_loop";
+inline constexpr llvm::StringLiteral kSpawnLoopAttrName = "wtc.spawn_loop";
 
 } // namespace mlir::wtc
 

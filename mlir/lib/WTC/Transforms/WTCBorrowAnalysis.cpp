@@ -26,8 +26,10 @@ using namespace mlir::wtc;
 // in place, through a shared_ptr that owns nothing, and destroys it at the
 // consumer's next pop. That is only correct if the program never notices
 // the difference, which is what this pass proves for every pop of a queue
-// already proved spsc. For each pop, whose shared_ptr the compiler builds in
-// a stack slot (the hidden return slot of try_pop):
+// already proved spsc, or proved spsc when the loops that start its threads
+// run at most once (Utils.h, spscWhenLoopsRunOnce). For each pop, whose
+// shared_ptr the compiler builds in a stack slot (the hidden return slot of
+// try_pop):
 //
 //   (a) the slot is used only by the pop, its lifetime markers, and members
 //       of shared_ptr that neither copy nor share it: operator bool, get,
@@ -368,7 +370,10 @@ public:
             if (!isa<cir::GlobalOp, cir::AllocaOp>(root) && !built) return;
             auto id = root->getAttrOfType<IntegerAttr>(kQueueIdAttrName);
             auto topo = root->getAttrOfType<TopologyAttr>(kTopologyAttrName);
-            if (!id || !topo || topo.getValue() != Topology::spsc) return;
+            // Spsc, or spsc when the loops that start its threads each run
+            // at most once: whether a pop only borrows does not depend on
+            // the count, and the inline ring is chosen only at a count of one.
+            if (!id || !topo || !spscWhenLoopsRunOnce(root)) return;
             const std::string label = labelOf(root);
             // Asked first: a pop of its type that the analysis could not
             // place may be one of its pops, and "nothing pops it" would be

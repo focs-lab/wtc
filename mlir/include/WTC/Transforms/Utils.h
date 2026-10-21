@@ -159,6 +159,25 @@ llvm::SmallVector<cir::FuncOp, 4> indirectCallees(cir::CallOp call);
 llvm::DenseMap<Operation *, llvm::SmallVector<cir::CallOp, 2>>
 collectQueueConstructors(ModuleOp module);
 
+// A loop whose number of iterations the program can compute before it
+// runs: `for (i = first; i < bound; ++i)`, or `<=`, where i is a slot that
+// only the loop's step writes, by one, and the bound is loaded from a
+// global or a stack slot in the condition each time round. Whether the
+// bound can change while the loop runs is not judged here; the caller that
+// computes the count elsewhere has to establish that.
+struct CountedLoop {
+    cir::ForOp loop;
+    cir::LoadOp bound;      // the condition's load of the bound
+    int64_t first = 0;      // what i is set to just before the loop
+    bool inclusive = false; // i <= bound
+};
+std::optional<CountedLoop> countedLoop(cir::ForOp loop);
+
+// Whether the queue whose root this is was found spsc, or would be once each
+// counted loop recorded on it (kProducersLoopAttrName, kConsumersLoopAttrName)
+// runs at most once: every side with many threads has its loop recorded.
+bool spscWhenLoopsRunOnce(Operation *root);
+
 // The topology tag a queue's one constructor passes, if it is a constant;
 // nullopt when there is not exactly one constructor of the two-operand
 // shape, or its tag is not a constant.
