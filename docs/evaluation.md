@@ -80,7 +80,10 @@ against the same clang compiling the same source without ClangIR.
 **RQ1** (`benchmarks/results/2026-10-21-reach`). 35 queues in the
 examples, the compiler-built workloads, ferret and dedup: 21 exact, 4
 conservative, 10 refused, none wrong. Of the 22 queues a reader would call
-single-producer single-consumer, 15 are proved so and specialised. The
+single-producer single-consumer, 15 are proved so and specialised. Four
+more, ferret's with the thread count from its command line, have their
+tag chosen when they are built, from the counts of the loops that start
+their threads: inline rings at one thread per stage. The
 refusals and imprecisions have three causes, each shown by a build that
 removes it: an access reached through recursion (ferret's loader), queues
 that are elements of arrays indexed at run time (dedup), and threads
