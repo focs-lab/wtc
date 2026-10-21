@@ -58,7 +58,9 @@ meta() {
   {
     echo "{"
     echo "  \"leg\": \"$LEG\", \"date\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
-    echo "  \"git_sha\": \"$(git -c safe.directory="$ROOT" -C "$ROOT" rev-parse HEAD)\", \"git_dirty\": $([ -z "$(git -c safe.directory="$ROOT" -C "$ROOT" status --porcelain)" ] && echo false || echo true),"
+    # Dirty means the source differs from the commit; the results of the
+    # legs before this one in a chain are output, not source.
+    echo "  \"git_sha\": \"$(git -c safe.directory="$ROOT" -C "$ROOT" rev-parse HEAD)\", \"git_dirty\": $([ -z "$(git -c safe.directory="$ROOT" -C "$ROOT" status --porcelain -- . ':(exclude)benchmarks/results')" ] && echo false || echo true),"
     echo "  \"kernel\": \"$(uname -r)\","
     echo "  \"cpu_model\": \"$(lscpu | sed -n 's/^Model name: *//p')\","
     echo "  \"sockets\": \"$(lscpu | sed -n 's/^Socket(s): *//p')\", \"numa_nodes\": \"$(lscpu | sed -n 's/^NUMA node(s): *//p')\","
