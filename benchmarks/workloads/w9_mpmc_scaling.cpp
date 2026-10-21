@@ -116,22 +116,36 @@ struct runner {
                 }
             }
         };
+        // A consumer counts what it pops locally and adds the count to popped
+        // every 256 elements and whenever the queue is empty, which is also
+        // the only time it looks whether everything has arrived: one counter
+        // that every consumer added to on every element was a contended
+        // atomic of the benchmark's own, paid on every pop. Its samples go to
+        // a vector of its own, handed over at the end; the vectors' headers
+        // sit side by side in ticks.
         auto consumer = [&](int id) {
             E e{};
             unsigned misses = 0;
+            std::uint64_t mine = 0;
             std::vector<std::uint64_t> last(P, 0);
+            std::vector<std::uint64_t> tk = std::move(ticks[id]);
             for (;;) {
-                if (popped.load(std::memory_order_relaxed) >= total) break;
-                if (!q.try_pop(e)) { wait_policy(c.wait, misses); continue; }
+                if (!q.try_pop(e)) {
+                    if (mine) { popped.fetch_add(mine, std::memory_order_relaxed); mine = 0; }
+                    if (popped.load(std::memory_order_relaxed) >= total) break;
+                    wait_policy(c.wait, misses);
+                    continue;
+                }
                 const std::uint64_t t = rdtsc_fenced();
                 const int p = static_cast<int>(e.seq >> 56);
                 const std::uint64_t s = e.seq & ((1ull << 56) - 1);
                 if (s < last[p]) ok.store(false);   // each producer's order must hold
                 last[p] = s;
-                if (sizeof(E) != 8 && s >= warm) ticks[id].push_back(t - e.tsc());
-                popped.fetch_add(1, std::memory_order_relaxed);
+                if (sizeof(E) != 8 && s >= warm) tk.push_back(t - e.tsc());
+                if (++mine == 256) { popped.fetch_add(mine, std::memory_order_relaxed); mine = 0; }
             }
             t_end.store(now_ns(), std::memory_order_relaxed);
+            ticks[id] = std::move(tk);
         };
         std::vector<std::thread> ts;
         for (int p = 0; p < P; ++p) { ts.emplace_back(producer, p); pin_thread(ts.back(), c.cpus[p]); }
