@@ -7,8 +7,10 @@ corpus commit) into a C++ program on wtc::queue, the one translation unit
 of ferret that uses queues and starts threads.
 
 What changes, and nothing else:
-  - the five `struct queue` globals become `wtc::queue<T*>` of the element
-    each carries (load_data*, seg_data*, ...);
+  - the five `struct queue` globals become pointers to `wtc::queue<T*>`
+    of the element each carries (load_data*, seg_data*, ...), each queue
+    built in main where PARSEC initialises it (queue_init), after the
+    thread counts are read, and deleted where PARSEC destroys it;
   - enqueue -> push; a blocking dequeue -> a spin on try_pop, pausing,
     as every variant measured does (threads never outnumber cores);
   - queue_signal_terminate -> the last producer of a queue pushes one
@@ -77,21 +79,21 @@ rep("#define DEFAULT_DEPTH", """#ifdef FERRET_HAND_TAG
 for qname, tname in (("q_load_seg", "load_data"), ("q_seg_extract", "seg_data"),
                      ("q_extract_vec", "extract_data"), ("q_vec_rank", "vec_query_data"),
                      ("q_rank_out", "rank_data")):
-    rep(f"struct queue {qname};", f"wtc::queue<struct {tname}*> {qname} FERRET_TAG;\nstd::atomic<int> {qname}_left;")
+    rep(f"struct queue {qname};", f"wtc::queue<struct {tname}*> *{qname};\nstd::atomic<int> {qname}_left;")
 # producers
-rep("enqueue(&q_load_seg, data);", "q_load_seg.push(data);")
+rep("enqueue(&q_load_seg, data);", "q_load_seg->push(data);")
 for q in ("q_seg_extract", "q_extract_vec", "q_vec_rank", "q_rank_out"):
     var = {"q_seg_extract": "seg", "q_extract_vec": "extract", "q_vec_rank": "vec", "q_rank_out": "rank"}[q]
-    rep(f"enqueue(&{q}, {var});", f"{q}.push({var});")
+    rep(f"enqueue(&{q}, {var});", f"{q}->push({var});")
 # terminations: the consumers of each queue
 ends = {"q_load_seg": "NTHREAD_SEG", "q_seg_extract": "NTHREAD_EXTRACT", "q_extract_vec": "NTHREAD_VEC",
         "q_vec_rank": "NTHREAD_RANK", "q_rank_out": "NTHREAD_OUT"}
 for q, cons in ends.items():
-    rep(f"queue_signal_terminate(&{q});", f"end_of({q}, {q}_left, {cons});")
+    rep(f"queue_signal_terminate(&{q});", f"end_of(*{q}, {q}_left, {cons});")
 # consumers
 for q, var in (("q_load_seg", "load"), ("q_seg_extract", "seg"), ("q_extract_vec", "extract"),
                ("q_vec_rank", "vec"), ("q_rank_out", "rank")):
-    rep(f"if(dequeue(&{q}, &{var}) < 0)", f"if(({var} = take({q})) == NULL)")
+    rep(f"if(dequeue(&{q}, &{var}) < 0)", f"if(({var} = take(*{q})) == NULL)")
 # stage signatures
 for st in ("t_load", "t_seg", "t_extract", "t_vec", "t_rank", "t_out"):
     rep(f"void *{st} (void *dummy)", f"void {st} (void *dummy)")
@@ -99,7 +101,13 @@ rep("	return NULL;\n", "	return;\n", count=6)
 # main: queue setup and the threads
 start = s.index("\tqueue_init(&q_load_seg,")
 end = s.index("#ifdef ENABLE_PARSEC_HOOKS\n\t__parsec_roi_end();")
-s = s[:start] + '''	q_load_seg_left = NTHREAD_LOAD;
+s = s[:start] + '''	q_load_seg = new wtc::queue<struct load_data*> FERRET_TAG;
+	q_seg_extract = new wtc::queue<struct seg_data*> FERRET_TAG;
+	q_extract_vec = new wtc::queue<struct extract_data*> FERRET_TAG;
+	q_vec_rank = new wtc::queue<struct vec_query_data*> FERRET_TAG;
+	q_rank_out = new wtc::queue<struct rank_data*> FERRET_TAG;
+
+	q_load_seg_left = NTHREAD_LOAD;
 	q_seg_extract_left = NTHREAD_SEG;
 	q_extract_vec_left = NTHREAD_EXTRACT;
 	q_vec_rank_left = NTHREAD_VEC;
@@ -131,10 +139,10 @@ s = s[:start] + '''	q_load_seg_left = NTHREAD_LOAD;
 #endif
 
 ''' + s[end:]
-# what main no longer needs
+# what main no longer needs, and the queues deleted where PARSEC destroys them
 start = s.index("\ttpool_destroy(p_load);")
 end = s.index("\tstimer_tuck(&tmr, \"QUERY TIME\");")
-s = s[:start] + s[end:]
+s = s[:start] + "".join(f"\tdelete {q};\n" for q in ends) + "\n" + s[end:]
 for decl in ("tdesc_t *t_load_desc;", "tdesc_t *t_seg_desc;", "tdesc_t *t_extract_desc;", "tdesc_t *t_vec_desc;",
              "tdesc_t *t_rank_desc;", "tdesc_t *t_out_desc;", "tpool_t *p_load;", "tpool_t *p_seg;",
              "tpool_t *p_extract;", "tpool_t *p_vec;", "tpool_t *p_rank;", "tpool_t *p_out;"):
