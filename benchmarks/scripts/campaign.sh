@@ -99,12 +99,15 @@ run_w2() {
 # Three runs, not one. The control compares the start of a leg with its end,
 # and shim_generic's own run-to-run spread is around 8%, so comparing two
 # single runs against a tight threshold flags every leg and means nothing.
-control() { # tag
+# A leg whose reservation is not two whole cores passes its placement, so
+# that its controls run where its measurements do.
+control() { # tag [placement arguments]
+  local tag=$1; shift
   if [ ! -x "$CONTROL_BUILD/w1_throughput" ]; then
     echo "no controls: set CONTROL_BUILD to the CMake build" | tee -a "$OUT/log.txt"; return 0
   fi
   for k in 1 2 3; do
-    lock "$CONTROL_BUILD/w1_throughput" --variant shim_generic --elem 64 --wait spin --rep "$1" --json "$RUNS" 2>>"$OUT/log.txt"
+    lock "$CONTROL_BUILD/w1_throughput" --variant shim_generic --elem 64 --wait spin --rep "$tag" "$@" --json "$RUNS" 2>>"$OUT/log.txt"
   done
 }
 
@@ -141,11 +144,11 @@ elems_for() {
 # still came out about 10% under the closing ones while the per-repetition
 # trend stayed flat, which is the signature of a warm-up that ended too
 # early rather than of drift. Two full-length runs, discarded.
-warmup() {
+warmup() { # [placement arguments]
   [ -x "$CONTROL_BUILD/w1_throughput" ] || return 0
   for k in 1 2; do
     lock "$CONTROL_BUILD/w1_throughput" --variant shim_generic --elem 64 --wait spin \
-         --n 20000000 --json "" 2>>"$OUT/log.txt" >/dev/null
+         --n 20000000 "$@" --json "" 2>>"$OUT/log.txt" >/dev/null
   done
 }
 
@@ -409,14 +412,14 @@ case "$LEG" in
     # reservation that keeps the siblings online (bench without -e).
     "$HERE/check_env.sh" 2 || exit 1
     meta
-    warmup; control 900
+    warmup --smt-siblings; control 900 --smt-siblings
     for rep in $(seq 0 $((REPS-1))); do
       for v in shim_generic $(have_tbb && echo onetbb_cq_sp) rigtorp_inline moodycamel_rw_sp shim_spsc shim_spsc_inline; do
         WTC_PLACEMENT=smt lock "$BUILD/w1_throughput" --variant "$v" --elem 64 --wait spin --rep "$rep" \
              --n "$(elems_for "$v")" --smt-siblings --json "$RUNS" 2>>"$OUT/log.txt"
       done
     done
-    control 901
+    control 901 --smt-siblings
     ;;
   eval-w2)
     # RQ2: latency against offered load, up to and past saturation, for the
