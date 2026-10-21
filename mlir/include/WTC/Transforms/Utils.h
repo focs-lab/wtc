@@ -173,6 +173,11 @@ struct CountedLoop {
 };
 std::optional<CountedLoop> countedLoop(cir::ForOp loop);
 
+// Whether the queue whose root this is was found spsc, or would be once each
+// counted loop recorded on it (kProducersLoopAttrName, kConsumersLoopAttrName)
+// runs at most once: every side with many threads has its loop recorded.
+bool spscWhenLoopsRunOnce(Operation *root);
+
 // The topology tag a queue's one constructor passes, if it is a constant;
 // nullopt when there is not exactly one constructor of the two-operand
 // shape, or its tag is not a constant.

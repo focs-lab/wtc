@@ -1,4 +1,5 @@
 #include "WTC/Transforms/Utils.h"
+#include "WTC/WTCAttrs.h"
 
 #include "clang/CIR/Dialect/IR/CIRAttrs.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -572,6 +573,16 @@ std::optional<CountedLoop> countedLoop(cir::ForOp loop) {
         if (writes) return std::nullopt;
     }
     return std::nullopt;
+}
+
+bool spscWhenLoopsRunOnce(Operation *root) {
+    auto t = root->getAttrOfType<TopologyAttr>(kTopologyAttrName);
+    if (!t) return false;
+    const bool manyProducers = t.getValue() == Topology::mpsc || t.getValue() == Topology::mpmc;
+    const bool manyConsumers = t.getValue() == Topology::spmc || t.getValue() == Topology::mpmc;
+    if (t.getValue() == Topology::unknown) return false;
+    return (!manyProducers || root->hasAttr(kProducersLoopAttrName)) &&
+           (!manyConsumers || root->hasAttr(kConsumersLoopAttrName));
 }
 
 } // namespace mlir::wtc
