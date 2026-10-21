@@ -34,7 +34,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
-from matplotlib.ticker import EngFormatter, FuncFormatter, NullFormatter  # noqa: E402
+from matplotlib.ticker import FuncFormatter, NullFormatter, NullLocator  # noqa: E402
 
 COLOURS = {
     "shim_generic": "#8a96a6", "generic": "#8a96a6", "orig_generic": "#b7c0cc", "plain": "#8a96a6",
@@ -116,6 +116,19 @@ def num(x):
         return None
 
 
+def eng2(x, _=None):
+    # A tick at a measured rate reads 1.4M, not 1.42857M.
+    for p, s in ((1e9, "G"), (1e6, "M"), (1e3, "k")):
+        if abs(x) >= p:
+            return f"{float(f'{x / p:.2g}'):g}{s}"
+    return f"{float(f'{x:.2g}'):g}"
+
+
+def outside(ax, *args, **kw):
+    # Beside the axes, not on them: a legend inside covers bars and points.
+    ax.legend(*args, fontsize=7, loc="upper left", bbox_to_anchor=(1.01, 1), borderaxespad=0, **kw)
+
+
 def tag_of(where):
     return "".join(f"-{k}{v}" for k, v in where.items())
 
@@ -161,7 +174,7 @@ def bars(a):
     ax.set_ylabel(LABELS.get(a.metric, a.metric))
     if a.log:
         ax.set_yscale("log")
-    ax.legend(fontsize=7, ncol=2)
+    outside(ax)
     save(fig, a.dir, f"bars-{a.workload or 'all'}-{a.metric}-by-{a.by}{tag_of(a.where)}")
 
 
@@ -196,15 +209,24 @@ def curves(a, x_field, x_of, x_label, name):
     # Ticks where the measurements are, not at powers between them: rates on
     # a decimal log scale, thread counts on a binary one.
     ticks = sorted({p[0] for pts in lines.values() for p in pts})
+    positive = [t for t in ticks if t > 0]
     if x_field in ("interval_ns", "rate") or x_field in ("threads", "producers", "consumers") and len(ticks) > 1:
         binary = x_field not in ("interval_ns", "rate")
         ax.set_xscale("log", base=2 if binary else 10)
         ax.set_xticks(ticks)
-        ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:g}") if binary else EngFormatter(sep=""))
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:g}") if binary else FuncFormatter(eng2))
         ax.xaxis.set_minor_formatter(NullFormatter())
         if len(ticks) > 6 and not binary:
             plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
-    ax.legend(handles, labels, fontsize=7, ncol=2)
+    elif len(positive) > 1 and positive[-1] >= 100 * positive[0]:
+        # A sweep over decades (work from 0 to 16384 rounds) would crowd
+        # every point but the last against the left edge; zero stays on the
+        # linear part of the scale.
+        ax.set_xscale("symlog", base=2, linthresh=positive[0], linscale=0.5)
+        ax.set_xticks(ticks)
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:g}"))
+        ax.xaxis.set_minor_locator(NullLocator())
+    outside(ax, handles, labels)
     save(fig, a.dir, name)
 
 
@@ -247,7 +269,7 @@ def cdf(a):
     ax.set_xscale("log")
     ax.set_xlabel("latency (ns), bucket lower bound")
     ax.set_ylabel("fraction of elements")
-    ax.legend(fontsize=7)
+    outside(ax)
     save(fig, a.dir, f"cdf-{a.workload or 'all'}{tag_of(a.where)}")
 
 
