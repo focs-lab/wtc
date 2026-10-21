@@ -85,8 +85,12 @@ struct runner {
                 th2.producer_wait(got);
             }
         });
+        // The sink records into a vector of its own and hands it over at the
+        // end: ticks' end pointer, stored on every record, lives on this
+        // stack beside what the other stages read on every record.
         std::thread sink([&] {
             E64 e{};
+            std::vector<std::uint64_t> tk = std::move(ticks);
             unsigned misses = 0;
             std::uint64_t sum = 0;
             for (std::uint64_t got = 0; got < n;) {
@@ -94,11 +98,12 @@ struct runner {
                 const std::uint64_t t = rdtsc_fenced();
                 if (e.seq != got) { ok.store(false); break; }
                 sum += e.pad[0];
-                if (got >= warm) ticks.push_back(t - e.tsc());
+                if (got >= warm) tk.push_back(t - e.tsc());
                 th2.consumer_progress(++got);
             }
             t_end.store(now_ns(), std::memory_order_relaxed);
             checksum.store(sum);
+            ticks = std::move(tk);
         });
         pin_thread(gen, c.cpus[0]); pin_thread(xform, c.cpus[1]); pin_thread(sink, c.cpus[2]);
         const long f0 = cur_freq_khz(c.cpus[0]);

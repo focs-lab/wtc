@@ -105,6 +105,10 @@ W7_PRODUCER void produce() {
 #endif
 
 void consume() {
+    // Samples go to a vector of the consumer's own, handed over at the end:
+    // g_ticks shares a cache line with g_interval, which the producer reads
+    // on every element.
+    std::vector<std::uint64_t> ticks = std::move(g_ticks);
     std::uint64_t sum = 0;
     for (std::uint64_t got = 0; got < g_n;) {
         auto p = q.try_pop();
@@ -116,11 +120,12 @@ void consume() {
         // Every 61st element: a prime, so the sample never lines up with a
         // batch boundary. Every 64th, as this once was, sampled only the
         // first element of each batch of 64, the one that waits longest.
-        if (got >= g_warm && p->tsc() && got % 61 == 0) g_ticks.push_back(t - p->tsc());
+        if (got >= g_warm && p->tsc() && got % 61 == 0) ticks.push_back(t - p->tsc());
         ++got;
     }
     g_t_end = now_ns();
     g_checksum = sum;
+    g_ticks = std::move(ticks);
 }
 
 } // namespace

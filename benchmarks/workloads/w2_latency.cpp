@@ -105,38 +105,48 @@ struct runner {
         std::uint64_t first_sent = 0, last_sent = 0, lag_max = 0, late = 0;
         std::uint64_t first_recv = 0, last_recv = 0;
 
+        // Each thread records into its own locals and hands them over when it
+        // finishes. Written here, on this stack, the producer's per-element
+        // stores and the consumer's (the samples' end pointers, the receive
+        // times) shared cache lines, and every latency included the
+        // benchmark's own false sharing.
         std::thread prod([&] {
             E e{};
+            std::uint64_t first = 0, last = 0, worst = 0, behind = 0;
             std::uint64_t next = rdtsc();
             for (std::uint64_t i = 0; i < total; ++i) {
                 while (rdtsc() < next) cpu_relax();
                 const std::uint64_t now = rdtsc_fenced();
                 if (i >= c.warm) {
                     const std::uint64_t lag = now - next;
-                    if (lag > lag_max) lag_max = lag;
-                    if (lag > interval_ticks) ++late;
-                    if (i == c.warm) first_sent = now;
-                    last_sent = now;
+                    if (lag > worst) worst = lag;
+                    if (lag > interval_ticks) ++behind;
+                    if (i == c.warm) first = now;
+                    last = now;
                 }
                 e.seq = i; e.set_tsc(next); e.set_sent(now);
                 q.push(e);
                 next += interval_ticks;
             }
+            first_sent = first; last_sent = last; lag_max = worst; late = behind;
         });
         std::thread cons([&] {
             E e{};
+            std::vector<std::uint64_t> tk = std::move(ticks), sv = std::move(svc);
+            std::uint64_t first = 0, last = 0;
             unsigned misses = 0;
             for (std::uint64_t got = 0; got < total;) {
                 if (!q.try_pop(e)) { wait_policy(c.wait, misses); continue; }
                 const std::uint64_t t = rdtsc_fenced();
                 if (e.seq != got) { order_ok.store(false); break; }
                 if (got >= c.warm) {
-                    ticks.push_back(t - e.tsc()); svc.push_back(t - e.sent());
-                    if (got == c.warm) first_recv = t;
-                    last_recv = t;
+                    tk.push_back(t - e.tsc()); sv.push_back(t - e.sent());
+                    if (got == c.warm) first = t;
+                    last = t;
                 }
                 ++got;
             }
+            ticks = std::move(tk); svc = std::move(sv); first_recv = first; last_recv = last;
         });
         pin_thread(prod, c.cpus[0]);
         pin_thread(cons, c.cpus[1]);
