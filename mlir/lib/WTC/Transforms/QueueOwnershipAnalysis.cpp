@@ -80,6 +80,21 @@ struct SideInfo {
         if (threads.empty()) return 0;
         return (anyMany || threads.size() >= 2) ? 2 : 1;
     }
+    // The counted loop that starts every thread on this side, one per
+    // iteration, when there is one: the side then has one thread exactly
+    // when the loop runs at most once. Null when two threads the walk tells
+    // apart touch the side, or any access is on a thread the module cannot
+    // account for or may be to another queue.
+    Operation *countLoop() const {
+        if (threads.size() != 1) return nullptr;
+        Operation *loop = nullptr;
+        for (const Access &a : accesses) {
+            if (!a.inst || !a.inst->countLoop || a.speculative || a.oneOf) return nullptr;
+            if (loop && loop != a.inst->countLoop) return nullptr;
+            loop = a.inst->countLoop;
+        }
+        return loop;
+    }
 };
 
 struct RootInfo {
@@ -120,6 +135,7 @@ private:
     llvm::DenseMap<Key, llvm::SmallSetVector<Operation *, 2>> keyCtors;
     llvm::DenseSet<Operation *> ctorUnplaced;
     llvm::DenseMap<Key, Type> keyType;             // the queue type its constructor builds
+    llvm::DenseMap<Operation *, int64_t> loopIds;  // the counted spawn loops recorded, numbered
     ThreadInstanceWalk *walk = nullptr;
     bool globalPoison = false;   // an access with no type to poison
     unsigned remarks = 0;
@@ -475,6 +491,26 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
                     root->emitRemark() << "wtc: queue " << label << ": many " << what << ": " << w;
                     ++remarks;
                 }
+        // A side that is many only because one counted loop starts its
+        // threads has one thread when the loop runs at most once, which the
+        // program knows before the loop runs: the loop is recorded for the
+        // specialisation pass, which can choose the implementation then.
+        if (carrier && t != Topology::unknown)
+            for (auto [n, side, what, attr] :
+                 {std::tuple{p, &info.producers, "producers", kProducersLoopAttrName},
+                  std::tuple{c, &info.consumers, "consumers", kConsumersLoopAttrName}}) {
+                Operation *loop = n == 2 ? side->countLoop() : nullptr;
+                if (!loop) continue;
+                auto [it, fresh] = loopIds.try_emplace(loop, static_cast<int64_t>(loopIds.size()));
+                if (fresh)
+                    loop->setAttr(kSpawnLoopAttrName, IntegerAttr::get(IntegerType::get(ctx, 64), it->second));
+                carrier->setAttr(attr, IntegerAttr::get(IntegerType::get(ctx, 64), it->second));
+                root->emitRemark() << "wtc: queue " << label << ": " << what
+                                   << ": one thread per iteration of the loop at "
+                                   << whereOf(loop->getLoc(), /*fileOnly=*/true)
+                                   << ", so one when it runs at most once";
+                ++remarks;
+            }
         if (!carrier && t == Topology::spsc) {
             root->emitRemark() << "wtc: queue " << label << " keeps the general-purpose implementation: "
                                << noCarrier;

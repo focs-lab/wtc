@@ -508,4 +508,70 @@ std::optional<int64_t> constructorTag(llvm::ArrayRef<cir::CallOp> ctors) {
     return v.getSInt();
 }
 
+std::optional<CountedLoop> countedLoop(cir::ForOp loop) {
+    Region &cond = loop.getCond();
+    if (!cond.hasOneBlock()) return std::nullopt;
+    auto term = dyn_cast<cir::ConditionOp>(cond.front().getTerminator());
+    auto cmp = term ? term.getCondition().getDefiningOp<cir::CmpOp>() : cir::CmpOp();
+    if (!cmp || !isa<cir::IntType>(cmp.getLhs().getType())) return std::nullopt;
+    auto lhs = cmp.getLhs().getDefiningOp<cir::LoadOp>();
+    auto rhs = cmp.getRhs().getDefiningOp<cir::LoadOp>();
+    if (!lhs || !rhs) return std::nullopt;
+    // i on the left of < or <=, or on the right of > or >=.
+    cir::LoadOp ind, bound;
+    bool inclusive = false;
+    switch (cmp.getKind()) {
+    case cir::CmpOpKind::le: inclusive = true; [[fallthrough]];
+    case cir::CmpOpKind::lt: ind = lhs; bound = rhs; break;
+    case cir::CmpOpKind::ge: inclusive = true; [[fallthrough]];
+    case cir::CmpOpKind::gt: ind = rhs; bound = lhs; break;
+    default: return std::nullopt;
+    }
+    auto slot = ind.getAddr().getDefiningOp<cir::AllocaOp>();
+    if (!slot) return std::nullopt;
+    Value boundAddr = bound.getAddr();
+    if (boundAddr == slot.getResult() ||
+        !(boundAddr.getDefiningOp<cir::GetGlobalOp>() || boundAddr.getDefiningOp<cir::AllocaOp>()))
+        return std::nullopt;
+    // i is read and written directly and nowhere else (its lifetime marks
+    // at -O1 aside), and inside the loop only the step writes it, once,
+    // adding one.
+    unsigned steps = 0;
+    for (Operation *u : slot->getUsers()) {
+        if (isa<cir::LoadOp, cir::LifetimeStartOp, cir::LifetimeEndOp>(u)) continue;
+        auto st = dyn_cast<cir::StoreOp>(u);
+        if (!st || st.getAddr() != slot.getResult()) return std::nullopt;
+        if (!loop->isAncestor(u)) continue;
+        if (!loop.getStep().isAncestor(u->getParentRegion())) return std::nullopt;
+        auto loadsI = [&](Value x) {
+            auto l = x.getDefiningOp<cir::LoadOp>();
+            return l && l.getAddr() == slot.getResult();
+        };
+        bool byOne = false;
+        if (auto inc = st.getValue().getDefiningOp<cir::IncOp>()) byOne = loadsI(inc.getInput());
+        else if (auto add = st.getValue().getDefiningOp<cir::AddOp>()) {
+            auto c = add.getRhs().getDefiningOp<cir::ConstantOp>();
+            auto k = c ? dyn_cast<cir::IntAttr>(c.getValue()) : cir::IntAttr();
+            byOne = k && k.getSInt() == 1 && loadsI(add.getLhs());
+        }
+        if (!byOne) return std::nullopt;
+        ++steps;
+    }
+    if (steps != 1) return std::nullopt;
+    // Where it starts: the nearest store to i before the loop in its block,
+    // of a constant, with nothing in between that writes i.
+    for (Operation *op = loop->getPrevNode(); op; op = op->getPrevNode()) {
+        if (auto st = dyn_cast<cir::StoreOp>(op); st && st.getAddr() == slot.getResult()) {
+            auto c = st.getValue().getDefiningOp<cir::ConstantOp>();
+            auto v = c ? dyn_cast<cir::IntAttr>(c.getValue()) : cir::IntAttr();
+            if (!v) return std::nullopt;
+            return CountedLoop{loop, bound, v.getSInt(), inclusive};
+        }
+        bool writes = false;
+        op->walk([&](cir::StoreOp st) { writes |= st.getAddr() == slot.getResult(); });
+        if (writes) return std::nullopt;
+    }
+    return std::nullopt;
+}
+
 } // namespace mlir::wtc
