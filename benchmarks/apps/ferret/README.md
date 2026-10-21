@@ -50,4 +50,6 @@ one thread per stage, and line for line with more. The leg `eval-ferret` in
 
 PARSEC's input site did not answer when this was written; `fetch-inputs.sh`
 takes simlarge from a published image of the PARSEC tree pinned by digest
-and checks the archive's checksum.
+and checks the archive's checksum. Docker Engine 28 no longer pulls that
+image's format; the script then says how to read the archive out of the
+image with an older engine, and takes it as a third argument.
