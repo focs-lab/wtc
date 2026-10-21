@@ -20,6 +20,11 @@ The cause column is the oracle's: what in the program stands between the
 analysis and the oracle, as the builds that remove it have shown. The last
 column is the analysis's own account where it gave one: why it counted
 many on a side, or the reason of an unresolvable access in the same build.
+
+A side whose threads one counted loop starts, one per iteration, is many
+in the verdict and one when the loop runs at most once; the verdict
+column says so, and the summary counts the queues whose tag is therefore
+chosen when the queue is built.
 """
 import json
 import re
@@ -30,6 +35,7 @@ from pathlib import Path
 VERDICT = re.compile(r"wtc: queue (\S+): (spsc|spmc|mpsc|mpmc|unknown) \(producers: (\w+), consumers: (\w+)\)")
 UNRESOLVED = re.compile(r"wtc: queue access is unresolvable \(([^)]*)\)")
 WHY_MANY = re.compile(r"wtc: queue (\S+): many (producers|consumers): (.*)$", re.M)
+PER_ITERATION = re.compile(r"wtc: queue (\S+): (producers|consumers): one thread per iteration of the loop at ")
 
 
 def side(n):
@@ -41,8 +47,9 @@ def topology(p, c):
 
 
 def label_matches(label, name):
-    # @q, or a mangled name ending in the queue's: @_ZL10refine_que, @_ZN..6stage1E
-    return re.search(rf"(^@|\d){re.escape(name)}E?$", label) is not None
+    # @q, a mangled name ending in the queue's (@_ZL10refine_que,
+    # @_ZN..6stage1E), or *@q for the heap object a pointer global holds
+    return re.search(rf"(^\*?@|\d){re.escape(name)}E?$", label) is not None
 
 
 def main():
@@ -56,6 +63,7 @@ def main():
         verdicts = VERDICT.findall(text or "")
         reasons = sorted(set(UNRESOLVED.findall(text or "")))
         why_many = WHY_MANY.findall(text or "")
+        per_iteration = PER_ITERATION.findall(text or "")
         for q in prog["queues"]:
             o = topology(q["producers"], q["consumers"])
             found = [v for v in verdicts if label_matches(v[0], q["queue"])]
@@ -67,6 +75,10 @@ def main():
                 _, t, p, c = found[0]
                 p, c = side(p), side(c)
                 said = f"{t} ({p}, {c})" if t != "unknown" else "unknown"
+                counted = [s for label, s in per_iteration if label_matches(label, q["queue"])]
+                if counted and t != "unknown":
+                    said += "; one per loop iteration on " + " and ".join(counted) + ", chosen at run time"
+                    counts["run time"] += 1
                 if t == "unknown":
                     outcome = "refused"
                 elif (p == "1" and q["producers"] == "many") or (c == "1" and q["consumers"] == "many"):
@@ -97,7 +109,9 @@ def main():
     print(f"\n{total} queues: {counts['exact']} exact ({counts['exact spsc']} of the "
           f"{counts['oracle spsc']} single-producer single-consumer ones proved so), "
           f"{counts['conservative']} conservative, {counts['refused']} refused, "
-          f"{counts['WRONG']} wrong" + (f", {counts['no build']} without a build log" if counts["no build"] else "") + ".")
+          f"{counts['WRONG']} wrong" + (f", {counts['no build']} without a build log" if counts["no build"] else "") + "."
+          + (f" {counts['run time']} of them have the tag chosen when the queue is built, from the count of the"
+             " loop that starts a side's threads." if counts["run time"] else ""))
     sys.exit(1 if counts["WRONG"] else 0)
 
 
