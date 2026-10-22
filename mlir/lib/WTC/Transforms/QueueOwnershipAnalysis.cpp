@@ -84,11 +84,13 @@ struct SideInfo {
     }
     // The counted loop that starts every thread on this side, one per
     // iteration, when there is one: the side then has one thread exactly
-    // when the loop runs at most once. Null when two threads the walk tells
-    // apart touch the side, or any access is on a thread the module cannot
-    // account for or may be to another queue.
+    // when the loop runs at most once. The walk may tell several threads
+    // apart under one such loop -- a vector's emplace_back constructs the
+    // thread on one of two paths -- and together they are still one per
+    // iteration, which the loop's record on each instance vouches for.
+    // Null when any access is on a thread not started by that loop, on
+    // one the module cannot account for, or may be to another queue.
     Operation *countLoop() const {
-        if (threads.size() != 1) return nullptr;
         Operation *loop = nullptr;
         for (const Access &a : accesses) {
             if (!a.inst || !a.inst->countLoop || a.speculative || a.oneOf) return nullptr;

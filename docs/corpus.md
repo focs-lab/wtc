@@ -110,8 +110,10 @@ of fixes and found by the second review.
   builds, and the function it runs -- a lambda by a direct call, a function
   or a member function through the indirect call in the library's invoker
   -- from the constructor's operand, so a function handed to `std::thread`
-  is no longer "a function whose address is taken". (`std-thread-lambda.cpp`,
-  `std-thread-function.cpp`, `std-thread-member.cpp`; `false_sharing.cpp`
+  is no longer "a function whose address is taken". A thread the loop of a
+  pool constructor starts through `emplace_back` is one per iteration.
+  (`std-thread-lambda.cpp`, `std-thread-function.cpp`,
+  `std-thread-member.cpp`, `std-thread-pool-loop.cpp`; `false_sharing.cpp`
   and `std_thread_main.cpp` now say `definite`.)
 - `cold` -- "this pair costs nothing" -- was computed from all threads,
   including ones the module cannot account for, and ran before `possible`,

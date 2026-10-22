@@ -823,17 +823,111 @@ static bool unconditionalInBody(Operation *op, cir::ForOp loop) {
     return !jumps;
 }
 
+bool ThreadInstanceWalk::canSpawnIn(Operation *op) {
+    bool found = false;
+    op->walk([&](cir::CallOp call) {
+        if (found) return;
+        cir::FuncOp callee = lookupCallee(call);
+        if (!callee ? indirectCallCanSpawn()
+                    : (getSemanticKind(callee) == SemanticOpKind::ThreadSpawn ||
+                       (!callee.getBody().empty() && canSpawn(callee))))
+            found = true;
+    });
+    return found;
+}
+
+// Exactly one thread per run of the region: among its operations exactly
+// one starts a thread, and that one does so on every path -- a spawn, a
+// call to a function that starts exactly one per call, a scope or a try
+// whose body does, or an `if` both of whose arms do. Anything that can
+// leave early (a return, a jump) or repeat (a loop) around it, and anything
+// else that can spawn, makes the count something other than one.
+// `std::vector::emplace_back` is the shape this is for: it constructs the
+// thread in place when there is room, else through a reallocation that
+// constructs it inside a `try`.
+bool ThreadInstanceWalk::spawnsOnce(Region &r, unsigned depth) {
+    if (depth > 8 || !r.hasOneBlock()) return false;
+    unsigned found = 0;
+    for (Operation &op : r.front()) {
+        if (auto call = dyn_cast<cir::CallOp>(&op)) {
+            cir::FuncOp callee = lookupCallee(call);
+            if (!callee) {
+                if (indirectCallCanSpawn()) return false;
+                continue;
+            }
+            if (getSemanticKind(callee) == SemanticOpKind::ThreadSpawn) { ++found; continue; }
+            if (callee.getBody().empty() || !canSpawn(callee)) continue;
+            if (!spawnsOncePerCall(callee, depth + 1)) return false;
+            ++found;
+            continue;
+        }
+        if (op.getNumRegions() == 0) continue;
+        if (!canSpawnIn(&op)) {
+            bool jumps = false;
+            op.walk([&](Operation *o) {
+                if (isa<cir::ReturnOp, cir::GotoOp, cir::BreakOp, cir::ContinueOp>(o)) jumps = true;
+            });
+            if (jumps) return false;
+            continue;
+        }
+        if (auto scope = dyn_cast<cir::ScopeOp>(&op)) {
+            if (!spawnsOnce(scope.getScopeRegion(), depth)) return false;
+        } else if (auto cs = dyn_cast<cir::CleanupScopeOp>(&op)) {
+            bool cleanupSpawns = false;
+            cs.getCleanupRegion().walk([&](Operation *o) { if (!cleanupSpawns && canSpawnIn(o)) cleanupSpawns = true; });
+            if (cleanupSpawns || !spawnsOnce(cs.getBodyRegion(), depth)) return false;
+        } else if (auto tr = dyn_cast<cir::TryOp>(&op)) {
+            if (!spawnsOnce(tr.getTryRegion(), depth)) return false;
+        } else if (auto ifOp = dyn_cast<cir::IfOp>(&op)) {
+            if (ifOp.getElseRegion().empty() || !spawnsOnce(ifOp.getThenRegion(), depth) ||
+                !spawnsOnce(ifOp.getElseRegion(), depth))
+                return false;
+        } else {
+            return false;   // a loop, a switch, a ternary
+        }
+        ++found;
+    }
+    return found == 1;
+}
+
+bool ThreadInstanceWalk::spawnsOncePerCall(cir::FuncOp f, unsigned depth) {
+    if (!f || f.getBody().empty()) return false;
+    if (auto it = spawnsOnceCache_.find(f.getOperation()); it != spawnsOnceCache_.end()) return it->second;
+    spawnsOnceCache_[f.getOperation()] = false;   // while in progress: a recursion is never once
+    const bool once = !isUnstructured(f) && !isRecursive(f) && spawnsOnce(f.getBody(), depth);
+    spawnsOnceCache_[f.getOperation()] = once;
+    return once;
+}
+
 // One thread per iteration, and the iterations counted: the spawn runs
 // unconditionally in the loop's body, no other loop encloses the loop, the
-// function's control flow is structured, and the instance that spawns runs
-// once on a thread the module accounts for.
+// function's control flow is structured, and the instance that holds the
+// loop runs once on a thread the module accounts for. The loop may be in a
+// caller: then every call on the way down to the spawn sits outside any
+// loop of its function, and the loop's body starts exactly one thread per
+// iteration, through whichever calls it makes -- the spawn seen here is
+// then one of the ways it does.
 Operation *ThreadInstanceWalk::countingLoop(Operation *spawn, const Instance &inst) {
-    if (inst.execMult != Mult::One || inst.threadMult != Mult::One || inst.execUnknown ||
-        inst.speculative || isUnstructured(inst.func))
-        return nullptr;
-    auto forOp = dyn_cast_or_null<cir::ForOp>(enclosingLoop(spawn, inst.func));
-    if (!forOp || enclosingLoop(forOp, inst.func) || !unconditionalInBody(spawn, forOp)) return nullptr;
-    return countedLoop(forOp) ? forOp.getOperation() : nullptr;
+    Operation *site = spawn;
+    const Instance *cur = &inst;
+    for (unsigned hops = 0; hops < 8; ++hops) {
+        if (cur->threadMult != Mult::One || cur->execUnknown || cur->speculative || cur->recurring ||
+            isUnstructured(cur->func))
+            return nullptr;
+        if (Operation *loop = enclosingLoop(site, cur->func)) {
+            auto forOp = dyn_cast<cir::ForOp>(loop);
+            if (!forOp || cur->execMult != Mult::One || enclosingLoop(forOp, cur->func) ||
+                !unconditionalInBody(site, forOp) || !countedLoop(forOp) || !spawnsOnce(forOp.getBody(), 0))
+                return nullptr;
+            return forOp.getOperation();
+        }
+        if (!cur->parent || !cur->site) return nullptr;
+        cir::CallOp via = cur->site;
+        if (getSemanticKind(lookupCallee(via)) == SemanticOpKind::ThreadSpawn) return nullptr;
+        site = via.getOperation();
+        cur = cur->parent;
+    }
+    return nullptr;
 }
 
 const DataLayout &ThreadInstanceWalk::dataLayout() const {
