@@ -396,16 +396,24 @@ public:
   // that pointer only after it has acquired a count beyond the block.
   void publish() { push_pub_.store(p_.count, std::memory_order_release); }
 
-  bool try_pop(Slot& out) {
+  // Pops the oldest element into f, called once with the element as an
+  // rvalue still in its slot, or not at all when the queue was empty; the
+  // slot is released after f returns.
+  template <class F>
+  bool consume(F&& f) {
 #ifdef WTC_CHECK
     if constexpr (kOneConsumer) claim(owner_c_, "consumer");
 #endif
     release_lent();
     Slot* e = advance();
     if (!e) return false;
-    out = std::move(*e);
+    f(std::move(*e));
     e->~Slot();
     return true;
+  }
+
+  bool try_pop(Slot& out) {
+    return consume([&](Slot&& s) { out = std::move(s); });
   }
 
   // The next element in place, or null if the queue was empty. It stays

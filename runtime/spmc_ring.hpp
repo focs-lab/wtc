@@ -60,11 +60,16 @@ class spmc_ring {
 
   void publish() { ring_.publish(); }
 
-  bool try_pop(Slot& out) {
+  template <class F>
+  bool consume(F&& f) {
     lock();
-    const bool got = ring_.try_pop(out);
+    const bool got = ring_.consume(f);
     unlock();
     return got;
+  }
+
+  bool try_pop(Slot& out) {
+    return consume([&](Slot&& s) { out = std::move(s); });
   }
 
  private:

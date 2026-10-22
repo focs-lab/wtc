@@ -203,14 +203,24 @@ class segment_queue {
         hazard::clear(hp, kTail);
     }
 
-    bool try_pop(Slot& out) {
+    // Pops the oldest element into f, which is called once, with the
+    // element as an rvalue still in its cell, or not at all when the queue
+    // was empty; the cell is released after f returns. A caller that wants
+    // the element somewhere without a default-constructed object to assign
+    // to, or wants to build something else from it, pops this way.
+    template <class F>
+    bool consume(F&& f) {
 #ifdef WTC_CHECK
         if constexpr (!kManyConsumers) claim_consumer();
 #endif
         hazard::record& hp = hazard::mine();
-        bool got = kManyConsumers ? pop_many(hp, out) : pop_one(hp, out);
+        bool got = kManyConsumers ? pop_many(hp, f) : pop_one(hp, f);
         if constexpr (kManyConsumers) hazard::clear(hp, kHead);
         return got;
+    }
+
+    bool try_pop(Slot& out) {
+        return consume([&](Slot&& s) { out = std::move(s); });
     }
 
  private:
@@ -231,7 +241,8 @@ class segment_queue {
         hazard::retire(hp, h, &free_segment);
     }
 
-    bool pop_many(hazard::record& hp, Slot& out) {
+    template <class F>
+    bool pop_many(hazard::record& hp, F& f) {
         for (;;) {
             segment* h = hazard::protect(hp, kHead, head_);
             if (h->deq.load(std::memory_order_relaxed) >= h->enq.load(std::memory_order_acquire) &&
@@ -268,13 +279,14 @@ class segment_queue {
                 }
             }
             if (st == kSkipped) continue;
-            out = std::move(*c.slot());
+            f(std::move(*c.slot()));
             c.slot()->~Slot();
             return true;
         }
     }
 
-    bool pop_one(hazard::record& hp, Slot& out) {
+    template <class F>
+    bool pop_one(hazard::record& hp, F& f) {
         for (;;) {
             segment* h = head_.load(std::memory_order_relaxed);
             std::uint64_t i = h->deq.load(std::memory_order_relaxed);
@@ -286,7 +298,7 @@ class segment_queue {
             }
             cell& c = h->cells[i];
             if (c.state.load(std::memory_order_acquire) != kFull) return false;
-            out = std::move(*c.slot());
+            f(std::move(*c.slot()));
             c.slot()->~Slot();
             h->deq.store(i + 1, std::memory_order_relaxed);
             return true;
