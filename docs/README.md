@@ -9,7 +9,7 @@
 | `mvp.md` | What the compiler does now, with a command and its remarks for each transformation |
 | `evaluation.md` | The evaluation: its questions, baselines and method, the results so far, and the threats to them |
 | `corpus.md` | What people pad by hand, counted across 17 codebases, and what the false-sharing analysis finds on memcached |
-| `related-work.md` | Bibliography, with the papers themselves under `related-works/` |
+| `related-work.md` | What the compiler does against where each technique was done before, claim by claim, with checked citations; papers collected earlier are under `related-works/` |
 | `toolchain.md` | Building and sharing the ClangIR-enabled Clang the project needs |
 | `MLIR Concur.pptx` | Early presentation on the dialect design and motivating examples; an artefact kept verbatim, metadata included |
 
