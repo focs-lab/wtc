@@ -35,6 +35,8 @@ workloads/
   w8_lock_batch_wtc   a loop's critical sections, held as one by the
                       compiler or not, with one or two threads
   w9_mpmc_scaling     the general-purpose queues as threads are added
+  w10_ablation        the runtime's queues used directly: synchronisation
+                      strength and element ownership, alone and together
 apps/ferret/          PARSEC ferret ported onto the shim (GPL, see there)
 apps/dedup/           PARSEC dedup ported onto the shim (BSD-3, see there)
 reach/oracle.json     every compiled queue's topology, read from its source
@@ -145,6 +147,17 @@ variants are the ceiling.
   the libraries a developer would otherwise use; with one consumer or one
   producer, what the compiler substitutes there (`shim_mpsc`, `shim_spmc`)
   runs beside them.
+- **W10** `w10_ablation`: W1's measurement over the runtime's two queues used
+  directly, each under three forms of ownership: the element behind a
+  `shared_ptr` the producer allocates and the consumer frees, as the program
+  as written and the libraries do (`xsp`); in the cell, handed out as a
+  `shared_ptr` the consumer allocates from it, the shim's `try_pop()`
+  (`share`); in the cell, moved out (`cell`). Six rows, `mpmc_xsp` to
+  `spsc_cell`: the rows that differ in one factor isolate it, and the
+  compiler's substitution of a program as written is the diagonal,
+  `mpmc_xsp` to `spsc_cell` (through the shim, where B0 is already
+  `mpmc_share`). Run under every allocator, since the `xsp` and `share` rows
+  depend on it and the `cell` rows must not.
 
 Every results line also records the process's peak resident set
 (`peak_rss_kib`). The latency workloads record the whole distribution as
@@ -184,8 +197,8 @@ benchmarks/scripts/campaign.sh w1 build-bench 10
 Legs: `w1`, `w2`, `w2pp`, `w3`, `w3wtc`, `w5`, `w6`, `smt`, `far`, `tbb`,
 `w1check`, and `smoke`, which runs everything once, tiny, unreserved. The
 evaluation's legs are `eval-w1`, `eval-w1smt`, `eval-w2`, `eval-w3`,
-`eval-w3grain`, `eval-w7`, `eval-w8`, `eval-w9`, `eval-ferret` and
-`eval-dedup`; each one's comment in `campaign.sh` says which question it
+`eval-w3grain`, `eval-w7`, `eval-w8`, `eval-w9`, `eval-ferret`,
+`eval-dedup` and `eval-ablation`; each one's comment in `campaign.sh` says which question it
 answers and what it needs.
 
 Figures come from a summarised leg:

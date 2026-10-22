@@ -8,8 +8,8 @@
 # (ping-pong), smoke (everything once, tiny sizes, no environment check);
 # the MVP's own: w1mvp, w2mvp, w3wtc, w7, w8; the evaluation's: eval-w1,
 # eval-w1smt, eval-w2, eval-w3, eval-w3grain, eval-w7, eval-w8, eval-w9,
-# eval-ferret, eval-dedup, each with the question it answers in its comment
-# below.
+# eval-ferret, eval-dedup, eval-ablation, each with the question it answers
+# in its comment below.
 #
 # Legs that run builds made by tools/wtc-cc take the directory holding them
 # as BUILD and need the CMake build too, for the controls and the
@@ -736,19 +736,54 @@ case "$LEG" in
       kb=$(sed -n 's/^Mean data chunk size: *\([0-9.]*\) KB.*/\1/p' <<<"$out")
       cmp -s "$SCRATCH/out.ddp" "$SCRATCH/reference.ddp" && same=1
       [ "$same" = 1 ] || echo "dedup-$v n=$n rep $rep: output differs from PARSEC's" | tee -a "$OUT/log.txt"
-      printf '{"workload": "dedup", "variant": "%s", "threads": %d, "rep": %d, "time_s": %s, "chunk_kb": %s, "input_bytes": %d, "output_ok": %d, "cmd": "%s"}\n' \
-        "$v" "$n" "$rep" "${t:-0}" "${kb:-0}" "$(stat -c %s "$ISO")" "$same" "dedup-$v -c -p -v -t $n" >> "$RUNS"
+      printf '{"workload": "dedup", "variant": "%s", "threads": %d, "rep": %d, "time_s": %s, "chunk_kb": %s, "input_bytes": %d, "output_ok": %d, "alloc": "%s", "cmd": "%s"}\n' \
+        "$v" "$n" "$rep" "${t:-0}" "${kb:-0}" "$(stat -c %s "$ISO")" "$same" "$WTC_ALLOC" "dedup-$v -c -p -v -t $n" >> "$RUNS"
       rm -f "$SCRATCH/out.ddp"
     }
+    ALLOCS=$(allocs_for glibc jemalloc)
     for rep in $(seq 0 $((REPS-1))); do
-      for v in orig generic-one compiler-one hand-one hand-spsc-one compiler-flat-one compiler-flat-one-unity; do
-        dedup_run "$v" 1 "$rep"
-      done
-      for n in 2 4; do
-        for v in orig generic compiler; do dedup_run "$v" "$n" "$rep"; done
+      for alloc in $ALLOCS; do
+        use_alloc "$alloc"
+        for v in orig generic-one compiler-one hand-one hand-spsc-one compiler-flat-one compiler-flat-one-unity; do
+          dedup_run "$v" 1 "$rep"
+        done
+        for n in 2 4; do
+          for v in orig generic compiler; do dedup_run "$v" "$n" "$rep"; done
+        done
       done
     done
     rm -rf "$SCRATCH"
+    control 901
+    ;;
+  eval-ablation)
+    # RQ2/RQ3: the ablation. The runtime's two queues used directly, each
+    # under three forms of ownership (the element behind a shared_ptr the
+    # producer allocates and the consumer frees, as the program as written
+    # and the libraries do; in the cell and handed out as a shared_ptr the
+    # consumer allocates, the shim's try_pop(); in the cell and moved out),
+    # at three sizes, on two cores and on the SMT siblings of one, under
+    # every allocator: what synchronisation strength buys and what the
+    # element's ownership buys, alone and together. The compiler's
+    # substitution of a program as written is mpmc_xsp to spsc_cell. Needs a
+    # 2-core reservation that keeps the siblings online (bench without -e).
+    "$HERE/check_env.sh" 2 || exit 1
+    meta
+    ALLOCS=$(allocs_for glibc jemalloc tcmalloc mimalloc snmalloc)
+    w10_n() { case "$1" in spsc_cell) echo 100000000 ;; spsc_xsp) echo 20000000 ;; *) echo 40000000 ;; esac; }
+    warmup; control 900
+    for rep in $(seq 0 $((REPS-1))); do
+      for alloc in $ALLOCS; do
+        use_alloc "$alloc"
+        for elem in 8 64 256; do
+          for v in mpmc_xsp mpmc_share mpmc_cell spsc_xsp spsc_share spsc_cell; do
+            lock "$BUILD/w10_ablation" --variant "$v" --elem "$elem" --wait spin --rep "$rep" \
+              --n "$(w10_n "$v")" --json "$RUNS" 2>>"$OUT/log.txt"
+            WTC_PLACEMENT=smt lock "$BUILD/w10_ablation" --variant "$v" --elem "$elem" --wait spin --rep "$rep" \
+              --n "$(w10_n "$v")" --smt-siblings --json "$RUNS" 2>>"$OUT/log.txt"
+          done
+        done
+      done
+    done
     control 901
     ;;
   *) echo "unknown leg $LEG" >&2; exit 2 ;;
