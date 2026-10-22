@@ -23,13 +23,21 @@ Every implementation carries, in its header comment:
 | `spmc_ring.hpp` | `wtc::queue<T>` | exactly one thread ever pushes, any number pop, and the destructor runs after all are done |
 
 `spsc_ring<Slot, kSlots>` is an unbounded wait-free ring of blocks of 128 KiB
-each. It keeps
-the generic queue's semantics exactly: FIFO, `push` never blocks or fails,
-`try_pop` never blocks and says empty only when the queue was empty. The shim
-instantiates it with `Slot = std::shared_ptr<T>`, so the per-element
-allocation the original API implies is still paid; the ring removes the two
-mutexes and the per-push node. A `Slot = T` instantiation exists for the
-benchmark ceiling only and is not what the compiler emits.
+each. It keeps the generic queue's semantics exactly: FIFO, `push` never
+blocks or fails, `try_pop` never blocks and says empty only when the queue
+was empty. The consumer keeps its distance from the producer: when it
+catches up and finds fewer than a batch of elements published it waits,
+for at most 64 pauses, for the batch, so that a slot line crosses the cores
+once rather than once per element in it; the batch tracks the producer's
+rate, one for a trickle and up to thirty-two lines' worth for a stream,
+and the wait polls the producer's counter about as often as the batch
+should take to fill, from an estimate of that rate, since every poll takes
+the counter's line from the producer. The shim instantiates it with
+`Slot = std::shared_ptr<T>` for the `spsc` tag, so the per-element
+allocation the original API implies is still paid and the ring removes the
+two mutexes and the per-push node, and with `Slot = T` for `spsc_inline`,
+where the consumer borrows each element in place and nothing is allocated
+per element.
 
 `segment_queue<Slot, kManyConsumers>` is an unbounded linearisable queue over
 a list of array segments ("FAAArrayQueue"): a push takes the tail segment's
