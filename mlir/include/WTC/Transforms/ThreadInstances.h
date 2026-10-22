@@ -113,6 +113,11 @@ struct Instance {
     // all the same, which is what holds whatever the number; every
     // instance on the thread carries the loop.
     Operation *countLoop = nullptr;
+    // With countLoop: the instance of the function that holds the loop,
+    // the one run of it whose loop started this thread. A client that
+    // credits a thread to the loop of the object it touches compares this
+    // with the instance that built the object.
+    const Instance *countLoopInst = nullptr;
 };
 
 // Where a handle points, as far as the walk can read it: a root (a
@@ -363,8 +368,20 @@ private:
     // `unitStep` is set when the step region advances it by exactly one.
     static bool isInductionOf(Value index, Operation *loop, bool &unitStep);
     // The counted loop whose iterations each start one thread at `spawn`
-    // in `inst`, when that loop is the whole of the spawn's repetition.
-    Operation *countingLoop(Operation *spawn, const Instance &inst);
+    // in `inst`, when that loop is the whole of the spawn's repetition. The
+    // loop may be in `inst`'s own function or in a caller above it, with
+    // the spawn reached by calls that each run once per iteration and
+    // each start exactly one thread per call. `holder` receives the
+    // instance whose function holds the loop.
+    Operation *countingLoop(Operation *spawn, const Instance &inst, const Instance **holder);
+    // Whether every run of the region, or every call of the function,
+    // starts exactly one thread: one spawning call, or one spawning
+    // callee that does, on every path, with no loop, jump or early return
+    // around it.
+    bool spawnsOnce(Region &r, unsigned depth);
+    bool spawnsOncePerCall(cir::FuncOp f, unsigned depth);
+    bool canSpawnIn(Operation *op);
+    bool canSpawnIn(Region &r);
     // The functions with indirect calls that a std::thread's _M_run
     // reaches, and the named functions those calls may run: the callables
     // handed to the thread constructor at every site that builds that
@@ -450,6 +467,7 @@ private:
     llvm::DenseSet<Operation *> resolvedRuns_;
     llvm::DenseMap<Operation *, InvokeTargets> invokeTargets_;
     bool invokeTargetsComputed_ = false;
+    llvm::DenseMap<Operation *, bool> spawnsOnceCache_;
     bool capExceeded_ = false;
     unsigned remarks_ = 0;
     llvm::SmallVector<std::pair<Operation *, std::string>, 8> pendingRemarks_;
