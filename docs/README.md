@@ -12,6 +12,7 @@
 | `census-dynamic.md` | Which mutexes only one thread takes, counted at run time in five programs: the ceiling for removing a mutex by proving it confined |
 | `related-work.md` | What the compiler does against where each technique was done before, claim by claim, with checked citations; papers collected earlier are under `related-works/` |
 | `declared-topology-audit.md` | Hand-declared queue topologies read in DPDK's examples and in users of four SPSC libraries: which hold, which only by convention, and what a compiler check needs |
+| `correctness.md` | Why substituting a queue preserves the program: one lemma per implementation under its precondition, the facts the analyses must prove, and what is assumed rather than derived |
 | `toolchain.md` | Building and sharing the ClangIR-enabled Clang the project needs |
 | `MLIR Concur.pptx` | Early presentation on the dialect design and motivating examples; an artefact kept verbatim, metadata included |
 
