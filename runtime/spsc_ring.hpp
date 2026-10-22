@@ -82,21 +82,27 @@
 
 namespace wtc::rt {
 
-// kSlots: measured, not chosen, and the measurement is in
-// benchmarks/results under the w6 leg. Three things it showed, one of which
-// corrected an earlier claim in this comment:
+// A block is kBlockBytes of slots by default, whatever the slot: 16384
+// slots of 8 bytes, 2048 of 64, 512 of 256, 8192 shared pointers. The size
+// is measured, not chosen, and the measurement is in benchmarks/results
+// under the w6 leg, which was run with the block in slots (4096 of 64
+// bytes, 256 KiB) before it was set in bytes:
 //
 //   - 64 slots is too small and consistently slow, around 8 million
 //     elements a second against 50 to 60 for every larger block.
-//   - From 256 slots upward the median is flat to within about 15%, and
-//     4096 sits at or near the top of that range.
+//   - From 256 slots upward the median is flat to within about 15%.
 //   - The ring has a second, much slower regime, and size makes it rarer
 //     without abolishing it: at every block size from 256 up, a run in
-//     twenty still lands there. This comment used to claim the fast regime
-//     was the only one seen above 4096 slots, which was three repetitions
-//     talking. The regime is what happens when the consumer settles in
-//     immediately behind the producer, so each line the producer writes is
-//     still live in the consumer's cache and has to be invalidated first.
+//     twenty still lands there. The regime is what happens when the
+//     consumer settles in immediately behind the producer, so each line the
+//     producer writes is still live in the consumer's cache and has to be
+//     invalidated first.
+//
+// 128 KiB keeps a block well clear of the 64 slots that are too few for
+// any slot type, spends a quarter of what 4096 slots of 64 bytes did, and
+// makes a block's turnover, the one moment the producer reads the
+// consumer's line, rarer for the small elements that turn over most. Two
+// blocks are allocated at rest.
 //
 // Padding the shared state to 128 bytes rather than 64 was tried, on the
 // theory that this processor's prefetcher pairs adjacent lines. It made no
@@ -105,13 +111,20 @@ namespace wtc::rt {
 // None of this matters for the shim's spsc queue, whose slots are shared
 // pointers: there the allocator dominates and every block size measures the
 // same, 3.2 to 3.4 million a second. It matters for elements held inline.
-// For shared-pointer slots 4096 costs 64 KiB per block, 128 KiB per queue
-// at rest.
 //
 // kOneConsumer false is for spmc_ring, which lets consumers into try_pop
 // one at a time under its own lock: the ring's consumer side is then still
 // single-threaded, and only the contract check must not count them.
-template <class Slot, unsigned kSlots = 4096, unsigned kLine = 64, bool kOneConsumer = true>
+inline constexpr unsigned kBlockBytes = 128 * 1024;
+
+template <class Slot>
+constexpr unsigned default_slots() {
+  constexpr unsigned n = kBlockBytes / sizeof(Slot);
+  return n < 2 ? 2 : n;
+}
+
+template <class Slot, unsigned kSlots = default_slots<Slot>(), unsigned kLine = 64,
+          bool kOneConsumer = true>
 class spsc_ring {
   static_assert(kSlots >= 2, "a block needs at least two slots");
   static_assert((kLine & (kLine - 1)) == 0, "kLine must be a power of two");
