@@ -185,6 +185,8 @@ elems_for() {
     ring_inline)          echo 200000000 ;;
     ring_borrowed)        echo 200000000 ;;
     shim_spsc_inline)     echo 100000000 ;;
+    shim_inline_move)     echo 100000000 ;;
+    shim_spsc_move)       echo 100000000 ;;
     moodycamel_rw_inline) echo  40000000 ;;
     *)                    echo  20000000 ;;
   esac
@@ -443,7 +445,7 @@ case "$LEG" in
     # at a size that keeps it short. Needs a 2-core reservation.
     "$HERE/check_env.sh" 2 || exit 1
     meta
-    EVAL_W1="shim_generic orig_generic $(have_tbb && echo onetbb_cq_sp) moodycamel_cq_sp boost_ms_queue std_mutex rigtorp_sp rigtorp_inline moodycamel_rw_sp moodycamel_rw_inline boost_spsc_sp shim_spsc shim_spsc_inline ring_sp ring_borrowed ring_inline"
+    EVAL_W1="shim_generic orig_generic $(have_tbb && echo onetbb_cq_sp) moodycamel_cq_sp boost_ms_queue std_mutex rigtorp_sp rigtorp_inline moodycamel_rw_sp moodycamel_rw_inline boost_spsc_sp shim_spsc shim_spsc_inline shim_generic_move shim_spsc_move shim_inline_move ring_sp ring_borrowed ring_inline"
     ALLOCS=$(allocs_for glibc jemalloc tcmalloc mimalloc snmalloc)
     warmup; control 900
     for rep in $(seq 0 $((REPS-1))); do

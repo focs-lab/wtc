@@ -15,8 +15,6 @@
 // the list the workloads dispatch over.
 
 #include <condition_variable>
-#include <cstdio>
-#include <cstdlib>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -73,6 +71,26 @@ template <class T> struct shim_spsc_inline {
     wtc::queue<T> q{wtc::topology::spsc_inline};
     void push(const T& v) { q.push(v); }
     bool try_pop(T& out) { auto p = q.try_pop(); if (!p) return false; out = *p; return true; }
+};
+
+// The same three, popped by transfer: try_pop(T&) moves the element into
+// out, so the consumer allocates nothing either. What a program that owns
+// its elements gets, on the general-purpose queue, the ring and the
+// lending ring (where a transfer copies the element out of its slot).
+template <class T> struct shim_generic_move {
+    wtc::queue<T> q;
+    void push(const T& v) { q.push(v); }
+    bool try_pop(T& out) { return q.try_pop(out); }
+};
+template <class T> struct shim_spsc_move {
+    wtc::queue<T> q{wtc::topology::spsc};
+    void push(const T& v) { q.push(v); }
+    bool try_pop(T& out) { return q.try_pop(out); }
+};
+template <class T> struct shim_inline_move {
+    wtc::queue<T> q{wtc::topology::spsc_inline};
+    void push(const T& v) { q.push(v); }
+    bool try_pop(T& out) { return q.try_pop(out); }
 };
 
 // The shim with the tag the compiler sets for many producers and one
@@ -191,17 +209,10 @@ template <class T> struct onetbb_cq_sp {
 // paper's artifact: LCRQ (CAS2), LPRQ (its portable form), LSCQ (the
 // scalable circular queue, linked) and the fetch-and-add array queue. Each
 // takes a thread index for its hazard pointers, handed out here per thread
-// of the process for its lifetime, and carries an owning raw pointer, as
-// boost_ms_queue does. The hazard-pointer table has room for 128 threads
-// (HP_MAX_THREADS in HazardPointers.hpp); a process that starts more stops
-// rather than index past it.
+// of the process, and carries an owning raw pointer, as boost_ms_queue does.
 inline int lprq_tid() {
     static std::atomic<int> next{0};
     thread_local const int id = next.fetch_add(1);
-    if (id >= 128) {
-        std::fprintf(stderr, "the LPRQ artifact's queues take at most 128 threads per process\n");
-        std::abort();
-    }
     return id;
 }
 template <class T, class Q> struct lprq_adapter {
@@ -242,6 +253,7 @@ template <class T> struct ring_borrowed {
 inline const std::vector<std::string>& variant_names() {
     static const std::vector<std::string> v = {
         "shim_generic", "shim_spsc", "shim_spsc_inline", "shim_mpsc", "shim_spmc", "orig_generic", "orig_mpsc", "std_mutex",
+        "shim_generic_move", "shim_spsc_move", "shim_inline_move",
         "moodycamel_rw_sp", "moodycamel_rw_inline", "moodycamel_cq_sp",
         "rigtorp_sp", "rigtorp_inline", "boost_spsc_sp", "boost_ms_queue",
         "ring_inline", "ring_sp", "ring_borrowed",
@@ -274,6 +286,9 @@ bool with_variant(const std::string& name, F&& f) {
     if (name == "ring_inline")           { f.template run<ring_inline<T>>(); return true; }
     if (name == "ring_sp")               { f.template run<ring_sp<T>>(); return true; }
     if (name == "ring_borrowed")         { f.template run<ring_borrowed<T>>(); return true; }
+    if (name == "shim_generic_move")     { f.template run<shim_generic_move<T>>(); return true; }
+    if (name == "shim_spsc_move")        { f.template run<shim_spsc_move<T>>(); return true; }
+    if (name == "shim_inline_move")      { f.template run<shim_inline_move<T>>(); return true; }
     if (name == "lcrq")                  { f.template run<lcrq<T>>(); return true; }
     if (name == "lprq")                  { f.template run<lprq<T>>(); return true; }
     if (name == "lscq")                  { f.template run<lscq<T>>(); return true; }

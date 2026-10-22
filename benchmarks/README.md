@@ -71,6 +71,7 @@ results/              committed: percentiles and summaries, never raw samples
 | `shim_generic` | the shim, tag `generic`: the segmented queue since 22 Oct 2026 | B0, the denominator of every ratio |
 | `orig_mpsc` | the shim's list for many producers as it was on 21 Oct 2026 (`mpsc_list_original.hpp`) | what the eval-w9 leg of that day measured as `shim_mpsc` |
 | `shim_spsc` | the shim, tag `spsc` | what the compiler produces when it proves SPSC |
+| `shim_generic_move`, `shim_spsc_move`, `shim_inline_move` | the same tags, popped by `try_pop(T&)` | the transfer form: what a program that owns its elements gets, with no allocation at all |
 | `ring_sp` | `runtime/spsc_ring` with `shared_ptr<T>` slots, no shim | prices the shim's branch and wrapper |
 | `ring_inline` | `runtime/spsc_ring` with `T` inline, 64K-slot blocks | our ceiling: what the shared_ptr in the API costs |
 | `std_mutex` | `std::queue<shared_ptr<T>>` under one mutex | the typical developer's queue |
