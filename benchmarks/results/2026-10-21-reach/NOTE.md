@@ -41,3 +41,12 @@ Not yet in the table: the mutexes (the lock-batching remarks are in the
 logs of `lock_loop`), and spdlog's asynchronous logger, whose queue, a
 member of a pool reached through `shared_ptr` and `weak_ptr`, the analysis
 does not identify.
+
+Update, 23 Oct: the analysis now identifies it (`benchmarks/apps/spdlog`):
+the queue is `q_ in any spdlog::details::thread_pool`, its producers many
+(the logging threads come through the logger's virtual `sink_it_`), its
+consumers one per iteration of the pool constructor's loop over the number
+of workers, and the tag is chosen when the pool is built: the
+single-consumer queue when that number is one, the general-purpose queue
+otherwise. The table has not been rerun since; it will be with the next
+reach leg.
