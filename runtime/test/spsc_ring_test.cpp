@@ -100,6 +100,41 @@ void growth_then_drain_then_reuse() {
   }
 }
 
+void lockstep_never_slips() {
+  // One element in, one out: the consumer catches up every time with one
+  // element published, which is the batch it waits for, so it never waits
+  // and the batch never grows. A consumer that waited here would add a
+  // bounded spin to every round trip of a request-reply pair.
+  ring q;
+  for (std::uint64_t i = 0; i < 100000; ++i) {
+    q.push(i);
+    std::uint64_t v = ~0ull;
+    EXPECT(q.try_pop(v));
+    EXPECT(v == i);
+  }
+  EXPECT(q.slips() == 0);
+}
+
+void slip_waits_boundedly_then_takes_what_is_there() {
+  // A burst grows the batch; a lone element after it finds fewer than a
+  // batch published and no producer to deliver more. The wait must end on
+  // its own, the element must come out, and the batch must shrink so the
+  // next lone element is read without a wait.
+  ring q;
+  std::uint64_t v = ~0ull;
+  for (std::uint64_t i = 0; i < 4; ++i) q.push(i);
+  for (std::uint64_t i = 0; i < 4; ++i) EXPECT(q.try_pop(v) && v == i);
+  EXPECT(q.slips() == 0);
+  q.push(4);
+  EXPECT(q.try_pop(v));   // waits, times out, returns the element
+  EXPECT(v == 4);
+  EXPECT(q.slips() == 1);
+  q.push(5);
+  EXPECT(q.try_pop(v) && v == 5);
+  EXPECT(q.slips() == 1); // batch is back to one
+  EXPECT(!q.try_pop(v));
+}
+
 void destructor_releases_unpopped_elements() {
   auto counter = std::make_shared<int>(0);
   {
@@ -233,6 +268,8 @@ int main() {
   fifo_across_many_blocks();
   interleaved_reuses_blocks_without_growing();
   exact_block_lockstep();
+  lockstep_never_slips();
+  slip_waits_boundedly_then_takes_what_is_there();
   growth_then_drain_then_reuse();
   destructor_releases_unpopped_elements();
   moved_out_slot_is_empty();

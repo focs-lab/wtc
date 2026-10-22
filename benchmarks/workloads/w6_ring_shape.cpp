@@ -12,15 +12,14 @@
 // independent samples of anything.
 //
 // The block size matters more than it looks. Below a few thousand slots the
-// ring has two stable regimes on this host, one of them tens of times
-// slower, and which one a run falls into depends on timing rather than on
-// anything in the program: with a small footprint every line the producer
-// writes is still in the consumer's cache from the previous lap, so each
-// write has to invalidate it first, and once the consumer settles in right
-// behind the producer the pair locks into the slow step. The default block
-// is set in bytes, 128 KiB, so 2048 of these 64-byte elements, from this
-// measurement, and the header says so; this workload is what would notice
-// if the choice stopped being right.
+// ring had two stable regimes on this host, one of them tens of times
+// slower, and which one a run fell into depended on timing rather than on
+// anything in the program: once the consumer settled in right behind the
+// producer, each line the producer wrote was still being read by the
+// consumer and crossed the cores once per element. The ring's consumer now
+// keeps its distance (the slip in spsc_ring.hpp), and the default block is
+// set in bytes, 128 KiB, so 2048 of these 64-byte elements; this workload
+// is what would notice if either choice stopped being right.
 //
 // The shared_ptr rows exist to show the other half: once every element
 // costs an allocation, the ring's shape stops mattering at all, because the

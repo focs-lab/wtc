@@ -46,6 +46,21 @@
 // of one line for push_pub_. The consumer performs no shared store per
 // element at all. On x86 every atomic here is a plain move.
 //
+// The consumer keeps its distance. When it runs right behind the producer
+// it reads each slot line while the producer is still filling it, and reads
+// push_pub_ once per element, so a line that should cross the cores once
+// crosses once per element in it, and the producer's publish has to win
+// the counter line back every time: throughput falls by a factor of five
+// to ten and which of the two regimes a run lands in is a matter of timing.
+// So when the consumer catches up and finds fewer than a batch of elements
+// published, it waits, briefly and boundedly, for the batch to fill before
+// reading any of them, and the batch grows while the producer keeps
+// delivering it and shrinks when it does not: a trickle is read one element
+// at a time with no wait at all, a stream a few lines at a time with the
+// producer always ahead. try_pop still never blocks: it says empty the
+// moment the queue is, and waits only when there is something to take.
+// This is FastForward's temporal slip with B-Queue's bounded backtracking.
+//
 // A block is reused when the consumer has left it, which the consumer
 // announces only after it has read the block's next pointer. That ordering
 // is load-bearing: the producer inserts new blocks by writing next on its
@@ -55,11 +70,13 @@
 // mark of elements in flight, plus one block.
 //
 // Lineage: Lamport's ring (1983); FastForward, Giacomoni et al., PPoPP 2008,
-// for the observation that the index lines are the bottleneck; Vyukov for
-// the cached-index discipline and the reuse rule; Rigtorp's SPSCQueue for
-// the line layout; moodycamel's ReaderWriterQueue for unboundedness through
-// a ring of blocks. The two queue-global counters are what make this simpler
-// than moodycamel: nothing is reset on reuse.
+// for the observation that the index lines are the bottleneck and for the
+// slip; B-Queue, Wang et al., 2013, for reading in batches that back off
+// when the producer stops; Vyukov for the cached-index discipline and the
+// reuse rule; Rigtorp's SPSCQueue for the line layout; moodycamel's
+// ReaderWriterQueue for unboundedness through a ring of blocks. The two
+// queue-global counters are what make this simpler than moodycamel: nothing
+// is reset on reuse.
 //
 // Measured numbers against the general-purpose queue: see runtime/README.md,
 // which is filled in from benchmarks/results/ and not from this comment.
@@ -91,12 +108,11 @@ namespace wtc::rt {
 //   - 64 slots is too small and consistently slow, around 8 million
 //     elements a second against 50 to 60 for every larger block.
 //   - From 256 slots upward the median is flat to within about 15%.
-//   - The ring has a second, much slower regime, and size makes it rarer
+//   - The ring had a second, much slower regime, and size made it rarer
 //     without abolishing it: at every block size from 256 up, a run in
-//     twenty still lands there. The regime is what happens when the
-//     consumer settles in immediately behind the producer, so each line the
-//     producer writes is still live in the consumer's cache and has to be
-//     invalidated first.
+//     twenty still landed there. That regime is the consumer settling in
+//     immediately behind the producer, and the slip above is its remedy,
+//     not the block size.
 //
 // 128 KiB keeps a block well clear of the 64 slots that are too few for
 // any slot type, spends a quarter of what 4096 slots of 64 bytes did, and
@@ -114,7 +130,8 @@ namespace wtc::rt {
 //
 // kOneConsumer false is for spmc_ring, which lets consumers into try_pop
 // one at a time under its own lock: the ring's consumer side is then still
-// single-threaded, and only the contract check must not count them.
+// single-threaded, and only the contract check must not count them, and
+// the consumer must not slip, since it would wait while holding that lock.
 inline constexpr unsigned kBlockBytes = 128 * 1024;
 
 template <class Slot>
@@ -129,11 +146,24 @@ class spsc_ring {
   static_assert(kSlots >= 2, "a block needs at least two slots");
   static_assert((kLine & (kLine - 1)) == 0, "kLine must be a power of two");
 
-  // Raw storage for one element: an element exists in a slot only between
-  // the push that constructs it and the pop that destroys it, so a block
-  // costs no constructor per slot and the element type needs no default
-  // constructor. Same size and alignment as Slot, so the layout is that of
-  // a Slot array.
+  // The slip's bounds. The batch the consumer waits for grows up to
+  // thirty-two lines' worth of elements and never past a quarter of a
+  // block. A wait polls push_pub_ as rarely as it can, since every poll
+  // takes the counter's line from the producer, whose next publish then
+  // has to win it back: polled every pause, a producer that is the slower
+  // of the two slows down further and the batch never fills. So the
+  // consumer keeps an estimate of the producer's rate, in elements per
+  // pause, and sleeps for about the time the rest of the batch should
+  // take before each poll; a wait gives up after kSlipPauses.
+  static constexpr unsigned kSlipMax = [] {
+    unsigned n = 32 * kLine / static_cast<unsigned>(sizeof(Slot));
+    if (n > kSlots / 4) n = kSlots / 4;
+    return n < 2 ? 2u : n;
+  }();
+  static constexpr unsigned kSlipPauses = 64;
+  static constexpr unsigned kSlipGapMax = 32;
+  static constexpr unsigned kRateScale = 16;  // rate_ is elements per pause, times this
+
   struct cell {
     alignas(Slot) unsigned char raw[sizeof(Slot)];
   };
@@ -167,6 +197,9 @@ class spsc_ring {
     unsigned off;              // next slot to read in blk
     std::uint64_t cached_push; // last value read from push_pub_
     Slot* lent;                // the element try_pop_borrow handed out, if any
+    unsigned batch;            // elements the slip waits for, 1..kSlipMax
+    unsigned rate;             // the producer's elements per pause, times kRateScale
+    std::uint64_t slips;       // bounded waits entered, a hint for tests
   };
 
   alignas(kLine) producer_state p_;
@@ -209,6 +242,51 @@ class spsc_ring {
     return std::launder(reinterpret_cast<Slot*>(b->slots[i].raw));
   }
 
+  static void relax() {
+#if defined(__x86_64__) || defined(__i386__)
+    __builtin_ia32_pause();
+#elif defined(__aarch64__)
+    asm volatile("yield");
+#endif
+  }
+
+  // Called with at least one element published and none cached: the
+  // consumer has just caught up. If fewer than a batch are there, wait a
+  // bounded while for the rest, so that the lines they occupy are read
+  // after the producer is done with them and the counter line once per
+  // batch. The batch doubles while the producer delivers two of them at a
+  // time and halves when a wait runs out, so it tracks the producer's rate:
+  // one for a trickle, where no wait ever happens, and up to kSlipMax for
+  // a stream.
+  void slip() {
+    std::uint64_t delta = c_.cached_push - c_.count;
+    if (delta >= c_.batch) {
+      if (delta >= 2 * c_.batch && c_.batch < kSlipMax) c_.batch *= 2;
+      return;
+    }
+    ++c_.slips;
+    for (unsigned waited = 0; waited < kSlipPauses;) {
+      // About the time the rest of the batch should take at the rate seen
+      // so far, at least one pause and at most kSlipGapMax.
+      unsigned need = static_cast<unsigned>(c_.batch - delta);
+      unsigned gap = (need * kRateScale + c_.rate - 1) / c_.rate;
+      if (gap < 1) gap = 1;
+      if (gap > kSlipGapMax) gap = kSlipGapMax;
+      for (unsigned i = 0; i < gap; ++i) relax();
+      waited += gap;
+      std::uint64_t before = delta;
+      c_.cached_push = push_pub_.load(std::memory_order_acquire);
+      delta = c_.cached_push - c_.count;
+      // The rate, smoothed: three parts the old estimate, one part what
+      // this poll saw. Never below one element per kRateScale pauses.
+      unsigned seen = static_cast<unsigned>((delta - before) * kRateScale / gap);
+      c_.rate = (3 * c_.rate + seen) / 4;
+      if (c_.rate < 1) c_.rate = 1;
+      if (delta >= c_.batch) return;
+    }
+    if (c_.batch > 1) c_.batch /= 2;
+  }
+
   // Ends the life of the element the last try_pop_borrow lent out.
   void release_lent() {
     if (!c_.lent) return;
@@ -224,6 +302,7 @@ class spsc_ring {
     if (c_.count == c_.cached_push) {
       c_.cached_push = push_pub_.load(std::memory_order_acquire);
       if (c_.count == c_.cached_push) return nullptr;
+      if constexpr (kOneConsumer) slip();
     }
     if (c_.off == kSlots) {
       // Element c_.count lives in the next block. Leave this one, then tell
@@ -255,7 +334,7 @@ public:
     // reads as drained one lap later, and is reused under the consumer.
     a->end = kSlots;
     p_ = producer_state{a, 0, 0, 0};
-    c_ = consumer_state{a, 0, 0, 0, nullptr};
+    c_ = consumer_state{a, 0, 0, 0, nullptr, 1, kRateScale, 0};
   }
 
   spsc_ring(const spsc_ring&) = delete;
@@ -343,9 +422,10 @@ public:
     return c_.lent;
   }
 
-  // Not synchronised; a hint for the owning threads only.
+  // Not synchronised; hints for the owning threads only.
   std::uint64_t pushed() const { return p_.count; }
   std::uint64_t popped() const { return c_.count; }
+  std::uint64_t slips() const { return c_.slips; }
 
 private:
   void turn_over() {

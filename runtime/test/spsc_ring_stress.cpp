@@ -6,7 +6,11 @@
 // report a race, which is the test that the test can fail. With
 // WTC_STRESS_BORROW the elements are held inline and the consumer borrows
 // each one in place instead of moving it out. With WTC_STRESS_DEFERRED the
-// producer publishes once per run of 64 pushes.
+// producer publishes once per run of 64 pushes. With WTC_STRESS_BURSTY the
+// producer sends one element at a time with a pause between them, and the
+// consumer checks that each arrives promptly: the consumer's slip, which
+// waits for a batch when it finds fewer than one published, must not hold
+// a lone element back for longer than its bounded spin.
 
 #include "spsc_ring.hpp"
 
@@ -24,7 +28,7 @@ struct payload {
   std::uint64_t pad[7];
 };
 
-#ifdef WTC_STRESS_BORROW
+#if defined(WTC_STRESS_BORROW) || defined(WTC_STRESS_BURSTY)
 using ring = wtc::rt::spsc_ring<payload, 64>;
 #else
 using ring = wtc::rt::spsc_ring<std::shared_ptr<payload>, 64>;
@@ -33,6 +37,14 @@ using ring = wtc::rt::spsc_ring<std::shared_ptr<payload>, 64>;
 std::uint64_t parse_count(int argc, char** argv, std::uint64_t dflt) {
   return argc > 1 ? std::strtoull(argv[1], nullptr, 10) : dflt;
 }
+
+#ifdef WTC_STRESS_BURSTY
+std::uint64_t now_ns() {
+  return static_cast<std::uint64_t>(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(
+          std::chrono::steady_clock::now().time_since_epoch()).count());
+}
+#endif
 
 } // namespace
 
@@ -49,6 +61,12 @@ int main(int argc, char** argv) {
       p->seq = i;
       q.push_deferred(std::move(p));
       if (i % 64 == 63 || i + step >= n) q.publish();
+#elif defined(WTC_STRESS_BURSTY)
+      payload p{};
+      p.seq = i;
+      p.pad[0] = now_ns();
+      q.push(p);
+      std::this_thread::sleep_for(std::chrono::microseconds(100));
 #elif defined(WTC_STRESS_BORROW)
       payload p{};
       p.seq = i;
@@ -79,9 +97,13 @@ int main(int argc, char** argv) {
   // is not mistaken for a stall.
   auto last_progress = std::chrono::steady_clock::now();
   while (expect < n) {
-#ifdef WTC_STRESS_BORROW
+#if defined(WTC_STRESS_BORROW)
     payload* p = q.try_pop_borrow();
     if (!p) {
+#elif defined(WTC_STRESS_BURSTY)
+    payload got{};
+    payload* p = &got;
+    if (!q.try_pop(got)) {
 #else
     std::shared_ptr<payload> p;
     if (!q.try_pop(p)) {
@@ -100,6 +122,17 @@ int main(int argc, char** argv) {
       continue;
     }
     last_progress = std::chrono::steady_clock::now();
+#ifdef WTC_STRESS_BURSTY
+    // Generous for a sanitized build; the slip's own bound is under a
+    // hundred pauses, a few microseconds at most.
+    if (now_ns() - p->pad[0] > 20'000'000) {
+      std::fprintf(stderr, "element %llu held back for %.1f ms\n",
+                   static_cast<unsigned long long>(p->seq),
+                   (now_ns() - p->pad[0]) / 1e6);
+      failed = true;
+      break;
+    }
+#endif
 #ifndef WTC_STRESS_TWO_PRODUCERS
     if (p->seq != expect) {
       std::fprintf(stderr, "order broken: got %llu, expected %llu\n",
@@ -118,8 +151,11 @@ int main(int argc, char** argv) {
   const auto dt = std::chrono::steady_clock::now() - t0;
   const double s = std::chrono::duration<double>(dt).count();
 
-#ifdef WTC_STRESS_BORROW
+#if defined(WTC_STRESS_BORROW)
   if (!failed && q.try_pop_borrow()) {
+#elif defined(WTC_STRESS_BURSTY)
+  payload leftover{};
+  if (!failed && q.try_pop(leftover)) {
 #else
   std::shared_ptr<payload> leftover;
   if (!failed && q.try_pop(leftover)) {
