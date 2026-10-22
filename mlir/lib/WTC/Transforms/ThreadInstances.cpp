@@ -817,11 +817,19 @@ bool ThreadInstanceWalk::isInductionOf(Value index, Operation *loop, bool &unitS
 }
 
 // Whether every iteration of the loop reaches `op` once: op sits in the
-// loop's body under nothing but scopes, and the body has no early exit or
-// jump that could skip it on some iterations.
+// loop's body under nothing but scopes -- the body of a cleanup scope
+// included, which runs whenever it is reached and only wraps the
+// destructors of what it declares; a lambda that captures a std::function
+// gets one around the spawn -- and the body has no early exit or jump
+// that could skip it on some iterations.
 static bool unconditionalInBody(Operation *op, cir::ForOp loop) {
-    for (Operation *p = op->getParentOp(); p != loop.getOperation(); p = p->getParentOp())
-        if (!p || !isa<cir::ScopeOp>(p)) return false;
+    Operation *child = op;
+    for (Operation *p = op->getParentOp(); p != loop.getOperation(); child = p, p = p->getParentOp()) {
+        if (!p) return false;
+        if (isa<cir::ScopeOp>(p)) continue;
+        auto cs = dyn_cast<cir::CleanupScopeOp>(p);
+        if (!cs || !cs.getBodyRegion().isAncestor(child->getParentRegion())) return false;
+    }
     if (!loop.getBody().isAncestor(op->getParentRegion())) return false;
     bool jumps = false;
     loop.getBody().walk([&](Operation *o) {
