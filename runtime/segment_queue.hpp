@@ -76,17 +76,29 @@ class segment_queue {
     // the cell it took before it skips the cell.
     static constexpr unsigned kPatience = 64;
 
+    // Raw storage for one element, the size and alignment of the element,
+    // so that the cells are an array of elements and a 64-byte element
+    // occupies exactly one line.
     struct cell {
-        std::atomic<std::uint32_t> state{kEmpty};
         alignas(Slot) unsigned char raw[sizeof(Slot)];
         Slot* slot() { return std::launder(reinterpret_cast<Slot*>(raw)); }
     };
 
+    // The cells' states live in their own array, sixteen to a line, apart
+    // from the elements. With the state inside the cell a 64-byte element
+    // straddled two lines and shared each with its neighbours' states, so
+    // a pop that followed its push closely took four line transfers per
+    // element; kept apart, it takes the element's line and a sixteenth of
+    // the states' line.
     struct segment {
         alignas(kLine) std::atomic<std::uint64_t> deq{0};
         alignas(kLine) std::atomic<std::uint64_t> enq{0};
         alignas(kLine) std::atomic<segment*> next{nullptr};
+        alignas(kLine) std::atomic<std::uint32_t> state[kSegment];
         alignas(kLine) cell cells[kSegment];
+        segment() {
+            for (unsigned i = 0; i < kSegment; ++i) state[i].store(kEmpty, std::memory_order_relaxed);
+        }
     };
 
     static void free_segment(void* p) { delete static_cast<segment*>(p); }
@@ -109,8 +121,7 @@ class segment_queue {
         std::uint64_t from = s->deq.load(std::memory_order_relaxed);
         while (s) {
             for (std::uint64_t i = from; i < kSegment; ++i) {
-                cell& c = s->cells[i];
-                if (c.state.load(std::memory_order_relaxed) == kFull) c.slot()->~Slot();
+                if (s->state[i].load(std::memory_order_relaxed) == kFull) s->cells[i].slot()->~Slot();
             }
             segment* next = s->next.load(std::memory_order_relaxed);
             delete s;
@@ -145,8 +156,8 @@ class segment_queue {
                     ::new (static_cast<void*>(c.raw)) Slot(std::move(first[k]));
                     if constexpr (kManyConsumers) {
                         std::uint32_t e = kEmpty;
-                        if (c.state.compare_exchange_strong(e, kFull, std::memory_order_release,
-                                                            std::memory_order_relaxed))
+                        if (t->state[j].compare_exchange_strong(e, kFull, std::memory_order_release,
+                                                                std::memory_order_relaxed))
                             continue;
                         // A pop skipped the cell before this push reserved it:
                         // take the element back, give up the cells after it,
@@ -155,12 +166,12 @@ class segment_queue {
                         c.slot()->~Slot();
                         for (std::uint64_t r = j + 1; r < stop; ++r) {
                             std::uint32_t z = kEmpty;
-                            t->cells[r].state.compare_exchange_strong(z, kSkipped,
-                                                                      std::memory_order_relaxed);
+                            t->state[r].compare_exchange_strong(z, kSkipped,
+                                                                std::memory_order_relaxed);
                         }
                         break;
                     } else {
-                        c.state.store(kFull, std::memory_order_release);
+                        t->state[j].store(kFull, std::memory_order_release);
                     }
                 }
                 if (k == n) break;
@@ -177,9 +188,8 @@ class segment_queue {
                 segment* fresh = new segment;
                 std::uint64_t m = 0;
                 for (; m < kSegment && k + m < n; ++m) {
-                    cell& c = fresh->cells[m];
-                    ::new (static_cast<void*>(c.raw)) Slot(std::move(first[k + m]));
-                    c.state.store(kFull, std::memory_order_relaxed);
+                    ::new (static_cast<void*>(fresh->cells[m].raw)) Slot(std::move(first[k + m]));
+                    fresh->state[m].store(kFull, std::memory_order_relaxed);
                 }
                 fresh->enq.store(m, std::memory_order_relaxed);
                 segment* none = nullptr;
@@ -256,7 +266,8 @@ class segment_queue {
                 continue;
             }
             cell& c = h->cells[i];
-            std::uint32_t st = c.state.load(std::memory_order_acquire);
+            std::atomic<std::uint32_t>& state = h->state[i];
+            std::uint32_t st = state.load(std::memory_order_acquire);
             if (st == kEmpty) {
                 // Not reserved yet: give the pushes a moment to reach it
                 // before skipping it. Consumers that outnumber the producers
@@ -268,13 +279,13 @@ class segment_queue {
                 if (i < h->enq.load(std::memory_order_acquire)) {
                     // Reserved: its push is between taking the cell and
                     // filling it, or about to give it up.
-                    for (unsigned spin = 0; (st = c.state.load(std::memory_order_acquire)) == kEmpty;
+                    for (unsigned spin = 0; (st = state.load(std::memory_order_acquire)) == kEmpty;
                          ++spin) {
                         if (spin < 1024) pause();
                         else std::this_thread::yield();
                     }
-                } else if (c.state.compare_exchange_strong(st, kSkipped, std::memory_order_acquire,
-                                                           std::memory_order_acquire)) {
+                } else if (state.compare_exchange_strong(st, kSkipped, std::memory_order_acquire,
+                                                         std::memory_order_acquire)) {
                     continue;
                 }
             }
@@ -283,6 +294,39 @@ class segment_queue {
             c.slot()->~Slot();
             return true;
         }
+    }
+
+    // The single consumer keeps its distance from the producers, as the
+    // spsc ring's does: at the first cell of a line of states it waits a
+    // bounded while for the last cell of its batch to be filled, so that
+    // the states' line is read once the pushes are done with it rather
+    // than once per push. The batch doubles while the pushes stay two
+    // batches ahead and halves when a wait runs out, so a trickle never
+    // waits. Multi-consumer pops do not slip: a cell they wait for could
+    // be the one another consumer is about to take.
+    static constexpr unsigned kSlipMax = 2 * kLine / sizeof(std::uint32_t);
+    static constexpr unsigned kSlipPauses = 64;
+    static constexpr unsigned kSlipGapMax = 4;
+    unsigned batch_ = 1;
+
+    void slip_one(segment* h, std::uint64_t i) {
+        if (i % kSlipMax != 0) return;
+        std::uint64_t last = i + batch_ - 1;
+        if (last >= kSegment) return;
+        if (h->state[last].load(std::memory_order_acquire) == kFull) {
+            std::uint64_t ahead = i + 2 * batch_ - 1;
+            if (batch_ < kSlipMax && ahead < kSegment &&
+                h->state[ahead].load(std::memory_order_acquire) == kFull)
+                batch_ *= 2;
+            return;
+        }
+        unsigned gap = 1;
+        for (unsigned waited = 0; waited < kSlipPauses; gap = gap < kSlipGapMax ? 2 * gap : gap) {
+            for (unsigned k = 0; k < gap; ++k) pause();
+            waited += gap;
+            if (h->state[last].load(std::memory_order_acquire) == kFull) return;
+        }
+        if (batch_ > 1) batch_ /= 2;
     }
 
     template <class F>
@@ -297,7 +341,8 @@ class segment_queue {
                 continue;
             }
             cell& c = h->cells[i];
-            if (c.state.load(std::memory_order_acquire) != kFull) return false;
+            if (h->state[i].load(std::memory_order_acquire) != kFull) return false;
+            slip_one(h, i);
             f(std::move(*c.slot()));
             c.slot()->~Slot();
             h->deq.store(i + 1, std::memory_order_relaxed);
