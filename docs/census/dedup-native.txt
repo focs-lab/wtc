@@ -1,0 +1,53 @@
+threadcensus: 65536 mutexes, 999463 acquisitions (357194 on mutexes the table could not hold)
+single-thread mutexes: 21018 of 65536; their acquisitions: 27644 of 999463 (2.8%)
+acquisitions on mutexes with more than 8 threads (count not kept): 37003
+
+top 20 by acquisitions (address, acquisitions, threads, first acquisition's stack):
+
+0x7ff6bc0013b8  198093  2
+dedup/bin/dedup-orig(+0x5f91)[0x55683f6d9f91]
+dedup/bin/dedup-orig(+0x6268)[0x55683f6da268]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7ff6f0da0b84]
+/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7ff6f0e2dcc4]
+
+0x7ff6f0945978  198093  4
+dedup/bin/dedup-orig(+0x64ad)[0x55683f6da4ad]
+dedup/bin/dedup-orig(+0x66eb)[0x55683f6da6eb]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7ff6f0da0b84]
+/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7ff6f0e2dcc4]
+
+0x55686560b530  37005  8
+dedup/bin/dedup-orig(+0x965c)[0x55683f6dd65c]
+dedup/bin/dedup-orig(+0x66a5)[0x55683f6da6a5]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7ff6f0da0b84]
+/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7ff6f0e2dcc4]
+
+0x55686560b690  37003  >8
+dedup/bin/dedup-orig(+0x965c)[0x55683f6dd65c]
+dedup/bin/dedup-orig(+0x7e70)[0x55683f6dbe70]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7ff6f0da0b84]
+/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7ff6f0e2dcc4]
+
+0x55686560b740  16846  8
+dedup/bin/dedup-orig(+0x965c)[0x55683f6dd65c]
+dedup/bin/dedup-orig(+0x6223)[0x55683f6da223]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7ff6f0da0b84]
+/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7ff6f0e2dcc4]
+
+0x7ff6ac02e678  1138  2
+dedup/bin/dedup-orig(+0x5f91)[0x55683f6d9f91]
+dedup/bin/dedup-orig(+0x6268)[0x55683f6da268]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7ff6f0da0b84]
+/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7ff6f0e2dcc4]
+
+0x7ff6f0c27cb8  1138  4
+dedup/bin/dedup-orig(+0x64ad)[0x55683f6da4ad]
+dedup/bin/dedup-orig(+0x66eb)[0x55683f6da6eb]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7ff6f0da0b84]
+/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7ff6f0e2dcc4]
+
+0x55686560b5e0  355  5
+dedup/bin/dedup-orig(+0x965c)[0x55683f6dd65c]
+dedup/bin/dedup-orig(+0x6b67)[0x55683f6dab67]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7ff6f0da0b84]
+/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7ff6f0e2dcc4]

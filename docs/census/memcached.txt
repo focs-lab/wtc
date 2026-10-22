@@ -1,0 +1,67 @@
+threadcensus: 2840 mutexes, 1782421 acquisitions (0 on mutexes the table could not hold)
+single-thread mutexes: 1539 of 2840; their acquisitions: 1156997 of 1782421 (64.9%)
+
+top 20 by acquisitions (address, acquisitions, threads, first acquisition's stack):
+
+0x5565b2516d08  250001  1
+memcached/memcached(+0xd133)[0x55658f0ef133]
+/lib/x86_64-linux-gnu/libevent-2.1.so.7(+0x20ae8)[0x7f8a554ebae8]
+/lib/x86_64-linux-gnu/libevent-2.1.so.7(event_base_loop+0x4af)[0x7f8a554ed46f]
+memcached/memcached(+0x1848e)[0x55658f0fa48e]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f8a54689b84]
+/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f8a54716cc4]
+
+0x5565b2511b18  250001  1
+memcached/memcached(+0xd133)[0x55658f0ef133]
+/lib/x86_64-linux-gnu/libevent-2.1.so.7(+0x20ae8)[0x7f8a554ebae8]
+/lib/x86_64-linux-gnu/libevent-2.1.so.7(event_base_loop+0x4af)[0x7f8a554ed46f]
+memcached/memcached(+0x1848e)[0x55658f0fa48e]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f8a54689b84]
+/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f8a54716cc4]
+
+0x5565b2513668  250001  1
+memcached/memcached(+0xd133)[0x55658f0ef133]
+/lib/x86_64-linux-gnu/libevent-2.1.so.7(+0x20ae8)[0x7f8a554ebae8]
+/lib/x86_64-linux-gnu/libevent-2.1.so.7(event_base_loop+0x4af)[0x7f8a554ed46f]
+memcached/memcached(+0x1848e)[0x55658f0fa48e]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f8a54689b84]
+/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f8a54716cc4]
+
+0x5565b25151b8  250001  1
+memcached/memcached(+0xd133)[0x55658f0ef133]
+/lib/x86_64-linux-gnu/libevent-2.1.so.7(+0x20ae8)[0x7f8a554ebae8]
+/lib/x86_64-linux-gnu/libevent-2.1.so.7(event_base_loop+0x4af)[0x7f8a554ed46f]
+memcached/memcached(+0x1848e)[0x55658f0fa48e]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f8a54689b84]
+/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f8a54716cc4]
+
+0x55658f135918  95688  8
+memcached/memcached(+0x1394e)[0x55658f0f594e]
+memcached/memcached(+0x1eda9)[0x55658f100da9]
+memcached/memcached(+0x20309)[0x55658f102309]
+memcached/memcached(+0x7cfb)[0x55658f0e9cfb]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f8a546171ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f8a5461728b]
+memcached/memcached(+0x8b55)[0x55658f0eab55]
+
+0x55658f134518  76088  8
+memcached/memcached(+0x13916)[0x55658f0f5916]
+memcached/memcached(+0x1eda9)[0x55658f100da9]
+memcached/memcached(+0x20309)[0x55658f102309]
+memcached/memcached(+0x7cfb)[0x55658f0e9cfb]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f8a546171ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f8a5461728b]
+memcached/memcached(+0x8b55)[0x55658f0eab55]
+
+0x55658f126c60  62078  7
+memcached/memcached(+0x12e16)[0x55658f0f4e16]
+memcached/memcached(+0x16a13)[0x55658f0f8a13]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f8a54689b84]
+/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f8a54716cc4]
+
+0x55658f136d80  57655  8
+memcached/memcached(+0x1797d)[0x55658f0f997d]
+memcached/memcached(+0x79cd)[0x55658f0e99cd]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f8a546171ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f8a5461728b]
+memcached/memcached(+0x8b55)[0x55658f0eab55]

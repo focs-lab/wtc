@@ -1,0 +1,35 @@
+threadcensus: 4 mutexes, 2400011 acquisitions (0 on mutexes the table could not hold)
+single-thread mutexes: 3 of 4; their acquisitions: 7 of 2400011 (0.0%)
+
+top 4 by acquisitions (address, acquisitions, threads, first acquisition's stack):
+
+0x560c7badca30  2400004  6
+spdlog-build/bin/spdlog-orig(+0x1511b)[0x560c5c45611b]
+spdlog-build/bin/spdlog-orig(+0x14fd5)[0x560c5c455fd5]
+spdlog-build/bin/spdlog-orig(+0x14f88)[0x560c5c455f88]
+/lib/x86_64-linux-gnu/libstdc++.so.6(+0xecdb4)[0x7fa5ed26edb4]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7fa5ed00bb84]
+/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7fa5ed098cc4]
+
+0x560c5c493510  4  1
+spdlog-build/bin/spdlog-orig(+0x1379f)[0x560c5c45479f]
+spdlog-build/bin/spdlog-orig(+0xf201)[0x560c5c450201]
+spdlog-build/bin/spdlog-orig(+0xbf01)[0x560c5c44cf01]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7fa5ecf991ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7fa5ecf9928b]
+spdlog-build/bin/spdlog-orig(+0xabf5)[0x560c5c44bbf5]
+
+0x560c5c4934c0  2  1
+spdlog-build/bin/spdlog-orig(+0x3a989)[0x560c5c47b989]
+spdlog-build/bin/spdlog-orig(+0x3d93a)[0x560c5c47e93a]
+spdlog-build/bin/spdlog-orig(+0xc0f7)[0x560c5c44d0f7]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7fa5ecf991ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7fa5ecf9928b]
+spdlog-build/bin/spdlog-orig(+0xabf5)[0x560c5c44bbf5]
+
+0x560c5c4934e8  1  1
+spdlog-build/bin/spdlog-orig(+0x387c4)[0x560c5c4797c4]
+spdlog-build/bin/spdlog-orig(+0xd012)[0x560c5c44e012]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7fa5ecf991ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7fa5ecf9928b]
+spdlog-build/bin/spdlog-orig(+0xabf5)[0x560c5c44bbf5]

@@ -1,0 +1,60 @@
+threadcensus: 8 mutexes, 1572 acquisitions (0 on mutexes the table could not hold)
+single-thread mutexes: 5 of 8; their acquisitions: 105 of 1572 (6.7%)
+
+top 8 by acquisitions (address, acquisitions, threads, first acquisition's stack):
+
+0x56354072d0d0  489  2
+redis/src/redis-server *:6399(initThreadedIO+0xaf)[0x5635405675ef]
+redis/src/redis-server *:6399(InitServerLast+0x12)[0x5635405463e2]
+redis/src/redis-server *:6399(main+0x295)[0x563540537e05]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f117264e1ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f117264e28b]
+redis/src/redis-server *:6399(_start+0x25)[0x563540538645]
+
+0x56354072d0a8  489  2
+redis/src/redis-server *:6399(initThreadedIO+0xaf)[0x5635405675ef]
+redis/src/redis-server *:6399(InitServerLast+0x12)[0x5635405463e2]
+redis/src/redis-server *:6399(main+0x295)[0x563540537e05]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f117264e1ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f117264e28b]
+redis/src/redis-server *:6399(_start+0x25)[0x563540538645]
+
+0x56354072d0f8  489  2
+redis/src/redis-server *:6399(initThreadedIO+0xaf)[0x5635405675ef]
+redis/src/redis-server *:6399(InitServerLast+0x12)[0x5635405463e2]
+redis/src/redis-server *:6399(main+0x295)[0x563540537e05]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f117264e1ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f117264e28b]
+redis/src/redis-server *:6399(_start+0x25)[0x563540538645]
+
+0x56354072e8a0  101  1
+redis/src/redis-server *:6399(freeClientAsync+0x36)[0x56354055de86]
+redis/src/redis-server *:6399(readQueryFromClient+0x179)[0x5635405679e9]
+redis/src/redis-server *:6399(+0x15dd4c)[0x563540626d4c]
+redis/src/redis-server *:6399(+0x72eb8)[0x56354053beb8]
+redis/src/redis-server *:6399(aeMain+0x2d)[0x56354053ca9d]
+redis/src/redis-server *:6399(main+0x36f)[0x563540537edf]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f117264e1ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f117264e28b]
+redis/src/redis-server *:6399(_start+0x25)[0x563540538645]
+
+0x56354072f000  1  1
+redis/src/redis-server *:6399(bioProcessBackgroundJobs+0x98)[0x5635405d06d8]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f11726c0b84]
+/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f117274dcc4]
+
+0x5635407344c0  1  1
+redis/src/redis-server *:6399(main+0x112)[0x563540537c82]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f117264e1ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f117264e28b]
+redis/src/redis-server *:6399(_start+0x25)[0x563540538645]
+
+0x56354072f050  1  1
+redis/src/redis-server *:6399(bioProcessBackgroundJobs+0x98)[0x5635405d06d8]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f11726c0b84]
+/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f117274dcc4]
+
+0x56354072f028  1  1
+redis/src/redis-server *:6399(bioProcessBackgroundJobs+0x98)[0x5635405d06d8]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f11726c0b84]
+/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f117274dcc4]
