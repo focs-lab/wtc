@@ -1,0 +1,70 @@
+threadcensus: 2840 mutexes, 1808264 acquisitions (0 on mutexes the table could not hold; table of 1048576)
+single-thread mutexes: 1539 of 2840; their acquisitions: 1163201 of 1808264 (64.3%)
+
+top 20 by acquisitions (address, acquisitions, threads, first acquisition's stack):
+
+0x561e4f31abe8  250001  1
+.apps/census/memcached/memcached(+0xd133)[0x561e2c178133]
+/lib/x86_64-linux-gnu/libevent-2.1.so.7(+0x20ae8)[0x7f690f6cbae8]
+/lib/x86_64-linux-gnu/libevent-2.1.so.7(event_base_loop+0x4af)[0x7f690f6cd46f]
+.apps/census/memcached/memcached(+0x1848e)[0x561e2c18348e]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f690f534b84]
+/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f690f5c1cc4]
+
+0x561e4f31c738  250001  1
+.apps/census/memcached/memcached(+0xd133)[0x561e2c178133]
+/lib/x86_64-linux-gnu/libevent-2.1.so.7(+0x20ae8)[0x7f690f6cbae8]
+/lib/x86_64-linux-gnu/libevent-2.1.so.7(event_base_loop+0x4af)[0x7f690f6cd46f]
+.apps/census/memcached/memcached(+0x1848e)[0x561e2c18348e]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f690f534b84]
+/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f690f5c1cc4]
+
+0x561e4f31e288  250001  1
+.apps/census/memcached/memcached(+0xd133)[0x561e2c178133]
+/lib/x86_64-linux-gnu/libevent-2.1.so.7(+0x20ae8)[0x7f690f6cbae8]
+/lib/x86_64-linux-gnu/libevent-2.1.so.7(event_base_loop+0x4af)[0x7f690f6cd46f]
+.apps/census/memcached/memcached(+0x1848e)[0x561e2c18348e]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f690f534b84]
+/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f690f5c1cc4]
+
+0x561e4f31fdd8  250001  1
+.apps/census/memcached/memcached(+0xd133)[0x561e2c178133]
+/lib/x86_64-linux-gnu/libevent-2.1.so.7(+0x20ae8)[0x7f690f6cbae8]
+/lib/x86_64-linux-gnu/libevent-2.1.so.7(event_base_loop+0x4af)[0x7f690f6cd46f]
+.apps/census/memcached/memcached(+0x1848e)[0x561e2c18348e]
+/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f690f534b84]
+/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f690f5c1cc4]
+
+0x561e2c1be918  98787  8
+.apps/census/memcached/memcached(+0x1394e)[0x561e2c17e94e]
+.apps/census/memcached/memcached(+0x1eda9)[0x561e2c189da9]
+.apps/census/memcached/memcached(+0x20309)[0x561e2c18b309]
+.apps/census/memcached/memcached(+0x7cfb)[0x561e2c172cfb]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f690f4c21ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f690f4c228b]
+.apps/census/memcached/memcached(+0x8b55)[0x561e2c173b55]
+
+0x561e2c1bd518  79187  8
+.apps/census/memcached/memcached(+0x13916)[0x561e2c17e916]
+.apps/census/memcached/memcached(+0x1eda9)[0x561e2c189da9]
+.apps/census/memcached/memcached(+0x20309)[0x561e2c18b309]
+.apps/census/memcached/memcached(+0x7cfb)[0x561e2c172cfb]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f690f4c21ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f690f4c228b]
+.apps/census/memcached/memcached(+0x8b55)[0x561e2c173b55]
+
+0x561e2c1afc60  63753  7
+.apps/census/memcached/memcached(+0x12afd)[0x561e2c17dafd]
+.apps/census/memcached/memcached(+0x1edb5)[0x561e2c189db5]
+.apps/census/memcached/memcached(+0x20309)[0x561e2c18b309]
+.apps/census/memcached/memcached(+0x7cfb)[0x561e2c172cfb]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f690f4c21ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f690f4c228b]
+.apps/census/memcached/memcached(+0x8b55)[0x561e2c173b55]
+
+0x561e2c1bfd80  59206  8
+.apps/census/memcached/memcached(+0x1797d)[0x561e2c18297d]
+.apps/census/memcached/memcached(+0x79cd)[0x561e2c1729cd]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f690f4c21ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f690f4c228b]
+.apps/census/memcached/memcached(+0x8b55)[0x561e2c173b55]

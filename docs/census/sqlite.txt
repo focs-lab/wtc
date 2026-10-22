@@ -1,0 +1,47 @@
+threadcensus: 5 mutexes, 422808 acquisitions (0 on mutexes the table could not hold; table of 1048576)
+single-thread mutexes: 2 of 5; their acquisitions: 31 of 422808 (0.0%)
+
+top 5 by acquisitions (address, acquisitions, threads, first acquisition's stack):
+
+0x55c40e2ee348  261151  5
+.apps/census/sqlite_driver(+0x154bd)[0x55c40e1ff4bd]
+.apps/census/sqlite_driver(+0x2246a)[0x55c40e20c46a]
+.apps/census/sqlite_driver(+0x5bdd8)[0x55c40e245dd8]
+.apps/census/sqlite_driver(+0xa86f8)[0x55c40e2926f8]
+.apps/census/sqlite_driver(+0xa83b)[0x55c40e1f483b]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f894ecac1ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f894ecac28b]
+.apps/census/sqlite_driver(+0xa9c5)[0x55c40e1f49c5]
+
+0x55c43159a3b8  160048  5
+.apps/census/sqlite_driver(+0xa87b2)[0x55c40e2927b2]
+.apps/census/sqlite_driver(+0xa83b)[0x55c40e1f483b]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f894ecac1ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f894ecac28b]
+.apps/census/sqlite_driver(+0xa9c5)[0x55c40e1f49c5]
+
+0x55c40e2ee3e8  1578  5
+.apps/census/sqlite_driver(+0x15d19)[0x55c40e1ffd19]
+.apps/census/sqlite_driver(+0x1fd79)[0x55c40e209d79]
+.apps/census/sqlite_driver(+0x85ba0)[0x55c40e26fba0]
+.apps/census/sqlite_driver(+0xa8aab)[0x55c40e292aab]
+.apps/census/sqlite_driver(+0xa83b)[0x55c40e1f483b]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f894ecac1ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f894ecac28b]
+.apps/census/sqlite_driver(+0xa9c5)[0x55c40e1f49c5]
+
+0x55c40e2ee320  23  1
+.apps/census/sqlite_driver(+0x5ba70)[0x55c40e245a70]
+.apps/census/sqlite_driver(+0xa86f8)[0x55c40e2926f8]
+.apps/census/sqlite_driver(+0xa83b)[0x55c40e1f483b]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f894ecac1ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f894ecac28b]
+.apps/census/sqlite_driver(+0xa9c5)[0x55c40e1f49c5]
+
+0x55c43159a3b8  8  1
+.apps/census/sqlite_driver(+0x5bad9)[0x55c40e245ad9]
+.apps/census/sqlite_driver(+0xa86f8)[0x55c40e2926f8]
+.apps/census/sqlite_driver(+0xa83b)[0x55c40e1f483b]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f894ecac1ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f894ecac28b]
+.apps/census/sqlite_driver(+0xa9c5)[0x55c40e1f49c5]
