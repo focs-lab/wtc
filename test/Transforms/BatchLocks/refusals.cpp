@@ -37,6 +37,10 @@ WTC_BATCH void spins(int n) { for (int i = 0; i < n && !stop.load(); ++i) { m.lo
 WTC_BATCH void throws(int n) { for (int i = 0; i < n; ++i) { m.lock(); ++total; m.unlock(); may_throw(i); } }
 // CHECK-DAG: [[@LINE+1]]:{{.*}} remark: wtc: critical sections in this loop not batched: it calls bump(), where it acts on a queue or a mutex
 WTC_BATCH void calls(int n) { for (int i = 0; i < n; ++i) { m.lock(); ++total; m.unlock(); bump(); } }
+// CHECK-DAG: [[@LINE+1]]:{{.*}} remark: wtc: critical sections in this loop not batched: the loop takes the mutex and does not let it go
+WTC_BATCH void holds(int n) { for (int i = 0; i < n; ++i) { m.lock(); ++total; } }
+// CHECK-DAG: [[@LINE+1]]:{{.*}} remark: wtc: critical sections in this loop not batched: the unlock does not follow the lock in the same block
+WTC_BATCH void reversed(int n) { for (int i = 0; i < n; ++i) { m.unlock(); ++total; m.lock(); } }
 // A break outside the critical section is no obstacle: the mutex is held
 // there now, and let go after the loop.
 // CHECK-DAG: [[@LINE+1]]:{{.*}} remark: wtc: critical sections in this loop batched

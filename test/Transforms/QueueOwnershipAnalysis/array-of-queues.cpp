@@ -1,11 +1,15 @@
 // An array of queues: one constructor call builds every element, and the
 // analysis does not tell the elements apart, so it cannot say which
 // element a thread's operation acts on. Every queue of the type is unknown.
+// The element indexed at run time is some element of the array; the one
+// indexed by a constant is a place, but no constructor call is known to
+// build a queue there, since the array's runs in a loop.
 //
 // RUN: %clangxx -std=c++17 -I%shim -fclangir -emit-cir %s -o %t.cir
 // RUN: wtc-opt %t.cir --lift-cir-to-wtc --queue-ownership-analysis --wtc-specialize -o /dev/null 2>&1 | FileCheck %s
 //
-// CHECK: queue access is unresolvable
+// CHECK-DAG: queue access is unresolvable (the queue is an element of an array)
+// CHECK-DAG: queue access is unresolvable (the queue object could not be identified)
 // CHECK-NOT: tag rewritten
 
 #include "queue.hpp"
