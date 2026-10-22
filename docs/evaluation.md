@@ -107,15 +107,45 @@ thread count tried; the lit suite runs every positive integration test's
 program the same way, and a negative control shows the build reports a
 race when a ring is forced on a queue with two producers.
 
-**RQ2, applications, first look.** Both PARSEC programs are
-coarse-grained: a dedup chunk spends tens of microseconds in compression
-per queue operation, and ferret's stages take milliseconds per image. In
-untimed runs every build of each was within a few percent of the others;
-the timed legs `eval-ferret` and `eval-dedup` are what will say it. The
-grain at which the queue stops mattering is what `eval-w3grain` measures.
+**RQ2** (`eval-w1`, `eval-w1smt`, `eval-w2`, `eval-w3`, `eval-w3grain`,
+`eval-w9`, `eval-ferret`, `eval-dedup`). With one producer and one consumer
+on two cores the compiler's inline queue is 17 to 60 times the program as
+written (8, 64 and 256-byte elements) and level with the best expert queue
+at 256 bytes; used by pointer, its ring is level with the expert queues.
+Under load it keeps up to 10 M elements a second, the end of the sweep,
+where the program as written falls behind at 1 M/s and the best
+general-purpose library at 2 M/s; at one element every 10 µs its p99 is
+542 ns, against 5.5 µs as written and 2.1 µs for the best library. On the
+three-stage pipeline the compiler's build of the unmodified source is the
+hand-tagged build byte for byte, 8.9 M records a second, 9.0 times the
+original. The grain sweep finds the gain a nearly constant 1.1 to 1.6 µs a
+record, so the speed-up is close to (t + 1.1 µs) / t for a slowest stage
+of t: above 10% only while a stage takes under about 10 µs. ferret (13 ms
+an image) and dedup (57 µs a chunk) lie to the right of that, and every
+build of each is within 1% of the others. With many threads, the
+substitutes for a single side gain 2.5 to 4.0 times (the list for many
+producers) and 2.0 to 2.9 times (the ring for many consumers) over the
+general queue; the ring is level with the best library or ahead, the list
+reaches 63 to 94% of oneTBB's and moodycamel's queues, and the general
+queue, kept where both sides are many, ends 7 to 8 times behind them at
+eight producers and eight consumers.
 
-The timed legs for RQ2 to RQ4 are prepared and checked on an unreserved
-host but not yet run.
+**RQ3** (the legs' mechanism passes). On the pipeline the compiler's build
+allocates nothing per record where the program as written allocates four,
+and spends 785 cycles a record against 7,677.
+
+**RQ4** (`eval-w7`, `eval-w8`). Batching a producer's pushes gains 1.8
+times on the general queue at the default K = 64 and nothing on the rings,
+which publish with one store already; the compiler's batching equals
+batching written by hand at every K. Its price is delay, with no flush on
+idle: paced at 1 M elements a second an element waits 34 to 44 µs at
+K = 64. Holding a mutex across 64 critical sections is 11 to 12 times
+faster when nothing happens between them, and turns into a loss somewhere
+between 100 and 500 ns of work between sections, at a cost in fairness
+(Jain's index 0.59 at eight threads): legal is not profitable.
+
+Each leg's NOTE.md, beside its summary, gives the setup, the controls and
+what the numbers can and cannot carry.
 
 ## Corrections
 
@@ -124,8 +154,18 @@ element, and the batch held 64: every sample was the first element of a
 batch, the one that waits longest for the rest, so those delays overstate
 batching's price (paced at a million elements a second on an unreserved
 host, the aligned sample's median was 63 µs where an unaligned one gives
-about 32). The evaluation samples one element in 61 and re-measures them
-in `eval-w7`.
+about 32). The evaluation samples one element in 61; `eval-w7` measures
+34 µs (inline ring) to 44 µs (general queue) at K = 64.
+
+The first timed runs of W2, W3, W7 and W9 kept the benchmarks' own
+per-element bookkeeping (the consumer's sample vectors, and in W9 one
+count of elements popped that every consumer added to) on cache lines the
+measured threads also used. It held the fastest queues back, by up to 2.4
+times (moodycamel's queue with eight producers and one consumer), and put
+the inline rings' limit under load at 3.3 to 5 M elements a second instead
+of beyond 10. 5e682b6 and 63c2ba7 keep that bookkeeping in each thread
+until it ends; the five legs were run again on 22 October, and their
+result directories hold only the new runs.
 
 ## Threats to validity
 
@@ -147,7 +187,13 @@ in `eval-w7`.
   producers, or the ring whose consumers take turns); one with several of
   each keeps the general-purpose queue
   whatever the analysis proves, so a pipeline whose middle stages each
-  have several threads gains only at its ends.
+  have several threads gains only at its ends. The list for many
+  producers is itself behind the best libraries.
+- **The saturation mark compares rates.** A run is marked when the
+  producer or the consumer sustained less than 95% of the offered rate; a
+  backlog that does not grow over the measured part, or clears before its
+  end, goes unmarked. W2's table of the rates each queue keeps up with is
+  read from the latencies.
 - **The inline ring is bimodal** in some placements (`runtime/spsc_ring.hpp`);
   distributions are reported, not only medians.
 - **The oracle is a reading.** Each queue's topology in
