@@ -33,9 +33,10 @@ push is linking the next segment, hence lock-free rather than wait-free.
 A push to any of these queues can allocate, because they are unbounded; no
 producer passes the check. That is the honest answer, not a defect of the
 check. A pop from an spsc queue is wait-free, but the shared_ptr it returns
-owns the element, and its release may free it: the check follows the
-destructor and finds that. A pop from an spsc_inline queue returns a
-shared_ptr that owns nothing, so its members are not followed.
+is allocated by the pop itself, from the element in the ring's slot, and its
+release frees it: the check reports the allocation and follows the
+destructor. A pop from an spsc_inline queue returns a shared_ptr that owns
+nothing, so its members are not followed.
 
 ## What the check establishes
 

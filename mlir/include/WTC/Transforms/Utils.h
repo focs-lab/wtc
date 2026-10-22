@@ -23,6 +23,7 @@ enum class SemanticOpKind {
     QueueConstruction,
     QueuePush,
     QueueTryPop,
+    QueueTryPopInto,
     QueueBatchBegin,
     QueuePushDeferred,
     QueueBatchEnd,

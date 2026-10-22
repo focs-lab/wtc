@@ -100,7 +100,17 @@ struct LowerQueuePopPattern : public OpConversionPattern<QueuePopOp> {
         Value queue = mlir::UnrealizedConversionCastOp::create(
             rewriter, op.getLoc(), op.getSourceQueueTypeAttr().getValue(), adaptor.getQueue()).getResult(0);
         if (adaptor.getOut()) {
-            // Return-slot form: the slot comes first, as in the original call.
+            // Return-slot form: the slot comes first, as in the original
+            // call; a transfer's object comes after the queue, as try_pop(T&)
+            // takes it.
+            if (op.getTransfer()) {
+                auto call = rebuildCall(rewriter, op.getLoc(), op.getFallbackImplAttr(),
+                                        op.getNumResults() ? op.getResult(0).getType() : Type{},
+                                        ValueRange{queue, adaptor.getOut()}, op.getSourceArgAttrsAttr());
+                if (op.getNumResults()) rewriter.replaceOp(op, call->getResults());
+                else rewriter.eraseOp(op);
+                return success();
+            }
             rebuildCall(rewriter, op.getLoc(), op.getFallbackImplAttr(), Type{},
                         ValueRange{adaptor.getOut(), queue}, op.getSourceArgAttrsAttr());
             rewriter.eraseOp(op);

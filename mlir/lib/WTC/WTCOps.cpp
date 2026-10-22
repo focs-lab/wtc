@@ -92,8 +92,9 @@ LogicalResult QueuePushOp::verifySymbolUses(SymbolTableCollection &symbolTable) 
 
 LogicalResult QueuePopOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     const unsigned expectedArgs = getOut() ? 2 : 1;
-    return verifyFallbackImpl(*this, getFallbackImplAttr(), "wtc_queue_try_pop", "try_pop",
-                              expectedArgs, symbolTable);
+    return verifyFallbackImpl(*this, getFallbackImplAttr(),
+                              getTransfer() ? "wtc_queue_try_pop_into" : "wtc_queue_try_pop",
+                              "try_pop", expectedArgs, symbolTable);
 }
 
 LogicalResult QueuePushOp::verify() {
@@ -103,8 +104,11 @@ LogicalResult QueuePushOp::verify() {
 LogicalResult QueuePopOp::verify() {
     const bool hasOut = static_cast<bool>(getOut());
     const bool hasValue = static_cast<bool>(getValue());
-    if (hasOut == hasValue)
+    if (getTransfer()) {
+        if (!hasOut) return emitOpError("a transfer pop moves the element into its `out` operand");
+    } else if (hasOut == hasValue) {
         return emitOpError("needs exactly one of an `out` operand or a result");
+    }
     return verifySourceQueueType(*this, getQueue().getType(), getSourceQueueType());
 }
 
@@ -182,14 +186,11 @@ bool QueuePushOp::mayCallAllocator() { return true; }
 std::string QueuePushOp::getBlockingReason() {
     switch (implOf(getImpl())) {
     case ::mlir::wtc::Impl::spsc:
-    case ::mlir::wtc::Impl::spmc:
-        return "allocates the element it pushes (make_shared), and a new block when the "
-               "current one is full";
     case ::mlir::wtc::Impl::spsc_inline:
+    case ::mlir::wtc::Impl::spmc:
         return "allocates a new block when the current one is full: the queue is unbounded";
     default:
-        return "allocates the element it pushes (make_shared), and a new segment when the "
-               "current one is full";
+        return "allocates a new segment when the current one is full: the queue is unbounded";
     }
 }
 
@@ -198,19 +199,30 @@ Progress QueuePopOp::getProgress() {
     return impl == ::mlir::wtc::Impl::generic || impl == ::mlir::wtc::Impl::spmc ? Progress::blocking
                                                                                  : Progress::wait_free;
 }
+// A pop that returns a shared_ptr allocates it, on the consumer's side,
+// from the element in the cell; a pop that moves the element out
+// (transfer) or lends it (spsc_inline) allocates nothing, and only the
+// segmented queues' pops then still free the segments they move past.
 bool QueuePopOp::mayCallAllocator() {
     const ::mlir::wtc::Impl impl = implOf(getImpl());
-    return impl == ::mlir::wtc::Impl::generic || impl == ::mlir::wtc::Impl::mpsc;
+    if (getTransfer()) return segmented(impl);
+    return impl != ::mlir::wtc::Impl::spsc_inline;
 }
 std::string QueuePopOp::getBlockingReason() {
+    const bool shares = !getTransfer();
     switch (implOf(getImpl())) {
     case ::mlir::wtc::Impl::generic:
-        return "waits for a push that has taken the cell it reads to fill it, and frees the "
-               "segments it moves past";
+        return std::string("waits for a push that has taken the cell it reads to fill it, and "
+                           "frees the segments it moves past") +
+               (shares ? ", and allocates the shared_ptr it returns" : "");
     case ::mlir::wtc::Impl::mpsc:
-        return "frees the segments it moves past";
+        return std::string("frees the segments it moves past") +
+               (shares ? ", and allocates the shared_ptr it returns" : "");
     case ::mlir::wtc::Impl::spmc:
-        return "waits for another consumer's pop under the consumers' spin lock";
+        return std::string("waits for another consumer's pop under the consumers' spin lock") +
+               (shares ? ", and allocates the shared_ptr it returns" : "");
+    case ::mlir::wtc::Impl::spsc:
+        return shares ? "allocates the shared_ptr it returns" : "";
     default:
         return "";
     }
@@ -227,14 +239,12 @@ bool QueuePushDeferredOp::mayCallAllocator() { return true; }
 std::string QueuePushDeferredOp::getBlockingReason() {
     switch (implOf(getImpl())) {
     case ::mlir::wtc::Impl::spsc:
-    case ::mlir::wtc::Impl::spmc:
-        return "allocates the element it pushes (make_shared), and a new block when the "
-               "current one is full";
     case ::mlir::wtc::Impl::spsc_inline:
+    case ::mlir::wtc::Impl::spmc:
         return "allocates a new block when the current one is full: the queue is unbounded";
     default:
-        return "allocates the element it pushes (make_shared), and a new segment when it "
-               "publishes into a full one";
+        return "allocates a new segment when it publishes into a full one: the queue is "
+               "unbounded";
     }
 }
 

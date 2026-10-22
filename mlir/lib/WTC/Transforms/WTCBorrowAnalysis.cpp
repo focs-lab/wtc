@@ -323,6 +323,10 @@ std::optional<Refusal> BorrowChecker::checkPop(QueuePopOp pop, int64_t id, Type 
     curId = id;
     curType = queueType;
     popMemo.clear();
+    // A transfer moves the element into the program's own object and keeps
+    // nothing of the queue's: it borrows nothing, so it stands in the way
+    // of nothing.
+    if (pop.getTransfer()) return std::nullopt;
     Value out = pop.getOut();
     if (!out) return Refusal{pop, "the popped value is not returned through a slot"};
     auto slot = out.getDefiningOp<cir::AllocaOp>();

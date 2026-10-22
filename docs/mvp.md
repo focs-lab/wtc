@@ -47,12 +47,16 @@ borrows, and the next section is what that buys.
 ## 2. No allocation per element
 
 The gate's second finding was that the queue's main cost is not its
-synchronisation but the `shared_ptr` it allocates for every element: the
-same ring with elements held inline was 10 to 41 times faster. Holding
-them inline is only correct if the consumer never notices that the element
-lives in the ring and dies at its next pop. The borrow analysis proves
-that from the consumer's code, and the queue is then built with its
-elements inline.
+synchronisation but the `shared_ptr` it allocated for every element, on the
+producer's side, to be freed on the consumer's: the same ring with elements
+held inline was 10 to 41 times faster. Every implementation now holds the
+element in its cell, and what remains per element is what the pop hands
+out: a `shared_ptr` the consumer allocates for itself (the original API), a
+move into the consumer's object (`try_pop(T&)`), or, best, nothing at all,
+the element lent in place. Lending is only correct if the consumer never
+notices that the element lives in the ring and dies at its next pop. The
+borrow analysis proves that from the consumer's code, and the queue is then
+built to lend.
 
 ```sh
 tools/wtc-cc --toolchain build-llvm examples/inline_pipeline.cpp -o prog

@@ -45,10 +45,15 @@ consumers taking turns under a spin lock: FIFO in the producer's order and
 linearisable, and a pop that reports empty does so when every published
 element has been popped.
 
-**Progress.** The shim queue blocks on a mutex; the substitute is lock-free
-on the consumer side, and its producer allocates. A program cannot observe
-progress except as deadlock or starvation, and a substitution can only make
-those less likely, not more.
+**Progress.** The shim queue blocks on a mutex; the substitutes are
+lock-free or wait-free on both sides and allocate only a block or a segment
+when the queue grows. The element itself lives in the cell, on every
+implementation (since 23 Oct 2026): a push copies or moves it there, and a
+pop moves it out, lends it in place, or allocates the `shared_ptr` the
+original API returns on the consumer's side, so that the memory that
+crosses the threads is the queue's own and no allocation does. A program
+cannot observe progress except as deadlock or starvation, and a
+substitution can only make those less likely, not more.
 
 **Effects.** Per-object memory effects would let a transform reorder ops on
 two different queues. In a concurrent program that is not generally sound,
