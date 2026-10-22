@@ -13,6 +13,7 @@
 | `related-work.md` | What the compiler does against where each technique was done before, claim by claim, with checked citations; papers collected earlier are under `related-works/` |
 | `declared-topology-audit.md` | Hand-declared queue topologies read in DPDK's examples and in users of four SPSC libraries: which hold, which only by convention, and what a compiler check needs |
 | `correctness.md` | Why substituting a queue preserves the program: one lemma per implementation under its precondition, the facts the analyses must prove, and what is assumed rather than derived |
+| `paper-outline.md` | The paper's outline around topology and ownership, the experiments it needs with the leg behind each, and the claims no measurement supports yet |
 | `toolchain.md` | Building and sharing the ClangIR-enabled Clang the project needs |
 | `MLIR Concur.pptx` | Early presentation on the dialect design and motivating examples; an artefact kept verbatim, metadata included |
 
