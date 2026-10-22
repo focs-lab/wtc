@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="372" viewBox="0 0 900 372" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-label="What one element costs in the general-purpose queue, the SPSC ring and the inline SPSC ring">
+<title>What one element costs in each implementation</title>
+<rect x="0.5" y="0.5" width="899" height="371" rx="12" fill="#FBFAF7" stroke="#E4DFD5"/>
+<text x="28" y="38" font-size="18" font-weight="600" fill="#172033">What one element costs</text>
+<text x="28" y="62" font-size="14" fill="#5F6773">per element, from the shim’s code; throughput from W1, one producer and one consumer, 64-byte elements</text>
+<g>
+<rect x="28" y="84" width="268" height="266" rx="10" fill="#FFFFFF" stroke="#E4DFD5"/>
+<path d="M28,94 a10,10 0 0 1 10,-10 h248 a10,10 0 0 1 10,10 v46 h-268 z" fill="#5B6676"/>
+<text x="44" y="110" font-size="16" font-weight="600" fill="#FFFFFF">General-purpose queue</text>
+<text x="44" y="130" font-size="13" fill="#E4E8EE">a linked list, two mutexes</text>
+<text x="44" y="168" font-size="14" fill="#4A5568"><tspan font-weight="600" fill="#172033">push</tspan>  2 allocations, 1 lock</text>
+<text x="44" y="192" font-size="14" fill="#4A5568"><tspan font-weight="600" fill="#172033">pop</tspan>  2 locks, frees the node</text>
+<text x="44" y="216" font-size="14" fill="#4A5568"><tspan font-weight="600" fill="#172033">later</tspan>  frees the element</text>
+<line x1="44" y1="236" x2="280" y2="236" stroke="#E4DFD5"/>
+<text x="74" y="272" font-size="30" font-weight="600" fill="#172033" text-anchor="middle">2</text>
+<text x="162" y="272" font-size="30" font-weight="600" fill="#172033" text-anchor="middle">2</text>
+<text x="250" y="272" font-size="30" font-weight="600" fill="#172033" text-anchor="middle">3</text>
+<text x="74" y="292" font-size="12" fill="#5F6773" text-anchor="middle">allocations</text>
+<text x="162" y="292" font-size="12" fill="#5F6773" text-anchor="middle">frees</text>
+<text x="250" y="292" font-size="12" fill="#5F6773" text-anchor="middle">locks</text>
+<text x="44" y="332" font-size="15" fill="#172033"><tspan font-weight="600">1.1</tspan> M elements/s</text>
+</g>
+<g>
+<rect x="316" y="84" width="268" height="266" rx="10" fill="#FFFFFF" stroke="#E4DFD5"/>
+<path d="M316,94 a10,10 0 0 1 10,-10 h248 a10,10 0 0 1 10,10 v46 h-268 z" fill="#2F6FB2"/>
+<text x="332" y="110" font-size="16" font-weight="600" fill="#FFFFFF">SPSC ring</text>
+<text x="332" y="130" font-size="13" fill="#DCE7F4">the element behind a shared_ptr</text>
+<text x="332" y="168" font-size="14" fill="#4A5568"><tspan font-weight="600" fill="#172033">push</tspan>  1 allocation, 1 store</text>
+<text x="332" y="192" font-size="14" fill="#4A5568"><tspan font-weight="600" fill="#172033">pop</tspan>  moves the pointer out</text>
+<text x="332" y="216" font-size="14" fill="#4A5568"><tspan font-weight="600" fill="#172033">later</tspan>  frees the element</text>
+<line x1="332" y1="236" x2="568" y2="236" stroke="#E4DFD5"/>
+<text x="362" y="272" font-size="30" font-weight="600" fill="#172033" text-anchor="middle">1</text>
+<text x="450" y="272" font-size="30" font-weight="600" fill="#172033" text-anchor="middle">1</text>
+<text x="538" y="272" font-size="30" font-weight="600" fill="#172033" text-anchor="middle">0</text>
+<text x="362" y="292" font-size="12" fill="#5F6773" text-anchor="middle">allocations</text>
+<text x="450" y="292" font-size="12" fill="#5F6773" text-anchor="middle">frees</text>
+<text x="538" y="292" font-size="12" fill="#5F6773" text-anchor="middle">locks</text>
+<text x="332" y="332" font-size="15" fill="#172033"><tspan font-weight="600">3.4</tspan> M elements/s</text>
+</g>
+<g>
+<rect x="604" y="84" width="268" height="266" rx="10" fill="#FFFFFF" stroke="#C2562A" stroke-width="2"/>
+<path d="M604,94 a10,10 0 0 1 10,-10 h248 a10,10 0 0 1 10,10 v46 h-268 z" fill="#B4491F"/>
+<text x="620" y="110" font-size="16" font-weight="600" fill="#FFFFFF">Inline SPSC ring</text>
+<text x="620" y="130" font-size="13" fill="#FFE4D4">the element held in the slot</text>
+<text x="620" y="168" font-size="14" fill="#4A5568"><tspan font-weight="600" fill="#172033">push</tspan>  copies into the slot</text>
+<text x="620" y="192" font-size="14" fill="#4A5568"><tspan font-weight="600" fill="#172033">pop</tspan>  lends the slot</text>
+<text x="620" y="216" font-size="14" fill="#4A5568"><tspan font-weight="600" fill="#172033">later</tspan>  destroyed in place</text>
+<line x1="620" y1="236" x2="856" y2="236" stroke="#E4DFD5"/>
+<text x="650" y="272" font-size="30" font-weight="600" fill="#B04A20" text-anchor="middle">0</text>
+<text x="738" y="272" font-size="30" font-weight="600" fill="#B04A20" text-anchor="middle">0</text>
+<text x="826" y="272" font-size="30" font-weight="600" fill="#B04A20" text-anchor="middle">0</text>
+<text x="650" y="292" font-size="12" fill="#5F6773" text-anchor="middle">allocations</text>
+<text x="738" y="292" font-size="12" fill="#5F6773" text-anchor="middle">frees</text>
+<text x="826" y="292" font-size="12" fill="#5F6773" text-anchor="middle">locks</text>
+<text x="620" y="332" font-size="15" fill="#B04A20"><tspan font-weight="600">67</tspan> M elements/s</text>
+</g>
+</svg>

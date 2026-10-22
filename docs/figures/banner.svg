@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-label="WTC: a compiler that knows what a queue is">
+<title>WTC: a compiler that knows what a queue is</title>
+<defs>
+<marker id="head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9AA7BC"/></marker>
+</defs>
+<rect width="1280" height="360" rx="18" fill="#172033"/>
+<text x="56" y="76" font-size="17" font-weight="600" letter-spacing="3" fill="#E8894F">WTC · WELL-TEMPERED COMPILER FOR MULTITHREADING</text>
+<text x="56" y="146" font-size="50" font-weight="600" fill="#F4F1EA">A compiler that knows</text>
+<text x="56" y="204" font-size="50" font-weight="600" fill="#F4F1EA">what a queue is</text>
+<text x="56" y="252" font-size="19" fill="#C9D2E0">Queues and mutexes as operations of an MLIR dialect: the</text>
+<text x="56" y="280" font-size="19" fill="#C9D2E0">compiler proves how a program uses each one, picks the cheapest</text>
+<text x="56" y="308" font-size="19" fill="#C9D2E0">safe implementation, and checks the promises the program makes.</text>
+<rect x="770" y="62" width="262" height="46" rx="8" fill="#22304A" stroke="#3A465C"/>
+<text x="786" y="91" font-family="JetBrains Mono, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" fill="#F4F1EA">wtc::queue&lt;rec&gt; q;</text>
+<line x1="901" y1="110" x2="901" y2="140" stroke="#9AA7BC" stroke-width="2" marker-end="url(#head)"/>
+<rect x="770" y="146" width="262" height="66" rx="8" fill="#22304A" stroke="#2F6FB2" stroke-width="2"/>
+<text x="786" y="171" font-size="14" letter-spacing="1" fill="#9AA7BC">PROVED FROM THE THREADS</text>
+<text x="786" y="198" font-size="18" font-weight="600" fill="#F4F1EA">1 producer · 1 consumer</text>
+<line x1="901" y1="214" x2="901" y2="244" stroke="#9AA7BC" stroke-width="2" marker-end="url(#head)"/>
+<rect x="770" y="250" width="262" height="66" rx="8" fill="#C2562A"/>
+<text x="786" y="276" font-size="18" font-weight="600" fill="#FFFDF9">inline SPSC ring</text>
+<text x="786" y="302" font-size="14" fill="#FFE4D4">no lock, no allocation</text>
+<line x1="1036" y1="283" x2="1066" y2="262" stroke="#9AA7BC" stroke-width="2" marker-end="url(#head)"/>
+<g fill="#E8894F">
+<rect x="1137" y="103" width="26" height="18" rx="4" transform="rotate(0 1150 190)"/>
+<rect x="1137" y="103" width="26" height="18" rx="4" transform="rotate(30 1150 190)"/>
+<rect x="1137" y="103" width="26" height="18" rx="4" transform="rotate(60 1150 190)"/>
+<rect x="1137" y="103" width="26" height="18" rx="4" transform="rotate(90 1150 190)"/>
+<rect x="1137" y="103" width="26" height="18" rx="4" transform="rotate(120 1150 190)"/>
+<rect x="1137" y="103" width="26" height="18" rx="4" transform="rotate(150 1150 190)"/>
+<rect x="1137" y="103" width="26" height="18" rx="4" transform="rotate(180 1150 190)"/>
+</g>
+<g fill="#2C3850" stroke="#3A465C">
+<rect x="1137" y="103" width="26" height="18" rx="4" transform="rotate(210 1150 190)"/>
+<rect x="1137" y="103" width="26" height="18" rx="4" transform="rotate(240 1150 190)"/>
+<rect x="1137" y="103" width="26" height="18" rx="4" transform="rotate(270 1150 190)"/>
+<rect x="1137" y="103" width="26" height="18" rx="4" transform="rotate(300 1150 190)"/>
+<rect x="1137" y="103" width="26" height="18" rx="4" transform="rotate(330 1150 190)"/>
+</g>
+<text x="1150" y="92" font-size="15" font-weight="600" fill="#E8894F" text-anchor="middle">pop</text>
+<text x="1093" y="300" font-size="15" font-weight="600" fill="#7FA6D6" text-anchor="middle">push</text>
+<text x="1150" y="186" font-size="14" fill="#9AA7BC" text-anchor="middle">elements</text>
+<text x="1150" y="204" font-size="14" fill="#9AA7BC" text-anchor="middle">in the slots</text>
+</svg>
