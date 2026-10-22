@@ -235,6 +235,23 @@ public:
     // names only its own parameter.
     cir::FuncOp resolveEntry(Value v, Instance *inst, unsigned depth = 0) const;
 
+    // The function a std::thread starts. libstdc++'s constructor is a
+    // template instantiated per callable: it allocates a
+    // _State_impl<_Invoker<tuple<F, Args...>>>, moves the callable into it
+    // and hands it to the bodiless _M_start_thread, and the new thread runs
+    // that state's _M_run, whose only mention in the module is the state's
+    // vtable. The state's type, read off the constructor call that builds
+    // it in the same function as `start`, names the entry. Null when
+    // `start` is not that call or the module holds no such _M_run.
+    cir::FuncOp stdThreadEntry(cir::CallOp start);
+
+    // The callable a std::thread runs, from the constructor instance that
+    // built it: the second operand of the constructor call, through
+    // single-assignment slots, copies out of a member-pointer constant and
+    // the call chain of `ctx`, to a named function. Null when that trail
+    // does not end at one.
+    cir::FuncOp resolveCallable(Value v, Instance *ctx) const;
+
     // Whether f, or anything it reaches by a direct call or by spawning a
     // thread, contains an operation the predicate accepts. Computed for the
     // whole module on the first call, for the predicate passed then: pass the
@@ -348,6 +365,15 @@ private:
     // The counted loop whose iterations each start one thread at `spawn`
     // in `inst`, when that loop is the whole of the spawn's repetition.
     Operation *countingLoop(Operation *spawn, const Instance &inst);
+    // The functions with indirect calls that a std::thread's _M_run
+    // reaches, and the named functions those calls may run: the callables
+    // handed to the thread constructor at every site that builds that
+    // state. `unresolved` when some site's callable could not be read.
+    struct InvokeTargets {
+        llvm::SmallVector<Operation *, 4> funcs;
+        bool unresolved = false;
+    };
+    void computeInvokeTargets();
     const DataLayout &dataLayout() const;
     void noteRemark(Operation *at, const llvm::Twine &msg);
     void addRootsForModule();
@@ -413,6 +439,11 @@ private:
     // standard headers that was nine seconds of eleven.
     std::optional<llvm::DenseSet<Operation *>> addressTaken_;
     bool isAddressTaken(cir::FuncOp f);
+    // std::thread state record type -> its _M_run, over the module once.
+    llvm::DenseMap<Type, Operation *> stateRun_;
+    bool stateRunComputed_ = false;
+    llvm::DenseMap<Operation *, InvokeTargets> invokeTargets_;
+    bool invokeTargetsComputed_ = false;
     bool capExceeded_ = false;
     unsigned remarks_ = 0;
     llvm::SmallVector<std::pair<Operation *, std::string>, 8> pendingRemarks_;

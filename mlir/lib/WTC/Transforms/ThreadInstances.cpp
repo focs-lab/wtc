@@ -185,6 +185,122 @@ static bool entryComesFromParameter(Value v) {
     return isa<BlockArgument>(traceToRoot(v));
 }
 
+// std::thread. libstdc++'s constructor `thread(F&&, Args&&...)` is a
+// template the translation unit instantiates once per callable type. Its
+// body allocates a `_State_impl<_Invoker<tuple<F, Args...>>>`, moves the
+// callable into it and hands it to the bodiless `_M_start_thread`. The new
+// thread runs the state's virtual `_M_run`, which calls down through
+// `_Invoker::operator()` and `std::__invoke_impl` to the callable: a
+// lambda's `operator()` by a direct call, a function or a member pointer by
+// an indirect call through the tuple. Nothing names `_M_run` but the
+// state's vtable, and nothing names the callable but the constructor's
+// second operand, so both are read from the constructor.
+
+static bool isStdThreadStart(cir::FuncOp f) {
+    return f && f.getSymName().contains("6thread15_M_start_thread");
+}
+
+// A template constructor of std::thread, `_ZNSt6threadC[12]I...`; the
+// non-template ones (`C2EOS_`, the move constructor) have no `I`.
+static bool isStdThreadCtor(cir::FuncOp f) {
+    if (!f || f.getBody().empty()) return false;
+    StringRef n = f.getSymName();
+    return n.consume_front("_ZNSt6threadC") && n.size() > 1 && (n[0] == '1' || n[0] == '2') && n[1] == 'I';
+}
+
+// The call in a std::thread constructor that builds the state object, and
+// so names its type: `_State_impl<...>::_State_impl(F&&, Args&&...)`.
+static cir::CallOp stateConstructorCall(cir::FuncOp threadCtor) {
+    cir::CallOp found;
+    if (!threadCtor || threadCtor.getBody().empty()) return found;
+    threadCtor.walk([&](cir::CallOp call) {
+        if (found) return;
+        cir::FuncOp callee = lookupCallee(call);
+        if (!callee) return;
+        StringRef n = callee.getSymName();
+        if (!n.starts_with("_ZNSt6thread11_State_impl") || !(n.contains("EC2I") || n.contains("EC1I"))) return;
+        if (call.getNumOperands() == 0) return;
+        auto pt = dyn_cast<cir::PointerType>(call.getOperand(0).getType());
+        if (pt && isa<cir::RecordType>(pt.getPointee())) found = call;
+    });
+    return found;
+}
+
+// The function a member-pointer constant names: `&pool::worker` is a
+// private constant record whose first member views the function (a
+// virtual member's first member is an offset, not a view).
+static cir::FuncOp memberPointerTarget(Value v) {
+    auto gg = traceToLocalRoot(v).getDefiningOp<cir::GetGlobalOp>();
+    if (!gg) return nullptr;
+    auto g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr());
+    if (!g || !g.getConstant() || !g.getInitialValue()) return nullptr;
+    auto rec = dyn_cast<cir::ConstRecordAttr>(*g.getInitialValue());
+    if (!rec || rec.getMembers().empty()) return nullptr;
+    auto gv = dyn_cast<cir::GlobalViewAttr>(rec.getMembers()[0]);
+    if (!gv || (gv.getIndices() && !gv.getIndices().empty())) return nullptr;
+    return SymbolTable::lookupNearestSymbolFrom<cir::FuncOp>(g, gv.getSymbol().getAttr());
+}
+
+// The named functions a std::thread constructor's callable operand may be,
+// read without a call string: through single-assignment slots, a copy out
+// of a member-pointer constant and, for a parameter, every call site of
+// the function that holds it. False when some trail ends elsewhere -- at a
+// lambda, at a pointer loaded from memory, at a call site that is not
+// direct -- and then nothing is claimed about the thread's callable.
+static bool callableSources(Value v, unsigned depth, llvm::SmallVectorImpl<cir::FuncOp> &out) {
+    if (depth > 8) return false;
+    Value t = traceToRoot(v);
+    auto add = [&](cir::FuncOp f) {
+        if (!llvm::is_contained(out, f)) out.push_back(f);
+        return true;
+    };
+    if (cir::FuncOp f = resolveFunctionOperand(t)) return add(f);
+    if (cir::FuncOp f = memberPointerTarget(t)) return add(f);
+    // The constructor takes the callable by reference: the operand is the
+    // slot that holds a function pointer, or a member-pointer temporary
+    // copied out of its constant. Every value the slot takes must be read.
+    if (auto slot = t.getDefiningOp<cir::AllocaOp>()) {
+        bool any = false;
+        for (Operation *u : slot->getUsers()) {
+            if (isa<cir::LoadOp, cir::LifetimeStartOp, cir::LifetimeEndOp>(u)) continue;
+            Value from;
+            if (auto cp = dyn_cast<cir::CopyOp>(u)) {
+                if (cp.getDst() != slot.getResult()) return false;
+                from = cp.getSrc();
+            } else if (auto st = dyn_cast<cir::StoreOp>(u)) {
+                if (st.getAddr() != slot.getResult()) return false;
+                from = st.getValue();
+            } else if (auto call = dyn_cast<cir::CallOp>(u)) {
+                // Handed to a std::thread constructor, which reads it.
+                if (!isStdThreadCtor(lookupCallee(call))) return false;
+                continue;
+            } else {
+                return false;
+            }
+            if (!callableSources(from, depth + 1, out)) return false;
+            any = true;
+        }
+        return any;
+    }
+    auto arg = dyn_cast<BlockArgument>(t);
+    if (!arg) return false;
+    auto owner = dyn_cast_or_null<cir::FuncOp>(arg.getOwner()->getParentOp());
+    if (!owner || owner.getBody().empty() || arg.getOwner() != &owner.getBody().front()) return false;
+    auto uses = SymbolTable::getSymbolUses(owner, owner->getParentOfType<ModuleOp>());
+    if (!uses) return false;
+    bool any = false;
+    for (const SymbolTable::SymbolUse &u : *uses) {
+        auto site = dyn_cast<cir::CallOp>(u.getUser());
+        if (!site || site.isIndirect() || site.getCalleeAttr() != u.getSymbolRef()) return false;
+        // A direct call's operands are the callee's parameters, a hidden
+        // return slot included on both sides.
+        const unsigned k = arg.getArgNumber();
+        if (k >= site.getNumOperands() || !callableSources(site.getOperand(k), depth + 1, out)) return false;
+        any = true;
+    }
+    return any;
+}
+
 // Computed for the whole module at once, as a fixpoint over the call graph.
 // An earlier version recursed and cached "no" for a function while it was
 // still being explored, so in a recursive cycle the answer depended on
@@ -207,6 +323,11 @@ bool ThreadInstanceWalk::reachesOp(cir::FuncOp f, llvm::function_ref<bool(Operat
                 cir::FuncOp callee = lookupCallee(call);
                 if (!callee) return;
                 if (getSemanticKind(callee) == SemanticOpKind::ThreadSpawn) {
+                    if (isStdThreadStart(callee)) {
+                        if (cir::FuncOp entry = stdThreadEntry(call))
+                            callers[entry.getOperation()].push_back(fn.getOperation());
+                        return;
+                    }
                     const unsigned k = spawnEntryOperand(call);
                     if (k >= call.getNumOperands()) return;
                     // Resolved as expand() resolves it, through casts and a
@@ -235,6 +356,11 @@ bool ThreadInstanceWalk::reachesOp(cir::FuncOp f, llvm::function_ref<bool(Operat
             reachesCache_[fn.getOperation()] = direct;
             if (direct) work.push_back(fn.getOperation());
         });
+        // The indirect call in a std::thread's invoker runs the callable
+        // the constructor was handed.
+        computeInvokeTargets();
+        for (auto &[g, targets] : invokeTargets_)
+            for (Operation *c : targets.funcs) callers[c].push_back(g);
         while (!work.empty()) {
             Operation *g = work.pop_back_val();
             for (Operation *c : callers.lookup(g)) {
@@ -244,6 +370,100 @@ bool ThreadInstanceWalk::reachesOp(cir::FuncOp f, llvm::function_ref<bool(Operat
         }
     }
     return reachesCache_.lookup(f.getOperation());
+}
+
+cir::FuncOp ThreadInstanceWalk::stdThreadEntry(cir::CallOp start) {
+    if (!isStdThreadStart(lookupCallee(start))) return nullptr;
+    auto ctor = start->getParentOfType<cir::FuncOp>();
+    if (!isStdThreadCtor(ctor)) return nullptr;
+    cir::CallOp sc = stateConstructorCall(ctor);
+    if (!sc) return nullptr;
+    if (!stateRunComputed_) {
+        stateRunComputed_ = true;
+        module_.walk([&](cir::FuncOp f) {
+            const StringRef n = f.getSymName();
+            if (f.getBody().empty() || f.getNumArguments() != 1 || !n.contains("6thread11_State_impl") ||
+                !n.ends_with("6_M_runEv"))
+                return;
+            if (auto pt = dyn_cast<cir::PointerType>(f.getArgument(0).getType()))
+                stateRun_[pt.getPointee()] = f.getOperation();
+        });
+    }
+    const Type state = cast<cir::PointerType>(sc.getOperand(0).getType()).getPointee();
+    return dyn_cast_or_null<cir::FuncOp>(stateRun_.lookup(state));
+}
+
+void ThreadInstanceWalk::computeInvokeTargets() {
+    if (invokeTargetsComputed_) return;
+    invokeTargetsComputed_ = true;
+    module_.walk([&](cir::FuncOp ctor) {
+        if (!isStdThreadCtor(ctor)) return;
+        cir::CallOp start;
+        ctor.walk([&](cir::CallOp c) { if (!start && isStdThreadStart(lookupCallee(c))) start = c; });
+        cir::FuncOp entry = start ? stdThreadEntry(start) : cir::FuncOp();
+        if (!entry) return;
+        // The library's own instantiations under _M_run that hold an
+        // indirect call: for a lambda there is none, its operator() is
+        // called by name.
+        llvm::SmallVector<cir::FuncOp, 4> impls;
+        llvm::DenseSet<Operation *> seen;
+        llvm::SmallVector<std::pair<cir::FuncOp, unsigned>, 8> work{{entry, 0}};
+        while (!work.empty()) {
+            auto [f, depth] = work.pop_back_val();
+            if (!seen.insert(f.getOperation()).second || depth > 8) continue;
+            f.walk([&](cir::CallOp c) {
+                cir::FuncOp callee = lookupCallee(c);
+                if (!callee) { if (!llvm::is_contained(impls, f)) impls.push_back(f); return; }
+                const StringRef n = callee.getSymName();
+                if (!callee.getBody().empty() && (n.starts_with("_ZSt") || n.starts_with("_ZNSt")))
+                    work.push_back({callee, depth + 1});
+            });
+        }
+        if (impls.empty()) return;
+        llvm::SmallVector<cir::FuncOp, 4> cands;
+        const bool ok = ctor.getNumArguments() > 1 && callableSources(ctor.getArgument(1), 0, cands);
+        for (cir::FuncOp g : impls) {
+            InvokeTargets &t = invokeTargets_[g.getOperation()];
+            if (!ok) t.unresolved = true;
+            for (cir::FuncOp c : cands)
+                if (!llvm::is_contained(t.funcs, c.getOperation())) t.funcs.push_back(c.getOperation());
+        }
+    });
+}
+
+cir::FuncOp ThreadInstanceWalk::resolveCallable(Value v, Instance *ctx) const {
+    for (unsigned guard = 0; guard < 64; ++guard) {
+        Value t = traceToRoot(v);
+        if (cir::FuncOp f = resolveFunctionOperand(t)) return f;
+        if (cir::FuncOp f = memberPointerTarget(t)) return f;
+        if (auto slot = t.getDefiningOp<cir::AllocaOp>()) {
+            // The slot the callable is passed by reference from: one value
+            // stored or copied into it, read by the constructor.
+            Value from;
+            for (Operation *u : slot->getUsers()) {
+                if (isa<cir::LoadOp, cir::LifetimeStartOp, cir::LifetimeEndOp>(u)) continue;
+                Value this_;
+                if (auto cp = dyn_cast<cir::CopyOp>(u); cp && cp.getDst() == slot.getResult()) this_ = cp.getSrc();
+                else if (auto st = dyn_cast<cir::StoreOp>(u); st && st.getAddr() == slot.getResult()) this_ = st.getValue();
+                else if (auto call = dyn_cast<cir::CallOp>(u); call && isStdThreadCtor(lookupCallee(call))) continue;
+                else return nullptr;
+                if (from) return nullptr;
+                from = this_;
+            }
+            if (!from) return nullptr;
+            v = from;
+            continue;
+        }
+        auto arg = dyn_cast<BlockArgument>(t);
+        if (!arg || !ctx || !ctx->site || arg.getOwner() != &ctx->func.getBody().front()) return nullptr;
+        cir::CallOp site = ctx->site;
+        if (getSemanticKind(lookupCallee(site)) == SemanticOpKind::ThreadSpawn) return nullptr;
+        const unsigned k = arg.getArgNumber();
+        if (k >= site.getNumOperands()) return nullptr;
+        v = site.getOperand(k);
+        ctx = ctx->parent;
+    }
+    return nullptr;
 }
 
 bool ThreadInstanceWalk::hasIndirectCall(cir::FuncOp f) {
@@ -300,7 +520,7 @@ bool ThreadInstanceWalk::canSpawn(cir::FuncOp f) {
     return spawnsCache_.lookup(f.getOperation());
 }
 
-static bool flowsOnlyToSpawnEntry(Value v, unsigned depth);
+static bool flowsOnlyToSpawnEntry(Value v, unsigned depth, Operation *skip = nullptr);
 
 // Whether a use of a function's symbol takes its address, so that the
 // function may run somewhere the call graph does not show -- not a direct
@@ -316,6 +536,27 @@ static bool takesAddress(const SymbolTable::SymbolUse &use) {
     if (isa<QueuePushOp, QueuePopOp, LockOp, UnlockOp>(user)) return false;   // fallback_impl
     if (auto gg = dyn_cast<cir::GetGlobalOp>(user))
         if (flowsOnlyToSpawnEntry(gg.getResult(), 0)) return false;
+    if (auto g = dyn_cast<cir::GlobalOp>(user)) {
+        // A std::thread state's vtable names its _M_run, which runs only as
+        // the thread that state starts, and the walk reaches it through the
+        // constructor that builds the state.
+        if (g.getSymName().starts_with("_ZTVNSt6thread11_State_impl") &&
+            use.getSymbolRef().getRootReference().getValue().ends_with("6_M_runEv"))
+            return false;
+        // A member-pointer constant, `&pool::worker`, that is only ever
+        // copied into a std::thread constructor's callable operand.
+        if (g.getConstant() && g.getSymName().starts_with("__const.")) {
+            auto uses = SymbolTable::getSymbolUses(g, g->getParentOfType<ModuleOp>());
+            if (!uses) return true;
+            bool any = false;
+            for (const SymbolTable::SymbolUse &u : *uses) {
+                auto gg = dyn_cast<cir::GetGlobalOp>(u.getUser());
+                if (!gg || !flowsOnlyToSpawnEntry(gg.getResult(), 0)) return true;
+                any = true;
+            }
+            return !any;
+        }
+    }
     return true;                            // a global initializer, a vtable, anything else
 }
 
@@ -366,6 +607,11 @@ void ThreadInstanceWalk::computeSpawns() {
             }
         }
     };
+    // The indirect call in a std::thread's invoker runs the callable the
+    // constructor was handed, which may itself start threads.
+    computeInvokeTargets();
+    for (auto &[g, targets] : invokeTargets_)
+        for (Operation *c : targets.funcs) callers[c].push_back(g);
     propagate();
     bool any = false;
     module_.walk([&](cir::FuncOp fn) {
@@ -1319,6 +1565,13 @@ Operation *ThreadInstanceWalk::resolveRootImpl(Value v, Instance *inst, unsigned
     cir::CallOp site = inst->site;
     unsigned idx;
     if (getSemanticKind(lookupCallee(site)) == SemanticOpKind::ThreadSpawn) {
+        // A std::thread's _M_run has one parameter, the state object the
+        // constructor allocated; the spawn's own operands say nothing.
+        if (isStdThreadStart(lookupCallee(site))) {
+            cir::CallOp sc = i == 0 ? stateConstructorCall(site->getParentOfType<cir::FuncOp>()) : cir::CallOp();
+            if (!sc) return fail(Unplaced::Other);
+            return resolveRootImpl(sc.getOperand(0), inst->parent, depth + 1, cir::CallOp(), place, many);
+        }
         // The entry's parameter i is the i-th argument the spawn passes on.
         idx = spawnFirstArgOperand(site) + i;
     } else {
@@ -1391,10 +1644,11 @@ cir::FuncOp ThreadInstanceWalk::resolveEntry(Value v, Instance *inst, unsigned d
 // pass it on, as memcached's create_worker(func, arg) does. Such a function
 // runs as the thread that spawn starts, which the walk resolves through the
 // call chain; it is not a function that may run anywhere.
-static bool flowsOnlyToSpawnEntry(Value v, unsigned depth) {
+static bool flowsOnlyToSpawnEntry(Value v, unsigned depth, Operation *skip) {
     if (depth > 8) return false;
     for (OpOperand &use : v.getUses()) {
         Operation *user = use.getOwner();
+        if (user == skip) continue;
         if (auto c = dyn_cast<cir::CastOp>(user)) {
             // The same casts traceToLocalRoot follows backwards: through an
             // integer round trip the entry can no longer be resolved at the
@@ -1413,12 +1667,29 @@ static bool flowsOnlyToSpawnEntry(Value v, unsigned depth) {
                 if (idx != spawnEntryOperand(call)) return false;
                 continue;
             }
+            // The callable of a std::thread: the thread runs it, and the
+            // walk finds it again from the constructor's call sites, so
+            // the two readings must agree on what can be read.
+            if (isStdThreadCtor(callee)) {
+                llvm::SmallVector<cir::FuncOp, 4> cands;
+                if (idx != 1 || !callableSources(call.getOperand(1), 0, cands)) return false;
+                continue;
+            }
             if (getSemanticKind(callee) != SemanticOpKind::Unknown || callee.getBody().empty() ||
                 idx >= callee.getNumArguments())
                 return false;
             if (!flowsOnlyToSpawnEntry(callee.getArgument(idx), depth + 1)) return false;
             continue;
         }
+        // A member-pointer constant copied into a temporary: the temporary
+        // may go nowhere but a std::thread constructor.
+        if (auto cp = dyn_cast<cir::CopyOp>(user)) {
+            auto slot = cp.getDst().getDefiningOp<cir::AllocaOp>();
+            if (cp.getSrc() != v || !slot) return false;
+            if (!flowsOnlyToSpawnEntry(slot.getResult(), depth + 1, user)) return false;
+            continue;
+        }
+        if (isa<cir::LifetimeStartOp, cir::LifetimeEndOp>(user)) continue;
         // A parameter spilled to its slot at -O0: follow the loads -- but
         // only where resolveEntry will follow them too, which is where
         // traceToRoot takes the slot for a single assignment (one store, in
@@ -1431,6 +1702,16 @@ static bool flowsOnlyToSpawnEntry(Value v, unsigned depth) {
             if (!slot || st.getValue() != v) return false;
             for (Operation *u : slot->getUsers()) {
                 if (u == user) continue;
+                if (isa<cir::LifetimeStartOp, cir::LifetimeEndOp>(u)) continue;
+                // The slot itself handed to a std::thread constructor, which
+                // takes its callable by reference.
+                if (auto call = dyn_cast<cir::CallOp>(u)) {
+                    llvm::SmallVector<cir::FuncOp, 4> cands;
+                    if (!isStdThreadCtor(lookupCallee(call)) || call.getNumOperands() < 2 ||
+                        call.getOperand(1) != slot.getResult() || !callableSources(slot.getResult(), 0, cands))
+                        return false;
+                    continue;
+                }
                 auto ld = dyn_cast<cir::LoadOp>(u);
                 if (!ld || traceToRoot(ld.getResult()) != traceToRoot(v) ||
                     !flowsOnlyToSpawnEntry(ld.getResult(), depth + 1))
@@ -1507,14 +1788,62 @@ void ThreadInstanceWalk::addRootsForModule() {
 
 void ThreadInstanceWalk::expand(Instance &inst) {
     cir::FuncOp f = inst.func;
+    // A function this instance calls, on the same thread.
+    auto addCallee = [&](cir::CallOp call, cir::FuncOp callee) {
+        bool known;
+        const Mult site = siteMult(call.getOperation(), f, known);
+        const Mult m = join(inst.execMult, site);
+        const bool certainlyMany = (inst.execMult == Mult::Many && !inst.execUnknown) ||
+                                   (known && site == Mult::Many);
+        if (Instance *child = addIfRoom({callee, inst.thread, inst.threadMult, m, call, &inst,
+                                         inst.speculative,
+                                         inst.startup && !spawnPrecedes(call.getOperation(), f)})) {
+            child->execUnknown = !certainlyMany && (!known || inst.execUnknown);
+            child->countLoop = inst.countLoop;
+            // In an unstructured function that can spawn, "no spawn precedes
+            // this call" is a guess: the goto may jump over the spawn or
+            // back behind it.
+            child->startupUnknown = inst.startupUnknown ||
+                                    (inst.startup && isUnstructured(f) && canSpawn(f));
+        }
+    };
     f.walk([&](cir::CallOp call) {
         cir::FuncOp callee = lookupCallee(call);
-        if (!callee) return;                                   // indirect: its targets are roots
+        if (!callee) {
+            // Indirect: its targets are roots, except inside a std::thread's
+            // invoker, where the call runs the callable the constructor was
+            // handed -- read through this instance's own chain when it can
+            // be, else every callable any site hands that constructor.
+            computeInvokeTargets();
+            auto it = invokeTargets_.find(f.getOperation());
+            if (it == invokeTargets_.end()) return;
+            llvm::SmallVector<cir::FuncOp, 4> targets;
+            const Instance *start = &inst;
+            while (start->parent && start->parent->thread == start->thread) start = start->parent;
+            if (start->site && isStdThreadStart(lookupCallee(start->site)) && start->parent &&
+                start->parent->func.getNumArguments() > 1)
+                if (cir::FuncOp one = resolveCallable(start->parent->func.getArgument(1), start->parent))
+                    targets.push_back(one);
+            if (targets.empty() && !it->second.unresolved)
+                for (Operation *t : it->second.funcs) targets.push_back(cast<cir::FuncOp>(t));
+            if (targets.empty()) {
+                noteRemark(call, "wtc: spawn target could not be resolved to a function in this module");
+                return;
+            }
+            for (cir::FuncOp t : targets)
+                if (!t.getBody().empty() && relevant_(t)) addCallee(call, t);
+            return;
+        }
         const SemanticOpKind kind = getSemanticKind(callee);
         if (kind == SemanticOpKind::ThreadSpawn) {
-            const unsigned k = spawnEntryOperand(call);
-            if (k >= call.getNumOperands()) return;
-            cir::FuncOp entry = resolveEntry(call.getOperand(k), &inst);
+            cir::FuncOp entry;
+            if (isStdThreadStart(callee)) {
+                entry = stdThreadEntry(call);
+            } else {
+                const unsigned k = spawnEntryOperand(call);
+                if (k >= call.getNumOperands()) return;
+                entry = resolveEntry(call.getOperand(k), &inst);
+            }
             if (!entry || entry.getBody().empty()) {
                 noteRemark(call, "wtc: spawn target could not be resolved to a function in this module");
                 return;
@@ -1544,32 +1873,30 @@ void ThreadInstanceWalk::expand(Instance &inst) {
         if (kind != SemanticOpKind::Unknown) return;           // shim functions: nothing inside
         if (callee.getBody().empty()) return;                  // a declaration
         if (!relevant_(callee)) return;
-        bool known;
-        const Mult site = siteMult(call.getOperation(), f, known);
-        const Mult m = join(inst.execMult, site);
-        const bool certainlyMany = (inst.execMult == Mult::Many && !inst.execUnknown) ||
-                                   (known && site == Mult::Many);
-        if (Instance *child = addIfRoom({callee, inst.thread, inst.threadMult, m, call, &inst,
-                                         inst.speculative,
-                                         inst.startup && !spawnPrecedes(call.getOperation(), f)})) {
-            child->execUnknown = !certainlyMany && (!known || inst.execUnknown);
-            child->countLoop = inst.countLoop;
-            // In an unstructured function that can spawn, "no spawn precedes
-            // this call" is a guess: the goto may jump over the spawn or
-            // back behind it.
-            child->startupUnknown = inst.startupUnknown ||
-                                    (inst.startup && isUnstructured(f) && canSpawn(f));
-        }
+        addCallee(call, callee);
     });
 }
 
 void ThreadInstanceWalk::addOrphanRoots() {
     // Externally visible functions with a body that nothing here calls may
-    // be called by another translation unit, on any thread.
+    // be called by another translation unit, on any thread. A function
+    // some call here names is not one of them, whether or not the walk
+    // came through that call: the std::thread constructor the shim's
+    // spawn instantiates is called from the shim's body, which the walk
+    // does not enter, and was being taken for a thread no one accounts
+    // for, started by anyone, any number of times.
+    llvm::DenseSet<Operation *> called;
+    module_.walk([&](cir::CallOp call) {
+        if (cir::FuncOp callee = lookupCallee(call)) called.insert(callee.getOperation());
+    });
     module_.walk([&](cir::FuncOp f) {
         if (f.getBody().empty()) return;
-        if (reachedFuncs_.count(f.getOperation())) return;
+        if (reachedFuncs_.count(f.getOperation()) || called.count(f.getOperation())) return;
         if (getSemanticKind(f) != SemanticOpKind::Unknown) return;
+        // A std::thread state's _M_run runs only as the thread its
+        // constructor starts, which the walk reaches from that constructor.
+        const StringRef n = f.getSymName();
+        if (n.contains("6thread11_State_impl") && n.ends_with("6_M_runEv")) return;
         const auto linkage = f.getLinkage();
         if (linkage == cir::GlobalLinkageKind::InternalLinkage ||
             linkage == cir::GlobalLinkageKind::PrivateLinkage)
