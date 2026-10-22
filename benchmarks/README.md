@@ -39,6 +39,7 @@ workloads/
                       strength and element ownership, alone and together
 apps/ferret/          PARSEC ferret ported onto the shim (GPL, see there)
 apps/dedup/           PARSEC dedup ported onto the shim (BSD-3, see there)
+apps/spdlog/          spdlog's asynchronous logger on the shim (MIT, see there)
 reach/oracle.json     every compiled queue's topology, read from its source
 scripts/
   check_env.sh        refuses to measure in an unfit environment
@@ -200,7 +201,8 @@ Legs: `w1`, `w2`, `w2pp`, `w3`, `w3wtc`, `w5`, `w6`, `smt`, `far`, `tbb`,
 `w1check`, and `smoke`, which runs everything once, tiny, unreserved. The
 evaluation's legs are `eval-w1`, `eval-w1smt`, `eval-w2`, `eval-w3`,
 `eval-w3grain`, `eval-w7`, `eval-w8`, `eval-w9`, `eval-ferret`,
-`eval-dedup` and `eval-ablation`; each one's comment in `campaign.sh` says which question it
+`eval-dedup`, `eval-ablation` and `eval-spdlog`; each one's comment in
+`campaign.sh` says which question it
 answers and what it needs.
 
 Figures come from a summarised leg:

@@ -8,8 +8,8 @@
 # (ping-pong), smoke (everything once, tiny sizes, no environment check);
 # the MVP's own: w1mvp, w2mvp, w3wtc, w7, w8; the evaluation's: eval-w1,
 # eval-w1smt, eval-w2, eval-w3, eval-w3grain, eval-w7, eval-w8, eval-w9,
-# eval-ferret, eval-dedup, eval-ablation, each with the question it answers
-# in its comment below.
+# eval-ferret, eval-dedup, eval-ablation, eval-spdlog, each with the question
+# it answers in its comment below.
 #
 # Legs that run builds made by tools/wtc-cc take the directory holding them
 # as BUILD and need the CMake build too, for the controls and the
@@ -708,6 +708,36 @@ case "$LEG" in
       done
     done
     cd "$ROOT"
+    control 901
+    ;;
+  eval-spdlog)
+    # RQ2 on an application the analysis reads as written: spdlog's
+    # asynchronous logger (BUILD: the bin directory of
+    # benchmarks/apps/spdlog/build.sh). N logging threads each write
+    # messages of 8, 64 and 256 bytes to a null sink through a pool of one
+    # worker, whose queue the compiler makes single-consumer when the pool
+    # is built: spdlog as released (its mutex and condition-variable
+    # queue), the port on the general-purpose queue (B0), the compiler's
+    # build, and the tag declared by hand (B3). Messages a second from the
+    # first call to the last message written, and the latency of the log
+    # call itself. Needs 9 cores: the worker and up to 8 logging threads.
+    "$HERE/check_env.sh" 9 || exit 1
+    meta
+    warmup; control 900
+    ALLOCS=$(allocs_for glibc jemalloc mimalloc)
+    for rep in $(seq 0 $((REPS-1))); do
+      for alloc in $ALLOCS; do
+        use_alloc "$alloc"
+        for threads in 1 2 4 8; do
+          for payload in 8 64 256; do
+            for v in orig generic compiler hand; do
+              lock "$BUILD/spdlog-$v" --variant "$v" --threads "$threads" --n 1000000 --payload "$payload" \
+                   --sink null --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt"
+            done
+          done
+        done
+      done
+    done
     control 901
     ;;
   eval-dedup)
