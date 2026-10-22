@@ -8,7 +8,7 @@
 #include <type_traits>
 
 #include "topology.hpp"
-#include "../runtime/mpsc_list.hpp"
+#include "../runtime/segment_queue.hpp"
 #include "../runtime/spmc_ring.hpp"
 #include "../runtime/spsc_ring.hpp"
 
@@ -19,11 +19,13 @@
 namespace wtc {
 
 // A queue with one API and several implementations, chosen per object at
-// construction by a topology tag. The general-purpose one is a two-lock
-// linked list; the single-producer single-consumer one is a wait-free ring
-// from runtime/, the one for many producers and one consumer a list without
-// locks (mpsc), and the one for one producer and many consumers the same
-// ring with its consumers taking turns (spmc). The tag is the whole
+// construction by a topology tag. The general-purpose one is a list of array
+// segments whose cells producers and consumers take with one fetch-and-add
+// each (runtime/segment_queue.hpp), and the one for many producers and one
+// consumer (mpsc) the same queue with its consumer's side unshared; the
+// single-producer single-consumer one is a wait-free ring from runtime/,
+// and the one for one producer and many consumers the same ring with its
+// consumers taking turns (spmc). The tag is the whole
 // substitution mechanism: the compiler rewrites the constant at one
 // constructor call and every operation on that object follows it through
 // one predictable branch.
@@ -43,63 +45,20 @@ namespace wtc {
 // push_deferred for each element, then batch_end. The elements become
 // visible to consumers together, in order, at batch_end or every
 // WTC_BATCH_K elements, whichever comes first; until then they are the
-// producer's. One mutex acquisition (general-purpose), one release store
-// (the rings) or one exchange (mpsc) per run instead of one per element.
+// producer's. One fetch-and-add (general-purpose and mpsc) or one release
+// store (the rings) per run instead of one per element.
 // The compiler rewrites a loop of pushes into this shape where the program
 // allows it (WTC_BATCH, shim/progress.hpp); a program may also write it by
 // hand.
 template <typename T>
 class queue {
 private:
-    // The general-purpose implementation, verbatim from the original queue
-    // (see benchmarks/queues/generic_original.hpp for that file as it was).
-    struct generic_impl {
-        struct node {
-            std::shared_ptr<T> data;
-            std::unique_ptr<node> next;
-        };
-
-        std::unique_ptr<node> head;
-        node* tail;
-        std::mutex head_mutex;
-        std::mutex tail_mutex;
-
-        generic_impl() : head(new node), tail(head.get()) {}
-
-        node* get_tail() {
-            std::lock_guard<std::mutex> tail_lock(tail_mutex);
-            return tail;
-        }
-
-        std::unique_ptr<node> pop_head() {
-            std::lock_guard<std::mutex> head_lock(head_mutex);
-            if (head.get() == get_tail()) {
-                return nullptr;
-            }
-            std::unique_ptr<node> old_head = std::move(head);
-            head = std::move(old_head->next);
-            return old_head;
-        }
-
-        std::shared_ptr<T> try_pop() {
-            std::unique_ptr<node> old_head = pop_head();
-            return old_head ? old_head->data : std::shared_ptr<T>();
-        }
-
-        void push(const T& new_value) {
-            std::shared_ptr<T> new_data(std::make_shared<T>(std::move(new_value)));
-            std::unique_ptr<node> p(new node);
-            node* const new_tail = p.get();
-            std::lock_guard<std::mutex> tail_lock(tail_mutex);
-            tail->data = new_data;
-            tail->next = std::move(p);
-            tail = new_tail;
-        }
-    };
-
+    // The original queue's two-lock list is benchmarks/queues/
+    // generic_original.hpp, kept as a baseline.
+    using generic_impl = rt::segment_queue<std::shared_ptr<T>, true>;
     using spsc_impl = rt::spsc_ring<std::shared_ptr<T>>;
     using inline_impl = rt::spsc_ring<T>;
-    using mpsc_impl = rt::mpsc_list<std::shared_ptr<T>>;
+    using mpsc_impl = rt::segment_queue<std::shared_ptr<T>, false>;
     using spmc_impl = rt::spmc_ring<std::shared_ptr<T>>;
 
     // Inline storage needs the element's end to be invisible: it is
@@ -154,13 +113,12 @@ public:
     class batch {
         friend class queue;
         struct state {
-            // General-purpose: the element for the queue's current dummy
-            // node, and the chain that follows it, ending in a new dummy.
-            std::shared_ptr<T> first;
-            std::unique_ptr<typename generic_impl::node> rest;
-            typename generic_impl::node* rest_tail = nullptr;
-            // mpsc: the run linked so far.
-            typename mpsc_impl::chain run;
+            // General-purpose and mpsc: the run so far, constructed in
+            // place as it grows and pushed with one fetch-and-add.
+            alignas(std::shared_ptr<T>) unsigned char run_raw[WTC_BATCH_K * sizeof(std::shared_ptr<T>)];
+            std::shared_ptr<T>* run_at(unsigned i) {
+                return std::launder(reinterpret_cast<std::shared_ptr<T>*>(run_raw)) + i;
+            }
             unsigned pending = 0;
         };
         alignas(state) unsigned char raw[sizeof(state)];
@@ -231,10 +189,11 @@ public:
     topology tag() const { return tag_; }
 
 private:
-    // Makes the run so far visible: one release store on a ring, one splice
-    // under the tail lock on the general-purpose list, whose result is the
-    // list the same pushes made one by one would have built.
+    // Makes the run so far visible: one release store on a ring, one
+    // fetch-and-add for the run on the segmented queues; in each, the order
+    // the same pushes made one by one would give.
     void publish(typename batch::state& st) {
+        const unsigned n = st.pending;
         st.pending = 0;
         switch (tag_) {
         case topology::spsc_inline:
@@ -244,20 +203,17 @@ private:
             impl_.spsc.publish();
             return;
         case topology::mpsc:
-            impl_.mpsc.publish(st.run);
+            if (!n) return;
+            impl_.mpsc.push_run(st.run_at(0), n);
+            for (unsigned i = 0; i < n; ++i) st.run_at(i)->~shared_ptr();
             return;
         case topology::spmc:
             impl_.spmc.publish();
             return;
         default:
-            if (!st.first) return;
-            {
-                std::lock_guard<std::mutex> tail_lock(impl_.generic.tail_mutex);
-                impl_.generic.tail->data = std::move(st.first);
-                impl_.generic.tail->next = std::move(st.rest);
-                impl_.generic.tail = st.rest_tail;
-            }
-            st.rest_tail = nullptr;
+            if (!n) return;
+            impl_.generic.push_run(st.run_at(0), n);
+            for (unsigned i = 0; i < n; ++i) st.run_at(i)->~shared_ptr();
             return;
         }
     }
@@ -293,7 +249,9 @@ public:
             impl_.spmc.try_pop(out);
             return out;
         }
-        return impl_.generic.try_pop();
+        std::shared_ptr<T> out;
+        impl_.generic.try_pop(out);
+        return out;
     }
 
     // gnu::used: the compiler calls these where the program allows it, so
@@ -311,27 +269,13 @@ public:
         case topology::spsc:
             impl_.spsc.push_deferred(std::make_shared<T>(new_value));
             break;
-        case topology::mpsc:
-            impl_.mpsc.push_deferred(st.run, std::make_shared<T>(new_value));
-            break;
         case topology::spmc:
             impl_.spmc.push_deferred(std::make_shared<T>(new_value));
             break;
-        default: {
-            // The nodes and the element are allocated here, outside the
-            // lock; only the splice at the end of the run takes it.
-            using node = typename generic_impl::node;
-            if (!st.first) {
-                st.first = std::make_shared<T>(new_value);
-                st.rest.reset(new node);
-                st.rest_tail = st.rest.get();
-            } else {
-                st.rest_tail->data = std::make_shared<T>(new_value);
-                st.rest_tail->next.reset(new node);
-                st.rest_tail = st.rest_tail->next.get();
-            }
+        case topology::mpsc:
+        default:
+            ::new (static_cast<void*>(st.run_at(st.pending))) std::shared_ptr<T>(std::make_shared<T>(new_value));
             break;
-        }
         }
         if (++st.pending == WTC_BATCH_K) publish(st);
     }
@@ -360,7 +304,7 @@ public:
             impl_.spmc.push(std::make_shared<T>(new_value));
             return;
         }
-        impl_.generic.push(new_value);
+        impl_.generic.push(std::make_shared<T>(new_value));
     }
 };
 

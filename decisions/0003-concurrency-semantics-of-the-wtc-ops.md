@@ -82,3 +82,28 @@ analysis has to detect programs that rely on more than the contract (for
 example, a pop whose emptiness is branched on and then followed by an
 access to other shared state), or whether those are accepted as the
 programmer's responsibility, as they would be for any library swap.
+
+## Update, 22 Oct 2026: the general-purpose queue is no longer a mutex
+
+The general-purpose implementation, which every queue the analysis does not
+prove keeps, became the segmented queue (`runtime/segment_queue.hpp`), and
+its single-consumer form replaced the list for many producers. It meets the
+contract above and promises nothing beyond it:
+
+- every push happens-before the pop that returns its element;
+- it is linearisable, so a push that finishes before another starts comes
+  out first, and a pop that finds the queue empty with many consumers does so
+  when every reserved cell has been taken; the single-consumer form, like
+  the list before it, may report empty while a push that started earlier is
+  between taking its cell and filling it;
+- it is FIFO per producer, and a producer's batch comes out in its order;
+- it orders nothing against other objects. A program that relied on the
+  mutex of the original queue to order its operations against its other
+  mutexes, the empty-pop signal of the Context above among them, is
+  outside the contract, as it already was for every substitute.
+
+This moves the line the contract draws from the substitutes to the program
+as written. The original two-lock queue stays in the tree as a baseline
+(`benchmarks/queues/generic_original.hpp`), not as an implementation the
+shim offers.
+
