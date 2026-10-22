@@ -5,14 +5,16 @@
 // pragma. The struct is what anyone would write, and the fact that the two
 // fields are contended is invisible in the source. That is the point.
 //
-// The verdict here is `possible`, not `definite`, and that is the honest
-// answer rather than a weaker one. std::thread's constructor hands the
-// callable to the bodiless _M_start_thread inside a heap-allocated state
-// object, so the analysis sees *that* a thread starts -- the call is
-// recognised by name -- but not *which* function it runs. It knows only that
-// the two functions have their addresses taken, which is equally true of two
-// callbacks handed to one single-threaded event loop. The pthread_create
-// companion test, where the entry is visible, says `definite`.
+// The verdict is `definite`, as for the pthread_create companion test.
+// std::thread's constructor hands the callable to the bodiless
+// _M_start_thread inside a heap-allocated state object, and the new thread
+// runs that state's _M_run, which nothing names but the state's vtable:
+// the entry is read from there, and the function the thread runs from the
+// constructor's operand. The verdict used to be `possible`, which was the
+// honest answer then: the analysis saw that a thread started but not which
+// function it ran, and knew only that both functions had their addresses
+// taken, which is equally true of two callbacks handed to one
+// single-threaded event loop.
 //
 // std_thread_main.cpp checks the other half: that recognising the start is
 // enough to end main's start-up phase.
@@ -20,7 +22,7 @@
 // RUN: %clangxx -std=c++17 -fclangir -emit-cir %s -o %t.cir
 // RUN: wtc-opt %t.cir --wtc-false-sharing-diagnose 2>&1 >/dev/null | FileCheck %s
 //
-// CHECK: possible false sharing in @{{.*}}stats
+// CHECK: remark: wtc: false sharing in @{{.*}}stats
 // CHECK-SAME: 'hits'
 // CHECK-SAME: 'misses'
 
@@ -38,4 +40,4 @@ int main() {
     b.join();
     return static_cast<int>(stats.hits + stats.misses);
 }
-// CHECK: false sharing: 0 definite, 1 possible, 0 cold
+// CHECK: false sharing: 1 definite, 0 possible, 0 cold
