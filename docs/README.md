@@ -10,6 +10,7 @@
 | `evaluation.md` | The evaluation: its questions, baselines and method, the results so far, and the threats to them |
 | `corpus.md` | What people pad by hand, counted across 17 codebases, and what the false-sharing analysis finds on memcached |
 | `related-work.md` | What the compiler does against where each technique was done before, claim by claim, with checked citations; papers collected earlier are under `related-works/` |
+| `declared-topology-audit.md` | Hand-declared queue topologies read in DPDK's examples and in users of four SPSC libraries: which hold, which only by convention, and what a compiler check needs |
 | `toolchain.md` | Building and sharing the ClangIR-enabled Clang the project needs |
 | `MLIR Concur.pptx` | Early presentation on the dialect design and motivating examples; an artefact kept verbatim, metadata included |
 
