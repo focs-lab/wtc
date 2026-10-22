@@ -298,6 +298,9 @@ struct result_line {
         if (!all.count("peak_rss_kib")) all["peak_rss_kib"] = std::to_string(peak_rss_kib());
         if (const char* pass = std::getenv("WTC_PASS")) all["pass"] = std::string("\"") + pass + "\"";
         if (const char* where = std::getenv("WTC_PLACEMENT")) all["placement"] = std::string("\"") + where + "\"";
+        // The allocator the run was given (campaign.sh names it and preloads
+        // it); a line without it ran on glibc before the factor existed.
+        if (const char* alloc = std::getenv("WTC_ALLOC")) all["alloc"] = std::string("\"") + alloc + "\"";
         if (!g_cmdline.empty()) all["cmd"] = "\"" + g_cmdline + "\"";
         g_perf.add_to(all);
         add_alloc_counts(all);

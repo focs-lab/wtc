@@ -11,9 +11,10 @@
 #
 # Never build inside a `bench` reservation; see benchmarks/README.md.
 cmake_minimum_required(VERSION 3.20)
-project(wtc-benchmarks CXX)
+project(wtc-benchmarks C CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+# 20 for the LPRQ artifact's queues (concepts); everything else is 17-clean.
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 if(NOT CMAKE_BUILD_TYPE)
@@ -46,7 +47,11 @@ target_include_directories(wtc_bench_flags INTERFACE
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party/readerwriterqueue
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party/concurrentqueue
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party/rigtorp)
-target_include_directories(wtc_bench_flags SYSTEM INTERFACE ${Boost_INCLUDE_DIRS})
+# Vendored verbatim and not warning-clean under -Wextra: a system include.
+target_include_directories(wtc_bench_flags SYSTEM INTERFACE
+  ${Boost_INCLUDE_DIRS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/lprq
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/lprq/scqueue)
 target_compile_options(wtc_bench_flags INTERFACE -Wall -Wextra -Werror -march=${WTC_BENCH_MARCH})
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   # rigtorp uses std::hardware_destructive_interference_size; GCC warns that
@@ -63,13 +68,20 @@ endif()
 if(WTC_CHECK)
   target_compile_definitions(wtc_bench_flags INTERFACE WTC_CHECK=1)
 endif()
-target_link_libraries(wtc_bench_flags INTERFACE Threads::Threads)
+# The SCQ ring LSCQ is built on, C11 atomics, from the LPRQ artifact.
+add_library(wtc_lfring STATIC third_party/lprq/scqueue/lfring_cas1.c)
+target_include_directories(wtc_lfring PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/third_party/lprq/scqueue)
+target_compile_options(wtc_lfring PRIVATE -O2 -march=${WTC_BENCH_MARCH})
+if(WTC_BENCH_SANITIZE)
+  target_compile_options(wtc_lfring PRIVATE -fsanitize=${WTC_BENCH_SANITIZE} -g)
+endif()
+target_link_libraries(wtc_bench_flags INTERFACE Threads::Threads wtc_lfring)
 if(TBB_FOUND)
   target_compile_definitions(wtc_bench_flags INTERFACE WTC_HAVE_TBB=1)
   target_link_libraries(wtc_bench_flags INTERFACE TBB::tbb)
 endif()
 
-foreach(w w1_throughput w2_latency w3_pipeline w5_mpmc_control w6_ring_shape w9_mpmc_scaling)
+foreach(w w1_throughput w2_latency w3_pipeline w5_mpmc_control w6_ring_shape w9_mpmc_scaling w10_ablation)
   add_executable(${w} workloads/${w}.cpp)
   target_link_libraries(${w} PRIVATE wtc_bench_flags)
 endforeach()

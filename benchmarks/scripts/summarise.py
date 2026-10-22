@@ -50,7 +50,7 @@ def load(path):
 # write is empty, so one key serves every workload; leaving one out is how
 # runs at different rates or batch sizes get averaged together.
 CONFIG_FIELDS = ("workload", "mode", "elem", "wait", "interval_ns", "rate", "smt", "placement",
-                 "threads", "producers", "consumers", "work", "pass")
+                 "threads", "producers", "consumers", "work", "alloc", "pass")
 # Recorded with every median in summary.csv, but not part of the key: the
 # batch size is in a batching flavour's name, and keying on it would put a
 # plain loop and its batched build in different tables.
@@ -79,6 +79,10 @@ def title_of(key):
         title += f"  ({k['placement']})"
     elif k["smt"] == "1":
         title += "  (SMT siblings)"
+    # A leg before the allocator was a factor wrote no alloc field: it ran on
+    # glibc, and its titles stay as they were.
+    if k["alloc"]:
+        title += f"  alloc={k['alloc']}"
     return title
 
 

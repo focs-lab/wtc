@@ -35,6 +35,8 @@ workloads/
   w8_lock_batch_wtc   a loop's critical sections, held as one by the
                       compiler or not, with one or two threads
   w9_mpmc_scaling     the general-purpose queues as threads are added
+  w10_ablation        the runtime's queues used directly: synchronisation
+                      strength and element placement, alone and together
 apps/ferret/          PARSEC ferret ported onto the shim (GPL, see there)
 apps/dedup/           PARSEC dedup ported onto the shim (BSD-3, see there)
 reach/oracle.json     every compiled queue's topology, read from its source
@@ -76,6 +78,7 @@ results/              committed: percentiles and summaries, never raw samples
 | `boost_spsc_sp` | `boost::lockfree::spsc_queue` | classic bounded SPSC |
 | `boost_ms_queue` | `boost::lockfree::queue` | Michael-Scott MPMC, for the fallback control |
 | `onetbb_cq_sp` | `tbb::concurrent_queue` | the library `docs/vision.md` names; present only where oneTBB is installed |
+| `lcrq`, `lprq`, `lscq`, `faaarray` | the LPRQ paper's artifact (PPoPP 2023): LCRQ, LPRQ, LSCQ, FAAArrayQueue | the ring queues the lock-free queue literature measures against; owning raw pointer, as `boost_ms_queue` |
 
 Every `_sp` variant stores `shared_ptr<T>` and copies `*p` out on pop, so
 all of them pay the same per-element allocation and the same copy, and a
@@ -136,9 +139,16 @@ are the ceiling.
   producer), and `--mode pairwise`, where every thread pushes then pops, as
   in the lock-free queue literature. Every queue the compiler cannot prove
   keeps the shim's general-purpose one, so this is where it is compared with
-  the libraries a developer would otherwise use; with one consumer or one
+  the libraries a developer would otherwise use and with the literature's
+  own queues (`lcrq`, `lprq`, `lscq`, `faaarray`); with one consumer or one
   producer, what the compiler substitutes there (`shim_mpsc`, `shim_spmc`)
   runs beside them.
+- **W10** `w10_ablation`: W1's measurement over the runtime's two queues used
+  directly, each holding the element in its cell and behind a `shared_ptr`
+  (`mpmc_sp`, `mpmc_cell`, `spsc_sp`, `spsc_cell`): the rows that differ in
+  one factor isolate it, and the diagonal is what the compiler's
+  substitution does. Run under every allocator, since the heap rows depend
+  on it and the cell rows must not.
 
 Every results line also records the process's peak resident set
 (`peak_rss_kib`). The latency workloads record the whole distribution as
@@ -178,8 +188,8 @@ benchmarks/scripts/campaign.sh w1 build-bench 10
 Legs: `w1`, `w2`, `w2pp`, `w3`, `w3wtc`, `w5`, `w6`, `smt`, `far`, `tbb`,
 `w1check`, and `smoke`, which runs everything once, tiny, unreserved. The
 evaluation's legs are `eval-w1`, `eval-w1smt`, `eval-w2`, `eval-w3`,
-`eval-w3grain`, `eval-w7`, `eval-w8`, `eval-w9`, `eval-ferret` and
-`eval-dedup`; each one's comment in `campaign.sh` says which question it
+`eval-w3grain`, `eval-w7`, `eval-w8`, `eval-w9`, `eval-ferret`,
+`eval-dedup` and `eval-ablation`; each one's comment in `campaign.sh` says which question it
 answers and what it needs.
 
 Figures come from a summarised leg:
@@ -217,6 +227,36 @@ second measures process startup rather than the queue.
 The measured cores come from `taskset -p $$`, lowest first, on distinct
 physical cores; `--smt-siblings` picks a core and its sibling instead, and
 `--cpus a,b` overrides both.
+
+## Allocators
+
+Every variant that keeps its elements on the heap pays the allocator on
+each element, allocated by the producer's thread and freed by the
+consumer's, and that cost depends on the allocator more than on the queue
+(a probe on 22 Oct 2026 moved `shim_spsc` from 4.5 to 14.5 million a
+second by swapping glibc for jemalloc, and to 40 with snmalloc). So the
+allocator is a factor of the evaluation's legs, not a footnote: each
+variant runs under glibc and, where the leg's comment says so, under
+jemalloc, tcmalloc, mimalloc and snmalloc, preloaded. Every results line
+names its allocator in `alloc`, the summary keys on it (a table per
+allocator, ratios against B0 under the same allocator), and
+`plot.py --where alloc=jemalloc` selects one.
+
+The libraries live outside the tree in `.apps/allocs/` at its root (or
+`WTC_ALLOC_DIR`), under these names:
+
+| name | file | source |
+|---|---|---|
+| jemalloc | `libjemalloc.so.2` | the system package (`libjemalloc2`) |
+| tcmalloc | `libtcmalloc_minimal.so.4` | the system package (`libgoogle-perftools4`) |
+| mimalloc | `libmimalloc.so` | built from the mimalloc repository at a tagged release (v2.1.7): `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build`, then `build/libmimalloc.so` |
+| snmalloc | `libsnmalloc.so` | built from the snmalloc repository at a tagged release (0.7.6, MIT): `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSNMALLOC_BUILD_TESTING=OFF && cmake --build build`, then `build/libsnmallocshim.so` |
+
+A library that is missing is skipped and the leg's log says so;
+`WTC_ALLOCS="glibc jemalloc"` narrows a leg to a subset. The controls, the
+warm-up and the explaining pass always run on glibc: the counting preload
+is an allocator of its own. A leg measured before the factor existed wrote
+no `alloc` field; it ran on glibc.
 
 ## What the numbers mean
 
