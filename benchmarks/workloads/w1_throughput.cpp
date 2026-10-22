@@ -40,6 +40,9 @@ struct runner {
         std::atomic<std::uint64_t> t_start{0}, t_end{0};
         std::atomic<bool> order_ok{true};
         const std::uint64_t n = c.n, warm = c.warm;
+        // Empty polls the consumer made: how often it caught up with the
+        // producer, which is which of the pair was the slower.
+        std::uint64_t empty = 0;
 
         std::thread prod([&] {
             E e{};
@@ -55,7 +58,7 @@ struct runner {
             unsigned misses = 0;
             std::uint64_t got = 0;
             while (got < n) {
-                if (!q.try_pop(e)) { wait_policy(c.wait, misses); continue; }
+                if (!q.try_pop(e)) { wait_policy(c.wait, misses); ++empty; continue; }
                 if (e.seq != got) { order_ok.store(false); break; }
                 ++got;
                 th.consumer_progress(got);
@@ -84,6 +87,7 @@ struct runner {
         r.set("n_total", n);
         r.set("wall_ns", t_end.load() - t_start.load());
         r.set("mops", mops);
+        r.set("empty_polls", empty);
         r.set("ns_per_op", secs * 1e9 / static_cast<double>(n - warm));
         r.set("freq_before_khz", static_cast<std::uint64_t>(f0));
         r.set("freq_after_khz", static_cast<std::uint64_t>(f1));
