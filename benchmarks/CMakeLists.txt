@@ -69,7 +69,7 @@ if(TBB_FOUND)
   target_link_libraries(wtc_bench_flags INTERFACE TBB::tbb)
 endif()
 
-foreach(w w1_throughput w2_latency w3_pipeline w5_mpmc_control w6_ring_shape w9_mpmc_scaling)
+foreach(w w1_throughput w2_latency w3_pipeline w5_mpmc_control w6_ring_shape w9_mpmc_scaling w10_ablation)
   add_executable(${w} workloads/${w}.cpp)
   target_link_libraries(${w} PRIVATE wtc_bench_flags)
 endforeach()
