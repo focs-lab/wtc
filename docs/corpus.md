@@ -111,10 +111,15 @@ of fixes and found by the second review.
   or a member function through the indirect call in the library's invoker
   -- from the constructor's operand, so a function handed to `std::thread`
   is no longer "a function whose address is taken". A thread the loop of a
-  pool constructor starts through `emplace_back` is one per iteration.
-  (`std-thread-lambda.cpp`, `std-thread-function.cpp`,
-  `std-thread-member.cpp`, `std-thread-pool-loop.cpp`; `false_sharing.cpp`
-  and `std_thread_main.cpp` now say `definite`.)
+  pool constructor starts through `emplace_back` is one per iteration, and
+  a queue that is a member of an object reached through a pointer the walk
+  cannot follow -- a worker's `this` out of the tuple, a logger's out of a
+  `weak_ptr` -- is named by its record type and offset, as that member of
+  every object the one constructor call builds. (`std-thread-lambda.cpp`,
+  `std-thread-function.cpp`, `std-thread-member.cpp`,
+  `std-thread-pool-loop.cpp`, `std-thread-shared-ptr.cpp`,
+  `std_thread_pool.cpp`; `false_sharing.cpp` and `std_thread_main.cpp` now
+  say `definite`.)
 - `cold` -- "this pair costs nothing" -- was computed from all threads,
   including ones the module cannot account for, and ran before `possible`,
   so an unknown pair could be printed as a resolved one.

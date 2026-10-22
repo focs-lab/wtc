@@ -105,8 +105,27 @@ struct RootInfo {
     SideInfo producers, consumers;
 };
 
-// A queue: the root the walk names, and the queue's offset in it.
+// A queue: the root the walk names, and the queue's offset in it. Or, with
+// the offset below, a member of every object of one record type, keyed by
+// the constructor call that builds that member (see AbstractQueue).
 using Key = std::pair<Operation *, uint64_t>;
+constexpr uint64_t kAbstractOffset = ~uint64_t(0);
+
+// A queue the walk cannot place but can name by type: a member at a known
+// offset of a record, reached through a pointer the walk cannot follow --
+// `this->q_` in a worker whose `this` came through a tuple or a shared_ptr.
+// Every runtime object of the record is one of the objects the walk placed
+// or "some object of the record", so the member's threads over all objects
+// are at least each object's, and a verdict over the union holds for each.
+// The verdict is carried by the one constructor call that builds the
+// member, and the tag it is rewritten to applies to every object, which
+// the union covers. What is lost is precision: two objects with one thread
+// each are counted together.
+struct AbstractQueue {
+    Type record;
+    uint64_t offset;
+    std::string member;
+};
 
 class QueueOwnershipAnalysisPass
     : public PassWrapper<QueueOwnershipAnalysisPass, OperationPass<ModuleOp>> {
@@ -140,6 +159,11 @@ private:
     llvm::DenseSet<Operation *> ctorUnplaced;
     llvm::DenseMap<Key, Type> keyType;             // the queue type its constructor builds
     llvm::DenseMap<Operation *, int64_t> loopIds;  // the counted spawn loops recorded, numbered
+    // (record, offset) -> the queue constructor calls that build that
+    // member of the record, and the abstract keys in use.
+    llvm::DenseMap<std::pair<Type, uint64_t>, llvm::SmallVector<Operation *, 2>> memberCtors;
+    llvm::DenseMap<Key, AbstractQueue> abstractKeys;
+    std::optional<DataLayout> layout;
     ThreadInstanceWalk *walk = nullptr;
     bool globalPoison = false;   // an access with no type to poison
     unsigned remarks = 0;
@@ -192,6 +216,15 @@ private:
     // null with the reason.
     Operation *carrierOf(const Key &k, const char *&why) const;
     std::string labelOf(const Key &k, bool whole) const;
+    // The record member a handle names, when the handle is member steps
+    // from a pointer to a record, through the parameters of `inst`'s call
+    // chain: the outermost record, the member's offset in it and the
+    // innermost member's name.
+    std::optional<AbstractQueue> memberOf(Value handle, Instance *inst);
+    // The abstract key for an access the walk could not place, when its
+    // handle names a member one constructor call builds; registered as a
+    // queue of that constructor on first use.
+    std::optional<Key> abstractKey(Operation *op, Instance *inst);
     // For an allocation whose result one pointer global holds -- stored
     // there once, by the only store to that global -- the global's name,
     // so that a heap queue is named after the pointer the program uses
@@ -346,7 +379,60 @@ std::string QueueOwnershipAnalysisPass::whyMany(const SideInfo &side) {
     return "";
 }
 
+std::optional<AbstractQueue> QueueOwnershipAnalysisPass::memberOf(Value handle, Instance *inst) {
+    Value t = traceToRoot(handle);
+    // A parameter names what the instance's call site passed, as a place
+    // is resolved: once per call string, so a helper that takes the queue
+    // by reference contributes, under each of its instances, the member
+    // that instance's site handed it.
+    for (unsigned hops = 0; hops < 64; ++hops) {
+        auto arg = dyn_cast<BlockArgument>(t);
+        if (!arg) break;
+        if (!inst || !inst->site || arg.getOwner() != &inst->func.getBody().front()) return std::nullopt;
+        cir::CallOp site = inst->site;
+        unsigned idx = arg.getArgNumber();
+        if (getSemanticKind(lookupCallee(site)) == SemanticOpKind::ThreadSpawn) idx += spawnFirstArgOperand(site);
+        if (idx >= site.getNumOperands()) return std::nullopt;
+        t = traceToRoot(site.getOperand(idx));
+        inst = inst->parent;
+    }
+    auto gm = t.getDefiningOp<cir::GetMemberOp>();
+    if (!gm) return std::nullopt;
+    if (!layout) layout.emplace(module);
+    AbstractQueue a{Type(), 0, gm.getName().str()};
+    while (gm) {
+        auto pt = dyn_cast<cir::PointerType>(gm.getAddr().getType());
+        auto rec = pt ? dyn_cast<cir::RecordType>(pt.getPointee()) : cir::RecordType();
+        if (!rec || rec.isIncomplete()) return std::nullopt;
+        a.offset += rec.getElementOffset(*layout, gm.getIndex());
+        a.record = rec;
+        t = traceToRoot(gm.getAddr());
+        gm = t.getDefiningOp<cir::GetMemberOp>();
+    }
+    return a;
+}
+
+std::optional<Key> QueueOwnershipAnalysisPass::abstractKey(Operation *op, Instance *inst) {
+    std::optional<AbstractQueue> m = memberOf(queueOf(op), inst);
+    if (!m) return std::nullopt;
+    auto it = memberCtors.find({m->record, m->offset});
+    if (it == memberCtors.end() || it->second.size() != 1) return std::nullopt;
+    Operation *ctor = it->second.front();
+    auto built = dyn_cast<cir::PointerType>(cast<cir::CallOp>(ctor).getOperand(0).getType());
+    if (!built || built.getPointee() != queueObjectTypeOfOp(op)) return std::nullopt;
+    const Key k{ctor, kAbstractOffset};
+    if (abstractKeys.try_emplace(k, *m).second) {
+        keyType[k] = built.getPointee();
+        keyCtors[k].insert(ctor);
+        ctorKeys[ctor].insert(k);
+    }
+    return k;
+}
+
 Operation *QueueOwnershipAnalysisPass::carrierOf(const Key &k, const char *&why) const {
+    // An abstract queue is the one its constructor call builds, by
+    // construction: every object it builds is among those it stands for.
+    if (abstractKeys.count(k)) return k.first;
     auto it = keyCtors.find(k);
     if (it == keyCtors.end() || it->second.empty()) { why = "no constructor call is seen to build it"; return nullptr; }
     if (it->second.size() != 1) { why = "more than one constructor call may build it"; return nullptr; }
@@ -381,6 +467,11 @@ llvm::StringRef QueueOwnershipAnalysisPass::pointerNaming(Operation *allocation)
 
 std::string QueueOwnershipAnalysisPass::labelOf(const Key &k, bool whole) const {
     Operation *root = k.first;
+    if (auto it = abstractKeys.find(k); it != abstractKeys.end()) {
+        auto rec = cast<cir::RecordType>(it->second.record);
+        const std::string name = rec.getName() ? rec.getName().getValue().str() : "an unnamed record";
+        return it->second.member + " in any " + name;
+    }
     std::string base;
     if (auto g = dyn_cast<cir::GlobalOp>(root)) base = ("@" + g.getSymName()).str();
     else if (auto a = dyn_cast<cir::AllocaOp>(root)) base = ("%" + a.getName()).str();
@@ -603,6 +694,7 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
     module = getOperation();
     roots.clear(); poisonedTypes.clear(); poisonWhy.clear(); opRoots.clear();
     ctorKeys.clear(); keyCtors.clear(); ctorUnplaced.clear(); keyType.clear();
+    memberCtors.clear(); abstractKeys.clear(); layout.reset();
     globalPoison = false; remarks = 0;
     poisonedOps.clear();
 
@@ -645,8 +737,21 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
             auto [it, fresh] = keyType.try_emplace(k, built.getPointee());
             if (!fresh && it->second != built.getPointee()) it->second = Type();   // two types: neither
         }
+        // The member of a record this call builds, whatever object; the
+        // call is visited once per instance of its function.
+        if (std::optional<AbstractQueue> m = memberOf(call.getOperand(0), inst)) {
+            auto &calls = memberCtors[{m->record, m->offset}];
+            if (!llvm::is_contained(calls, op)) calls.push_back(op);
+        }
     }
 
+    struct Resolved {
+        Operation *op;
+        Instance *inst;
+        llvm::SmallVector<Key, 4> rs;
+    };
+    llvm::SmallVector<Resolved, 32> resolved;
+    llvm::SmallSetVector<Operation *, 4> abstractUsed;   // constructor calls some access fell back to
     for (auto [op, inst] : visits) {
         // A handle may name one of several queues -- loaded from a field or
         // a slot written in more than one place -- and then the access is
@@ -656,8 +761,20 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
         llvm::SmallVector<Key, 4> rs;
         const char *why = nullptr;
         const Type queueTy = queueObjectTypeOfOp(op);
+        // A place the walk could not name, or named without a queue there,
+        // may still be a member of a record reached through a pointer the
+        // walk cannot follow: then it is that member of some object of the
+        // record (AbstractQueue), which stands for all of them.
+        auto unidentified = [&]() {
+            if (std::optional<Key> a = abstractKey(op, inst)) {
+                if (!llvm::is_contained(rs, *a)) rs.push_back(*a);
+                abstractUsed.insert(a->first);
+                return;
+            }
+            why = "the queue object could not be identified";
+        };
         for (const Place &pl : walk.resolvePlaces(queueOf(op), inst)) {
-            if (!pl.root) { why = "the queue object could not be identified"; break; }
+            if (!pl.root) { unidentified(); if (why) break; continue; }
             // One element of an array of queues: which one is the thread's,
             // and every element is built by one constructor call.
             if (pl.unknownIndex || pl.loop) { why = "the queue is an element of an array"; break; }
@@ -667,12 +784,42 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
             // whose constructor the walk never saw -- is not one.
             const Key k{pl.root, pl.offset};
             if (!isWhole(k, queueTy) && keyType.lookup(k) != queueTy) {
-                why = "the queue object could not be identified";
-                break;
+                unidentified();
+                if (why) break;
+                continue;
             }
             rs.push_back(k);
         }
         if (why) { poison(op, why); continue; }
+        resolved.push_back({op, inst, std::move(rs)});
+    }
+
+    // Every object a constructor call builds is among those its abstract
+    // queue stands for: once that queue is in use, the objects the walk did
+    // place under the same constructor are folded into it, or the one
+    // constructor would carry two verdicts.
+    llvm::DenseMap<Key, Key> folded;
+    for (Operation *ctor : abstractUsed) {
+        const Key a{ctor, kAbstractOffset};
+        for (const Key &k : ctorKeys[ctor])
+            if (k != a) folded[k] = a;
+        ctorKeys[ctor].clear();
+        ctorKeys[ctor].insert(a);
+    }
+    for (auto &[k, a] : folded) {
+        keyCtors.erase(k);
+        keyType.erase(k);
+    }
+
+    for (Resolved &r : resolved) {
+        Operation *op = r.op;
+        Instance *inst = r.inst;
+        llvm::SmallVector<Key, 4> rs;
+        for (const Key &k : r.rs) {
+            auto it = folded.find(k);
+            const Key c = it == folded.end() ? k : it->second;
+            if (!llvm::is_contained(rs, c)) rs.push_back(c);
+        }
         for (const Key &root : rs) {
             RootInfo &info = roots[root];
             SideInfo &side = isa<QueuePopOp>(op) ? info.consumers : info.producers;
