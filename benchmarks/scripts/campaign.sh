@@ -19,6 +19,18 @@
 # build inside one. Every measured run takes the host's exclusive measurement
 # lock for its own duration, per the agreed rule that a leg locks per run.
 #
+# The allocator is a factor. Every queue that keeps its elements on the heap
+# pays the allocator on every element, from one thread to another, and
+# "use a better allocator" is the first objection to a result measured on
+# glibc alone. The evaluation's legs therefore run each variant under
+# several allocators, preloaded: glibc (none), jemalloc, tcmalloc, mimalloc
+# and snmalloc, looked up by file name in WTC_ALLOC_DIR (default
+# .apps/allocs at the root of the tree, outside version control; the
+# README says how to fill it). WTC_ALLOCS="glibc jemalloc" narrows a leg
+# to those; an allocator whose library is missing is skipped and logged.
+# Each run records its allocator ("alloc"), so the summary keys on it. The
+# controls, the warm-up and the explaining pass run on glibc.
+#
 # Discipline encoded here rather than remembered:
 #   - variants interleave round-robin across repetitions, so drift hits all
 #     of them equally instead of the last one;
@@ -43,10 +55,46 @@ RUNS="$OUT/runs.jsonl"
 
 VARIANTS_SPSC="orig_generic shim_generic shim_spsc shim_spsc_inline ring_sp ring_borrowed ring_inline std_mutex moodycamel_rw_sp moodycamel_rw_inline moodycamel_cq_sp rigtorp_sp rigtorp_inline boost_spsc_sp boost_ms_queue"
 
+WTC_ALLOC_DIR=${WTC_ALLOC_DIR:-$ROOT/.apps/allocs}
+ALLOC_PRELOAD=""   # the library of the current allocator; empty for glibc
+
+alloc_lib() { # name -> library file name, or nothing for glibc
+  case "$1" in
+    glibc)    echo "" ;;
+    jemalloc) echo libjemalloc.so.2 ;;
+    tcmalloc) echo libtcmalloc_minimal.so.4 ;;
+    mimalloc) echo libmimalloc.so ;;
+    snmalloc) echo libsnmalloc.so ;;
+    *) echo "unknown allocator $1" >&2; return 2 ;;
+  esac
+}
+
+# The allocators a leg will run: its default set, narrowed by WTC_ALLOCS,
+# minus those whose library is not there (logged, not fatal: a host without
+# snmalloc still measures everything else).
+allocs_for() { # default list
+  local want=${WTC_ALLOCS:-$*} out="" a lib
+  for a in $want; do
+    lib=$(alloc_lib "$a") || exit 2
+    if [ -z "$lib" ] || [ -r "$WTC_ALLOC_DIR/$lib" ]; then out="$out $a"
+    else echo "allocator $a skipped: $WTC_ALLOC_DIR/$lib not found" | tee -a "$OUT/log.txt" >&2; fi
+  done
+  echo "$out"
+}
+
+# Selects the allocator for the runs that follow: the name goes to every
+# results line through WTC_ALLOC, the library to the run through LD_PRELOAD.
+use_alloc() {
+  local lib; lib=$(alloc_lib "$1") || exit 2
+  export WTC_ALLOC=$1
+  ALLOC_PRELOAD=${lib:+$WTC_ALLOC_DIR/$lib}
+}
+
 lock() {
   # Exclusive measurement lock for one run. --no-scope: inside a bench shell a
   # user scope may not be creatable, and the memory cap it would give is not
   # needed for a benchmark of a few hundred megabytes.
+  if [ -n "$ALLOC_PRELOAD" ]; then set -- env "LD_PRELOAD=$ALLOC_PRELOAD" "$@"; fi
   if command -v machine-lock >/dev/null; then
     machine-lock --lane wtc-bench --measure --minutes 5 --why "wtc $LEG" --no-scope -- "$@"
   else
@@ -81,6 +129,7 @@ meta() {
     echo "  \"tbb\": \"$(dpkg-query -W -f='${Version}' libtbb12 2>/dev/null || echo none)\","
     echo "  \"vendored\": \"$(sed -n 's/^| \([a-z]*\)\/ | [^|]* | \([0-9a-f]\{12\}\).*/\1@\2/p' "$ROOT/benchmarks/third_party/VENDORED.md" | tr '\n' ' ')\","
     echo "  \"control_build\": \"$CONTROL_BUILD\","
+    echo "  \"alloc_dir\": \"$WTC_ALLOC_DIR\", \"allocators\": \"$(ls "$WTC_ALLOC_DIR" 2>/dev/null | grep '\.so' | tr '\n' ' ')\","
     echo "  \"reps\": $REPS"
     echo "}"
   } > "$OUT/meta.json"
@@ -106,6 +155,7 @@ control() { # tag [placement arguments]
   if [ ! -x "$CONTROL_BUILD/w1_throughput" ]; then
     echo "no controls: set CONTROL_BUILD to the CMake build" | tee -a "$OUT/log.txt"; return 0
   fi
+  use_alloc glibc
   for k in 1 2 3; do
     lock "$CONTROL_BUILD/w1_throughput" --variant shim_generic --elem 64 --wait spin --rep "$tag" "$@" --json "$RUNS" 2>>"$OUT/log.txt"
   done
@@ -120,6 +170,7 @@ have_tbb() { grep -qiE '^tbb=(1|true|on)' "$CONTROL_BUILD/build-info.txt" 2>/dev
 # pass=mechanism so the summary keeps it out of the timing tables. Kept
 # apart from the timed runs because counting perturbs what it counts.
 mech() {
+  use_alloc glibc   # the counting preload is an allocator of its own
   WTC_PASS=mechanism WTC_PERF=1 LD_PRELOAD="$CONTROL_BUILD/libwtc_alloccount.so" lock "$@"
 }
 
@@ -146,6 +197,7 @@ elems_for() {
 # early rather than of drift. Two full-length runs, discarded.
 warmup() { # [placement arguments]
   [ -x "$CONTROL_BUILD/w1_throughput" ] || return 0
+  use_alloc glibc
   for k in 1 2; do
     lock "$CONTROL_BUILD/w1_throughput" --variant shim_generic --elem 64 --wait spin \
          --n 20000000 "$@" --json "" 2>>"$OUT/log.txt" >/dev/null
@@ -392,10 +444,14 @@ case "$LEG" in
     "$HERE/check_env.sh" 2 || exit 1
     meta
     EVAL_W1="shim_generic orig_generic $(have_tbb && echo onetbb_cq_sp) moodycamel_cq_sp boost_ms_queue std_mutex rigtorp_sp rigtorp_inline moodycamel_rw_sp moodycamel_rw_inline boost_spsc_sp shim_spsc shim_spsc_inline ring_sp ring_borrowed ring_inline"
+    ALLOCS=$(allocs_for glibc jemalloc tcmalloc mimalloc snmalloc)
     warmup; control 900
     for rep in $(seq 0 $((REPS-1))); do
-      for elem in 8 64 256; do
-        for v in $EVAL_W1; do run_w1 "$rep" "$v" "$elem" spin; done
+      for alloc in $ALLOCS; do
+        use_alloc "$alloc"
+        for elem in 8 64 256; do
+          for v in $EVAL_W1; do run_w1 "$rep" "$v" "$elem" spin; done
+        done
       done
     done
     control 901
@@ -412,11 +468,15 @@ case "$LEG" in
     # reservation that keeps the siblings online (bench without -e).
     "$HERE/check_env.sh" 2 || exit 1
     meta
+    ALLOCS=$(allocs_for glibc jemalloc)
     warmup --smt-siblings; control 900 --smt-siblings
     for rep in $(seq 0 $((REPS-1))); do
-      for v in shim_generic $(have_tbb && echo onetbb_cq_sp) rigtorp_inline moodycamel_rw_sp shim_spsc shim_spsc_inline; do
-        WTC_PLACEMENT=smt lock "$BUILD/w1_throughput" --variant "$v" --elem 64 --wait spin --rep "$rep" \
-             --n "$(elems_for "$v")" --smt-siblings --json "$RUNS" 2>>"$OUT/log.txt"
+      for alloc in $ALLOCS; do
+        use_alloc "$alloc"
+        for v in shim_generic $(have_tbb && echo onetbb_cq_sp) rigtorp_inline moodycamel_rw_sp shim_spsc shim_spsc_inline; do
+          WTC_PLACEMENT=smt lock "$BUILD/w1_throughput" --variant "$v" --elem 64 --wait spin --rep "$rep" \
+               --n "$(elems_for "$v")" --smt-siblings --json "$RUNS" 2>>"$OUT/log.txt"
+        done
       done
     done
     control 901 --smt-siblings
@@ -427,11 +487,15 @@ case "$LEG" in
     # each element's due time; a saturated run is marked. Needs 2 cores.
     "$HERE/check_env.sh" 2 || exit 1
     meta
+    ALLOCS=$(allocs_for glibc jemalloc mimalloc)
     warmup; control 900
     for rep in $(seq 0 $((REPS-1))); do
-      for interval in 100 200 300 500 700 1000 2000 5000 10000; do
-        for v in shim_generic $(have_tbb && echo onetbb_cq_sp) moodycamel_cq_sp rigtorp_inline moodycamel_rw_inline shim_spsc shim_spsc_inline ring_borrowed; do
-          run_w2 "$rep" "$v" 64 "$interval"
+      for alloc in $ALLOCS; do
+        use_alloc "$alloc"
+        for interval in 100 200 300 500 700 1000 2000 5000 10000; do
+          for v in shim_generic $(have_tbb && echo onetbb_cq_sp) moodycamel_cq_sp rigtorp_inline moodycamel_rw_inline shim_spsc shim_spsc_inline ring_borrowed; do
+            run_w2 "$rep" "$v" 64 "$interval"
+          done
         done
       done
     done
@@ -445,17 +509,21 @@ case "$LEG" in
     "$HERE/check_env.sh" 3 || exit 1
     FLAVOURS=${FLAVOURS:?FLAVOURS=<dir of the W3 flavours>}
     meta
+    ALLOCS=$(allocs_for glibc jemalloc)
     warmup; control 900
     for rep in $(seq 0 $((REPS-1))); do
-      for rate in 0 500000 1000000 2000000 3000000 4000000; do
-        n=$([ "$rate" = 0 ] && echo 10000000 || echo 4000000)
-        for v in shim_generic $(have_tbb && echo onetbb_cq_sp) moodycamel_cq_sp moodycamel_rw_sp moodycamel_rw_inline rigtorp_inline shim_spsc shim_spsc_inline; do
-          lock "$BUILD/w3_pipeline" --variant "$v" --rate "$rate" --n "$n" --rep "$rep" --json "$RUNS" \
-            2>>"$OUT/log.txt" >>"$OUT/checksums-$n.txt"
-        done
-        for f in generic hand hand-inline compiler; do
-          lock "$FLAVOURS/w3_$f" --flavour "$f" --rate "$rate" --n "$n" --rep "$rep" --json "$RUNS" \
-            2>>"$OUT/log.txt" | awk '{print $1, $2}' >>"$OUT/checksums-$n.txt"
+      for alloc in $ALLOCS; do
+        use_alloc "$alloc"
+        for rate in 0 500000 1000000 2000000 3000000 4000000; do
+          n=$([ "$rate" = 0 ] && echo 10000000 || echo 4000000)
+          for v in shim_generic $(have_tbb && echo onetbb_cq_sp) moodycamel_cq_sp moodycamel_rw_sp moodycamel_rw_inline rigtorp_inline shim_spsc shim_spsc_inline; do
+            lock "$BUILD/w3_pipeline" --variant "$v" --rate "$rate" --n "$n" --rep "$rep" --json "$RUNS" \
+              2>>"$OUT/log.txt" >>"$OUT/checksums-$n.txt"
+          done
+          for f in generic hand hand-inline compiler; do
+            lock "$FLAVOURS/w3_$f" --flavour "$f" --rate "$rate" --n "$n" --rep "$rep" --json "$RUNS" \
+              2>>"$OUT/log.txt" | awk '{print $1, $2}' >>"$OUT/checksums-$n.txt"
+          done
         done
       done
     done
@@ -479,21 +547,25 @@ case "$LEG" in
     "$HERE/check_env.sh" 16 || exit 1
     meta
     MPMC="shim_generic orig_generic std_mutex moodycamel_cq_sp boost_ms_queue $(have_tbb && echo onetbb_cq_sp)"
+    ALLOCS=$(allocs_for glibc jemalloc mimalloc)
     warmup; control 900
     for rep in $(seq 0 $((REPS-1))); do
-      for pc in 1:1 2:2 4:4 8:8 1:2 1:4 1:8 2:1 4:1 8:1; do
-        # With one consumer, the shim's list for many producers too, and
-        # with one producer its ring for many consumers: what the compiler
-        # substitutes for an mpsc or an spmc verdict.
-        vs=$MPMC; [ "${pc##*:}" = 1 ] && vs="$vs shim_mpsc orig_mpsc"; [ "${pc%%:*}" = 1 ] && vs="$vs shim_spmc"
-        for v in $vs; do
-          lock "$BUILD/w9_mpmc_scaling" --variant "$v" --mode split --producers "${pc%%:*}" --consumers "${pc##*:}" \
-            --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt"
+      for alloc in $ALLOCS; do
+        use_alloc "$alloc"
+        for pc in 1:1 2:2 4:4 8:8 1:2 1:4 1:8 2:1 4:1 8:1; do
+          # With one consumer, the shim's queue for many producers too, and
+          # with one producer its ring for many consumers: what the compiler
+          # substitutes for an mpsc or an spmc verdict.
+          vs=$MPMC; [ "${pc##*:}" = 1 ] && vs="$vs shim_mpsc orig_mpsc"; [ "${pc%%:*}" = 1 ] && vs="$vs shim_spmc"
+          for v in $vs; do
+            lock "$BUILD/w9_mpmc_scaling" --variant "$v" --mode split --producers "${pc%%:*}" --consumers "${pc##*:}" \
+              --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt"
+          done
         done
-      done
-      for t in 1 2 4 8 16; do
-        for v in $MPMC; do
-          lock "$BUILD/w9_mpmc_scaling" --variant "$v" --mode pairwise --threads "$t" --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt"
+        for t in 1 2 4 8 16; do
+          for v in $MPMC; do
+            lock "$BUILD/w9_mpmc_scaling" --variant "$v" --mode pairwise --threads "$t" --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt"
+          done
         done
       done
     done
@@ -508,7 +580,10 @@ case "$LEG" in
     meta
     warmup; control 900
     w7_n() { case "$1" in *generic*) echo 3000000 ;; *spsc*) echo 5000000 ;; *) echo 20000000 ;; esac; }
+    ALLOCS=$(allocs_for glibc jemalloc)
     for rep in $(seq 0 $((REPS-1))); do
+      for alloc in $ALLOCS; do
+      use_alloc "$alloc"
       for b in "$BUILD"/w7_*; do
         [ -x "$b" ] || continue
         f=$(basename "$b"); f=${f#w7_}
@@ -519,6 +594,7 @@ case "$LEG" in
         case "$f" in *_e64)
           lock "$b" --flavour "$f" --n 2000000 --rate 1000000 --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt" >/dev/null ;;
         esac
+      done
       done
     done
     control 901
@@ -534,8 +610,11 @@ case "$LEG" in
     # CONTROL_BUILD.
     "$HERE/check_env.sh" 8 || exit 1
     meta
+    ALLOCS=$(allocs_for glibc jemalloc)
     warmup; control 900
     for rep in $(seq 0 $((REPS-1))); do
+      for alloc in $ALLOCS; do
+      use_alloc "$alloc"
       for t in 1 2 4 8; do
         for w in 0 20 50 100 200 500; do
           for f in plain batched hand; do
@@ -549,6 +628,7 @@ case "$LEG" in
           lock "$BUILD/w8_$f" --flavour "$f" --threads 2 --work-ns "$w" --n 2000000 --rep "$rep" --json "$RUNS" \
             2>>"$OUT/log.txt" >>"$OUT/checksums-t2.txt"
         done
+      done
       done
     done
     control 901
@@ -569,7 +649,10 @@ case "$LEG" in
     warmup; control 900
     grain_n() { case "$1" in 0|4) echo 10000000 ;; 16) echo 4000000 ;; 64) echo 2000000 ;; 256) echo 500000 ;;
                              1024) echo 150000 ;; 4096) echo 40000 ;; *) echo 10000 ;; esac; }
+    ALLOCS=$(allocs_for glibc jemalloc)
     for rep in $(seq 0 $((REPS-1))); do
+      for alloc in $ALLOCS; do
+      use_alloc "$alloc"
       for work in 0 4 16 64 256 1024 4096 16384; do
         n=$(grain_n "$work")
         for v in shim_generic $(have_tbb && echo onetbb_cq_sp) moodycamel_rw_inline rigtorp_inline shim_spsc shim_spsc_inline; do
@@ -580,6 +663,7 @@ case "$LEG" in
           lock "$FLAVOURS/w3_$f" --flavour "$f" --work "$work" --n "$n" --rep "$rep" --json "$RUNS" \
             2>>"$OUT/log.txt" | awk '{print $1, $2}' >>"$OUT/checksums-w$work.txt"
         done
+      done
       done
     done
     control 901
@@ -608,13 +692,17 @@ case "$LEG" in
       if [ "$n" = 1 ]; then cmp -s out.txt reference.txt && same=1
       else cmp -s <(sort out.txt) <(sort reference.txt) && same=1; fi
       [ "$same" = 1 ] || echo "ferret-$v n=$n rep $rep: output differs from PARSEC's" | tee -a "$OUT/log.txt"
-      printf '{"workload": "ferret", "variant": "%s", "threads": %d, "rep": %d, "time_s": %s, "queries": %d, "output_ok": %d, "cmd": "%s"}\n' \
-        "$v" "$n" "$rep" "${t:-0}" "$(wc -l < out.txt)" "$same" "ferret-$v corel lsh queries 10 20 $n" >> "$RUNS"
+      printf '{"workload": "ferret", "variant": "%s", "threads": %d, "rep": %d, "time_s": %s, "queries": %d, "output_ok": %d, "alloc": "%s", "cmd": "%s"}\n' \
+        "$v" "$n" "$rep" "${t:-0}" "$(wc -l < out.txt)" "$same" "$WTC_ALLOC" "ferret-$v corel lsh queries 10 20 $n" >> "$RUNS"
     }
+    ALLOCS=$(allocs_for glibc jemalloc)
     for rep in $(seq 0 $((REPS-1))); do
-      for v in orig generic-one compiler-one hand-one; do ferret_run "$v" 1 "$rep"; done
-      for n in 2 4; do
-        for v in orig generic compiler; do ferret_run "$v" "$n" "$rep"; done
+      for alloc in $ALLOCS; do
+        use_alloc "$alloc"
+        for v in orig generic-one compiler-one hand-one; do ferret_run "$v" 1 "$rep"; done
+        for n in 2 4; do
+          for v in orig generic compiler; do ferret_run "$v" "$n" "$rep"; done
+        done
       done
     done
     cd "$ROOT"

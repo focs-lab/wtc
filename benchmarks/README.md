@@ -78,10 +78,15 @@ results/              committed: percentiles and summaries, never raw samples
 | `boost_ms_queue` | `boost::lockfree::queue` | Michael-Scott MPMC, for the fallback control |
 | `onetbb_cq_sp` | `tbb::concurrent_queue` | the library `docs/vision.md` names; present only where oneTBB is installed |
 
-Every `_sp` variant stores `shared_ptr<T>` and copies `*p` out on pop, so
-all of them pay the same per-element allocation and the same copy, and a
-difference between them is a difference in the queue. The `_inline` variants
-are the ceiling.
+Every `_sp` variant hands the element over as a `shared_ptr<T>` and copies
+`*p` out on pop, so all of them pay one allocation, one free and the same
+copy per element, and a difference between them is a difference in the
+queue, with one distinction that matters: the library queues, `ring_sp`,
+`std_mutex` and `orig_generic` allocate on the producer and free on the
+consumer, memory crossing threads, while the shim's own (`shim_generic`,
+`shim_spsc`) keep the element in the queue's cell and allocate the
+`shared_ptr` on the consumer, freed by the same thread. The `_inline`
+variants are the ceiling.
 
 ## Workloads
 
@@ -218,6 +223,37 @@ second measures process startup rather than the queue.
 The measured cores come from `taskset -p $$`, lowest first, on distinct
 physical cores; `--smt-siblings` picks a core and its sibling instead, and
 `--cpus a,b` overrides both.
+
+## Allocators
+
+Every variant that keeps its elements on the heap pays the allocator on
+each element, allocated by the producer's thread and freed by the
+consumer's, and that cost depends on the allocator more than on the queue
+(a probe on 22 Oct 2026 moved the ring with `shared_ptr` elements
+allocated by the producer, `ring_sp`, from 4.5 to 14.5 million a second by
+swapping glibc for jemalloc, and to 40 with snmalloc). So the
+allocator is a factor of the evaluation's legs, not a footnote: each
+variant runs under glibc and, where the leg's comment says so, under
+jemalloc, tcmalloc, mimalloc and snmalloc, preloaded. Every results line
+names its allocator in `alloc`, the summary keys on it (a table per
+allocator, ratios against B0 under the same allocator), and
+`plot.py --where alloc=jemalloc` selects one.
+
+The libraries live outside the tree in `.apps/allocs/` at its root (or
+`WTC_ALLOC_DIR`), under these names:
+
+| name | file | source |
+|---|---|---|
+| jemalloc | `libjemalloc.so.2` | the system package (`libjemalloc2`) |
+| tcmalloc | `libtcmalloc_minimal.so.4` | the system package (`libgoogle-perftools4`) |
+| mimalloc | `libmimalloc.so` | built from the mimalloc repository at a tagged release (v2.1.7): `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build`, then `build/libmimalloc.so` |
+| snmalloc | `libsnmalloc.so` | built from the snmalloc repository at a tagged release (0.7.6, MIT): `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSNMALLOC_BUILD_TESTING=OFF && cmake --build build`, then `build/libsnmallocshim.so` |
+
+A library that is missing is skipped and the leg's log says so;
+`WTC_ALLOCS="glibc jemalloc"` narrows a leg to a subset. The controls, the
+warm-up and the explaining pass always run on glibc: the counting preload
+is an allocator of its own. A leg measured before the factor existed wrote
+no `alloc` field; it ran on glibc.
 
 ## What the numbers mean
 

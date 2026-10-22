@@ -105,8 +105,12 @@ a function marked `WTC_LOCK_FREE` that can reach a blocking operation.
 Every number here comes from a timed leg on reserved cores of one Xeon
 w9-3495X, their SMT siblings offline, turbo off and the rest of the machine
 quiet: ten repetitions, each a fresh process, reported as medians with
-bootstrap 95% intervals. The baselines are the ones the concurrent-queue
-literature measures against:
+bootstrap 95% intervals. The allocator is a factor of the legs being run
+again: each variant under glibc and jemalloc, and in W1, W2, W9 and the
+ablation also under tcmalloc, mimalloc and snmalloc, since a queue that
+hands its elements over through the heap is measuring the allocator as much
+as itself. The baselines are the ones the concurrent-queue literature
+measures against:
 
 - **B0**, the program as written: the shim's general-purpose queue, which
   in the legs below was still the two-lock list it started as (kept as
