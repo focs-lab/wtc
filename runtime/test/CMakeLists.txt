@@ -74,28 +74,6 @@ elseif(WTC_RT_SANITIZE STREQUAL "thread")
                        ENVIRONMENT "TSAN_OPTIONS=halt_on_error=1:symbolize=0")
 endif()
 
-# The list for many producers and one consumer, and its test that must
-# fail: a second consumer, caught as the ring's second producer is.
-add_executable(mpsc_list_stress mpsc_list_stress.cpp)
-target_link_libraries(mpsc_list_stress PRIVATE wtc_rt_flags)
-add_test(NAME mpsc_list_stress COMMAND mpsc_list_stress 1000000)
-
-add_executable(mpsc_list_two_consumers mpsc_list_stress.cpp)
-target_link_libraries(mpsc_list_two_consumers PRIVATE wtc_rt_flags)
-target_compile_definitions(mpsc_list_two_consumers PRIVATE WTC_STRESS_TWO_CONSUMERS=1)
-if(WTC_CHECK)
-  add_test(NAME mpsc_list_two_consumers_is_caught
-           COMMAND sh -c "$<TARGET_FILE:mpsc_list_two_consumers> 200000 2>&1 | grep -q 'MPSC contract violated'")
-elseif(WTC_RT_SANITIZE STREQUAL "thread")
-  # A second consumer can free a node the first is still reading, which
-  # TSan reports as a heap-use-after-free rather than a data race; either
-  # is the race caught.
-  add_test(NAME mpsc_list_two_consumers_is_caught
-           COMMAND sh -c "$<TARGET_FILE:mpsc_list_two_consumers> 200000 2>&1 | grep -qE 'ThreadSanitizer: (data race|heap-use-after-free)'")
-  set_tests_properties(mpsc_list_two_consumers_is_caught PROPERTIES
-                       ENVIRONMENT "TSAN_OPTIONS=halt_on_error=1:symbolize=0")
-endif()
-
 # The ring for one producer and many consumers, and its test that must
 # fail: a second producer.
 add_executable(spmc_ring_stress spmc_ring_stress.cpp)
@@ -112,5 +90,30 @@ elseif(WTC_RT_SANITIZE STREQUAL "thread")
   add_test(NAME spmc_ring_two_producers_is_caught
            COMMAND sh -c "$<TARGET_FILE:spmc_ring_two_producers> 200000 2>&1 | grep -qE 'ThreadSanitizer: (data race|heap-use-after-free)'")
   set_tests_properties(spmc_ring_two_producers_is_caught PROPERTIES
+                       ENVIRONMENT "TSAN_OPTIONS=halt_on_error=1:symbolize=0")
+endif()
+
+# The segmented queue: many producers and many consumers, then the
+# single-consumer form, and the latter's test that must fail: a second
+# consumer.
+add_executable(segment_queue_stress segment_queue_stress.cpp)
+target_link_libraries(segment_queue_stress PRIVATE wtc_rt_flags)
+add_test(NAME segment_queue_stress COMMAND segment_queue_stress 500000)
+
+add_executable(segment_queue_one_consumer_stress segment_queue_stress.cpp)
+target_link_libraries(segment_queue_one_consumer_stress PRIVATE wtc_rt_flags)
+target_compile_definitions(segment_queue_one_consumer_stress PRIVATE WTC_STRESS_ONE_CONSUMER=1)
+add_test(NAME segment_queue_one_consumer_stress COMMAND segment_queue_one_consumer_stress 500000)
+
+add_executable(segment_queue_two_consumers segment_queue_stress.cpp)
+target_link_libraries(segment_queue_two_consumers PRIVATE wtc_rt_flags)
+target_compile_definitions(segment_queue_two_consumers PRIVATE WTC_STRESS_TWO_CONSUMERS=1)
+if(WTC_CHECK)
+  add_test(NAME segment_queue_two_consumers_is_caught
+           COMMAND sh -c "$<TARGET_FILE:segment_queue_two_consumers> 200000 2>&1 | grep -q 'MPSC contract violated'")
+elseif(WTC_RT_SANITIZE STREQUAL "thread")
+  add_test(NAME segment_queue_two_consumers_is_caught
+           COMMAND sh -c "$<TARGET_FILE:segment_queue_two_consumers> 200000 2>&1 | grep -qE 'ThreadSanitizer: (data race|heap-use-after-free)'")
+  set_tests_properties(segment_queue_two_consumers_is_caught PROPERTIES
                        ENVIRONMENT "TSAN_OPTIONS=halt_on_error=1:symbolize=0")
 endif()

@@ -64,8 +64,8 @@ results/              committed: percentiles and summaries, never raw samples
 
 | name | what | role |
 |---|---|---|
-| `orig_generic` | `shim/queue.hpp` as it was, verbatim | what the program pays today; proves the tag branch is free |
-| `shim_generic` | the shim, tag `generic` | B0, the denominator of every ratio |
+| `orig_generic` | `shim/queue.hpp` as it was, verbatim: the two-lock list | the shim's general-purpose queue until 22 Oct 2026; the typical program's queue |
+| `shim_generic` | the shim, tag `generic`: the segmented queue since 22 Oct 2026 | B0, the denominator of every ratio |
 | `shim_spsc` | the shim, tag `spsc` | what the compiler produces when it proves SPSC |
 | `ring_sp` | `runtime/spsc_ring` with `shared_ptr<T>` slots, no shim | prices the shim's branch and wrapper |
 | `ring_inline` | `runtime/spsc_ring` with `T` inline, 64K-slot blocks | our ceiling: what the shared_ptr in the API costs |

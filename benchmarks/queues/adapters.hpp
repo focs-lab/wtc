@@ -40,7 +40,8 @@
 
 namespace wtc_bench {
 
-// B0: the shim as shipped, tag generic.
+// B0: the shim as shipped, tag generic: the segmented queue
+// (runtime/segment_queue.hpp).
 template <class T> struct shim_generic {
     wtc::queue<T> q;
     void push(const T& v) { q.push(v); }
@@ -64,7 +65,8 @@ template <class T> struct shim_spsc_inline {
 };
 
 // The shim with the tag the compiler sets for many producers and one
-// consumer: the list without locks (runtime/mpsc_list.hpp).
+// consumer: the segmented queue with its consumer's side unshared
+// (runtime/segment_queue.hpp).
 template <class T> struct shim_mpsc {
     wtc::queue<T> q{wtc::topology::mpsc};
     void push(const T& v) { q.push(v); }

@@ -169,8 +169,14 @@ std::string LockBatchEndOp::getBlockingReason() {
     return "releases a mutex, which is half of a blocking protocol";
 }
 
+// The segmented queues (general-purpose and mpsc) retry a push whose cell a
+// pop skipped, or whose segment another push is linking: lock-free.
+static bool segmented(::mlir::wtc::Impl impl) {
+    return impl == ::mlir::wtc::Impl::generic || impl == ::mlir::wtc::Impl::mpsc;
+}
+
 Progress QueuePushOp::getProgress() {
-    return implOf(getImpl()) == ::mlir::wtc::Impl::generic ? Progress::blocking : Progress::wait_free;
+    return segmented(implOf(getImpl())) ? Progress::lock_free : Progress::wait_free;
 }
 bool QueuePushOp::mayCallAllocator() { return true; }
 std::string QueuePushOp::getBlockingReason() {
@@ -181,10 +187,9 @@ std::string QueuePushOp::getBlockingReason() {
                "current one is full";
     case ::mlir::wtc::Impl::spsc_inline:
         return "allocates a new block when the current one is full: the queue is unbounded";
-    case ::mlir::wtc::Impl::mpsc:
-        return "allocates the element it pushes (make_shared) and a node for it";
     default:
-        return "takes the queue's mutex and allocates a node and the element";
+        return "allocates the element it pushes (make_shared), and a new segment when the "
+               "current one is full";
     }
 }
 
@@ -200,9 +205,10 @@ bool QueuePopOp::mayCallAllocator() {
 std::string QueuePopOp::getBlockingReason() {
     switch (implOf(getImpl())) {
     case ::mlir::wtc::Impl::generic:
-        return "takes the queue's mutexes and frees the node it unlinks";
+        return "waits for a push that has taken the cell it reads to fill it, and frees the "
+               "segments it moves past";
     case ::mlir::wtc::Impl::mpsc:
-        return "frees the node it moves past";
+        return "frees the segments it moves past";
     case ::mlir::wtc::Impl::spmc:
         return "waits for another consumer's pop under the consumers' spin lock";
     default:
@@ -215,7 +221,7 @@ bool QueueBatchBeginOp::mayCallAllocator() { return false; }
 std::string QueueBatchBeginOp::getBlockingReason() { return ""; }
 
 Progress QueuePushDeferredOp::getProgress() {
-    return implOf(getImpl()) == ::mlir::wtc::Impl::generic ? Progress::blocking : Progress::wait_free;
+    return segmented(implOf(getImpl())) ? Progress::lock_free : Progress::wait_free;
 }
 bool QueuePushDeferredOp::mayCallAllocator() { return true; }
 std::string QueuePushDeferredOp::getBlockingReason() {
@@ -226,19 +232,18 @@ std::string QueuePushDeferredOp::getBlockingReason() {
                "current one is full";
     case ::mlir::wtc::Impl::spsc_inline:
         return "allocates a new block when the current one is full: the queue is unbounded";
-    case ::mlir::wtc::Impl::mpsc:
-        return "allocates the element it pushes (make_shared) and a node for it";
     default:
-        return "allocates a node and the element, and takes the queue's mutex when it publishes";
+        return "allocates the element it pushes (make_shared), and a new segment when it "
+               "publishes into a full one";
     }
 }
 
 Progress QueueBatchEndOp::getProgress() {
-    return implOf(getImpl()) == ::mlir::wtc::Impl::generic ? Progress::blocking : Progress::wait_free;
+    return segmented(implOf(getImpl())) ? Progress::lock_free : Progress::wait_free;
 }
-bool QueueBatchEndOp::mayCallAllocator() { return false; }
+bool QueueBatchEndOp::mayCallAllocator() { return segmented(implOf(getImpl())); }
 std::string QueueBatchEndOp::getBlockingReason() {
-    if (implOf(getImpl()) == ::mlir::wtc::Impl::generic)
-        return "takes the queue's mutex to splice the run in";
+    if (segmented(implOf(getImpl())))
+        return "allocates a new segment when it publishes the run into a full one";
     return "";
 }

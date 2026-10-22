@@ -18,7 +18,8 @@ Every implementation carries, in its header comment:
 | file | substitutes for | the fact to prove |
 |---|---|---|
 | `spsc_ring.hpp` | `wtc::queue<T>` | exactly one thread ever pushes, exactly one ever pops, and the destructor runs after both are done |
-| `mpsc_list.hpp` | `wtc::queue<T>` | exactly one thread ever pops, any number push, and the destructor runs after all are done |
+| `segment_queue.hpp` | nothing: it is `wtc::queue<T>`'s general-purpose implementation | none: any number of producers and consumers |
+| `segment_queue.hpp`, single-consumer form | `wtc::queue<T>` | exactly one thread ever pops, any number push, and the destructor runs after all are done |
 | `spmc_ring.hpp` | `wtc::queue<T>` | exactly one thread ever pushes, any number pop, and the destructor runs after all are done |
 
 `spsc_ring<Slot, kSlots>` is an unbounded wait-free ring of blocks. It keeps
@@ -28,6 +29,17 @@ instantiates it with `Slot = std::shared_ptr<T>`, so the per-element
 allocation the original API implies is still paid; the ring removes the two
 mutexes and the per-push node. A `Slot = T` instantiation exists for the
 benchmark ceiling only and is not what the compiler emits.
+
+`segment_queue<Slot, kManyConsumers>` is an unbounded linearisable queue over
+a list of array segments ("FAAArrayQueue"): a push takes the tail segment's
+next cell with one fetch-and-add and fills it, a pop takes the head
+segment's next cell the same way, and a drained segment is freed through
+the hazard pointers of `hazard.hpp`. A batch takes its cells with one
+fetch-and-add. With many consumers a pop that reaches a cell no push has
+reserved yet skips it after a short wait, and one that reaches a reserved
+cell waits for it to be filled, so that a batch is never torn; the
+single-consumer form never skips and takes no read-modify-write on its
+side.
 
 Contract checking: build with `-DWTC_CHECK` and every ring records the first
 producer and the first consumer thread and aborts the moment a different
@@ -52,9 +64,10 @@ cmake -S runtime/test -B build-rt-check -DCMAKE_CXX_COMPILER=clang++-18 -DWTC_CH
 ```
 
 The suite includes tests that must fail: a two-producer run of the ring, a
-two-consumer run of the mpsc list and a two-producer run of the spmc ring,
-which TSan has to report and `WTC_CHECK` has to abort. A suite that cannot fail proves nothing, which is a lesson this
-project has already paid for once.
+two-consumer run of the segmented queue's single-consumer form and a
+two-producer run of the spmc ring, which TSan has to report and
+`WTC_CHECK` has to abort. A suite that cannot fail proves nothing, which is
+a lesson this project has already paid for once.
 
 The lagging-consumer unit test found a real bug on its first run: the block
 the producer starts in never received its `end` mark, read as drained one lap
