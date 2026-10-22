@@ -15,6 +15,8 @@
 // the list the workloads dispatch over.
 
 #include <condition_variable>
+#include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -31,6 +33,14 @@
 #include "SPSCQueue.h"
 #include <boost/lockfree/spsc_queue.hpp>
 #include <boost/lockfree/queue.hpp>
+
+// The queues of the LPRQ paper's evaluation (benchmarks/third_party/lprq):
+// the fetch-and-add ring queues the lock-free queue literature measures
+// itself against.
+#include "FAAArrayQueue.hpp"
+#include "LCRQueue.hpp"
+#include "LPRQueue.hpp"
+#include "LSCQueue.hpp"
 
 // oneTBB is the library docs/vision.md names by name, so it is worth having
 // when it is installed; it is a system package rather than a vendored
@@ -177,6 +187,33 @@ template <class T> struct onetbb_cq_sp {
 };
 #endif
 
+// B7: the ring queues of the lock-free queue literature, from the LPRQ
+// paper's artifact: LCRQ (CAS2), LPRQ (its portable form), LSCQ (the
+// scalable circular queue, linked) and the fetch-and-add array queue. Each
+// takes a thread index for its hazard pointers, handed out here per thread
+// of the process for its lifetime, and carries an owning raw pointer, as
+// boost_ms_queue does. The hazard-pointer table has room for 128 threads
+// (HP_MAX_THREADS in HazardPointers.hpp); a process that starts more stops
+// rather than index past it.
+inline int lprq_tid() {
+    static std::atomic<int> next{0};
+    thread_local const int id = next.fetch_add(1);
+    if (id >= 128) {
+        std::fprintf(stderr, "the LPRQ artifact's queues take at most 128 threads per process\n");
+        std::abort();
+    }
+    return id;
+}
+template <class T, class Q> struct lprq_adapter {
+    Q q;
+    void push(const T& v) { q.enqueue(new T(v), lprq_tid()); }
+    bool try_pop(T& out) { T* p = q.dequeue(lprq_tid()); if (!p) return false; out = *p; delete p; return true; }
+};
+template <class T> using lcrq = lprq_adapter<T, LCRQueue<T>>;
+template <class T> using lprq = lprq_adapter<T, LPRQueue<T>>;
+template <class T> using lscq = lprq_adapter<T, LSCQueue<T>>;
+template <class T> using faaarray = lprq_adapter<T, FAAArrayQueue<T>>;
+
 // ceiling: our own ring with T inline and blocks of 65536 slots, which is
 // the footprint of the flat 64K-entry ring a person writes for exactly this
 // case (rigtorp_inline is that ring). Not what the compiler emits.
@@ -208,6 +245,7 @@ inline const std::vector<std::string>& variant_names() {
         "moodycamel_rw_sp", "moodycamel_rw_inline", "moodycamel_cq_sp",
         "rigtorp_sp", "rigtorp_inline", "boost_spsc_sp", "boost_ms_queue",
         "ring_inline", "ring_sp", "ring_borrowed",
+        "lcrq", "lprq", "lscq", "faaarray",
 #if defined(WTC_HAVE_TBB)
         "onetbb_cq_sp",
 #endif
@@ -236,6 +274,10 @@ bool with_variant(const std::string& name, F&& f) {
     if (name == "ring_inline")           { f.template run<ring_inline<T>>(); return true; }
     if (name == "ring_sp")               { f.template run<ring_sp<T>>(); return true; }
     if (name == "ring_borrowed")         { f.template run<ring_borrowed<T>>(); return true; }
+    if (name == "lcrq")                  { f.template run<lcrq<T>>(); return true; }
+    if (name == "lprq")                  { f.template run<lprq<T>>(); return true; }
+    if (name == "lscq")                  { f.template run<lscq<T>>(); return true; }
+    if (name == "faaarray")              { f.template run<faaarray<T>>(); return true; }
 #if defined(WTC_HAVE_TBB)
     if (name == "onetbb_cq_sp")          { f.template run<onetbb_cq_sp<T>>(); return true; }
 #endif

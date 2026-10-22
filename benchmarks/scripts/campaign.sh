@@ -127,7 +127,7 @@ meta() {
     echo "  \"llvm_sha\": \"$(git -c safe.directory="$ROOT" -C "$ROOT" submodule status llvm 2>/dev/null | awk '{print $1}' | tr -d '+-')\","
     echo "  \"boost\": \"$(sed -n 's/^#define BOOST_LIB_VERSION \"\(.*\)\"/\1/p' /usr/include/boost/version.hpp 2>/dev/null)\","
     echo "  \"tbb\": \"$(dpkg-query -W -f='${Version}' libtbb12 2>/dev/null || echo none)\","
-    echo "  \"vendored\": \"$(sed -n 's/^| \([a-z]*\)\/ | [^|]* | \([0-9a-f]\{12\}\).*/\1@\2/p' "$ROOT/benchmarks/third_party/VENDORED.md" | tr '\n' ' ')\","
+    echo "  \"vendored\": \"$(sed -n 's/^| \([a-z]*\)\/ | [^|]* | \([^ |]*\)[^|]*|.*/\1@\2/p' "$ROOT/benchmarks/third_party/VENDORED.md" | tr '\n' ' ')\","
     echo "  \"control_build\": \"$CONTROL_BUILD\","
     echo "  \"alloc_dir\": \"$WTC_ALLOC_DIR\", \"allocators\": \"$(ls "$WTC_ALLOC_DIR" 2>/dev/null | grep '\.so' | tr '\n' ' ')\","
     echo "  \"reps\": $REPS"
@@ -543,10 +543,12 @@ case "$LEG" in
     # producers as well, which the compiler substitutes for an mpsc verdict,
     # and with one producer its ring for many consumers (spmc).
     # Split producers and consumers, and the pairwise workload of the
-    # lock-free queue literature. Needs a 16-core reservation.
+    # lock-free queue literature, whose queues (LCRQ, LPRQ, LSCQ and the
+    # fetch-and-add array queue, from the LPRQ artifact) run beside the
+    # libraries. Needs a 16-core reservation.
     "$HERE/check_env.sh" 16 || exit 1
     meta
-    MPMC="shim_generic orig_generic std_mutex moodycamel_cq_sp boost_ms_queue $(have_tbb && echo onetbb_cq_sp)"
+    MPMC="shim_generic orig_generic std_mutex moodycamel_cq_sp boost_ms_queue $(have_tbb && echo onetbb_cq_sp) lcrq lprq lscq faaarray"
     ALLOCS=$(allocs_for glibc jemalloc mimalloc)
     warmup; control 900
     for rep in $(seq 0 $((REPS-1))); do

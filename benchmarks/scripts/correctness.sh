@@ -58,6 +58,10 @@ pick_tsan_cxx() {
 }
 
 CXX=$(pick_tsan_cxx) || { echo "no compiler here has a working ThreadSanitizer" >&2; exit 2; }
+# The C compiler of the same family and version, for the one C file (the
+# SCQ ring under LSCQ): a sanitized C++ build must not link a C object
+# instrumented by another compiler's runtime.
+CC=${CXX/clang++/clang}; CC=${CC/g++/gcc}
 echo "ThreadSanitizer builds use $CXX ($("$CXX" --version | head -1))"
 echo
 
@@ -81,7 +85,7 @@ done
 echo
 echo "=== 2. the workloads under ThreadSanitizer, spsc and inline tags ==="
 BT="$OUT/bench-tsan"
-if cmake -S "$ROOT/benchmarks" -B "$BT" -DCMAKE_CXX_COMPILER="$CXX" -DWTC_BENCH_SANITIZE=thread >/dev/null 2>&1 \
+if cmake -S "$ROOT/benchmarks" -B "$BT" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_C_COMPILER="$CC" -DWTC_BENCH_SANITIZE=thread >/dev/null 2>&1 \
    && cmake --build "$BT" -j 8 >/dev/null 2>&1; then
   for v in shim_spsc shim_spsc_inline ring_sp ring_inline ring_borrowed; do
     for e in 8 64 256; do
@@ -92,6 +96,21 @@ if cmake -S "$ROOT/benchmarks" -B "$BT" -DCMAKE_CXX_COMPILER="$CXX" -DWTC_BENCH_
         bad "W1 $v E$e: $(grep -m1 -oE 'ThreadSanitizer: [a-z ]*' "$OUT/tsan-$v-$e.log" || echo 'run failed')"
       fi
     done
+  done
+  # The literature's ring queues, vendored, under two producers and two
+  # consumers: a report here is theirs, not the shim's, and is still a
+  # reason not to compare against them. Not lcrq: it hands the element over
+  # through cmpxchg16b in inline assembly, which the sanitizer cannot see as
+  # a release, so it reports the hand-over itself (the write in push, the
+  # read in try_pop) and tells nothing. LPRQ is the same queue without CAS2
+  # and is checked.
+  for v in lprq lscq faaarray; do
+    if "${RUN[@]}" timeout 600 "$BT/w9_mpmc_scaling" --variant "$v" --mode split --producers 2 --consumers 2 \
+         --n 100000 --json /dev/null >"$OUT/tsan-w9-$v.log" 2>&1 && ! grep -q 'ThreadSanitizer' "$OUT/tsan-w9-$v.log"; then
+      ok "W9 $v 2P2C: no report"
+    else
+      bad "W9 $v 2P2C: $(grep -m1 -oE 'ThreadSanitizer: [a-z ]*' "$OUT/tsan-w9-$v.log" || echo 'run failed')"
+    fi
   done
   # The ablation's six rows, the runtime's queues used directly: the
   # segmented queue holding the element itself is what the shim builds,
@@ -158,7 +177,7 @@ fi
 echo
 echo "=== 4. the contract checks stay silent where the proof holds ==="
 BC="$OUT/bench-check"
-if cmake -S "$ROOT/benchmarks" -B "$BC" -DCMAKE_CXX_COMPILER="$CXX" -DWTC_CHECK=ON >/dev/null 2>&1 \
+if cmake -S "$ROOT/benchmarks" -B "$BC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_C_COMPILER="$CC" -DWTC_CHECK=ON >/dev/null 2>&1 \
    && cmake --build "$BC" -j 8 >/dev/null 2>&1; then
   silent=1
   for k in $(seq 1 10); do

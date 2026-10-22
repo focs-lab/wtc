@@ -79,6 +79,7 @@ results/              committed: percentiles and summaries, never raw samples
 | `boost_spsc_sp` | `boost::lockfree::spsc_queue` | classic bounded SPSC |
 | `boost_ms_queue` | `boost::lockfree::queue` | Michael-Scott MPMC, for the fallback control |
 | `onetbb_cq_sp` | `tbb::concurrent_queue` | the library `docs/vision.md` names; present only where oneTBB is installed |
+| `lcrq`, `lprq`, `lscq`, `faaarray` | the LPRQ paper's artifact (PPoPP 2023): LCRQ, LPRQ, LSCQ, FAAArrayQueue | the ring queues the lock-free queue literature measures against; owning raw pointer, as `boost_ms_queue` |
 
 Every `_sp` variant hands the element over as a `shared_ptr<T>` and copies
 `*p` out on pop, so all of them pay one allocation, one free and the same
@@ -144,7 +145,8 @@ variants are the ceiling.
   producer), and `--mode pairwise`, where every thread pushes then pops, as
   in the lock-free queue literature. Every queue the compiler cannot prove
   keeps the shim's general-purpose one, so this is where it is compared with
-  the libraries a developer would otherwise use; with one consumer or one
+  the libraries a developer would otherwise use and with the literature's
+  own queues (`lcrq`, `lprq`, `lscq`, `faaarray`); with one consumer or one
   producer, what the compiler substitutes there (`shim_mpsc`, `shim_spmc`)
   runs beside them.
 - **W10** `w10_ablation`: W1's measurement over the runtime's two queues used

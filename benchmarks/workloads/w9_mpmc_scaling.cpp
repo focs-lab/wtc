@@ -48,6 +48,7 @@ struct config {
 
 const char* const kSafe[] = {"shim_generic", "orig_generic", "std_mutex",
                              "moodycamel_cq_sp", "boost_ms_queue",
+                             "lcrq", "lprq", "lscq", "faaarray",
 #if defined(WTC_HAVE_TBB)
                              "onetbb_cq_sp",
 #endif

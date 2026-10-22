@@ -117,7 +117,9 @@ measures against:
   `orig_generic`); it has since become the segmented queue described
   under [Many threads](#many-threads), and the legs are being run again;
 - **B1**, general-purpose libraries: oneTBB, moodycamel ConcurrentQueue
-  (CQ), Boost lock-free and `std::mutex`;
+  (CQ), Boost lock-free and `std::mutex`, and in W9 the queues the
+  lock-free queue literature measures against, from the LPRQ paper's
+  artifact: LCRQ, LPRQ, LSCQ and the fetch-and-add array queue;
 - **B2**, expert single-producer queues: rigtorp's, moodycamel
   ReaderWriterQueue (RWQ) and Boost spsc;
 - **B3**, the same source with its tags written by hand.
