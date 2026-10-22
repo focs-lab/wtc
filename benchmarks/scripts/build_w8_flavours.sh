@@ -52,6 +52,6 @@ echo "builds batch in the source); the checksums must agree."
 # What was built, for meta.json: the toolchain and each flavour's flags.
 {
   echo "compiler=tools/wtc-cc, ClangIR $(git -c safe.directory="$ROOT" -C "$ROOT" submodule status llvm 2>/dev/null | awk '{print $1}' | tr -d '+-' | cut -c1-12)"
-  echo "wtc=$(git -c safe.directory="$ROOT" -C "$ROOT" rev-parse --short=12 HEAD 2>/dev/null)$([ -n "$(git -c safe.directory="$ROOT" -C "$ROOT" status --porcelain 2>/dev/null)" ] && echo ' (dirty)')"
+  echo "wtc=$(git -c safe.directory="$ROOT" -C "$ROOT" rev-parse --short=12 HEAD 2>/dev/null)$([ -n "$(git -c safe.directory="$ROOT" -C "$ROOT" status --porcelain -- . ":(exclude)benchmarks/results" 2>/dev/null)" ] && echo ' (dirty)')"
   cat "$OUT/flavours.txt"
 } > "$OUT/build-info.txt"
