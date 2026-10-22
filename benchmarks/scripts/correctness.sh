@@ -93,6 +93,21 @@ if cmake -S "$ROOT/benchmarks" -B "$BT" -DCMAKE_CXX_COMPILER="$CXX" -DWTC_BENCH_
       fi
     done
   done
+  # The literature's ring queues, vendored, under two producers and two
+  # consumers: a report here is theirs, not the shim's, and is still a
+  # reason not to compare against them. Not lcrq: it hands the element over
+  # through cmpxchg16b in inline assembly, which the sanitizer cannot see as
+  # a release, so it reports the hand-over itself (the write in push, the
+  # read in try_pop) and tells nothing. LPRQ is the same queue without CAS2
+  # and is checked.
+  for v in lprq lscq faaarray; do
+    if "${RUN[@]}" timeout 600 "$BT/w9_mpmc_scaling" --variant "$v" --mode split --producers 2 --consumers 2 \
+         --n 100000 --json /dev/null >"$OUT/tsan-w9-$v.log" 2>&1 && ! grep -q 'ThreadSanitizer' "$OUT/tsan-w9-$v.log"; then
+      ok "W9 $v 2P2C: no report"
+    else
+      bad "W9 $v 2P2C: $(grep -m1 -oE 'ThreadSanitizer: [a-z ]*' "$OUT/tsan-w9-$v.log" || echo 'run failed')"
+    fi
+  done
   # The ablation's four queues, used directly: the segmented queue with the
   # element in its cell is a shape the shim does not build.
   for v in mpmc_sp mpmc_cell spsc_sp spsc_cell; do
