@@ -669,4 +669,6 @@ esac
 if ! python3 "$HERE/summarise.py" "$OUT" > "$OUT/SUMMARY.md"; then
   echo "summarise failed; the runs are in $OUT/runs.jsonl and can be summarised again" >&2
 fi
+BUILD=$BUILD CONTROL_BUILD=$CONTROL_BUILD FLAVOURS=${FLAVOURS:-} INPUTS=${INPUTS:-} \
+  "$HERE/scrub_paths.sh" "$OUT"
 echo "results: $OUT"
