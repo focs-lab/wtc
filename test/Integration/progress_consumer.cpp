@@ -21,7 +21,7 @@
 //
 // RETAIN: queue @q: not borrowed
 // RETAIN: error: wtc: consume_one() is declared lock-free but can block
-// RETAIN: note: calls std::shared_ptr<sample>::operator=
+// RETAIN: note: which allocates the shared_ptr it returns
 //
 // LOG: error: wtc: consume_one() is declared lock-free but can block
 // LOG: note: which does input or output (printf)

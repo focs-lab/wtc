@@ -88,8 +88,8 @@ benchmark it is the same binary.
 | Tag | Chosen when the analysis proves | Implementation |
 |:--|:--|:--|
 | `generic` | nothing, or many producers and many consumers | [`runtime/segment_queue.hpp`](runtime/segment_queue.hpp): array segments whose cells each side takes with one fetch-and-add, freed through hazard pointers |
-| `spsc` | one producer thread and one consumer thread | [`runtime/spsc_ring.hpp`](runtime/spsc_ring.hpp): an unbounded wait-free ring, the element behind a `shared_ptr` |
-| `spsc_inline` | the same, and every pop only borrows its element | the same ring, the element held in its slot |
+| `spsc` | one producer thread and one consumer thread | [`runtime/spsc_ring.hpp`](runtime/spsc_ring.hpp): an unbounded wait-free ring, the element in its slot, handed out as a `shared_ptr` allocated by the consumer |
+| `spsc_inline` | the same, and every pop only borrows its element | the same ring, the element lent in place: nothing allocated per element |
 | `mpsc` | one consumer, many producers | the same segmented queue, its consumer's side unshared |
 | `spmc` | one producer, many consumers | [`runtime/spmc_ring.hpp`](runtime/spmc_ring.hpp): the ring, its consumers taking turns |
 
