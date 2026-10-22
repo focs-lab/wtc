@@ -1,0 +1,21 @@
+{
+  "leg": "eval-w8", "date": "2026-10-21T08:15:51Z",
+  "git_sha": "915a601a933b2568dd4ff07f514ceac43fc1c3e8", "git_dirty": false,
+  "kernel": "6.8.0-40-generic",
+  "cpu_model": "Intel(R) Xeon(R) w9-3495X",
+  "sockets": "1", "numa_nodes": "1",
+  "allowed_cpus": "4-11",
+  "smt_control": "on",
+  "smt_siblings": "offline or reserved",
+  "load_average": "0.98 1.79 2.15",
+  "build": "compiler=tools/wtc-cc, ClangIR 1ebf89d8c5e6;wtc=915a601a933b;flavour w8_plain=-O2 -DW8_PLAIN;flavour w8_batched=-O2 ;flavour w8_hand=-O2 -DW8_HAND_BATCH;flavour w8_batched_k8=-O2 -DWTC_LOCK_BATCH_K=8;flavour w8_hand_k8=-O2 -DW8_HAND_BATCH -DWTC_LOCK_BATCH_K=8;flavour w8_batched_k512=-O2 -DWTC_LOCK_BATCH_K=512;flavour w8_hand_k512=-O2 -DW8_HAND_BATCH -DWTC_LOCK_BATCH_K=512;",
+  "governor": "performance",
+  "no_turbo": "1",
+  "freq_khz": "1900019",
+  "llvm_sha": "1ebf89d8c5e61f9184431eb4e5c9a6966b5c0748",
+  "boost": "1_83",
+  "tbb": "2021.11.0-2ubuntu2",
+  "vendored": "readerwriterqueue@6867b5645235 concurrentqueue@683b9e31ea15 rigtorp@1053918dbd25 ",
+  "control_build": "$CONTROL_BUILD",
+  "reps": 10
+}

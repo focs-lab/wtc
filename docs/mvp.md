@@ -23,6 +23,8 @@ tools/wtc-cc --toolchain build-llvm examples/queue_example.cpp -o prog
 ```
 remark: wtc: queue @q1: spsc (producers: 1, consumers: 1)
 remark: wtc: queue @q2: mpmc (producers: many, consumers: many)
+remark: wtc: queue @q2: many producers: 2 threads: producer2() started at queue_example.cpp:61:22, producer2() started at queue_example.cpp:62:22
+remark: wtc: queue @q2: many consumers: 2 threads: consumer2() started at queue_example.cpp:63:22, consumer2() started at queue_example.cpp:64:22
 remark: wtc: queue @q1: every pop only borrows its element (1 pop)
 remark: wtc: specialised: constructor tag rewritten to spsc_inline
 ```
@@ -31,9 +33,16 @@ The queue may be a global, a local, a member of a struct or a heap object,
 and the threads may reach it through parameters, struct fields or pointers
 written in several places; a pointer that may name one of several queues
 counts on each (`test/Transforms/QueueOwnershipAnalysis/`). `q2` has two
-producers and two consumers and keeps the general-purpose queue. `q1` goes one step further than the gate did: its consumer only
-tests whether a pop returned anything, so it borrows, and the next section
-is what that buys.
+producers and two consumers and keeps the general-purpose queue; a side
+that counts many says why -- two threads, as here, or one that stands for
+many: started in a loop, under recursion, or from a function nothing in the
+file calls (`why-many.cpp`). A queue with many producers and one consumer
+gets the shim's linked list without locks, whose push is one exchange
+(`test/Integration/mpsc_fan_in.cpp`); one with one producer and many
+consumers, the SPSC ring with its consumers taking turns under a spin lock
+(`spmc_fan_out.cpp`). `q1` goes one step further than the
+gate did: its consumer only tests whether a pop returned anything, so it
+borrows, and the next section is what that buys.
 
 ## 2. No allocation per element
 
@@ -66,15 +75,16 @@ byte the build whose source asks for inline storage itself.
 
 A loop that pushes on every iteration pays one synchronisation per element.
 In a function marked `WTC_BATCH` the compiler turns such a loop into one
-batched run, published every 64 elements and at the end, when nothing in
-the loop can be waiting for an element it has not published.
+batched run, published every `WTC_BATCH_K` elements (64 unless the program
+sets it) and at the end, when nothing in the loop can be waiting for an
+element it has not published.
 
 ```sh
 tools/wtc-cc --toolchain build-llvm examples/batch_loop.cpp -o prog
 ```
 
 ```
-remark: wtc: pushes in this loop batched: published every WTC_BATCH_K (64) pushes and at the end
+remark: wtc: pushes in this loop batched: published every WTC_BATCH_K pushes and at the end
 ```
 
 A loop that spins on an atomic, calls into the threading library, can
@@ -83,14 +93,15 @@ with the reason (`test/Transforms/Batch/refusals.cpp`).
 
 The same mark lets the compiler hold a mutex across the critical sections
 of a loop that takes and lets go of it on every iteration, letting it go
-every 64 sections and at the end:
+every `WTC_LOCK_BATCH_K` sections (64 unless the program sets it) and at
+the end:
 
 ```sh
 tools/wtc-cc --toolchain build-llvm examples/lock_loop.cpp -o prog
 ```
 
 ```
-remark: wtc: critical sections in this loop batched: the mutex is let go every WTC_LOCK_BATCH_K (64) sections and at the end
+remark: wtc: critical sections in this loop batched: the mutex is let go every WTC_LOCK_BATCH_K sections and at the end
 ```
 
 Every interleaving of the result is one the original allows, so no
@@ -193,7 +204,9 @@ p99 of 2.8 µs for spsc and 1.2 µs for both inline builds, and a p99.9 of
 18.7 µs against 5.2 and 5.0 µs.
 
 **Batching** (`w7_batch_wtc`), one producer loop, million elements a
-second, closed loop, and the delay of every 64th element:
+second, closed loop, and the delay of every 64th element (which, with a
+batch of 64, is always a batch's first element and overstates the delay;
+`docs/evaluation.md`, Corrections):
 
 | implementation, 64 bytes | plain | batched | gain | delay p50 plain → batched |
 |---|---|---|---|---|

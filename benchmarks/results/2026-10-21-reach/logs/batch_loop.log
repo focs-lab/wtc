@@ -1,0 +1,4 @@
+wtc: pushes in this loop batched: published every WTC_BATCH_K pushes and at the end
+wtc: queue @q: spsc (producers: 1, consumers: 1)
+wtc: queue @q: every pop only borrows its element (1 pop)
+wtc: specialised: constructor tag rewritten to spsc_inline

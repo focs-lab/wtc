@@ -1,0 +1,7 @@
+workload,mode,elem,wait,interval_ns,rate,smt,placement,threads,producers,consumers,work,pass,k,variant,metric,n,median,lo,hi,min,max,cov,saturated
+W1,,64,spin,,,1,smt,,,,,,,shim_generic,mops,10,3.070575,3.04255,3.091835,3.03269,3.10549,0.007814669653046825,0
+W1,,64,spin,,,1,smt,,,,,,,onetbb_cq_sp,mops,10,9.931519999999999,9.911999999999999,9.97231,9.89884,9.99047,0.003048728823834703,0
+W1,,64,spin,,,1,smt,,,,,,,rigtorp_inline,mops,10,153.0435,152.404,153.449,152.077,154.031,0.004009579751968586,0
+W1,,64,spin,,,1,smt,,,,,,,moodycamel_rw_sp,mops,10,12.909,12.8936,12.95975,12.8243,13.0189,0.004107160698544112,0
+W1,,64,spin,,,1,smt,,,,,,,shim_spsc,mops,10,13.34395,13.301,13.35915,13.2326,13.3648,0.0029678258864494185,0
+W1,,64,spin,,,1,smt,,,,,,,shim_spsc_inline,mops,10,67.02235,66.6379,67.26345,66.5198,67.472,0.004759713227320863,0

@@ -107,7 +107,11 @@ namespace wtc::rt {
 // same, 3.2 to 3.4 million a second. It matters for elements held inline.
 // For shared-pointer slots 4096 costs 64 KiB per block, 128 KiB per queue
 // at rest.
-template <class Slot, unsigned kSlots = 4096, unsigned kLine = 64>
+//
+// kOneConsumer false is for spmc_ring, which lets consumers into try_pop
+// one at a time under its own lock: the ring's consumer side is then still
+// single-threaded, and only the contract check must not count them.
+template <class Slot, unsigned kSlots = 4096, unsigned kLine = 64, bool kOneConsumer = true>
 class spsc_ring {
   static_assert(kSlots >= 2, "a block needs at least two slots");
   static_assert((kLine & (kLine - 1)) == 0, "kLine must be a power of two");
@@ -177,9 +181,9 @@ class spsc_ring {
       return;
     if (seen == me) return;
     std::fprintf(stderr,
-                 "wtc: SPSC contract violated: a second %s thread on queue %p "
+                 "wtc: %s contract violated: a second %s thread on queue %p "
                  "(first %#lx, now %#lx)\n",
-                 role, static_cast<void*>(this),
+                 kOneConsumer ? "SPSC" : "SPMC", role, static_cast<void*>(this),
                  static_cast<unsigned long>(seen),
                  static_cast<unsigned long>(me));
     std::abort();
@@ -302,7 +306,7 @@ public:
 
   bool try_pop(Slot& out) {
 #ifdef WTC_CHECK
-    claim(owner_c_, "consumer");
+    if constexpr (kOneConsumer) claim(owner_c_, "consumer");
 #endif
     release_lent();
     Slot* e = advance();
@@ -317,6 +321,7 @@ public:
   // The previously lent element is destroyed first, so it must not be
   // referenced any more when this is called.
   Slot* try_pop_borrow() {
+    static_assert(kOneConsumer, "a borrowed element dies at the next pop of any consumer");
 #ifdef WTC_CHECK
     claim(owner_c_, "consumer");
 #endif

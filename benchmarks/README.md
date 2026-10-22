@@ -34,14 +34,26 @@ workloads/
   w7_batch_wtc        a producer loop's pushes, batched by the compiler or not
   w8_lock_batch_wtc   a loop's critical sections, held as one by the
                       compiler or not, with one or two threads
+  w9_mpmc_scaling     the general-purpose queues as threads are added
+apps/ferret/          PARSEC ferret ported onto the shim (GPL, see there)
+apps/dedup/           PARSEC dedup ported onto the shim (BSD-3, see there)
+reach/oracle.json     every compiled queue's topology, read from its source
 scripts/
   check_env.sh        refuses to measure in an unfit environment
   campaign.sh         one leg: interleaved reps, control runs, results dir
-  summarise.py        runs.jsonl -> SUMMARY.md with medians, CIs, ratios
+  summarise.py        runs.jsonl -> SUMMARY.md with medians, CIs, ratios,
+                      and summary.csv for the figures
+  plot.py             summary.csv -> figures: bars, latency against load,
+                      sweeps, latency distributions
+  compile_cost.sh     wtc-cc's time per step and per pass, and code size
+  reach.sh            every queue's verdict against the oracle (RQ1);
+                      reach_table.py draws the table
   in_bench.py         drives a reservation without a terminal
   build_wtc_flavours.sh  the generic, hand-tagged and compiler-tagged builds
-  build_w7_flavours.sh   W7 for each implementation, batched and not
-  build_w8_flavours.sh   W8 as written and with its sections batched
+  build_w7_flavours.sh   W7 for each implementation: plain, batched by the
+                         compiler, batched by hand; batch sizes 1 to 1024
+  build_w8_flavours.sh   W8 as written, batched by the compiler, batched by
+                         hand; batch sizes 8, 64, 512
   correctness.sh      sanitizer and contract-check leg
 third_party/          vendored baselines, pinned commits, licences
                       (boost and oneTBB come from system packages instead)
@@ -77,22 +89,72 @@ are the ceiling.
   after warm-up and the last pop. An in-flight throttle (at most 4096
   queued) keeps unbounded queues from measuring the allocator instead; the
   bounded baselines see the same limit.
-- **W2** `w2_latency`: open loop, the producer sends one element every 1 us
-  or 10 us by busy-waiting on the TSC, the consumer records receive minus
-  send. p50/p90/p99/p99.9/p99.99/max from one million samples after warm-up.
+- **W2** `w2_latency`: open loop, the producer sends one element every
+  `--interval-ns` (1 us and 10 us in the gate's legs) by busy-waiting on the
+  TSC. Latency runs from the time each element was due, not the time it was
+  sent: a producer that falls behind its schedule charges the delay to the
+  elements it held up instead of hiding it (coordinated omission), and
+  `svc_p50`/`svc_p99`/`svc_p999`, from the send, are the queue's own share.
+  Each line records the offered rate, the rates at which the producer sent
+  and the consumer drained, and marks a run in which either fell short of
+  the offered rate `saturated`: such a run measures a backlog. The queue is
+  unbounded, so a consumer that falls behind shows only in its own rate.
+  p50/p90/p99/p99.9/p99.99/max from one million samples after warm-up.
   `--pingpong` measures half a round trip over two queues as a cross-check
   that does not depend on two cores agreeing about the counter.
 - **W3** `w3_pipeline` and `w3_pipeline_wtc`: three stages and two queues,
   with a checksum as the output oracle. The second uses the queues directly
-  rather than through an adapter, because a queue held as a struct member is
-  exactly what the analysis refuses to identify, so the adapter shape cannot
-  show the compiler's own decision.
+  rather than through an adapter: every adapter builds its queue in its own
+  constructor, which serves both queues of a pipeline, and one tag cannot
+  serve two queues, so the adapter shape cannot show the compiler's own
+  decision. Both have the same in-flight bound, and in the open loop both
+  measure latency from each record's due time and mark a run that fell
+  behind the offered rate `saturated`.
 - **W5** `w5_mpmc_control`: two producers and two consumers. The case where
   the compiler must refuse, so the question is whether the fallback costs
   anything. `--force-unsafe`, with `WTC_CHECK`, runs the single-producer ring
   under two producers on purpose: the negative control.
 - **W6** `w6_ring_shape`: block size and cache-line padding, which are
   template parameters rather than options, so one configuration per process.
+- **W7** `w7_batch_wtc`: a producer's loop of pushes, as written, batched by
+  the compiler (`WTC_BATCH`) and batched by hand through the shim's batch
+  calls, the bound for the compiler's. As fast as it can, the producer runs
+  ahead and latency measures the backlog; `--rate` paces it, and latency
+  from each element's due time shows batching's price: an element waits
+  for the rest of its batch. One element in 61 is timed, a prime, so the
+  sample never lines up with a batch boundary.
+- **W8** `w8_lock_batch_wtc`: threads adding to one record under one mutex,
+  with their own work between sections (`--work-ns`, calibrated rounds of
+  a step the compiler cannot fold), as written, batched by the compiler and
+  by hand. Beside the rate: Jain's fairness index over the threads' rates,
+  how far apart they finish, and the distribution of one section's time,
+  wait included. Holding the mutex across sections also holds it across
+  the work between them, so batching loses once that work is long enough:
+  the sweep over `--work-ns` is where that shows.
+- **W9** `w9_mpmc_scaling`: the general-purpose queues alone, as threads are
+  added: `--mode split` with P producers and C consumers (order checked per
+  producer), and `--mode pairwise`, where every thread pushes then pops, as
+  in the lock-free queue literature. Every queue the compiler cannot prove
+  keeps the shim's general-purpose one, so this is where it is compared with
+  the libraries a developer would otherwise use; with one consumer or one
+  producer, what the compiler substitutes there (`shim_mpsc`, `shim_spmc`)
+  runs beside them.
+
+Every results line also records the process's peak resident set
+(`peak_rss_kib`). The latency workloads record the whole distribution as
+well as its percentiles (`hist_ns`: log-linear buckets, eight per power of
+two, as `lower:count` pairs), and W1 the cost of one element
+(`ns_per_op`). Latency timestamps are fenced on both sides, so a sample
+brackets exactly the operation.
+
+Runs that explain a result rather than time it are kept apart from the
+timed ones, because counting perturbs what it counts. `WTC_PASS=mechanism`
+marks every line of such a run (`pass`); `WTC_PERF=1` adds user-space
+hardware counters for the whole process (`cycles`, `instructions`,
+`cache_misses`, `llc_read_misses`), and `LD_PRELOAD=libwtc_alloccount.so`
+(built beside the workloads) adds the allocator calls (`allocs`, `frees`,
+`alloc_bytes`). All of them count the whole run, so they are divided by
+`n_total`, the elements pushed including warm-up.
 
 oneTBB is optional. Where `libtbb-dev` is installed CMake finds it and the
 `onetbb_cq_sp` variant appears; where it is not, the configure step says so
@@ -114,7 +176,23 @@ benchmarks/scripts/campaign.sh w1 build-bench 10
 ```
 
 Legs: `w1`, `w2`, `w2pp`, `w3`, `w3wtc`, `w5`, `w6`, `smt`, `far`, `tbb`,
-`w1check`, and `smoke`, which runs everything once, tiny, unreserved.
+`w1check`, and `smoke`, which runs everything once, tiny, unreserved. The
+evaluation's legs are `eval-w1`, `eval-w1smt`, `eval-w2`, `eval-w3`,
+`eval-w3grain`, `eval-w7`, `eval-w8`, `eval-w9`, `eval-ferret` and
+`eval-dedup`; each one's comment in `campaign.sh` says which question it
+answers and what it needs.
+
+Figures come from a summarised leg:
+
+```sh
+benchmarks/scripts/summarise.py benchmarks/results/<leg>
+benchmarks/scripts/plot.py load  benchmarks/results/<leg> --workload W2 --metric p99
+benchmarks/scripts/plot.py sweep benchmarks/results/<leg> --workload W9 --x threads --where mode=pairwise
+```
+
+A figure draws one value per variant and position, so `plot.py` refuses a
+selection that leaves a configuration field open and names the field to
+fix with `--where`.
 
 `campaign.sh` checks the environment first (governor `performance`, turbo
 off, enough cores for the leg), writes `meta.json`, discards a warm-up run,

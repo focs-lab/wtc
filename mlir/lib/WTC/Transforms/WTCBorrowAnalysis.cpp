@@ -42,14 +42,18 @@ using namespace mlir::wtc;
 //       It is never stored anywhere else, returned, or turned into an
 //       integer, so nothing can reach the element after the slot is gone.
 //   (c) while the slot lives, nothing in its scope pops the same queue: no
-//       other pop of it, no pop that may act on several queues of its type,
-//       and no call that may reach either.
+//       other pop that may act on it -- its own, one of several queues it
+//       is among, or one of its type the analysis could not place -- and no
+//       call that may reach one.
 //
 // The slot is a local of the scope that holds it, so the scope ends, and
 // with it the borrow, before any later pop of the same queue that is not
 // inside that scope. A queue is borrowed only if every one of its pops
 // passes; the root then gets wtc.borrowed and each pop `borrowed`. A remark
-// names the first use that stands in the way otherwise.
+// names the first use that stands in the way otherwise. A pop that may act
+// on several queues (a helper every stage calls with its own) is one of
+// each one's pops and is checked for each: what it does with its element
+// does not depend on which queue it came from.
 //
 // Assumes one translation unit, as the ownership analysis does: a function
 // without a body here cannot pop a queue this module defines.
@@ -135,8 +139,10 @@ private:
 
 bool BorrowChecker::popsSameQueue(QueuePopOp other) const {
     if (auto id = other.getQueueIdAttr()) return id.getInt() == curId;
-    // A pop that may act on several queues names none of them; it may act
-    // on this one if it acts on a queue of the same type.
+    if (auto ids = other->getAttrOfType<DenseI64ArrayAttr>(kQueueIdsAttrName))
+        return llvm::is_contained(ids.asArrayRef(), curId);
+    // A pop the analysis could not place names no queue; it may act on
+    // this one if it acts on a queue of the same type.
     auto qt = dyn_cast<QueueType>(other.getQueue().getType());
     return !qt || qt.getElementType() == curType;
 }
@@ -348,6 +354,8 @@ public:
         llvm::SmallPtrSet<Type, 4> anonymousPopTypes;
         module.walk([&](QueuePopOp pop) {
             if (auto id = pop.getQueueIdAttr()) popsOf[id.getInt()].push_back(pop);
+            else if (auto ids = pop->getAttrOfType<DenseI64ArrayAttr>(kQueueIdsAttrName))
+                for (int64_t i : ids.asArrayRef()) popsOf[i].push_back(pop);
             else if (auto qt = dyn_cast<QueueType>(pop.getQueue().getType()))
                 anonymousPopTypes.insert(qt.getElementType());
         });
@@ -362,16 +370,17 @@ public:
             auto topo = root->getAttrOfType<TopologyAttr>(kTopologyAttrName);
             if (!id || !topo || topo.getValue() != Topology::spsc) return;
             const std::string label = labelOf(root);
-            // Asked first: a queue whose only pop may also act on another
-            // has no pop of its own, and "nothing pops it" would be wrong.
+            // Asked first: a pop of its type that the analysis could not
+            // place may be one of its pops, and "nothing pops it" would be
+            // wrong.
             Type queueType;
             if (auto g = dyn_cast<cir::GlobalOp>(root)) queueType = g.getSymType();
             else if (auto a = dyn_cast<cir::AllocaOp>(root)) queueType = a.getAllocaType();
             else queueType = cast<cir::PointerType>(root->getOperand(0).getType()).getPointee();
             if (anonymousPopTypes.contains(queueType)) {
                 root->emitRemark() << "wtc: queue " << label
-                                   << ": not borrowed: a pop that may act on several queues of its "
-                                      "type was not checked";
+                                   << ": not borrowed: a pop of its type that the analysis could not "
+                                      "place was not checked";
                 return;
             }
             auto it = popsOf.find(id.getInt());

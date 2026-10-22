@@ -28,14 +28,20 @@ SRC="$ROOT/benchmarks/workloads/w3_pipeline_wtc.cpp"
 CC="$ROOT/tools/wtc-cc"
 
 mkdir -p "$OUT"
+: > "$OUT/flavours.txt"
 export WTC_OPT=${WTC_OPT:-$ROOT/build/bin/wtc-opt}
 INC="-I$ROOT/benchmarks/queues -I$ROOT/benchmarks/harness"
+
+# Through the host's build lock where there is one, as the W7 and W8
+# scripts do; a machine without it builds directly.
+LOCK=()
+command -v machine-lock >/dev/null && LOCK=(machine-lock --lane wtc --cores 4 --mem 8G --minutes 15 --why "wtc w3 build" --)
 
 build() { # name, extra wtc-cc args...
   local name=$1; shift
   echo "=== $name"
-  machine-lock --lane wtc --cores 4 --mem 8G --minutes 15 --why "wtc flavour $name" -- \
-    "$CC" --toolchain "$ROOT/build-llvm" $INC -O2 "$@" "$SRC" -o "$OUT/w3_$name" \
+  echo "flavour $name=-O2 $*" >> "$OUT/flavours.txt"
+  "${LOCK[@]}" "$CC" --toolchain "$ROOT/build-llvm" $INC -O2 "$@" "$SRC" -o "$OUT/w3_$name" \
     2>"$OUT/$name.log" || { echo "  FAILED; last lines:"; tail -5 "$OUT/$name.log"; return 1; }
   grep -oE 'wtc: (queue @[A-Za-z0-9_]+: [a-z_ ]+|specialised[^;]*|not specialised[^;]*)' "$OUT/$name.log" \
     | sort | uniq -c | sed 's/^/  /' || true
@@ -76,3 +82,10 @@ if cmp -s "$OUT/w3_generic" "$OUT/w3_compiler"; then
 else
   echo "  generic and compiler: differ in $(cmp -l "$OUT/w3_generic" "$OUT/w3_compiler" | wc -l) bytes, as they must"
 fi
+
+# What was built, for meta.json: the toolchain and each flavour's flags.
+{
+  echo "compiler=tools/wtc-cc, ClangIR $(git -c safe.directory="$ROOT" -C "$ROOT" submodule status llvm 2>/dev/null | awk '{print $1}' | tr -d '+-' | cut -c1-12)"
+  echo "wtc=$(git -c safe.directory="$ROOT" -C "$ROOT" rev-parse --short=12 HEAD 2>/dev/null)$([ -n "$(git -c safe.directory="$ROOT" -C "$ROOT" status --porcelain -- . ":(exclude)benchmarks/results" 2>/dev/null)" ] && echo ' (dirty)')"
+  cat "$OUT/flavours.txt"
+} > "$OUT/build-info.txt"

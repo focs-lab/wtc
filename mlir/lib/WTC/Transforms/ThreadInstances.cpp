@@ -302,27 +302,37 @@ bool ThreadInstanceWalk::canSpawn(cir::FuncOp f) {
 
 static bool flowsOnlyToSpawnEntry(Value v, unsigned depth);
 
-// Whether f may run somewhere the call graph does not show: its address is
-// taken, and not merely handed to a spawn as the thread's entry. One rule
-// for both askers. The indirect-call check used to count a spawn entry as
-// an address taken, so any worker that itself started a thread made every
-// indirect call in the module a possible spawn, and main's start-up loop
-// before its first function pointer paired against that worker.
-static bool isAddressTaken(cir::FuncOp f, ModuleOp module) {
-    auto uses = SymbolTable::getSymbolUses(f, module.getOperation());
-    if (!uses) return false;
-    for (const SymbolTable::SymbolUse &use : *uses) {
-        Operation *user = use.getUser();
-        if (auto call = dyn_cast<cir::CallOp>(user)) {
-            if (call.getCalleeAttr() == use.getSymbolRef()) continue;    // a direct call
-            return true;
-        }
-        if (isa<QueuePushOp, QueuePopOp, LockOp, UnlockOp>(user)) continue; // fallback_impl
-        if (auto gg = dyn_cast<cir::GetGlobalOp>(user))
-            if (flowsOnlyToSpawnEntry(gg.getResult(), 0)) continue;
-        return true;                        // a global initializer, a vtable, anything else
+// Whether a use of a function's symbol takes its address, so that the
+// function may run somewhere the call graph does not show -- not a direct
+// call, and not merely handing it to a spawn as the thread's entry. One
+// rule for both askers. The indirect-call check used to count a spawn entry
+// as an address taken, so any worker that itself started a thread made
+// every indirect call in the module a possible spawn, and main's start-up
+// loop before its first function pointer paired against that worker.
+static bool takesAddress(const SymbolTable::SymbolUse &use) {
+    Operation *user = use.getUser();
+    if (auto call = dyn_cast<cir::CallOp>(user))
+        return call.getCalleeAttr() != use.getSymbolRef();               // not a direct call
+    if (isa<QueuePushOp, QueuePopOp, LockOp, UnlockOp>(user)) return false;   // fallback_impl
+    if (auto gg = dyn_cast<cir::GetGlobalOp>(user))
+        if (flowsOnlyToSpawnEntry(gg.getResult(), 0)) return false;
+    return true;                            // a global initializer, a vtable, anything else
+}
+
+bool ThreadInstanceWalk::isAddressTaken(cir::FuncOp f) {
+    if (!addressTaken_) {
+        addressTaken_.emplace();
+        SymbolTable symbols(module_);
+        // The module's body, not the module: asked of an operation that is
+        // a symbol table, getSymbolUses reads only that operation's own
+        // attributes and finds nothing.
+        if (auto uses = SymbolTable::getSymbolUses(&module_.getBodyRegion()))
+            for (const SymbolTable::SymbolUse &use : *uses)
+                if (auto fn = symbols.lookup<cir::FuncOp>(use.getSymbolRef().getRootReference()))
+                    if (!addressTaken_->contains(fn.getOperation()) && takesAddress(use))
+                        addressTaken_->insert(fn.getOperation());
     }
-    return false;
+    return addressTaken_->contains(f.getOperation());
 }
 
 // Both answers at once, as a fixpoint, for the reason reachesOp gives: a
@@ -360,7 +370,7 @@ void ThreadInstanceWalk::computeSpawns() {
     bool any = false;
     module_.walk([&](cir::FuncOp fn) {
         if (!any && !fn.getBody().empty() && spawnsCache_.lookup(fn.getOperation()) &&
-            isAddressTaken(fn, module_))
+            isAddressTaken(fn))
             any = true;
     });
     indirectSpawns_ = any;
@@ -1333,7 +1343,7 @@ bool ThreadInstanceWalk::siteRunsOnce(Operation *op, unsigned depth) {
     if (runsOnce(f)) return true;
     if (f.getSymName() == "main") return true;
     if (instanceCount(f) > 0) return false;     // the walk saw it run more than once
-    if (isAddressTaken(f, module_)) return false;
+    if (isAddressTaken(f)) return false;
     if (!callersComputed_) {
         callersComputed_ = true;
         ModuleOp module = module_;
@@ -1472,10 +1482,12 @@ void ThreadInstanceWalk::addRootsForModule() {
     module_.walk([&](cir::FuncOp f) {
         if (f.getBody().empty()) return;
         if (getSemanticKind(f) != SemanticOpKind::Unknown) return;   // shim bodies carry no wtc ops
-        if (isAddressTaken(f, module_) && relevant_(f)) {
-            if (addIfRoom({f, nextThread_++, Mult::Many, Mult::Many, nullptr, nullptr, true, false}))
+        if (isAddressTaken(f) && relevant_(f)) {
+            if (Instance *root = addIfRoom({f, nextThread_++, Mult::Many, Mult::Many, nullptr, nullptr, true, false})) {
+                root->manyRoot = "its address is taken, so it may run on any thread";
                 noteRemark(f, "wtc: address of this function is taken; it is treated as callable "
                               "from any thread, any number of times");
+            }
         }
     });
 }
@@ -1547,7 +1559,8 @@ void ThreadInstanceWalk::addOrphanRoots() {
             linkage == cir::GlobalLinkageKind::PrivateLinkage)
             return;
         if (!relevant_(f)) return;
-        addIfRoom({f, nextThread_++, Mult::Many, Mult::Many, nullptr, nullptr, true, false});
+        if (Instance *root = addIfRoom({f, nextThread_++, Mult::Many, Mult::Many, nullptr, nullptr, true, false}))
+            root->manyRoot = "nothing in this translation unit calls it";
     });
 }
 

@@ -68,6 +68,7 @@ struct Access {
     Location started;   // the spawn that starts it, or the entry for main
     bool spawned;
     bool oneOf = false;  // the operation may act on this queue or another
+    const Instance *inst = nullptr;   // where the walk saw it, while the walk lives
 };
 
 struct SideInfo {
@@ -109,6 +110,7 @@ private:
     ModuleOp module;
     llvm::MapVector<Key, RootInfo> roots;          // in discovery order
     llvm::DenseSet<Type> poisonedTypes;            // queue object types with an unresolvable access
+    llvm::DenseSet<Operation *> poisonedOps;       // accesses already reported unresolvable
     llvm::DenseMap<Type, std::string> poisonWhy;   // the first reason, for the declared-topology check
     llvm::DenseMap<Operation *, llvm::SmallSetVector<Key, 2>> opRoots;
     // Which queues each constructor call builds, under every instance of
@@ -171,10 +173,16 @@ private:
     Operation *carrierOf(const Key &k, const char *&why) const;
     std::string labelOf(const Key &k, bool whole) const;
 
+    // An operation is poisoned once: the walk can meet the same recursive
+    // function along several call strings. Only an access with no type is
+    // everyone's problem; one whose type is already poisoned is not, and
+    // treating the second sighting as the first case made every queue in
+    // the program unknown.
     void poison(Operation *op, const Twine &why) {
+        if (!poisonedOps.insert(op).second) return;
         Type t = queueObjectTypeOfOp(op);
-        if (t && poisonedTypes.insert(t).second) poisonWhy[t] = why.str();
-        else globalPoison = true;
+        if (!t) globalPoison = true;
+        else if (poisonedTypes.insert(t).second) poisonWhy[t] = why.str();
         op->emitRemark() << "wtc: queue access is unresolvable (" << why
                          << "); every queue of this type is now unknown";
         ++remarks;
@@ -208,6 +216,9 @@ private:
     bool checkDeclared(Operation *root, const RootInfo &info, Topology verdict, const std::string &label,
                        llvm::ArrayRef<cir::CallOp> ctors, bool capExceeded, bool summary);
     static Access accessOf(Operation *op, const Instance &inst);
+    // Why one side of a queue counts many, in the program's own terms.
+    std::string whyMany(const SideInfo &side);
+    std::string whyThreadMany(const Instance &inst, bool &spawned);
 };
 
 // A location as a person reads it: file:line:column, from the first file
@@ -240,7 +251,73 @@ Access QueueOwnershipAnalysisPass::accessOf(Operation *op, const Instance &inst)
                   inst.speculative,
                   llvm::demangle(entry.getSymName().str()),
                   site ? site.getLoc() : entry.getLoc(),
-                  static_cast<bool>(site)};
+                  static_cast<bool>(site),
+                  false,
+                  &inst};
+}
+
+// Why one thread the walk saw stands for many: the nearest cause above the
+// instance that starts it -- a spawn or a call in a loop, recursion, or a
+// root nothing here accounts for. Empty when the cause is a guess (a goto
+// with no loop), which the count keeps but a programmer could not act on.
+// `spawned` is false when the thread is such a root itself: a function
+// another file may call directly, a weaker account than the spawn that
+// starts it here, when there is one.
+std::string QueueOwnershipAnalysisPass::whyThreadMany(const Instance &inst, bool &spawned) {
+    const Instance *start = &inst;
+    while (start->parent && start->parent->thread == start->thread) start = start->parent;
+    spawned = true;
+    for (const Instance *q = start; q; q = q->parent) {
+        cir::FuncOp f = q->func;   // op handles are not const
+        cir::CallOp site = q->site;
+        const std::string fn = llvm::demangle(f.getSymName().str());
+        if (q->recurring) return fn + " is reached again through recursion";
+        if (!site) {
+            if (!q->manyRoot) return "";
+            spawned = q != start;
+            return spawned ? "started from " + fn + ", which may run any number of times: " + q->manyRoot
+                           : fn + " may run any number of times: " + q->manyRoot;
+        }
+        bool known;
+        const Mult m = walk->siteMult(site.getOperation(), q->parent->func, known);
+        if (!known) return "";
+        if (m == Mult::Many) {
+            const bool spawn = getSemanticKind(lookupCallee(site)) == SemanticOpKind::ThreadSpawn;
+            return std::string(spawn ? "started" : "reached by a call") + " in a loop at " +
+                   whereOf(site.getLoc(), /*fileOnly=*/true);
+        }
+    }
+    return "";
+}
+
+// Two threads that each touch the side, or one that stands for many and
+// why. The first explained access answers: one cause is what a programmer
+// needs to look at, and every access of one thread shares it.
+std::string QueueOwnershipAnalysisPass::whyMany(const SideInfo &side) {
+    std::string weak;
+    for (const Access &a : side.accesses) {
+        if (!a.many || !a.inst) continue;
+        bool spawned;
+        std::string w = whyThreadMany(*a.inst, spawned);
+        if (w.empty()) continue;
+        if (spawned) return w;
+        if (weak.empty()) weak = std::move(w);
+    }
+    if (!weak.empty()) return weak;
+    if (side.threads.size() >= 2) {
+        llvm::SmallVector<std::string, 4> named;
+        llvm::SmallSet<unsigned, 4> seen;
+        for (const Access &a : side.accesses) {
+            if (!seen.insert(a.thread).second) continue;
+            std::string w = whereOf(a.started, /*fileOnly=*/true);
+            named.push_back(a.entry + (w.empty() ? "" : (a.spawned ? " started at " : " at ") + w));
+        }
+        std::string out = std::to_string(side.threads.size()) + " threads: ";
+        for (size_t i = 0; i < named.size() && i < 3; ++i) out += (i ? ", " : "") + named[i];
+        if (named.size() > 3) out += ", ...";
+        return out;
+    }
+    return "";
 }
 
 Operation *QueueOwnershipAnalysisPass::carrierOf(const Key &k, const char *&why) const {
@@ -279,8 +356,15 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
     auto tag = constructorTag(ctors);
     if (!tag || *tag == 0) return true;  // nothing declared, or nothing readable
     cir::CallOp ctor = ctors.front();
-    const char *declared = *tag == 2 ? "spsc_inline" : "spsc";
-    if (verdict == Topology::spsc) {
+    // mpsc promises one consumer and any number of producers, spmc one
+    // producer and any number of consumers; the others, one of each.
+    const bool declaredMpsc = *tag == 3, declaredSpmc = *tag == 4;
+    const char *declared = *tag == 2       ? "spsc_inline"
+                           : declaredMpsc ? "mpsc"
+                           : declaredSpmc ? "spmc"
+                                          : "spsc";
+    if (verdict == Topology::spsc || (declaredMpsc && verdict == Topology::mpsc) ||
+        (declaredSpmc && verdict == Topology::spmc)) {
         ctor.emitRemark() << "wtc: queue " << label << ": declared " << declared << ", verified";
         ++remarks;
         return true;
@@ -291,6 +375,7 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
     for (const SideInfo *side : {&info.producers, &info.consumers}) {
         if (summary) break;
         const bool pushes = side == &info.producers;
+        if ((pushes && declaredMpsc) || (!pushes && declaredSpmc)) continue;
         llvm::SmallVector<const Access *, 4> firstOfThread;
         llvm::SmallSet<unsigned, 4> seen;
         bool certainMany = false;
@@ -327,7 +412,7 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
         }
         return false;
     }
-    // Not spsc, but nothing certain: say why it could not be checked.
+    // Not as declared, but nothing certain: say why it could not be checked.
     InFlightDiagnostic w = ctor.emitWarning()
                            << "wtc: queue " << label << " is declared " << declared << "; cannot verify: ";
     auto built = dyn_cast<cir::PointerType>(ctor.getOperand(0).getType());
@@ -382,6 +467,14 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
                            << " (producers: " << (p == 2 ? "many" : std::to_string(p))
                            << ", consumers: " << (c == 2 ? "many" : std::to_string(c)) << ")";
         ++remarks;
+        // What a programmer would change to get a smaller count.
+        for (auto [n, side, what] : {std::tuple{p, &info.producers, "producers"},
+                                     std::tuple{c, &info.consumers, "consumers"}})
+            if (n == 2)
+                if (std::string w = whyMany(*side); !w.empty()) {
+                    root->emitRemark() << "wtc: queue " << label << ": many " << what << ": " << w;
+                    ++remarks;
+                }
         if (!carrier && t == Topology::spsc) {
             root->emitRemark() << "wtc: queue " << label << " keeps the general-purpose implementation: "
                                << noCarrier;
@@ -410,10 +503,16 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
             else if (kt != t) { t = Topology::unknown; }
         }
         op->setAttr("topology", TopologyAttr::get(ctx, t));
-        // An operation that may act on several queues names none of them:
-        // a later pass reading queue_id would otherwise treat the others'
-        // operations as unrelated to this one.
-        if (ks.size() != 1) continue;
+        // An operation that may act on several queues has no queue_id: a
+        // later pass reading it would treat the others' operations as
+        // unrelated to this one. It lists them all instead.
+        if (ks.size() != 1) {
+            llvm::SmallVector<int64_t, 4> ids;
+            for (const Key &k : ks) ids.push_back(idOf(k));
+            llvm::sort(ids);
+            op->setAttr(kQueueIdsAttrName, DenseI64ArrayAttr::get(ctx, ids));
+            continue;
+        }
         op->setAttr("queue_id", IntegerAttr::get(IntegerType::get(ctx, 64), idOf(ks.front())));
     }
     // Poisoned operations that resolved to nothing: unknown, explicitly.
@@ -428,6 +527,7 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
     roots.clear(); poisonedTypes.clear(); poisonWhy.clear(); opRoots.clear();
     ctorKeys.clear(); keyCtors.clear(); ctorUnplaced.clear(); keyType.clear();
     globalPoison = false; remarks = 0;
+    poisonedOps.clear();
 
     // A function that can reach neither a queue operation nor a queue's
     // constructor cannot affect a verdict, nor which call builds a queue.
