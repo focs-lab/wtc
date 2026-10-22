@@ -114,3 +114,28 @@ elseif(WTC_RT_SANITIZE STREQUAL "thread")
   set_tests_properties(spmc_ring_two_producers_is_caught PROPERTIES
                        ENVIRONMENT "TSAN_OPTIONS=halt_on_error=1:symbolize=0")
 endif()
+
+# The segmented queue: many producers and many consumers, then the
+# single-consumer form, and the latter's test that must fail: a second
+# consumer.
+add_executable(segment_queue_stress segment_queue_stress.cpp)
+target_link_libraries(segment_queue_stress PRIVATE wtc_rt_flags)
+add_test(NAME segment_queue_stress COMMAND segment_queue_stress 500000)
+
+add_executable(segment_queue_one_consumer_stress segment_queue_stress.cpp)
+target_link_libraries(segment_queue_one_consumer_stress PRIVATE wtc_rt_flags)
+target_compile_definitions(segment_queue_one_consumer_stress PRIVATE WTC_STRESS_ONE_CONSUMER=1)
+add_test(NAME segment_queue_one_consumer_stress COMMAND segment_queue_one_consumer_stress 500000)
+
+add_executable(segment_queue_two_consumers segment_queue_stress.cpp)
+target_link_libraries(segment_queue_two_consumers PRIVATE wtc_rt_flags)
+target_compile_definitions(segment_queue_two_consumers PRIVATE WTC_STRESS_TWO_CONSUMERS=1)
+if(WTC_CHECK)
+  add_test(NAME segment_queue_two_consumers_is_caught
+           COMMAND sh -c "$<TARGET_FILE:segment_queue_two_consumers> 200000 2>&1 | grep -q 'MPSC contract violated'")
+elseif(WTC_RT_SANITIZE STREQUAL "thread")
+  add_test(NAME segment_queue_two_consumers_is_caught
+           COMMAND sh -c "$<TARGET_FILE:segment_queue_two_consumers> 200000 2>&1 | grep -qE 'ThreadSanitizer: (data race|heap-use-after-free)'")
+  set_tests_properties(segment_queue_two_consumers_is_caught PROPERTIES
+                       ENVIRONMENT "TSAN_OPTIONS=halt_on_error=1:symbolize=0")
+endif()
