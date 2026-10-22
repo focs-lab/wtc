@@ -20,6 +20,8 @@ using namespace mlir::wtc;
 #include "llvm/Demangle/Demangle.h"
 #include "llvm/Support/Path.h"
 
+#include <optional>
+
 // For every queue object the module touches, how many threads push to it
 // and how many pop from it, as a verdict written into the IR:
 //
@@ -80,6 +82,21 @@ struct SideInfo {
         if (threads.empty()) return 0;
         return (anyMany || threads.size() >= 2) ? 2 : 1;
     }
+    // The counted loop that starts every thread on this side, one per
+    // iteration, when there is one: the side then has one thread exactly
+    // when the loop runs at most once. Null when two threads the walk tells
+    // apart touch the side, or any access is on a thread the module cannot
+    // account for or may be to another queue.
+    Operation *countLoop() const {
+        if (threads.size() != 1) return nullptr;
+        Operation *loop = nullptr;
+        for (const Access &a : accesses) {
+            if (!a.inst || !a.inst->countLoop || a.speculative || a.oneOf) return nullptr;
+            if (loop && loop != a.inst->countLoop) return nullptr;
+            loop = a.inst->countLoop;
+        }
+        return loop;
+    }
 };
 
 struct RootInfo {
@@ -120,6 +137,7 @@ private:
     llvm::DenseMap<Key, llvm::SmallSetVector<Operation *, 2>> keyCtors;
     llvm::DenseSet<Operation *> ctorUnplaced;
     llvm::DenseMap<Key, Type> keyType;             // the queue type its constructor builds
+    llvm::DenseMap<Operation *, int64_t> loopIds;  // the counted spawn loops recorded, numbered
     ThreadInstanceWalk *walk = nullptr;
     bool globalPoison = false;   // an access with no type to poison
     unsigned remarks = 0;
@@ -172,6 +190,12 @@ private:
     // null with the reason.
     Operation *carrierOf(const Key &k, const char *&why) const;
     std::string labelOf(const Key &k, bool whole) const;
+    // For an allocation whose result one pointer global holds -- stored
+    // there once, by the only store to that global -- the global's name,
+    // so that a heap queue is named after the pointer the program uses
+    // for it. Computed once.
+    llvm::StringRef pointerNaming(Operation *allocation) const;
+    mutable std::optional<llvm::DenseMap<Operation *, llvm::StringRef>> pointerNames;
 
     // An operation is poisoned once: the walk can meet the same recursive
     // function along several call strings. Only an access with no type is
@@ -330,12 +354,43 @@ Operation *QueueOwnershipAnalysisPass::carrierOf(const Key &k, const char *&why)
     return c;
 }
 
+llvm::StringRef QueueOwnershipAnalysisPass::pointerNaming(Operation *allocation) const {
+    if (!pointerNames) {
+        pointerNames.emplace();
+        llvm::DenseMap<llvm::StringRef, llvm::SmallVector<cir::StoreOp, 1>> storesOf;
+        llvm::DenseSet<llvm::StringRef> escaped;
+        ModuleOp m = module;
+        m.walk([&](cir::GetGlobalOp g) {
+            for (Operation *u : g.getResult().getUsers()) {
+                if (auto st = dyn_cast<cir::StoreOp>(u); st && st.getAddr() == g.getResult())
+                    storesOf[g.getName()].push_back(st);
+                else if (!isa<cir::LoadOp>(u))
+                    escaped.insert(g.getName());
+            }
+        });
+        for (auto &[name, stores] : storesOf) {
+            if (stores.size() != 1 || escaped.contains(name)) continue;
+            if (Operation *src = traceToRoot(stores.front().getValue()).getDefiningOp())
+                if (isa<cir::CallOp>(src)) (*pointerNames)[src] = name;
+        }
+    }
+    return pointerNames->lookup(allocation);
+}
+
 std::string QueueOwnershipAnalysisPass::labelOf(const Key &k, bool whole) const {
     Operation *root = k.first;
     std::string base;
     if (auto g = dyn_cast<cir::GlobalOp>(root)) base = ("@" + g.getSymName()).str();
     else if (auto a = dyn_cast<cir::AllocaOp>(root)) base = ("%" + a.getName()).str();
-    else base = "the heap object made at " + whereOf(root->getLoc(), /*fileOnly=*/true);
+    else if (llvm::StringRef name = pointerNaming(root); !name.empty()) base = ("*@" + name).str();
+    else {
+        // ClangIR gives an allocation the location of its function; the
+        // constructor's is the new expression's.
+        Location at = root->getLoc();
+        if (auto it = keyCtors.find(k); it != keyCtors.end() && !it->second.empty())
+            at = it->second.front()->getLoc();
+        base = "the heap object made at " + whereOf(at, /*fileOnly=*/true);
+    }
     if (whole) return base;
     // The member's name, from the address its constructor is handed.
     std::string member;
@@ -475,6 +530,26 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
                     root->emitRemark() << "wtc: queue " << label << ": many " << what << ": " << w;
                     ++remarks;
                 }
+        // A side that is many only because one counted loop starts its
+        // threads has one thread when the loop runs at most once, which the
+        // program knows before the loop runs: the loop is recorded for the
+        // specialisation pass, which can choose the implementation then.
+        if (carrier && t != Topology::unknown)
+            for (auto [n, side, what, attr] :
+                 {std::tuple{p, &info.producers, "producers", kProducersLoopAttrName},
+                  std::tuple{c, &info.consumers, "consumers", kConsumersLoopAttrName}}) {
+                Operation *loop = n == 2 ? side->countLoop() : nullptr;
+                if (!loop) continue;
+                auto [it, fresh] = loopIds.try_emplace(loop, static_cast<int64_t>(loopIds.size()));
+                if (fresh)
+                    loop->setAttr(kSpawnLoopAttrName, IntegerAttr::get(IntegerType::get(ctx, 64), it->second));
+                carrier->setAttr(attr, IntegerAttr::get(IntegerType::get(ctx, 64), it->second));
+                root->emitRemark() << "wtc: queue " << label << ": " << what
+                                   << ": one thread per iteration of the loop at "
+                                   << whereOf(loop->getLoc(), /*fileOnly=*/true)
+                                   << ", so one when it runs at most once";
+                ++remarks;
+            }
         if (!carrier && t == Topology::spsc) {
             root->emitRemark() << "wtc: queue " << label << " keeps the general-purpose implementation: "
                                << noCarrier;

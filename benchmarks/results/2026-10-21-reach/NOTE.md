@@ -1,14 +1,18 @@
 # Reach and precision, 21 October 2026
 
-`benchmarks/scripts/reach.sh` at 29bb531, with ferret and dedup built by
-their `build.sh` at the same commit. (First recorded at 651528a with the
-same verdicts; since then the analysis says why it counts many.) The verdicts are the analysis's, so
-the machine does not matter; it ran in the evaluation's container on an
+`benchmarks/scripts/reach.sh` at 0eab2f0, with ferret and dedup built by
+their `build.sh` at the same commit. (First recorded at 651528a and again
+at 29bb531 with the same verdicts; since then the analysis says why it
+counts many, and chooses a tag when the queue is built where a counted
+loop starts a side's threads.) The verdicts are the analysis's, so the
+machine does not matter; it ran in the evaluation's container on an
 unreserved host.
 
 35 queues: 21 exact, 4 conservative, 10 refused, **0 wrong**. Of the 22
 queues a reader would call single-producer single-consumer, 15 are proved
-so and specialised.
+so and specialised. Four more have their tag chosen when the queue is
+built: the verdict is many on a side, and that side's threads are one per
+iteration of a loop the program runs a known number of times.
 
 What stands in the way, program by program:
 
@@ -16,7 +20,12 @@ What stands in the way, program by program:
   inline. The fifth is filled from inside the loader's recursive directory
   scan, and an access reached through recursion is not attributed to one
   queue. With the thread count from `argv`, every verdict but that one is
-  exact (`mpmc`, `mpsc`): there is nothing single-producer to prove.
+  exact (`mpmc`, `mpsc`): nothing is single-producer whatever the count.
+  But each middle stage's threads come from a loop over that count, and
+  the queues are built in `main` after it is read, where PARSEC
+  initialises them, so the four queues after the loader get their tag
+  then: inline rings when every loop runs once, which is what the build
+  with one thread per stage gets at compile time.
 - **dedup** as written: no verdict, because every queue is an element of
   an array indexed at run time. With the queues as globals, every queue is
   counted `mpmc`: the threads start in `Encode`, which only `main`, in

@@ -1,7 +1,7 @@
 # Reach and precision
 
 Every queue of every program compiled, the analysis's verdict against the topology read
-from the source (benchmarks/reach/oracle.json). wtc 29bb531.
+from the source (benchmarks/reach/oracle.json). wtc 0eab2f0.
 
 | program | queue | oracle | verdict | outcome | cause | the analysis's account |
 |---|---|---|---|---|---|---|
@@ -20,10 +20,10 @@ from the source (benchmarks/reach/oracle.json). wtc 29bb531.
 | PARSEC ferret, one thread per stage | q_vec_rank | spsc (1, 1) | spsc (1, 1) | exact |  |  |
 | PARSEC ferret, one thread per stage | q_rank_out | spsc (1, 1) | spsc (1, 1) | exact |  |  |
 | PARSEC ferret, threads per middle stage from argv | q_load_seg | spmc (1, many) | unknown | refused | the loader pushes from inside its recursive directory scan | reached through recursion |
-| PARSEC ferret, threads per middle stage from argv | q_seg_extract | mpmc (many, many) | mpmc (many, many) | exact |  |  |
-| PARSEC ferret, threads per middle stage from argv | q_extract_vec | mpmc (many, many) | mpmc (many, many) | exact |  |  |
-| PARSEC ferret, threads per middle stage from argv | q_vec_rank | mpmc (many, many) | mpmc (many, many) | exact |  |  |
-| PARSEC ferret, threads per middle stage from argv | q_rank_out | mpsc (many, 1) | mpsc (many, 1) | exact |  |  |
+| PARSEC ferret, threads per middle stage from argv | q_seg_extract | mpmc (many, many) | mpmc (many, many); one per loop iteration on producers and consumers, chosen at run time | exact |  |  |
+| PARSEC ferret, threads per middle stage from argv | q_extract_vec | mpmc (many, many) | mpmc (many, many); one per loop iteration on producers and consumers, chosen at run time | exact |  |  |
+| PARSEC ferret, threads per middle stage from argv | q_vec_rank | mpmc (many, many) | mpmc (many, many); one per loop iteration on producers and consumers, chosen at run time | exact |  |  |
+| PARSEC ferret, threads per middle stage from argv | q_rank_out | mpsc (many, 1) | mpsc (many, 1); one per loop iteration on producers, chosen at run time | exact |  |  |
 | PARSEC dedup as written, threads per stage from argv | refine_que | spmc (1, many) | no verdict | refused | the queues are elements of arrays, indexed at run time | the queue is an element of an array |
 | PARSEC dedup as written, threads per stage from argv | deduplicate_que | mpmc (many, many) | no verdict | refused | the queues are elements of arrays, indexed at run time | the queue is an element of an array |
 | PARSEC dedup as written, threads per stage from argv | compress_que | mpmc (many, many) | no verdict | refused | the queues are elements of arrays, indexed at run time | the queue is an element of an array |
@@ -41,4 +41,4 @@ from the source (benchmarks/reach/oracle.json). wtc 29bb531.
 | PARSEC dedup, one thread per stage, queues as globals, one translation unit | compress_que | spsc (1, 1) | spsc (1, 1) | exact |  |  |
 | PARSEC dedup, one thread per stage, queues as globals, one translation unit | reorder_que | mpsc (many, 1) | mpsc (many, 1) | exact |  |  |
 
-35 queues: 21 exact (15 of the 22 single-producer single-consumer ones proved so), 4 conservative, 10 refused, 0 wrong.
+35 queues: 21 exact (15 of the 22 single-producer single-consumer ones proved so), 4 conservative, 10 refused, 0 wrong. 4 of them have the tag chosen when the queue is built, from the count of the loop that starts a side's threads.

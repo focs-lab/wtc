@@ -65,6 +65,7 @@ Every abbreviation and named thing this repository uses.
 | Lifting, lowering | Turning calls into dialect operations, and turning them back into calls |
 | ADR | A record of an architectural decision. Here, the `decisions/` directory |
 | Topology tag | The constant a queue's constructor receives that picks its implementation: `generic` (0), `spsc` (1), `spsc_inline` (2), `mpsc` (3), `spmc` (4). The compiler rewrites it; a program that passes a non-generic tag itself has declared it, and the declaration is checked |
+| Counted spawn loop | A loop `for (i = c; i < n; ++i)` that starts one thread in every iteration, unconditionally, in a function that runs once: its threads number exactly its iterations, which the program knows before the loop runs. A queue side whose threads one such loop starts has one thread when the loop runs at most once, and its tag can be chosen when the queue is built (`wtc.producers_loop`, `wtc.consumers_loop`) |
 | spsc_inline | The spsc ring with the elements held in it, so that neither push nor pop allocates. Chosen only for a queue whose consumer borrows |
 | Borrowed pop | A pop whose element the program uses only until its next pop of the same queue: it keeps no copy of the returned `shared_ptr` and no pointer into the element. What `--wtc-borrow-analysis` proves |
 | Batch, deferred push | A producer's run of pushes published together, every `WTC_BATCH_K` elements and at the end, at one synchronisation per run. Written by hand through the shim, or by the compiler in a function marked `WTC_BATCH` |
