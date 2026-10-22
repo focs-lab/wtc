@@ -1,0 +1,40 @@
+threadcensus: 4 mutexes, 420412 acquisitions (0 on mutexes the table could not hold)
+single-thread mutexes: 1 of 4; their acquisitions: 23 of 420412 (0.0%)
+
+top 4 by acquisitions (address, acquisitions, threads, first acquisition's stack):
+
+0x561b46e96348  258919  5
+sqlite_driver(+0x154bd)[0x561b46da74bd]
+sqlite_driver(+0x2246a)[0x561b46db446a]
+sqlite_driver(+0x5bdd8)[0x561b46deddd8]
+sqlite_driver(+0xa86f8)[0x561b46e3a6f8]
+sqlite_driver(+0xa83b)[0x561b46d9c83b]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f59756171ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f597561728b]
+sqlite_driver(+0xa9c5)[0x561b46d9c9c5]
+
+0x561b7cb8f3b8  160056  5
+sqlite_driver(+0x5bad9)[0x561b46dedad9]
+sqlite_driver(+0xa86f8)[0x561b46e3a6f8]
+sqlite_driver(+0xa83b)[0x561b46d9c83b]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f59756171ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f597561728b]
+sqlite_driver(+0xa9c5)[0x561b46d9c9c5]
+
+0x561b46e963e8  1414  5
+sqlite_driver(+0x15d19)[0x561b46da7d19]
+sqlite_driver(+0x1fd79)[0x561b46db1d79]
+sqlite_driver(+0x85ba0)[0x561b46e17ba0]
+sqlite_driver(+0xa8aab)[0x561b46e3aaab]
+sqlite_driver(+0xa83b)[0x561b46d9c83b]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f59756171ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f597561728b]
+sqlite_driver(+0xa9c5)[0x561b46d9c9c5]
+
+0x561b46e96320  23  1
+sqlite_driver(+0x5ba70)[0x561b46deda70]
+sqlite_driver(+0xa86f8)[0x561b46e3a6f8]
+sqlite_driver(+0xa83b)[0x561b46d9c83b]
+/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f59756171ca]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f597561728b]
+sqlite_driver(+0xa9c5)[0x561b46d9c9c5]
