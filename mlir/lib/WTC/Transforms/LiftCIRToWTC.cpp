@@ -38,6 +38,7 @@ struct CirToWTCConversionTarget : public ConversionTarget {
             case SemanticOpKind::MutexBatchEnd:
             case SemanticOpKind::QueuePush:
             case SemanticOpKind::QueueTryPop:
+            case SemanticOpKind::QueueTryPopInto:
             case SemanticOpKind::QueueBatchBegin:
             case SemanticOpKind::QueuePushDeferred:
             case SemanticOpKind::QueueBatchEnd:
@@ -111,7 +112,8 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
         const bool batchOp = kind == SemanticOpKind::QueueBatchBegin ||
                              kind == SemanticOpKind::QueuePushDeferred ||
                              kind == SemanticOpKind::QueueBatchEnd;
-        if (kind != SemanticOpKind::QueuePush && kind != SemanticOpKind::QueueTryPop && !batchOp)
+        if (kind != SemanticOpKind::QueuePush && kind != SemanticOpKind::QueueTryPop &&
+            kind != SemanticOpKind::QueueTryPopInto && !batchOp)
             return failure();
 
         const unsigned k = firstRealOperand(op);
@@ -160,7 +162,19 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
             return success();
         }
 
-        // try_pop. Two shapes: a real result (hand-written IR), or a return
+        // try_pop(T&): the queue, then the program's object the element is
+        // moved into; the result, if any, says whether one was.
+        if (kind == SemanticOpKind::QueueTryPopInto) {
+            if (k != 0 || op.getNumOperands() != 2 || op.getNumResults() > 1)
+                return op.emitError("wtc: try_pop into an object takes the queue and the object");
+            rewriter.replaceOpWithNewOp<QueuePopOp>(op, op.getResultTypes(),
+                                                    queue, adaptor.getOperands()[1],
+                                                    fallback, sourceType, argAttrs, TopologyAttr(), IntegerAttr(), ImplAttr(),
+                                                    UnitAttr(), rewriter.getUnitAttr());
+            return success();
+        }
+
+        // try_pop(). Two shapes: a real result (hand-written IR), or a return
         // slot in operand 0 and no result (what the compiler emits).
         if (k == 1) {
             if (op.getNumOperands() != 2 || op.getNumResults() != 0)
@@ -168,7 +182,7 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
             rewriter.replaceOpWithNewOp<QueuePopOp>(op, /*resultTypes=*/TypeRange{},
                                                     queue, adaptor.getOperands()[0],
                                                     fallback, sourceType, argAttrs, TopologyAttr(), IntegerAttr(), ImplAttr(),
-                                                    UnitAttr());
+                                                    UnitAttr(), UnitAttr());
             return success();
         }
         if (op.getNumOperands() != 1 || op.getNumResults() != 1)
@@ -176,7 +190,7 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
         rewriter.replaceOpWithNewOp<QueuePopOp>(op, TypeRange{op.getResult().getType()},
                                                 queue, /*out=*/Value(),
                                                 fallback, sourceType, argAttrs, TopologyAttr(), IntegerAttr(), ImplAttr(),
-                                                UnitAttr());
+                                                UnitAttr(), UnitAttr());
         return success();
     }
 };

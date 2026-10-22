@@ -32,8 +32,10 @@ namespace wtc {
 // Every implementation holds the elements themselves in its cells: a push
 // copies or moves its argument into the cell, and nothing is allocated per
 // element on the producer's side. What a pop does with the element is the
-// element's ownership, and there are two kinds:
+// element's ownership, and there are three kinds:
 //
+//   - Transfer: try_pop(T&) moves the element out of the cell into the
+//     consumer's object. No allocation on either side.
 //   - Share: try_pop() returns a shared_ptr<T>, the original API, and
 //     allocates the element it returns, on the consumer's side, from the
 //     cell. The memory that crosses the threads is the cell's, which the
@@ -260,6 +262,16 @@ public:
         std::shared_ptr<T> out;
         consume([&](T&& e) { out = std::make_shared<T>(std::move(e)); });
         return out;
+    }
+
+    // Transfer: the oldest element moved into out; false when the queue was
+    // empty, and out is then untouched.
+    [[clang::annotate("wtc_queue_try_pop_into")]]
+    bool try_pop(T& out) {
+#ifdef WTC_CHECK
+        check_returned("at the next try_pop");
+#endif
+        return consume([&](T&& e) { out = std::move(e); });
     }
 
     // gnu::used: the compiler calls these where the program allows it, so
