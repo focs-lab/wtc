@@ -22,7 +22,8 @@ Every implementation carries, in its header comment:
 | `segment_queue.hpp`, single-consumer form | `wtc::queue<T>` | exactly one thread ever pops, any number push, and the destructor runs after all are done |
 | `spmc_ring.hpp` | `wtc::queue<T>` | exactly one thread ever pushes, any number pop, and the destructor runs after all are done |
 
-`spsc_ring<Slot, kSlots>` is an unbounded wait-free ring of blocks. It keeps
+`spsc_ring<Slot, kSlots>` is an unbounded wait-free ring of blocks of 128 KiB
+each. It keeps
 the generic queue's semantics exactly: FIFO, `push` never blocks or fails,
 `try_pop` never blocks and says empty only when the queue was empty. The shim
 instantiates it with `Slot = std::shared_ptr<T>`, so the per-element

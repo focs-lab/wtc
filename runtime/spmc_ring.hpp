@@ -45,7 +45,7 @@
 
 namespace wtc::rt {
 
-template <class Slot, unsigned kSlots = 4096, unsigned kLine = 64>
+template <class Slot, unsigned kSlots = default_slots<Slot>(), unsigned kLine = 64>
 class spmc_ring {
  public:
   spmc_ring() = default;

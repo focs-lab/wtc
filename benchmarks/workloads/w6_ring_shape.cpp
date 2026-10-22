@@ -17,9 +17,10 @@
 // anything in the program: with a small footprint every line the producer
 // writes is still in the consumer's cache from the previous lap, so each
 // write has to invalidate it first, and once the consumer settles in right
-// behind the producer the pair locks into the slow step. The default was
-// chosen from this measurement and the header says so; this workload is
-// what would notice if the choice stopped being right.
+// behind the producer the pair locks into the slow step. The default block
+// is set in bytes, 128 KiB, so 2048 of these 64-byte elements, from this
+// measurement, and the header says so; this workload is what would notice
+// if the choice stopped being right.
 //
 // The shared_ptr rows exist to show the other half: once every element
 // costs an allocation, the ring's shape stops mattering at all, because the
@@ -110,7 +111,7 @@ int main(int argc, char** argv) {
     c.tsc_hz = calibrate_tsc_hz();
 
     const int cfg = static_cast<int>(a.getu("config", 0));
-    if (a.has("list")) { std::printf("9\n"); return 0; }
+    if (a.has("list")) { std::printf("10\n"); return 0; }
 
     switch (cfg) {
     case 0: report(c, "inline", 64, 64, (run_one<E64, 64, 64>(c, make_inline, read_inline))); break;
@@ -118,6 +119,7 @@ int main(int argc, char** argv) {
     case 2: report(c, "inline", 1024, 64, (run_one<E64, 1024, 64>(c, make_inline, read_inline))); break;
     case 3: report(c, "inline", 4096, 64, (run_one<E64, 4096, 64>(c, make_inline, read_inline))); break;
     case 4: report(c, "inline", 16384, 64, (run_one<E64, 16384, 64>(c, make_inline, read_inline))); break;
+    case 9: report(c, "inline", 2048, 64, (run_one<E64, 2048, 64>(c, make_inline, read_inline))); break;
     case 5: report(c, "inline", 256, 128, (run_one<E64, 256, 128>(c, make_inline, read_inline))); break;
     case 6: report(c, "inline", 4096, 128, (run_one<E64, 4096, 128>(c, make_inline, read_inline))); break;
     // With an allocation per element the shape stops mattering; two sizes
@@ -126,7 +128,7 @@ int main(int argc, char** argv) {
                    (run_one<std::shared_ptr<E64>, 256, 64>(c, make_shared, read_shared))); break;
     case 8: report(c, "shared_ptr", 4096, 64,
                    (run_one<std::shared_ptr<E64>, 4096, 64>(c, make_shared, read_shared))); break;
-    default: std::fprintf(stderr, "--config must be 0..8\n"); return 2;
+    default: std::fprintf(stderr, "--config must be 0..9\n"); return 2;
     }
     return 0;
 }
