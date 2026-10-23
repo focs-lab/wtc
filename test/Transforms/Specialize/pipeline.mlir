@@ -4,8 +4,9 @@
 // The two passes in one run, which is how the driver uses them: the analysis
 // decides, the specialisation acts, and nothing in between carries the
 // verdict but the attribute the first leaves on the object. q1 has one
-// thread on each side and q2 has two producers, so exactly one constructor
-// must change.
+// thread on each side and q2 has two producers, so each constructor
+// changes to its own implementation: the ring and the list for many
+// producers.
 
 !s32i = !cir.int<s, 32>
 !queue_i32 = !cir.struct<"wtc::queue<int>" {data !cir.ptr<!s32i>}>
@@ -80,8 +81,8 @@ module {
 
 // CHECK: queue @q1: spsc (producers: 1, consumers: 1)
 // CHECK: queue @q2: mpsc (producers: many, consumers: 1)
-// CHECK: specialised: constructor tag rewritten to spsc
-// CHECK-NOT: specialised: constructor tag rewritten
+// CHECK-DAG: specialised: constructor tag rewritten to spsc
+// CHECK-DAG: specialised: constructor tag rewritten to mpsc
 
 // IR: cir.global external @q1 {{.*}}wtc.specialized = #wtc.topology<spsc>
-// IR-NOT: @q2{{.*}}wtc.specialized
+// IR: cir.global external @q2 {{.*}}wtc.specialized = #wtc.topology<mpsc>

@@ -38,7 +38,8 @@ locate dedup's two obstacles, arrays of queues and a program spread over
 several files. In the last build the three queues become inline rings,
 the tags an expert would write by hand: the one pop, inside the helper
 every stage calls, is checked as a pop of each queue it may act on, and
-every stage copies its element out before the next pop.
+every stage copies its element out before the next pop. The reorder queue,
+two stages into one, becomes the shim's list for many producers.
 
 ## Building and running
 

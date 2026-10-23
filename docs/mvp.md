@@ -31,9 +31,16 @@ The queue may be a global, a local, a member of a struct or a heap object,
 and the threads may reach it through parameters, struct fields or pointers
 written in several places; a pointer that may name one of several queues
 counts on each (`test/Transforms/QueueOwnershipAnalysis/`). `q2` has two
-producers and two consumers and keeps the general-purpose queue. `q1` goes one step further than the gate did: its consumer only
-tests whether a pop returned anything, so it borrows, and the next section
-is what that buys.
+producers and two consumers and keeps the general-purpose queue; a side
+that counts many says why -- two threads, as here, or one that stands for
+many: started in a loop, under recursion, or from a function nothing in the
+file calls (`why-many.cpp`). A queue with many producers and one consumer
+gets the shim's linked list without locks, whose push is one exchange
+(`test/Integration/mpsc_fan_in.cpp`); one with one producer and many
+consumers, the SPSC ring with its consumers taking turns under a spin lock
+(`spmc_fan_out.cpp`). `q1` goes one step further than the
+gate did: its consumer only tests whether a pop returned anything, so it
+borrows, and the next section is what that buys.
 
 ## 2. No allocation per element
 

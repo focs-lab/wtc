@@ -22,7 +22,10 @@
 // order can be checked when a thread pops what another pushed, so the
 // check is conservation: the popped values add up to the pushed ones.
 //
-// The single-producer queues run only at one producer and one consumer.
+// The single-producer queues run only at one producer and one consumer,
+// the shim's list for many producers (shim_mpsc) only with one consumer,
+// and its ring for many consumers (shim_spmc) only with one producer, in
+// split mode.
 
 #include "adapters.hpp"
 #include "elements.hpp"
@@ -222,6 +225,20 @@ int main(int argc, char** argv) {
     bool safe = false;
     for (auto s : kSafe) if (c.variant == s) safe = true;
     const bool one_to_one = c.mode == "split" && c.producers == 1 && c.consumers == 1;
+    if (c.variant == "shim_mpsc") {
+        if (c.mode != "split" || c.consumers != 1) {
+            std::fprintf(stderr, "shim_mpsc has one consumer: only --mode split with --consumers 1\n");
+            return 2;
+        }
+        safe = true;
+    }
+    if (c.variant == "shim_spmc") {
+        if (c.mode != "split" || c.producers != 1) {
+            std::fprintf(stderr, "shim_spmc has one producer: only --mode split with --producers 1\n");
+            return 2;
+        }
+        safe = true;
+    }
     if (!safe && !one_to_one) {
         std::fprintf(stderr, "%s is a single-producer queue: only --mode split with one producer and one consumer\n", c.variant.c_str());
         return 2;
