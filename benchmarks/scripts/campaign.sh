@@ -6,7 +6,14 @@
 #
 # Legs: w1 (throughput), w2 (open-loop latency at 1 us and 10 us), w2pp
 # (ping-pong), smoke (everything once, tiny sizes, no environment check);
-# the MVP's own: w1mvp, w2mvp, w3wtc, w7, w8.
+# the MVP's own: w1mvp, w2mvp, w3wtc, w7, w8; the evaluation's: eval-w1,
+# eval-w1smt, eval-w2, eval-w3, eval-w3grain, eval-w7, eval-w8, eval-w9,
+# eval-ferret, eval-dedup, each with the question it answers in its comment
+# below.
+#
+# Legs that run builds made by tools/wtc-cc take the directory holding them
+# as BUILD and need the CMake build too, for the controls and the
+# allocation counter: CONTROL_BUILD=<cmake build dir>.
 #
 # Run this INSIDE a `bench` reservation (see benchmarks/README.md) and never
 # build inside one. Every measured run takes the host's exclusive measurement
@@ -23,6 +30,9 @@
 set -euo pipefail
 
 LEG=${1:?leg}; BUILD=${2:?build dir}; REPS=${3:-10}
+CONTROL_BUILD=${CONTROL_BUILD:-$BUILD}
+# Absolute, because a leg may run its programs from their input directory.
+BUILD=$(cd "$BUILD" && pwd); CONTROL_BUILD=$(cd "$CONTROL_BUILD" && pwd)
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 DATE=$(date -u +%Y-%m-%d)
@@ -70,6 +80,7 @@ meta() {
     echo "  \"boost\": \"$(sed -n 's/^#define BOOST_LIB_VERSION \"\(.*\)\"/\1/p' /usr/include/boost/version.hpp 2>/dev/null)\","
     echo "  \"tbb\": \"$(dpkg-query -W -f='${Version}' libtbb12 2>/dev/null || echo none)\","
     echo "  \"vendored\": \"$(sed -n 's/^| \([a-z]*\)\/ | [^|]* | \([0-9a-f]\{12\}\).*/\1@\2/p' "$ROOT/benchmarks/third_party/VENDORED.md" | tr '\n' ' ')\","
+    echo "  \"control_build\": \"$CONTROL_BUILD\","
     echo "  \"reps\": $REPS"
     echo "}"
   } > "$OUT/meta.json"
@@ -88,10 +99,28 @@ run_w2() {
 # Three runs, not one. The control compares the start of a leg with its end,
 # and shim_generic's own run-to-run spread is around 8%, so comparing two
 # single runs against a tight threshold flags every leg and means nothing.
-control() { # tag
+# A leg whose reservation is not two whole cores passes its placement, so
+# that its controls run where its measurements do.
+control() { # tag [placement arguments]
+  local tag=$1; shift
+  if [ ! -x "$CONTROL_BUILD/w1_throughput" ]; then
+    echo "no controls: set CONTROL_BUILD to the CMake build" | tee -a "$OUT/log.txt"; return 0
+  fi
   for k in 1 2 3; do
-    lock "$BUILD/w1_throughput" --variant shim_generic --elem 64 --wait spin --rep "$1" --json "$RUNS" 2>>"$OUT/log.txt"
+    lock "$CONTROL_BUILD/w1_throughput" --variant shim_generic --elem 64 --wait spin --rep "$tag" "$@" --json "$RUNS" 2>>"$OUT/log.txt"
   done
+}
+
+# Whether this build has the oneTBB baseline: a machine without oneTBB
+# builds everything else, and a leg must not die on the one variant missing.
+have_tbb() { grep -qiE '^tbb=(1|true|on)' "$CONTROL_BUILD/build-info.txt" 2>/dev/null; }
+
+# A run that explains rather than times: allocator calls through the
+# counting preload and user-space hardware counters, every line marked
+# pass=mechanism so the summary keeps it out of the timing tables. Kept
+# apart from the timed runs because counting perturbs what it counts.
+mech() {
+  WTC_PASS=mechanism WTC_PERF=1 LD_PRELOAD="$CONTROL_BUILD/libwtc_alloccount.so" lock "$@"
 }
 
 # Elements per run, by variant. A fixed count makes a run last 17 seconds for
@@ -115,10 +144,11 @@ elems_for() {
 # still came out about 10% under the closing ones while the per-repetition
 # trend stayed flat, which is the signature of a warm-up that ended too
 # early rather than of drift. Two full-length runs, discarded.
-warmup() {
+warmup() { # [placement arguments]
+  [ -x "$CONTROL_BUILD/w1_throughput" ] || return 0
   for k in 1 2; do
-    lock "$BUILD/w1_throughput" --variant shim_generic --elem 64 --wait spin \
-         --n 20000000 --json "" 2>>"$OUT/log.txt" >/dev/null
+    lock "$CONTROL_BUILD/w1_throughput" --variant shim_generic --elem 64 --wait spin \
+         --n 20000000 "$@" --json "" 2>>"$OUT/log.txt" >/dev/null
   done
 }
 
@@ -348,10 +378,284 @@ case "$LEG" in
     "$HERE/check_env.sh" 4 || exit 1
     meta
     for rep in $(seq 0 $((REPS-1))); do
-      for v in orig_generic shim_generic std_mutex moodycamel_cq_sp boost_ms_queue onetbb_cq_sp; do
+      for v in orig_generic shim_generic std_mutex moodycamel_cq_sp boost_ms_queue $(have_tbb && echo onetbb_cq_sp); do
         lock "$BUILD/w5_mpmc_control" --variant "$v" --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt"
       done
     done
+    ;;
+  eval-w1)
+    # RQ2/RQ3: the queue alone, every baseline at three element sizes.
+    # B0 shim_generic, orig_generic; B1 the general-purpose libraries; B2
+    # the expert single-producer queues; the shim's own tags; the bare ring
+    # moved, borrowed and inline. Then the explaining pass, three runs each
+    # at a size that keeps it short. Needs a 2-core reservation.
+    "$HERE/check_env.sh" 2 || exit 1
+    meta
+    EVAL_W1="shim_generic orig_generic $(have_tbb && echo onetbb_cq_sp) moodycamel_cq_sp boost_ms_queue std_mutex rigtorp_sp rigtorp_inline moodycamel_rw_sp moodycamel_rw_inline boost_spsc_sp shim_spsc shim_spsc_inline ring_sp ring_borrowed ring_inline"
+    warmup; control 900
+    for rep in $(seq 0 $((REPS-1))); do
+      for elem in 8 64 256; do
+        for v in $EVAL_W1; do run_w1 "$rep" "$v" "$elem" spin; done
+      done
+    done
+    control 901
+    for rep in 0 1 2; do
+      for elem in 8 64 256; do
+        for v in $EVAL_W1; do
+          mech "$BUILD/w1_throughput" --variant "$v" --elem "$elem" --rep "$rep" --n 4000000 --json "$RUNS" 2>>"$OUT/log.txt"
+        done
+      done
+    done
+    ;;
+  eval-w1smt)
+    # Placement: the two threads on the SMT siblings of one core. Needs a
+    # reservation that keeps the siblings online (bench without -e).
+    "$HERE/check_env.sh" 2 || exit 1
+    meta
+    warmup --smt-siblings; control 900 --smt-siblings
+    for rep in $(seq 0 $((REPS-1))); do
+      for v in shim_generic $(have_tbb && echo onetbb_cq_sp) rigtorp_inline moodycamel_rw_sp shim_spsc shim_spsc_inline; do
+        WTC_PLACEMENT=smt lock "$BUILD/w1_throughput" --variant "$v" --elem 64 --wait spin --rep "$rep" \
+             --n "$(elems_for "$v")" --smt-siblings --json "$RUNS" 2>>"$OUT/log.txt"
+      done
+    done
+    control 901 --smt-siblings
+    ;;
+  eval-w2)
+    # RQ2: latency against offered load, up to and past saturation, for the
+    # shim's tags and one queue of each baseline class. Latency runs from
+    # each element's due time; a saturated run is marked. Needs 2 cores.
+    "$HERE/check_env.sh" 2 || exit 1
+    meta
+    warmup; control 900
+    for rep in $(seq 0 $((REPS-1))); do
+      for interval in 100 200 300 500 700 1000 2000 5000 10000; do
+        for v in shim_generic $(have_tbb && echo onetbb_cq_sp) moodycamel_cq_sp rigtorp_inline moodycamel_rw_inline shim_spsc shim_spsc_inline ring_borrowed; do
+          run_w2 "$rep" "$v" 64 "$interval"
+        done
+      done
+    done
+    control 901
+    ;;
+  eval-w3)
+    # RQ2/RQ3 on the pipeline: the adapter pipeline with every baseline
+    # class, and the compiler's pipeline in its four builds (FLAVOURS, made
+    # by build_wtc_flavours.sh), closed loop and at five offered rates.
+    # Needs a 3-core reservation.
+    "$HERE/check_env.sh" 3 || exit 1
+    FLAVOURS=${FLAVOURS:?FLAVOURS=<dir of the W3 flavours>}
+    meta
+    warmup; control 900
+    for rep in $(seq 0 $((REPS-1))); do
+      for rate in 0 500000 1000000 2000000 3000000 4000000; do
+        n=$([ "$rate" = 0 ] && echo 10000000 || echo 4000000)
+        for v in shim_generic $(have_tbb && echo onetbb_cq_sp) moodycamel_cq_sp moodycamel_rw_sp moodycamel_rw_inline rigtorp_inline shim_spsc shim_spsc_inline; do
+          lock "$BUILD/w3_pipeline" --variant "$v" --rate "$rate" --n "$n" --rep "$rep" --json "$RUNS" \
+            2>>"$OUT/log.txt" >>"$OUT/checksums-$n.txt"
+        done
+        for f in generic hand hand-inline compiler; do
+          lock "$FLAVOURS/w3_$f" --flavour "$f" --rate "$rate" --n "$n" --rep "$rep" --json "$RUNS" \
+            2>>"$OUT/log.txt" | awk '{print $1, $2}' >>"$OUT/checksums-$n.txt"
+        done
+      done
+    done
+    control 901
+    for f in "$OUT"/checksums-*.txt; do
+      echo "$(basename "$f"): $(sort -u "$f" | wc -l) distinct checksum(s) (must be 1)" | tee -a "$OUT/log.txt"
+    done
+    for f in generic compiler; do
+      mech "$FLAVOURS/w3_$f" --flavour "$f" --n 4000000 --rep 0 --json "$RUNS" 2>>"$OUT/log.txt" >/dev/null
+    done
+    ;;
+  eval-w9)
+    # RQ2/RQ5: the general-purpose queues as threads are added -- whether the
+    # shim's, which every unproved queue keeps, is a fair baseline beside the
+    # libraries, and what shapes the compiler leaves to it (many producers
+    # into one consumer, one producer into many). Split producers and
+    # consumers, and the pairwise workload of the lock-free queue
+    # literature. Needs a 16-core reservation.
+    "$HERE/check_env.sh" 16 || exit 1
+    meta
+    MPMC="shim_generic orig_generic std_mutex moodycamel_cq_sp boost_ms_queue $(have_tbb && echo onetbb_cq_sp)"
+    warmup; control 900
+    for rep in $(seq 0 $((REPS-1))); do
+      for pc in 1:1 2:2 4:4 8:8 1:2 1:4 1:8 2:1 4:1 8:1; do
+        for v in $MPMC; do
+          lock "$BUILD/w9_mpmc_scaling" --variant "$v" --mode split --producers "${pc%%:*}" --consumers "${pc##*:}" \
+            --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt"
+        done
+      done
+      for t in 1 2 4 8 16; do
+        for v in $MPMC; do
+          lock "$BUILD/w9_mpmc_scaling" --variant "$v" --mode pairwise --threads "$t" --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt"
+        done
+      done
+    done
+    control 901
+    ;;
+  eval-w7)
+    # RQ4: batching a producer's pushes. Every flavour build_w7_flavours.sh
+    # made (BUILD): as fast as it can, then paced at one element a
+    # microsecond, where the delay an element waits for its batch shows.
+    # Needs a 2-core reservation and CONTROL_BUILD.
+    "$HERE/check_env.sh" 2 || exit 1
+    meta
+    warmup; control 900
+    w7_n() { case "$1" in *generic*) echo 3000000 ;; *spsc*) echo 5000000 ;; *) echo 20000000 ;; esac; }
+    for rep in $(seq 0 $((REPS-1))); do
+      for b in "$BUILD"/w7_*; do
+        [ -x "$b" ] || continue
+        f=$(basename "$b"); f=${f#w7_}
+        # The checksum depends on the element type and the count, which
+        # differs by implementation: one file per pair, one checksum each.
+        lock "$b" --flavour "$f" --n "$(w7_n "$f")" --rep "$rep" --json "$RUNS" \
+          2>>"$OUT/log.txt" | awk '{print $1, $2}' >>"$OUT/checksums-${f##*_}-n$(w7_n "$f").txt"
+        case "$f" in *_e64)
+          lock "$b" --flavour "$f" --n 2000000 --rate 1000000 --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt" >/dev/null ;;
+        esac
+      done
+    done
+    control 901
+    for f in "$OUT"/checksums-*.txt; do
+      echo "$(basename "$f"): $(sort -u "$f" | wc -l) distinct checksum(s) (must be 1)" | tee -a "$OUT/log.txt"
+    done
+    ;;
+  eval-w8)
+    # RQ4: batching a loop's critical sections, against the thread count and
+    # the work between sections, where holding the mutex across that work
+    # stops paying; then the batch size at two threads. Every flavour
+    # build_w8_flavours.sh made (BUILD). Needs an 8-core reservation and
+    # CONTROL_BUILD.
+    "$HERE/check_env.sh" 8 || exit 1
+    meta
+    warmup; control 900
+    for rep in $(seq 0 $((REPS-1))); do
+      for t in 1 2 4 8; do
+        for w in 0 20 50 100 200 500; do
+          for f in plain batched hand; do
+            lock "$BUILD/w8_$f" --flavour "$f" --threads "$t" --work-ns "$w" --n 2000000 --rep "$rep" --json "$RUNS" \
+              2>>"$OUT/log.txt" >>"$OUT/checksums-t$t.txt"
+          done
+        done
+      done
+      for w in 0 20 50 100 200 500; do
+        for f in batched_k8 hand_k8 batched_k512 hand_k512; do
+          lock "$BUILD/w8_$f" --flavour "$f" --threads 2 --work-ns "$w" --n 2000000 --rep "$rep" --json "$RUNS" \
+            2>>"$OUT/log.txt" >>"$OUT/checksums-t2.txt"
+        done
+      done
+    done
+    control 901
+    for f in "$OUT"/checksums-*.txt; do
+      echo "$(basename "$f"): $(sort -u "$f" | wc -l) distinct checksum(s) (must be 1)" | tee -a "$OUT/log.txt"
+    done
+    ;;
+  eval-w3grain)
+    # RQ2: where the gain goes. The pipeline with each stage's own work swept
+    # from none to about 250 us a record (--work rounds of about 15 ns), the
+    # adapter pipeline with a queue of each class beside the compiler's
+    # pipeline in its four builds (FLAVOURS). A real pipeline sits somewhere
+    # on this axis: ferret, at about 10 ms a record, far to the right.
+    # Needs a 3-core reservation.
+    "$HERE/check_env.sh" 3 || exit 1
+    FLAVOURS=${FLAVOURS:?FLAVOURS=<dir of the W3 flavours>}
+    meta
+    warmup; control 900
+    grain_n() { case "$1" in 0|4) echo 10000000 ;; 16) echo 4000000 ;; 64) echo 2000000 ;; 256) echo 500000 ;;
+                             1024) echo 150000 ;; 4096) echo 40000 ;; *) echo 10000 ;; esac; }
+    for rep in $(seq 0 $((REPS-1))); do
+      for work in 0 4 16 64 256 1024 4096 16384; do
+        n=$(grain_n "$work")
+        for v in shim_generic $(have_tbb && echo onetbb_cq_sp) moodycamel_rw_inline rigtorp_inline shim_spsc shim_spsc_inline; do
+          lock "$BUILD/w3_pipeline" --variant "$v" --work "$work" --n "$n" --rep "$rep" --json "$RUNS" \
+            2>>"$OUT/log.txt" >>"$OUT/checksums-w$work.txt"
+        done
+        for f in generic hand hand-inline compiler; do
+          lock "$FLAVOURS/w3_$f" --flavour "$f" --work "$work" --n "$n" --rep "$rep" --json "$RUNS" \
+            2>>"$OUT/log.txt" | awk '{print $1, $2}' >>"$OUT/checksums-w$work.txt"
+        done
+      done
+    done
+    control 901
+    for f in "$OUT"/checksums-*.txt; do
+      echo "$(basename "$f"): $(sort -u "$f" | wc -l) distinct checksum(s) (must be 1)" | tee -a "$OUT/log.txt"
+    done
+    ;;
+  eval-ferret)
+    # RQ2/RQ5 on an application: PARSEC ferret, simlarge, as PARSEC builds it
+    # and as the port builds it (BUILD: the bin directory of
+    # benchmarks/apps/ferret/build.sh; INPUTS: the directory of its
+    # fetch-inputs.sh). One thread per stage, where the compiler proves four
+    # of the five queues single-producer, and 2 and 4 per middle stage, where
+    # it proves none. The time is ferret's own, of its parallel region; every
+    # run's output is checked against PARSEC's. Needs 18 cores.
+    "$HERE/check_env.sh" 18 || exit 1
+    INPUTS=${INPUTS:?INPUTS=<dir of benchmarks/apps/ferret/fetch-inputs.sh>}
+    meta
+    warmup; control 900
+    cd "$INPUTS/simlarge"
+    lock "$BUILD/ferret-orig" corel lsh queries 10 20 1 reference.txt >/dev/null 2>&1
+    ferret_run() { # variant, threads per middle stage, rep
+      local v=$1 n=$2 rep=$3 t
+      t=$(lock "$BUILD/ferret-$v" corel lsh queries 10 20 "$n" out.txt 2>/dev/null | sed -n 's/^QUERY TIME: \([0-9.]*\) seconds/\1/p')
+      local same=0
+      if [ "$n" = 1 ]; then cmp -s out.txt reference.txt && same=1
+      else cmp -s <(sort out.txt) <(sort reference.txt) && same=1; fi
+      [ "$same" = 1 ] || echo "ferret-$v n=$n rep $rep: output differs from PARSEC's" | tee -a "$OUT/log.txt"
+      printf '{"workload": "ferret", "variant": "%s", "threads": %d, "rep": %d, "time_s": %s, "queries": %d, "output_ok": %d, "cmd": "%s"}\n' \
+        "$v" "$n" "$rep" "${t:-0}" "$(wc -l < out.txt)" "$same" "ferret-$v corel lsh queries 10 20 $n" >> "$RUNS"
+    }
+    for rep in $(seq 0 $((REPS-1))); do
+      for v in orig generic-one compiler-one hand-one; do ferret_run "$v" 1 "$rep"; done
+      for n in 2 4; do
+        for v in orig generic compiler; do ferret_run "$v" "$n" "$rep"; done
+      done
+    done
+    cd "$ROOT"
+    control 901
+    ;;
+  eval-dedup)
+    # RQ1/RQ2 on an application the analysis must refuse as it is written:
+    # PARSEC dedup on its native input (BUILD: the bin directory of
+    # benchmarks/apps/dedup/build.sh; INPUTS: the directory of its
+    # fetch-inputs.sh). One thread per stage: the port as written (refused:
+    # its queues are elements of arrays), with its queues as globals
+    # (refused: the threads start in a function called from another
+    # file), the same in one translation unit (three of four queues proved
+    # single-producer), and tagged by hand; then 2 and 4 threads per middle
+    # stage, where no queue is single-producer. The time is PARSEC's own
+    # region of interest; the output goes to memory (SCRATCH, /dev/shm by
+    # default), so the disk is not timed, and every run's is checked against
+    # PARSEC's byte for byte. The mean chunk size, with the input's size,
+    # gives the elements the queues carry. Needs 18 cores.
+    "$HERE/check_env.sh" 18 || exit 1
+    INPUTS=${INPUTS:?INPUTS=<dir of benchmarks/apps/dedup/fetch-inputs.sh>}
+    ISO="$INPUTS/native/FC-6-x86_64-disc1.iso"
+    SCRATCH=$(mktemp -d "${SCRATCH:-/dev/shm}/wtc-dedup.XXXXXX")
+    meta
+    warmup; control 900
+    lock "$BUILD/dedup-orig" -c -p -t 1 -i "$ISO" -o "$SCRATCH/reference.ddp" >/dev/null 2>&1
+    dedup_run() { # variant, threads per middle stage, rep
+      local v=$1 n=$2 rep=$3 out t kb same=0
+      out=$(lock "$BUILD/dedup-$v" -c -p -v -t "$n" -i "$ISO" -o "$SCRATCH/out.ddp" 2>&1)
+      t=$(sed -n 's/.*Total time spent in ROI: \([0-9.]*\)s.*/\1/p' <<<"$out")
+      kb=$(sed -n 's/^Mean data chunk size: *\([0-9.]*\) KB.*/\1/p' <<<"$out")
+      cmp -s "$SCRATCH/out.ddp" "$SCRATCH/reference.ddp" && same=1
+      [ "$same" = 1 ] || echo "dedup-$v n=$n rep $rep: output differs from PARSEC's" | tee -a "$OUT/log.txt"
+      printf '{"workload": "dedup", "variant": "%s", "threads": %d, "rep": %d, "time_s": %s, "chunk_kb": %s, "input_bytes": %d, "output_ok": %d, "cmd": "%s"}\n' \
+        "$v" "$n" "$rep" "${t:-0}" "${kb:-0}" "$(stat -c %s "$ISO")" "$same" "dedup-$v -c -p -v -t $n" >> "$RUNS"
+      rm -f "$SCRATCH/out.ddp"
+    }
+    for rep in $(seq 0 $((REPS-1))); do
+      for v in orig generic-one compiler-one hand-one hand-spsc-one compiler-flat-one compiler-flat-one-unity; do
+        dedup_run "$v" 1 "$rep"
+      done
+      for n in 2 4; do
+        for v in orig generic compiler; do dedup_run "$v" "$n" "$rep"; done
+      done
+    done
+    rm -rf "$SCRATCH"
+    control 901
     ;;
   *) echo "unknown leg $LEG" >&2; exit 2 ;;
 esac
@@ -359,4 +663,6 @@ esac
 if ! python3 "$HERE/summarise.py" "$OUT" > "$OUT/SUMMARY.md"; then
   echo "summarise failed; the runs are in $OUT/runs.jsonl and can be summarised again" >&2
 fi
+BUILD=$BUILD CONTROL_BUILD=$CONTROL_BUILD FLAVOURS=${FLAVOURS:-} INPUTS=${INPUTS:-} \
+  "$HERE/scrub_paths.sh" "$OUT"
 echo "results: $OUT"
