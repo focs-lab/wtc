@@ -73,6 +73,19 @@ LogicalResult UnlockOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
                               symbolTable);
 }
 
+LogicalResult LockBatchBeginOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+    return verifyFallbackImpl(*this, getFallbackImplAttr(), "wtc_mutex_batch_begin", "batch_begin", 2,
+                              symbolTable);
+}
+LogicalResult LockBatchStepOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+    return verifyFallbackImpl(*this, getFallbackImplAttr(), "wtc_mutex_batch_step", "batch_step", 2,
+                              symbolTable);
+}
+LogicalResult LockBatchEndOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+    return verifyFallbackImpl(*this, getFallbackImplAttr(), "wtc_mutex_batch_end", "batch_end", 2,
+                              symbolTable);
+}
+
 LogicalResult QueuePushOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return verifyFallbackImpl(*this, getFallbackImplAttr(), "wtc_queue_push", "push", 2, symbolTable);
 }
@@ -137,6 +150,22 @@ std::string LockOp::getBlockingReason() { return "takes a mutex"; }
 Progress UnlockOp::getProgress() { return Progress::blocking; }
 bool UnlockOp::mayCallAllocator() { return false; }
 std::string UnlockOp::getBlockingReason() {
+    return "releases a mutex, which is half of a blocking protocol";
+}
+
+Progress LockBatchBeginOp::getProgress() { return Progress::blocking; }
+bool LockBatchBeginOp::mayCallAllocator() { return false; }
+std::string LockBatchBeginOp::getBlockingReason() { return "takes a mutex"; }
+
+Progress LockBatchStepOp::getProgress() { return Progress::blocking; }
+bool LockBatchStepOp::mayCallAllocator() { return false; }
+std::string LockBatchStepOp::getBlockingReason() {
+    return "lets a mutex go and takes it again every WTC_LOCK_BATCH_K sections";
+}
+
+Progress LockBatchEndOp::getProgress() { return Progress::blocking; }
+bool LockBatchEndOp::mayCallAllocator() { return false; }
+std::string LockBatchEndOp::getBlockingReason() {
     return "releases a mutex, which is half of a blocking protocol";
 }
 

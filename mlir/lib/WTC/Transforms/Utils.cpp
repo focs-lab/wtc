@@ -83,6 +83,9 @@ SemanticOpKind getSemanticKind(cir::FuncOp funcOp) {
         if (name == "wtc_queue_batch_end")    return SemanticOpKind::QueueBatchEnd;
         if (name == "wtc_mutex_lock")         return SemanticOpKind::MutexLock;
         if (name == "wtc_mutex_unlock")       return SemanticOpKind::MutexUnlock;
+        if (name == "wtc_mutex_batch_begin")  return SemanticOpKind::MutexBatchBegin;
+        if (name == "wtc_mutex_batch_step")   return SemanticOpKind::MutexBatchStep;
+        if (name == "wtc_mutex_batch_end")    return SemanticOpKind::MutexBatchEnd;
     }
     return SemanticOpKind::Unknown;
 }

@@ -51,6 +51,30 @@ def UnlockOp : WTC_ObjectOp<"unlock"> {
         OptionalAttr<ArrayAttr>:$source_arg_attrs);
 }
 
+// A run of critical sections on one mutex held as one (shim/mutex.hpp):
+// lock_batch_begin takes the mutex, lock_batch_step ends one section and
+// every WTC_LOCK_BATCH_K sections lets the mutex go and takes it again,
+// lock_batch_end lets it go. `batch` is the holder's own count.
+class WTC_MutexBatchOp<string mnemonic> : WTC_ObjectOp<mnemonic> {
+    let arguments = (ins WTC_MutexType:$mutex, AnyType:$batch,
+        OptionalAttr<FlatSymbolRefAttr>:$fallback_impl,
+        OptionalAttr<TypeAttr>:$source_mutex_type,
+        OptionalAttr<ArrayAttr>:$source_arg_attrs);
+    let results = (outs);
+}
+
+def LockBatchBeginOp : WTC_MutexBatchOp<"lock_batch_begin"> {
+    let summary = "Takes a mutex for a run of critical sections";
+}
+
+def LockBatchStepOp : WTC_MutexBatchOp<"lock_batch_step"> {
+    let summary = "Ends one critical section of the run, letting the mutex go now and then";
+}
+
+def LockBatchEndOp : WTC_MutexBatchOp<"lock_batch_end"> {
+    let summary = "Lets the mutex go and ends the run";
+}
+
 def QueuePushOp : WTC_ObjectOp<"queue_push"> {
     let summary = "A queue push operation";
     let description = [{

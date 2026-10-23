@@ -133,6 +133,24 @@ struct LowerQueueBatchPattern : public OpConversionPattern<Op> {
     }
 };
 
+// The three lock-batch operations lower alike: the mutex cast back to its
+// source type, then the batch.
+template <class Op>
+struct LowerLockBatchPattern : public OpConversionPattern<Op> {
+    using OpConversionPattern<Op>::OpConversionPattern;
+    LogicalResult matchAndRewrite(Op op, typename Op::Adaptor adaptor,
+                                  ConversionPatternRewriter &rewriter) const override {
+        if (failed(requireFallback(op, op.getFallbackImplAttr(), op.getSourceMutexTypeAttr())))
+            return failure();
+        Value mutex = mlir::UnrealizedConversionCastOp::create(
+            rewriter, op.getLoc(), op.getSourceMutexTypeAttr().getValue(), adaptor.getMutex()).getResult(0);
+        rebuildCall(rewriter, op.getLoc(), op.getFallbackImplAttr(), Type{},
+                    ValueRange{mutex, adaptor.getBatch()}, op.getSourceArgAttrsAttr());
+        rewriter.eraseOp(op);
+        return success();
+    }
+};
+
 struct LowerWTCToCIRPass : public PassWrapper<LowerWTCToCIRPass, OperationPass<ModuleOp>> {
     MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerWTCToCIRPass)
 
@@ -155,7 +173,10 @@ struct LowerWTCToCIRPass : public PassWrapper<LowerWTCToCIRPass, OperationPass<M
                      LowerQueuePushPattern, LowerQueuePopPattern,
                      LowerQueueBatchPattern<QueueBatchBeginOp>,
                      LowerQueueBatchPattern<QueuePushDeferredOp>,
-                     LowerQueueBatchPattern<QueueBatchEndOp>>(context);
+                     LowerQueueBatchPattern<QueueBatchEndOp>,
+                     LowerLockBatchPattern<LockBatchBeginOp>,
+                     LowerLockBatchPattern<LockBatchStepOp>,
+                     LowerLockBatchPattern<LockBatchEndOp>>(context);
         if (failed(applyPartialConversion(getOperation(), target, std::move(patterns))))
             return signalPassFailure();
 

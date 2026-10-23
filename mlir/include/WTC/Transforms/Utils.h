@@ -28,6 +28,9 @@ enum class SemanticOpKind {
     QueueBatchEnd,
     MutexLock,
     MutexUnlock,
+    MutexBatchBegin,
+    MutexBatchStep,
+    MutexBatchEnd,
 };
 
 // The callee of a direct call, or null for an indirect call or an
