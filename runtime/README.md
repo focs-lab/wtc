@@ -32,12 +32,12 @@ once rather than once per element in it; the batch tracks the producer's
 rate, one for a trickle and up to thirty-two lines' worth for a stream,
 and the wait polls the producer's counter about as often as the batch
 should take to fill, from an estimate of that rate, since every poll takes
-the counter's line from the producer. The shim instantiates it with
-`Slot = std::shared_ptr<T>` for the `spsc` tag, so the per-element
-allocation the original API implies is still paid and the ring removes the
-two mutexes and the per-push node, and with `Slot = T` for `spsc_inline`,
-where the consumer borrows each element in place and nothing is allocated
-per element.
+the counter's line from the producer. The shim instantiates it, like every
+other implementation, with `Slot = T`: the element lives in its slot, a
+push copies or moves it there, and the consumer takes it by moving it out
+(`try_pop(T&)`), by lending it in place (`spsc_inline`), or as the
+`shared_ptr` the original API returns, which the consumer allocates from
+the slot, so that no allocation ever crosses the threads.
 
 `segment_queue<Slot, kManyConsumers>` is an unbounded linearisable queue over
 a list of array segments ("FAAArrayQueue"): a push takes the tail segment's

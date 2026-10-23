@@ -8,12 +8,14 @@
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Pass/Pass.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/Demangle/Demangle.h"
 
+#include <cstdlib>
 #include <optional>
 #include <string>
 
@@ -160,12 +162,32 @@ std::optional<Refusal> LegalityChecker::callee(cir::FuncOp f) {
     return found;
 }
 
-// The shim's function for one batch operation on a queue of this type.
-cir::FuncOp shimFunction(ModuleOp module, StringRef annotation, Type queuePtr) {
+// Whether a function's last parameter is an rvalue reference: push and
+// push_deferred each come in a copying and a moving overload, which CIR
+// types alike (both are pointers), so the mangled name is what tells them
+// apart. A push by rvalue must be batched by the moving overload, or the
+// deferred push would copy from an object the program has given up.
+bool takesRvalue(cir::FuncOp f) {
+    llvm::ItaniumPartialDemangler d;
+    std::string mangled = f.getSymName().str();
+    if (d.partialDemangle(mangled.c_str())) return false;
+    char *params = d.getFunctionParameters(nullptr, nullptr);
+    if (!params) return false;
+    std::string p(params);
+    std::free(params);
+    return p.size() >= 3 && p.compare(p.size() - 3, 3, "&&)") == 0;
+}
+
+// The shim's function for one batch operation on a queue of this type; for
+// push_deferred, the overload whose value parameter matches the push's.
+cir::FuncOp shimFunction(ModuleOp module, StringRef annotation, Type queuePtr,
+                         std::optional<bool> rvalue = std::nullopt) {
     cir::FuncOp found;
     module.walk([&](cir::FuncOp f) {
         if (found || !hasAnnotation(f, annotation) || f.getNumArguments() == 0) return;
-        if (f.getArgumentTypes().front() == queuePtr) found = f;
+        if (f.getArgumentTypes().front() != queuePtr) return;
+        if (rvalue && takesRvalue(f) != *rvalue) return;
+        found = f;
     });
     return found;
 }
@@ -258,8 +280,12 @@ private:
         auto sourceType = push.getSourceQueueTypeAttr();
         if (!sourceType) return push.emitError("wtc: a push to batch carries no source type");
         Type queuePtr = sourceType.getValue();
+        cir::FuncOp pushFn = push.getFallbackImplAttr()
+                                 ? module.lookupSymbol<cir::FuncOp>(push.getFallbackImplAttr())
+                                 : cir::FuncOp();
+        const bool byRvalue = pushFn && takesRvalue(pushFn);
         cir::FuncOp begin = shimFunction(module, "wtc_queue_batch_begin", queuePtr);
-        cir::FuncOp deferred = shimFunction(module, "wtc_queue_push_deferred", queuePtr);
+        cir::FuncOp deferred = shimFunction(module, "wtc_queue_push_deferred", queuePtr, byRvalue);
         cir::FuncOp end = shimFunction(module, "wtc_queue_batch_end", queuePtr);
         if (!begin || !deferred || !end || begin.getNumArguments() != 2) {
             loop->emitRemark() << "wtc: pushes in this loop not batched: the shim's batch functions "
@@ -270,11 +296,16 @@ private:
         auto batchPtr = cast<cir::PointerType>(begin.getArgumentTypes()[1]);
 
         // The batch lives for the whole function, so its slot goes where
-        // ClangIR puts every other: the top of the entry block.
+        // ClangIR puts every other: the top of the entry block, aligned as
+        // the batch type asks (it holds elements, which may be over-aligned).
         auto fn = loop->getParentOfType<cir::FuncOp>();
         OpBuilder top(&fn.getBody().front(), fn.getBody().front().begin());
+        const DataLayout dl(module);
+        uint64_t align = 8;
+        if (auto pointee = batchPtr.getPointee(); pointee && mlir::isa<cir::RecordType>(pointee))
+            align = std::max<uint64_t>(align, dl.getTypeABIAlignment(pointee));
         auto slot = cir::AllocaOp::create(top, loop.getLoc(), batchPtr, "wtc.batch",
-                                          top.getI64IntegerAttr(8));
+                                          top.getI64IntegerAttr(static_cast<int64_t>(align)));
 
         // The handle outside the loop: the same value if it already is,
         // otherwise the global's address taken again before the loop.
