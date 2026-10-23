@@ -105,6 +105,14 @@ struct Instance {
     // global constructors, and for every instance with a parent, whose
     // multiplicity comes from its chain.
     const char *manyRoot = nullptr;
+    // For a thread started by a spawn that runs once in each iteration of a
+    // counted loop (countedLoop in Utils.h), with nothing else repeating
+    // around it, in an instance that runs once: that loop. The thread then
+    // stands for exactly as many threads as the loop has iterations, a
+    // number the program knows before the loop runs. threadMult says Many
+    // all the same, which is what holds whatever the number; every
+    // instance on the thread carries the loop.
+    Operation *countLoop = nullptr;
 };
 
 // Where a handle points, as far as the walk can read it: a root (a
@@ -337,6 +345,9 @@ private:
     // every store is either outside the loop or in its step region.
     // `unitStep` is set when the step region advances it by exactly one.
     static bool isInductionOf(Value index, Operation *loop, bool &unitStep);
+    // The counted loop whose iterations each start one thread at `spawn`
+    // in `inst`, when that loop is the whole of the spawn's repetition.
+    Operation *countingLoop(Operation *spawn, const Instance &inst);
     const DataLayout &dataLayout() const;
     void noteRemark(Operation *at, const llvm::Twine &msg);
     void addRootsForModule();

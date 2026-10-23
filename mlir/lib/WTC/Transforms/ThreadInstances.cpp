@@ -577,6 +577,19 @@ static bool unconditionalInBody(Operation *op, cir::ForOp loop) {
     return !jumps;
 }
 
+// One thread per iteration, and the iterations counted: the spawn runs
+// unconditionally in the loop's body, no other loop encloses the loop, the
+// function's control flow is structured, and the instance that spawns runs
+// once on a thread the module accounts for.
+Operation *ThreadInstanceWalk::countingLoop(Operation *spawn, const Instance &inst) {
+    if (inst.execMult != Mult::One || inst.threadMult != Mult::One || inst.execUnknown ||
+        inst.speculative || isUnstructured(inst.func))
+        return nullptr;
+    auto forOp = dyn_cast_or_null<cir::ForOp>(enclosingLoop(spawn, inst.func));
+    if (!forOp || enclosingLoop(forOp, inst.func) || !unconditionalInBody(spawn, forOp)) return nullptr;
+    return countedLoop(forOp) ? forOp.getOperation() : nullptr;
+}
+
 const DataLayout &ThreadInstanceWalk::dataLayout() const {
     if (!dataLayout_) dataLayout_.emplace(module_);
     return *dataLayout_;
@@ -1522,8 +1535,10 @@ void ThreadInstanceWalk::expand(Instance &inst) {
             const bool certainlyMany = (inst.execMult == Mult::Many && !inst.execUnknown) ||
                                        (known && site == Mult::Many);
             if (Instance *child = addIfRoom({entry, nextThread_++, m, m, call, &inst,
-                                             inst.speculative, false}))
+                                             inst.speculative, false})) {
                 child->execUnknown = !certainlyMany && (!known || inst.execUnknown);
+                child->countLoop = countingLoop(call.getOperation(), inst);
+            }
             return;
         }
         if (kind != SemanticOpKind::Unknown) return;           // shim functions: nothing inside
@@ -1538,6 +1553,7 @@ void ThreadInstanceWalk::expand(Instance &inst) {
                                          inst.speculative,
                                          inst.startup && !spawnPrecedes(call.getOperation(), f)})) {
             child->execUnknown = !certainlyMany && (!known || inst.execUnknown);
+            child->countLoop = inst.countLoop;
             // In an unstructured function that can spawn, "no spawn precedes
             // this call" is a guess: the goto may jump over the spawn or
             // back behind it.
@@ -1581,6 +1597,7 @@ void ThreadInstanceWalk::run(llvm::function_ref<void(Instance &)> visit,
         if (seen) {
             onRecursion(inst.func);
             inst.recurring = true;
+            inst.countLoop = nullptr;
             if (inst.site && getSemanticKind(lookupCallee(inst.site)) == SemanticOpKind::ThreadSpawn)
                 inst.threadMult = inst.execMult = Mult::Many;
             else
