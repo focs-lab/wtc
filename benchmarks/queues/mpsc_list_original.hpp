@@ -1,3 +1,9 @@
+// The shim's queue for many producers and one consumer from 21 to 22 Oct
+// 2026, kept as a baseline (orig_mpsc) so that the leg that measured it
+// (eval-w9 of 21 Oct) stays reproducible; the shim's mpsc tag is the
+// segmented queue's single-consumer form since. The file is the runtime's
+// mpsc_list.hpp as it was, moved here unchanged.
+//
 // wtc::rt::mpsc_list: an unbounded queue for any number of producers and
 // one consumer.
 //

@@ -1,6 +1,6 @@
 // A consumer step declared lock-free fails on either queue that has a side
-// with many threads, each for its own implementation's reason: the list for
-// many producers frees the node its pop moves past, and the ring whose
+// with many threads, each for its own implementation's reason: the queue for
+// many producers frees the segments its pop moves past, and the ring whose
 // consumers take turns makes a pop wait for another consumer's.
 //
 // RUN: %clangxx -std=c++17 -I%shim -fclangir -emit-cir %s -o %t.cir
@@ -9,7 +9,7 @@
 // CHECK-DAG: specialised: constructor tag rewritten to mpsc
 // CHECK-DAG: specialised: constructor tag rewritten to spmc
 // CHECK-DAG: error: wtc: take_in() is declared lock-free but can block
-// CHECK-DAG: note: which frees the node it moves past
+// CHECK-DAG: note: which frees the segments it moves past
 // CHECK-DAG: error: wtc: take_out() is declared lock-free but can block
 // CHECK-DAG: note: which waits for another consumer's pop under the consumers' spin lock
 

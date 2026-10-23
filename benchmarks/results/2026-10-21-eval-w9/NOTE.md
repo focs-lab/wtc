@@ -5,7 +5,9 @@ siblings offline (processors 4 to 19), governor performance, turbo off,
 10 repetitions. Two shapes: split producers and consumers (P:C from 1:1 to
 8:8, and one side single), and the pairwise workload of the lock-free
 queue literature (each thread pushes and pops in turn, 1 to 16 threads).
-With one consumer the shim's list for many producers (shim_mpsc) runs as
+(The shim's mpsc tag became the segmented queue's single-consumer form on
+22 Oct; the list this leg measured as shim_mpsc is kept as the variant
+`orig_mpsc`.) With one consumer the shim's list for many producers (shim_mpsc) runs as
 well, and with one producer its ring for many consumers (shim_spmc): what
 the compiler substitutes for an mpsc or an spmc verdict. It ran 06:32 to
 08:04 local on 22 October (22:32 UTC on the 21st, which names the
@@ -60,7 +62,7 @@ std::mutex 2.20, Boost 3.15, oneTBB 4.18, moodycamel 9.81.
 The general-purpose queue the compiler falls back to, a two-lock list,
 does not scale: it loses throughput as threads are added and ends 7 to 8
 times behind oneTBB and moodycamel at eight per side (5.5 to 6 times in
-the earlier run, which held the libraries back). Every queue the analysis
+the earlier, uncommitted run, which held the libraries back). Every queue the analysis
 cannot prove keeps it. This does not change what the compiler's
 substitutions buy against the program as written, but the general
 implementation is the weakest baseline in this group, and the list for

@@ -485,7 +485,7 @@ case "$LEG" in
         # With one consumer, the shim's list for many producers too, and
         # with one producer its ring for many consumers: what the compiler
         # substitutes for an mpsc or an spmc verdict.
-        vs=$MPMC; [ "${pc##*:}" = 1 ] && vs="$vs shim_mpsc"; [ "${pc%%:*}" = 1 ] && vs="$vs shim_spmc"
+        vs=$MPMC; [ "${pc##*:}" = 1 ] && vs="$vs shim_mpsc orig_mpsc"; [ "${pc%%:*}" = 1 ] && vs="$vs shim_spmc"
         for v in $vs; do
           lock "$BUILD/w9_mpmc_scaling" --variant "$v" --mode split --producers "${pc%%:*}" --consumers "${pc##*:}" \
             --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt"

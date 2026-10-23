@@ -23,6 +23,7 @@
 
 #include "queue.hpp"          // shim, via -I shim
 #include "generic_original.hpp"
+#include "mpsc_list_original.hpp"
 #include "spsc_ring.hpp"      // runtime, via -I runtime
 
 #include "readerwriterqueue.h"
@@ -40,7 +41,8 @@
 
 namespace wtc_bench {
 
-// B0: the shim as shipped, tag generic.
+// B0: the shim as shipped, tag generic: the segmented queue
+// (runtime/segment_queue.hpp).
 template <class T> struct shim_generic {
     wtc::queue<T> q;
     void push(const T& v) { q.push(v); }
@@ -64,7 +66,8 @@ template <class T> struct shim_spsc_inline {
 };
 
 // The shim with the tag the compiler sets for many producers and one
-// consumer: the list without locks (runtime/mpsc_list.hpp).
+// consumer: the segmented queue with its consumer's side unshared
+// (runtime/segment_queue.hpp).
 template <class T> struct shim_mpsc {
     wtc::queue<T> q{wtc::topology::mpsc};
     void push(const T& v) { q.push(v); }
@@ -80,6 +83,14 @@ template <class T> struct shim_spmc {
 };
 
 // B0-orig: the original file, before the tag existed.
+// The shim's list for many producers as it was on 21 Oct 2026, the
+// implementation the eval-w9 leg of that day measured as shim_mpsc.
+template <class T> struct orig_mpsc {
+    wtc::rt::mpsc_list<std::shared_ptr<T>> q;
+    void push(const T& v) { q.push(std::make_shared<T>(v)); }
+    bool try_pop(T& out) { std::shared_ptr<T> p; if (!q.try_pop(p)) return false; out = *p; return true; }
+};
+
 template <class T> struct orig_generic {
     wtc_orig::queue<T> q;
     void push(const T& v) { q.push(v); }
@@ -193,7 +204,7 @@ template <class T> struct ring_borrowed {
 
 inline const std::vector<std::string>& variant_names() {
     static const std::vector<std::string> v = {
-        "shim_generic", "shim_spsc", "shim_spsc_inline", "shim_mpsc", "shim_spmc", "orig_generic", "std_mutex",
+        "shim_generic", "shim_spsc", "shim_spsc_inline", "shim_mpsc", "shim_spmc", "orig_generic", "orig_mpsc", "std_mutex",
         "moodycamel_rw_sp", "moodycamel_rw_inline", "moodycamel_cq_sp",
         "rigtorp_sp", "rigtorp_inline", "boost_spsc_sp", "boost_ms_queue",
         "ring_inline", "ring_sp", "ring_borrowed",
@@ -213,6 +224,7 @@ bool with_variant(const std::string& name, F&& f) {
     if (name == "shim_mpsc")             { f.template run<shim_mpsc<T>>(); return true; }
     if (name == "shim_spmc")             { f.template run<shim_spmc<T>>(); return true; }
     if (name == "orig_generic")          { f.template run<orig_generic<T>>(); return true; }
+    if (name == "orig_mpsc")             { f.template run<orig_mpsc<T>>(); return true; }
     if (name == "std_mutex")             { f.template run<std_mutex_queue<T>>(); return true; }
     if (name == "moodycamel_rw_sp")      { f.template run<moodycamel_rw_sp<T>>(); return true; }
     if (name == "moodycamel_rw_inline")  { f.template run<moodycamel_rw_inline<T>>(); return true; }

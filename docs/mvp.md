@@ -37,8 +37,8 @@ producers and two consumers and keeps the general-purpose queue; a side
 that counts many says why -- two threads, as here, or one that stands for
 many: started in a loop, under recursion, or from a function nothing in the
 file calls (`why-many.cpp`). A queue with many producers and one consumer
-gets the shim's linked list without locks, whose push is one exchange
-(`test/Integration/mpsc_fan_in.cpp`); one with one producer and many
+gets the shim's segmented queue with its consumer's side unshared, whose
+push is one fetch-and-add (`test/Integration/mpsc_fan_in.cpp`); one with one producer and many
 consumers, the SPSC ring with its consumers taking turns under a spin lock
 (`spmc_fan_out.cpp`). `q1` goes one step further than the
 gate did: its consumer only tests whether a pop returned anything, so it
@@ -140,7 +140,8 @@ note: which does input or output (printf)
 
 The same function passes as the compiler builds it without `-DLOG`: its
 queue is spsc and borrowed, so the pop neither locks nor frees. It fails
-with `--no-specialize` (the general-purpose pop takes a mutex) and with
+with `--no-specialize` (the general-purpose pop may wait for a push that
+has taken its cell) and with
 `-DRETAIN` (keeping the element makes it a shared_ptr whose release may
 free it).
 

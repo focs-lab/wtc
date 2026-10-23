@@ -225,9 +225,9 @@ int main(int argc, char** argv) {
     bool safe = false;
     for (auto s : kSafe) if (c.variant == s) safe = true;
     const bool one_to_one = c.mode == "split" && c.producers == 1 && c.consumers == 1;
-    if (c.variant == "shim_mpsc") {
+    if (c.variant == "shim_mpsc" || c.variant == "orig_mpsc") {
         if (c.mode != "split" || c.consumers != 1) {
-            std::fprintf(stderr, "shim_mpsc has one consumer: only --mode split with --consumers 1\n");
+            std::fprintf(stderr, "%s has one consumer: only --mode split with --consumers 1\n", c.variant.c_str());
             return 2;
         }
         safe = true;

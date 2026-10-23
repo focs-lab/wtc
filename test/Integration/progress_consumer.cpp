@@ -17,7 +17,7 @@
 // OUT: total 4999950000
 //
 // GENERIC: error: wtc: consume_one() is declared lock-free but can block
-// GENERIC: note: which takes the queue's mutexes and frees the node it unlinks
+// GENERIC: note: which waits for a push that has taken the cell it reads to fill it
 //
 // RETAIN: queue @q: not borrowed
 // RETAIN: error: wtc: consume_one() is declared lock-free but can block

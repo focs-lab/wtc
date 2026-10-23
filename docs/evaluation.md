@@ -138,7 +138,10 @@ producers) and 2.0 to 2.9 times (the ring for many consumers) over the
 general queue; the ring is level with the best library or ahead, the list
 reaches 63 to 94% of oneTBB's and moodycamel's queues, and the general
 queue, kept where both sides are many, ends 7 to 8 times behind them at
-eight producers and eight consumers.
+eight producers and eight consumers. Both findings led to the segmented
+queue (`runtime/segment_queue.hpp`), since 22 October the general-purpose
+implementation and, in its single-consumer form, the one for many
+producers; the legs whose B0 it changes are being run again.
 
 **RQ3** (the legs' mechanism passes). On the pipeline the compiler's build
 allocates nothing per record where the program as written allocates four,
@@ -197,8 +200,9 @@ result directories hold only the new runs.
   producers, or the ring whose consumers take turns); one with several of
   each keeps the general-purpose queue
   whatever the analysis proves, so a pipeline whose middle stages each
-  have several threads gains only at its ends. The list for many
-  producers is itself behind the best libraries.
+  have several threads gains only at its ends. In the legs recorded
+  here the list for many producers is itself behind the best libraries;
+  it has since been replaced (see RQ2 above).
 - **The saturation mark compares rates.** A run is marked when the
   producer or the consumer sustained less than 95% of the offered rate; a
   backlog that does not grow over the measured part, or clears before its

@@ -3,7 +3,9 @@
 namespace wtc {
 
 // Which implementation a queue object carries. The default is the
-// general-purpose one, correct under any number of producers and consumers.
+// general-purpose one, correct under any number of producers and consumers:
+// a list of array segments whose cells each side takes with one
+// fetch-and-add (runtime/segment_queue.hpp).
 // The compiler, having proved a stronger fact about a particular object,
 // rewrites the constant passed to that object's constructor; nothing else in
 // the program changes. A tag the program states explicitly is left alone.
@@ -21,11 +23,11 @@ namespace wtc {
 // as spsc instead, since its destructor would otherwise run later than the
 // program expects.
 //
-// mpsc is for any number of producers and one consumer: a linked list
-// without locks, whose producers each swap their node into the tail
-// (runtime/mpsc_list.hpp). spmc is for one producer and any number of
-// consumers: the spsc ring, whose consumers take turns under a spin lock
-// (runtime/spmc_ring.hpp).
+// mpsc is for any number of producers and one consumer: the same segmented
+// queue with the consumer's side unshared, so that its pop takes no atomic
+// read-modify-write and never skips a cell. spmc is for one producer and
+// any number of consumers: the spsc ring, whose consumers take turns under
+// a spin lock (runtime/spmc_ring.hpp).
 enum class topology : int {
     generic = 0,
     spsc = 1,
