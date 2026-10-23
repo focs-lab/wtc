@@ -18,7 +18,9 @@ License 2.0 with LLVM Exceptions.
 `port.py` turns `benchmark/ferret-pthreads.c` of the pinned PARSEC tree
 (bamos/parsec-benchmark, 2e492f771c6749577fe4e7610d516a9e7f8ad580) into a
 C++ program on `wtc::queue`; its docstring lists every change. The queues
-carry pointers to each stage's record, as the original's do; a consumer
+carry pointers to each stage's record, as the original's do, and are
+built in `main` where PARSEC initialises its own (`queue_init`), after the
+thread counts are read; a consumer
 waits by spinning on `try_pop`, as every variant measured does, and a queue
 ends with one null per consumer from its last producer. The thread pool,
 which lives in another translation unit, is replaced by direct
@@ -32,11 +34,12 @@ With one thread per stage, four queues are proved single-producer
 single-consumer with borrowing consumers and become inline rings; the
 first, which the loader fills from inside a recursive directory scan, is
 refused ("reached through recursion"). With a thread count chosen at run
-time the last queue, from the rank stage's threads into the one output
-thread, becomes the shim's list for many producers, and the others keep
-the general implementation, which is correct: a spawn in a loop is many
-threads. Specialising the single-thread case of a run-time count would
-take a choice made at run time, which the compiler does not make yet.
+time each middle stage's threads are started by a loop over that count,
+one per iteration, so the four queues after the loader get their tag when
+they are built, from the counts: inline rings when every loop on them runs
+once, as with one thread per stage; with more, the last queue, from the
+rank stage's threads into the one output thread, becomes the shim's list
+for many producers, and the others keep the general implementation.
 
 ## Building and running
 
