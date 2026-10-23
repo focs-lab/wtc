@@ -109,6 +109,32 @@ with `--no-specialize` (the general-purpose pop takes a mutex) and with
 `-DRETAIN` (keeping the element makes it a shared_ptr whose release may
 free it).
 
+## How the substitutions are checked
+
+A faster queue that races is not a result, so every number below stands on
+`benchmarks/scripts/correctness.sh`, 27 checks, all passing on 20 October
+2026:
+
+- the ring's own tests, plain, under ThreadSanitizer and with its contract
+  checks compiled in;
+- the queue microbenchmark with every spsc and inline variant under
+  ThreadSanitizer, at three element sizes, and the pipeline: no report;
+- the compiler's own builds under ThreadSanitizer: the pipeline with both
+  queues inline, and the batched producer loop over each implementation:
+  no report;
+- the contract checks silent on correct programs, the guard against a kept
+  element included, on the compiler's inline builds;
+- the contract check firing on a queue with two producers and two
+  consumers forced to use the ring, in ten runs of ten.
+
+The third item instruments the code the compiler generated, after the whole
+pipeline (`tools/wtc-cc --tsan`); building the same source with another
+compiler would check that compiler's code instead. A silent run proves
+nothing unless the same path can report, so the test suite holds it to two
+races it must find: a plain one on a global, which only instrumented loads
+and stores can see, and the forced two-producer queue
+(`test/Integration/tsan_own_build_caught.cpp`).
+
 ## What it is worth
 
 Measured on 19 October 2026 on the lab server under the gate's protocol:

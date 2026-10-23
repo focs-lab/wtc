@@ -21,6 +21,16 @@
 #   --toolchain DIR    where clang++, wtc-opt, cir-translate live (default:
 #                      wtc-opt from the build tree next to this repo, the
 #                      rest from PATH)
+#   --tsan             build the compiler's own output under ThreadSanitizer
+#
+# --tsan exists because the pinned clang has the instrumentation but no
+# sanitizer runtime: it instruments the object, and a compiler that has the
+# runtime links it ($WTC_TSAN_CXX, else clang++-18, else clang++). The
+# runtime comes from another LLVM release; its entry points have not changed
+# in years, and test/Integration/tsan_own_build_caught.cpp would notice if
+# they did. Every function is marked sanitize_thread, which clang's front
+# end does for source and does not do for an .ll file: without the mark,
+# only atomics are instrumented and a run is silent whatever it does.
 #
 # The data-layout line cir-translate prints does not match the target's
 # string byte for byte and clang refuses the module; it is dropped and clang
@@ -30,7 +40,7 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)
 
-KEEP=""; SPECIALIZE=1; FORCE=""; FORCE_INLINE=""; TOOLCHAIN=""; OUT="a.out"; SRC=""; PASSTHRU=()
+KEEP=""; SPECIALIZE=1; TSAN=0; FORCE=""; FORCE_INLINE=""; TOOLCHAIN=""; OUT="a.out"; SRC=""; PASSTHRU=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --keep) KEEP=$2; shift 2 ;;
@@ -38,6 +48,7 @@ while [ $# -gt 0 ]; do
     --force-spsc) FORCE=$2; shift 2 ;;
     --force-inline) FORCE_INLINE=$2; shift 2 ;;
     --toolchain) TOOLCHAIN=$2; shift 2 ;;
+    --tsan) TSAN=1; shift ;;
     -o) OUT=$2; shift 2 ;;
     *.cpp|*.cc|*.cxx) SRC=$1; shift ;;
     *) PASSTHRU+=("$1"); shift ;;
@@ -85,4 +96,11 @@ PASSES+=(--wtc-check-progress --lower-wtc-to-cir --reconcile-unrealized-casts)
 "$CIRTR" --cir-to-llvmir "$WORK/$base.wtc.cir" -o "$WORK/$base.raw.ll"
 sed '/^target datalayout/d' "$WORK/$base.raw.ll" > "$WORK/$base.ll"
 
-"$CLANGXX" "${PASSTHRU[@]}" "$WORK/$base.ll" -o "$OUT" -pthread
+if (( TSAN )); then
+  LINKXX=${WTC_TSAN_CXX:-$(command -v clang++-18 || command -v clang++ || echo clang++)}
+  "$CLANGXX" "${PASSTHRU[@]}" -fsanitize=thread -mllvm -force-attribute=sanitize_thread \
+    -c "$WORK/$base.ll" -o "$WORK/$base.o"
+  "$LINKXX" -fsanitize=thread "$WORK/$base.o" -o "$OUT" -pthread
+else
+  "$CLANGXX" "${PASSTHRU[@]}" "$WORK/$base.ll" -o "$OUT" -pthread
+fi
