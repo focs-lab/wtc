@@ -690,13 +690,15 @@ llvm::ArrayRef<Instance *> ThreadInstanceWalk::instancesOf(cir::FuncOp f) const 
 
 // Functions with no body that read what they are handed and write nothing
 // the walk would want to know of: a memset writes zeros, and a null names
-// no object.
+// no object. A copy is not one: it writes whatever pointers it copies.
+// Output writes nothing in the program's memory, so it is one here, as it
+// is not to the progress check.
 static bool harmlessCallee(cir::FuncOp f) {
     if (!f) return false;
     if (isAllocator(f) || getSemanticKind(f) == SemanticOpKind::ThreadSpawn) return true;
     const StringRef n = f.getSymName();
-    return n == "free" || n == "memset" || n == "memcmp" || n == "strlen" || n == "strcmp" ||
-           n == "strncmp" || n == "memchr" || n == "puts" || n == "printf" || n == "fprintf";
+    if (n == "memcpy" || n == "memmove") return false;
+    return touchesOnlyItsArguments(f) || n == "free" || n == "puts" || n == "printf" || n == "fprintf";
 }
 
 // The functions a call may reach with a body each, for the operand rules

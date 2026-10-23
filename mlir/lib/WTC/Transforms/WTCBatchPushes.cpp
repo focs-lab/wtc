@@ -100,10 +100,7 @@ bool synchronises(Operation *op) {
 // Functions without a body here that cannot wait for another thread: the
 // allocator, and those that only touch the memory they are given.
 bool cannotWait(cir::FuncOp f) {
-    static const llvm::StringSet<> names = {
-        "memcpy", "memmove", "memset", "memcmp", "strlen", "strcmp", "strncmp", "memchr",
-        "abs", "labs", "llabs", "sqrt", "sqrtf", "fabs", "fabsf", "free"};
-    if (isAllocator(f) || names.contains(f.getSymName())) return true;
+    if (isAllocator(f) || touchesOnlyItsArguments(f) || f.getSymName() == "free") return true;
     const std::string name = llvm::demangle(f.getSymName().str());
     return llvm::StringRef(name).starts_with("operator delete");
 }

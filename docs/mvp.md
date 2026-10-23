@@ -133,6 +133,11 @@ with `--no-specialize` (the general-purpose pop takes a mutex) and with
 `-DRETAIN` (keeping the element makes it a shared_ptr whose release may
 free it).
 
+The producer's side never passes, and `-DPRODUCER` says so: every push may
+find its block full and allocate the next one, since the queue has no
+capacity to run out of. Lock-freedom for a producer needs a bounded queue,
+which the shim does not offer.
+
 ## How the substitutions are checked
 
 A faster queue that races is not a result, so every number below stands on
