@@ -113,6 +113,13 @@ def QueuePopOp : WTC_ObjectOp<"queue_pop"> {
         shared_ptr by value and the calling convention passes that through a
         hidden first pointer argument.
 
+        `transfer` marks the third shape, the shim's try_pop(T&): `out` is
+        then the program's own object of the element type, into which the
+        element is moved, and the result, if there is one, is the call's
+        own, whether an element was there. Nothing is allocated for the
+        element on either side, and the program keeps nothing of the
+        queue's, so such a pop never stands in the way of inline storage.
+
         `borrowed` says the program only borrows what this pop returns: it
         keeps no copy of the shared_ptr and no pointer into the element past
         the consumer's next pop of the same queue (WTCBorrowAnalysis.cpp).
@@ -125,7 +132,8 @@ def QueuePopOp : WTC_ObjectOp<"queue_pop"> {
         OptionalAttr<WTC_TopologyAttr>:$topology,
         OptionalAttr<I64Attr>:$queue_id,
         OptionalAttr<WTC_ImplAttr>:$impl,
-        UnitAttr:$borrowed);
+        UnitAttr:$borrowed,
+        UnitAttr:$transfer);
     let results = (outs Optional<AnyType>:$value);
     let hasVerifier = 1;
 }
