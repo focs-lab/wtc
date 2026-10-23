@@ -63,6 +63,13 @@ build compiler-one -DFERRET_ONE
 build hand-one     --no-specialize -DFERRET_ONE -DFERRET_HAND_TAG
 build generic      --no-specialize
 build compiler
+# TSAN=1 adds the compiler's builds under ThreadSanitizer, for the safety
+# question. The translation unit with the queues and the threads is
+# instrumented; ferret's libraries, which start no threads, are not.
+if [ "${TSAN:-0}" = 1 ]; then
+  build compiler-one-tsan -DFERRET_ONE --tsan -O1 -g
+  build compiler-tsan --tsan -O1 -g
+fi
 {
   echo "compiler=tools/wtc-cc, ClangIR $(git -c safe.directory="$WTC" -C "$WTC" submodule status llvm 2>/dev/null | awk '{print $1}' | tr -d '+-' | cut -c1-12)"
   echo "wtc=$(git -c safe.directory="$WTC" -C "$WTC" rev-parse --short=12 HEAD 2>/dev/null)"

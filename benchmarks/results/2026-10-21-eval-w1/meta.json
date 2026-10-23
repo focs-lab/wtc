@@ -1,0 +1,21 @@
+{
+  "leg": "eval-w1", "date": "2026-10-21T03:39:10Z",
+  "git_sha": "915a601a933b2568dd4ff07f514ceac43fc1c3e8", "git_dirty": false,
+  "kernel": "6.8.0-40-generic",
+  "cpu_model": "Intel(R) Xeon(R) w9-3495X",
+  "sockets": "1", "numa_nodes": "1",
+  "allowed_cpus": "4,5",
+  "smt_control": "on",
+  "smt_siblings": "offline or reserved",
+  "load_average": "4.49 6.30 7.03",
+  "build": "compiler=Clang 18.1.3;build_type=Release;march=native;sanitize=;check=OFF;tbb=1;",
+  "governor": "performance",
+  "no_turbo": "1",
+  "freq_khz": "1900000",
+  "llvm_sha": "1ebf89d8c5e61f9184431eb4e5c9a6966b5c0748",
+  "boost": "1_83",
+  "tbb": "2021.11.0-2ubuntu2",
+  "vendored": "readerwriterqueue@6867b5645235 concurrentqueue@683b9e31ea15 rigtorp@1053918dbd25 ",
+  "control_build": "$BUILD",
+  "reps": 10
+}
