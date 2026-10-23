@@ -27,8 +27,11 @@ remark: wtc: queue @q1: every pop only borrows its element (1 pop)
 remark: wtc: specialised: constructor tag rewritten to spsc_inline
 ```
 
-`q2` has two producers and two consumers and keeps the general-purpose
-queue. `q1` goes one step further than the gate did: its consumer only
+The queue may be a global, a local, a member of a struct or a heap object,
+and the threads may reach it through parameters, struct fields or pointers
+written in several places; a pointer that may name one of several queues
+counts on each (`test/Transforms/QueueOwnershipAnalysis/`). `q2` has two
+producers and two consumers and keeps the general-purpose queue. `q1` goes one step further than the gate did: its consumer only
 tests whether a pop returned anything, so it borrows, and the next section
 is what that buys.
 

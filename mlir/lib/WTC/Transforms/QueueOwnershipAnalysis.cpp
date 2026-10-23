@@ -15,8 +15,10 @@ using namespace mlir::wtc;
 
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/MapVector.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/Demangle/Demangle.h"
+#include "llvm/Support/Path.h"
 
 // For every queue object the module touches, how many threads push to it
 // and how many pop from it, as a verdict written into the IR:
@@ -33,6 +35,17 @@ using namespace mlir::wtc;
 //
 // The walk over dynamic thread and function instances, which is the subtle
 // part and is shared with every other analysis here, is in ThreadInstances.
+//
+// A queue is a place the walk names: a root (a global, a stack slot, or the
+// allocation call that made a heap object) and how many bytes into it the
+// queue starts. A queue that is the whole of a global or a slot carries its
+// verdict on that root. One that is a member of a struct or a heap object
+// carries it on the one constructor call that builds it, when one call
+// builds it and nothing else; a constructor shared with another queue -- a
+// struct's, run for two objects -- has a single tag for both, and both keep
+// the general-purpose implementation. All objects one allocation site makes
+// are one queue to the analysis: the threads of each are among the threads
+// of all, so spsc for all is spsc for each.
 //
 // A program can also state the topology itself, by passing a tag other than
 // generic to the queue's constructor. That is a claim, and it is checked:
@@ -54,6 +67,7 @@ struct Access {
     std::string entry;  // the function the thread starts in, demangled
     Location started;   // the spawn that starts it, or the entry for main
     bool spawned;
+    bool oneOf = false;  // the operation may act on this queue or another
 };
 
 struct SideInfo {
@@ -70,6 +84,9 @@ struct SideInfo {
 struct RootInfo {
     SideInfo producers, consumers;
 };
+
+// A queue: the root the walk names, and the queue's offset in it.
+using Key = std::pair<Operation *, uint64_t>;
 
 class QueueOwnershipAnalysisPass
     : public PassWrapper<QueueOwnershipAnalysisPass, OperationPass<ModuleOp>> {
@@ -90,10 +107,18 @@ public:
 
 private:
     ModuleOp module;
-    llvm::MapVector<Operation *, RootInfo> roots;  // GlobalOp or AllocaOp, in discovery order
+    llvm::MapVector<Key, RootInfo> roots;          // in discovery order
     llvm::DenseSet<Type> poisonedTypes;            // queue object types with an unresolvable access
     llvm::DenseMap<Type, std::string> poisonWhy;   // the first reason, for the declared-topology check
-    llvm::DenseMap<Operation *, llvm::SmallSetVector<Operation *, 2>> opRoots;
+    llvm::DenseMap<Operation *, llvm::SmallSetVector<Key, 2>> opRoots;
+    // Which queues each constructor call builds, under every instance of
+    // its function, and the reverse; a call whose object the walk cannot
+    // name builds something unknown and is no queue's own.
+    llvm::DenseMap<Operation *, llvm::SmallSetVector<Key, 2>> ctorKeys;
+    llvm::DenseMap<Key, llvm::SmallSetVector<Operation *, 2>> keyCtors;
+    llvm::DenseSet<Operation *> ctorUnplaced;
+    llvm::DenseMap<Key, Type> keyType;             // the queue type its constructor builds
+    ThreadInstanceWalk *walk = nullptr;
     bool globalPoison = false;   // an access with no type to poison
     unsigned remarks = 0;
 
@@ -122,6 +147,30 @@ private:
         return Type();
     }
 
+    // A call of the shim's queue constructor, whose first operand is the
+    // object it builds.
+    static bool isQueueConstructor(Operation *op) {
+        auto call = dyn_cast<cir::CallOp>(op);
+        return call && getSemanticKind(lookupCallee(call)) == SemanticOpKind::QueueConstruction &&
+               call.getNumOperands() > 0 && firstRealOperand(call) == 0;
+    }
+    static bool isQueueOpOrConstructor(Operation *op) { return isQueueOp(op) || isQueueConstructor(op); }
+
+    // The whole of a global or a slot of the queue's own type.
+    static bool isWhole(const Key &k, Type queueTy) {
+        return k.second == 0 && isa<cir::GlobalOp, cir::AllocaOp>(k.first) && queueObjectType(k.first) == queueTy;
+    }
+    // The queue type at a key: what its constructor builds, or the root's
+    // own type for the whole of a global or a slot.
+    Type queueTypeOf(const Key &k) const {
+        if (Type t = keyType.lookup(k)) return t;
+        return k.second == 0 ? queueObjectType(k.first) : Type();
+    }
+    // The one constructor call that builds this queue and nothing else, or
+    // null with the reason.
+    Operation *carrierOf(const Key &k, const char *&why) const;
+    std::string labelOf(const Key &k, bool whole) const;
+
     void poison(Operation *op, const Twine &why) {
         Type t = queueObjectTypeOfOp(op);
         if (t && poisonedTypes.insert(t).second) poisonWhy[t] = why.str();
@@ -146,29 +195,34 @@ private:
         }
     }
 
-    // A root's number is its position in discovery order, which follows
+    // A queue's number is its position in discovery order, which follows
     // the walk and is therefore deterministic.
-    int64_t idOf(Operation *root) const {
-        return static_cast<int64_t>(roots.find(root) - roots.begin());
+    int64_t idOf(const Key &k) const {
+        return static_cast<int64_t>(roots.find(k) - roots.begin());
     }
 
     void writeVerdicts(bool capExceeded);
-    // False when a declared topology is certainly broken.
+    // False when a declared topology is certainly broken. A summary queue
+    // stands for every object one allocation site makes, and threads on two
+    // of them are no proof against either.
     bool checkDeclared(Operation *root, const RootInfo &info, Topology verdict, const std::string &label,
-                       llvm::ArrayRef<cir::CallOp> ctors, bool capExceeded);
+                       llvm::ArrayRef<cir::CallOp> ctors, bool capExceeded, bool summary);
     static Access accessOf(Operation *op, const Instance &inst);
 };
 
 // A location as a person reads it: file:line:column, from the first file
 // position a fused or named location carries.
-static std::string whereOf(Location loc) {
-    if (auto f = dyn_cast<FileLineColLoc>(loc))
-        return (f.getFilename().getValue() + ":" + Twine(f.getLine()) + ":" + Twine(f.getColumn())).str();
+static std::string whereOf(Location loc, bool fileOnly = false) {
+    if (auto f = dyn_cast<FileLineColLoc>(loc)) {
+        StringRef file = f.getFilename().getValue();
+        if (fileOnly) file = llvm::sys::path::filename(file);
+        return (file + ":" + Twine(f.getLine()) + ":" + Twine(f.getColumn())).str();
+    }
     if (auto f = dyn_cast<FusedLoc>(loc))
         for (Location inner : f.getLocations())
-            if (std::string w = whereOf(inner); !w.empty()) return w;
-    if (auto n = dyn_cast<NameLoc>(loc)) return whereOf(n.getChildLoc());
-    if (auto c = dyn_cast<CallSiteLoc>(loc)) return whereOf(c.getCallee());
+            if (std::string w = whereOf(inner, fileOnly); !w.empty()) return w;
+    if (auto n = dyn_cast<NameLoc>(loc)) return whereOf(n.getChildLoc(), fileOnly);
+    if (auto c = dyn_cast<CallSiteLoc>(loc)) return whereOf(c.getCallee(), fileOnly);
     return "";
 }
 
@@ -189,9 +243,39 @@ Access QueueOwnershipAnalysisPass::accessOf(Operation *op, const Instance &inst)
                   static_cast<bool>(site)};
 }
 
+Operation *QueueOwnershipAnalysisPass::carrierOf(const Key &k, const char *&why) const {
+    auto it = keyCtors.find(k);
+    if (it == keyCtors.end() || it->second.empty()) { why = "no constructor call is seen to build it"; return nullptr; }
+    if (it->second.size() != 1) { why = "more than one constructor call may build it"; return nullptr; }
+    Operation *c = it->second.front();
+    if (ctorUnplaced.contains(c)) { why = "its constructor call also builds an object the analysis cannot name"; return nullptr; }
+    if (ctorKeys.lookup(c).size() != 1) { why = "its constructor call also builds other queues"; return nullptr; }
+    return c;
+}
+
+std::string QueueOwnershipAnalysisPass::labelOf(const Key &k, bool whole) const {
+    Operation *root = k.first;
+    std::string base;
+    if (auto g = dyn_cast<cir::GlobalOp>(root)) base = ("@" + g.getSymName()).str();
+    else if (auto a = dyn_cast<cir::AllocaOp>(root)) base = ("%" + a.getName()).str();
+    else base = "the heap object made at " + whereOf(root->getLoc(), /*fileOnly=*/true);
+    if (whole) return base;
+    // The member's name, from the address its constructor is handed.
+    std::string member;
+    if (auto it = keyCtors.find(k); it != keyCtors.end())
+        for (Operation *c : it->second)
+            if (auto gm = cast<cir::CallOp>(c).getOperand(0).getDefiningOp<cir::GetMemberOp>())
+                member = gm.getName().str();
+    if (isa<cir::CallOp>(root))
+        return member.empty() ? (k.second ? base + ", at offset " + std::to_string(k.second) : base)
+                              : member + " in " + base;
+    return member.empty() ? base + "+" + std::to_string(k.second) : base + "." + member;
+}
+
 bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &info, Topology verdict,
                                                const std::string &label,
-                                               llvm::ArrayRef<cir::CallOp> ctors, bool capExceeded) {
+                                               llvm::ArrayRef<cir::CallOp> ctors, bool capExceeded,
+                                               bool summary) {
     auto tag = constructorTag(ctors);
     if (!tag || *tag == 0) return true;  // nothing declared, or nothing readable
     cir::CallOp ctor = ctors.front();
@@ -204,12 +288,13 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
     // Certainly broken: on one side, two threads the module accounts for,
     // or one that certainly stands for several.
     for (const SideInfo *side : {&info.producers, &info.consumers}) {
+        if (summary) break;
         const bool pushes = side == &info.producers;
         llvm::SmallVector<const Access *, 4> firstOfThread;
         llvm::SmallSet<unsigned, 4> seen;
         bool certainMany = false;
         for (const Access &a : side->accesses) {
-            if (a.speculative) continue;
+            if (a.speculative || a.oneOf) continue;
             if (a.many) certainMany = true;
             if (seen.insert(a.thread).second) firstOfThread.push_back(&a);
         }
@@ -234,24 +319,29 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
     // Not spsc, but nothing certain: say why it could not be checked.
     InFlightDiagnostic w = ctor.emitWarning()
                            << "wtc: queue " << label << " is declared " << declared << "; cannot verify: ";
-    const Type objTy = queueObjectType(root);
+    auto built = dyn_cast<cir::PointerType>(ctor.getOperand(0).getType());
+    const Type objTy = built ? built.getPointee() : queueObjectType(root);
     if (capExceeded) w << "the program has too many function instances";
     else if (globalPoison) w << "an access to some queue could not be attributed";
     else if (auto it = poisonWhy.find(objTy); it != poisonWhy.end()) w << it->second;
+    else if (summary) w << "it is one of the objects one allocation site makes, and the threads may each have their own";
+    else if (llvm::any_of(info.producers.accesses, [](const Access &a) { return a.oneOf; }) ||
+             llvm::any_of(info.consumers.accesses, [](const Access &a) { return a.oneOf; }))
+        w << "an operation may act on it or on another queue";
     else w << "a thread that uses it is one the module cannot account for (its caller is not visible)";
     return true;
 }
 
 void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
     MLIRContext *ctx = &getContext();
-    llvm::DenseMap<Operation *, Topology> verdictOf;
+    llvm::DenseMap<Key, Topology> verdictOf;
     auto ctorsOf = collectQueueConstructors(module);
     bool contractsHold = true;
 
-    for (auto &[root, info] : roots) {
+    for (auto &[key, info] : roots) {
         Topology t;
         const unsigned p = info.producers.count(), c = info.consumers.count();
-        const Type objTy = queueObjectType(root);
+        const Type objTy = queueTypeOf(key);
         if (globalPoison || capExceeded || (objTy && poisonedTypes.count(objTy)))
             t = Topology::unknown;
         else if (p <= 1 && c <= 1)
@@ -262,38 +352,55 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
             t = Topology::spmc;
         else
             t = Topology::mpmc;
-        verdictOf[root] = t;
-        root->setAttr(kTopologyAttrName, TopologyAttr::get(ctx, t));
-        root->setAttr(kQueueIdAttrName, IntegerAttr::get(IntegerType::get(ctx, 64), idOf(root)));
+        verdictOf[key] = t;
 
-        std::string label;
-        if (auto g = dyn_cast<cir::GlobalOp>(root)) label = ("@" + g.getSymName()).str();
-        else if (auto a = dyn_cast<cir::AllocaOp>(root)) label = ("%" + a.getName()).str();
-        else label = "<queue>";
+        Operation *root = key.first;
+        const bool whole = isWhole(key, objTy);
+        const std::string label = labelOf(key, whole);
+        const char *noCarrier = nullptr;
+        Operation *carrier = whole ? root : carrierOf(key, noCarrier);
+        if (carrier) {
+            carrier->setAttr(kTopologyAttrName, TopologyAttr::get(ctx, t));
+            carrier->setAttr(kQueueIdAttrName, IntegerAttr::get(IntegerType::get(ctx, 64), idOf(key)));
+            if (!whole) carrier->setAttr(kQueueNameAttrName, StringAttr::get(ctx, label));
+        }
         root->emitRemark() << "wtc: queue " << label << ": " << stringifyTopology(t)
                            << " (producers: " << (p == 2 ? "many" : std::to_string(p))
                            << ", consumers: " << (c == 2 ? "many" : std::to_string(c)) << ")";
         ++remarks;
-        if (auto it = ctorsOf.find(root); it != ctorsOf.end())
-            contractsHold &= checkDeclared(root, info, t, label, it->second, capExceeded);
+        if (!carrier && t == Topology::spsc) {
+            root->emitRemark() << "wtc: queue " << label << " keeps the general-purpose implementation: "
+                               << noCarrier;
+            ++remarks;
+        }
+        llvm::SmallVector<cir::CallOp, 2> ctors;
+        if (whole) {
+            if (auto it = ctorsOf.find(root); it != ctorsOf.end()) ctors.assign(it->second.begin(), it->second.end());
+        } else if (auto it = keyCtors.find(key); it != keyCtors.end()) {
+            for (Operation *c : it->second) ctors.push_back(cast<cir::CallOp>(c));
+        }
+        if (!ctors.empty()) {
+            const bool summary = isa<cir::CallOp>(root) && !walk->siteRunsOnce(root);
+            contractsHold &= checkDeclared(root, info, t, label, ctors, capExceeded, summary);
+        }
     }
     if (!contractsHold) signalPassFailure();
 
-    // Each operation gets the meet over every root it may refer to.
-    for (auto &[op, rs] : opRoots) {
+    // Each operation gets the meet over every queue it may act on.
+    for (auto &[op, ks] : opRoots) {
         Topology t = Topology::unknown;
         bool first = true;
-        for (Operation *r : rs) {
-            Topology rt = verdictOf.lookup(r);
-            if (first) { t = rt; first = false; }
-            else if (rt != t) { t = Topology::unknown; }
+        for (const Key &k : ks) {
+            Topology kt = verdictOf.lookup(k);
+            if (first) { t = kt; first = false; }
+            else if (kt != t) { t = Topology::unknown; }
         }
         op->setAttr("topology", TopologyAttr::get(ctx, t));
         // An operation that may act on several queues names none of them:
         // a later pass reading queue_id would otherwise treat the others'
         // operations as unrelated to this one.
-        if (rs.size() != 1) continue;
-        op->setAttr("queue_id", IntegerAttr::get(IntegerType::get(ctx, 64), idOf(rs.front())));
+        if (ks.size() != 1) continue;
+        op->setAttr("queue_id", IntegerAttr::get(IntegerType::get(ctx, 64), idOf(ks.front())));
     }
     // Poisoned operations that resolved to nothing: unknown, explicitly.
     module.walk([&](Operation *op) {
@@ -305,40 +412,86 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
 void QueueOwnershipAnalysisPass::runOnOperation() {
     module = getOperation();
     roots.clear(); poisonedTypes.clear(); poisonWhy.clear(); opRoots.clear();
+    ctorKeys.clear(); keyCtors.clear(); ctorUnplaced.clear(); keyType.clear();
     globalPoison = false; remarks = 0;
 
-    // A function that cannot reach a queue operation cannot affect a verdict.
+    // A function that can reach neither a queue operation nor a queue's
+    // constructor cannot affect a verdict, nor which call builds a queue.
     // The predicate needs the walk that owns the memo table, and the walk
     // needs the predicate, so the lambda is named: a temporary would die at
     // the end of the constructor call and leave function_ref dangling.
     ThreadInstanceWalk *self = nullptr;
-    auto relevant = [&](cir::FuncOp f) { return self->reachesOp(f, isQueueOp); };
+    auto relevant = [&](cir::FuncOp f) { return self->reachesOp(f, isQueueOpOrConstructor); };
     ThreadInstanceWalk walk(module, relevant);
     self = &walk;
+    this->walk = &walk;
 
+    // Every queue operation under every instance, resolved once the walk
+    // is over: a pointer loaded from a field is placed under each instance
+    // of every function that stores it, and in the middle of the walk some
+    // of those instances do not exist yet.
+    llvm::SmallVector<std::pair<Operation *, Instance *>, 32> visits, ctorVisits;
     walk.run(
         [&](Instance &inst) {
             inst.func.walk([&](Operation *op) {
-                if (!isQueueOp(op)) return;
-                Value q = queueOf(op);
-                Operation *root = walk.resolveRoot(q, &inst);
-                // The walk now resolves a heap pointer to the call that
-                // allocated it. This pass has no notion of an allocation
-                // that runs once against one that runs many times, and a
-                // queue proved SPSC on the strength of one site that hands
-                // out many objects would be wrong; until it reasons about
-                // that, a heap queue stays unknown, as before.
-                if (root && isa<cir::CallOp>(root)) root = nullptr;
-                if (!root) { poison(op, "the queue object could not be identified"); return; }
-                RootInfo &info = roots[root];
-                SideInfo &side = isa<QueuePopOp>(op) ? info.consumers : info.producers;
-                side.threads.insert(inst.thread);
-                side.accesses.push_back(accessOf(op, inst));
-                if (inst.threadMult == Mult::Many) side.anyMany = true;
-                opRoots[op].insert(root);
+                if (isQueueOp(op)) visits.push_back({op, &inst});
+                else if (isQueueConstructor(op)) ctorVisits.push_back({op, &inst});
             });
         },
         [&](cir::FuncOp f) { poisonReachable(f); });
+
+    // What each constructor call builds. A queue inside a struct is built
+    // by the struct's constructor, under the instance that constructs that
+    // object; a heap queue by the call after its allocation.
+    for (auto [op, inst] : ctorVisits) {
+        auto call = cast<cir::CallOp>(op);
+        auto built = dyn_cast<cir::PointerType>(call.getOperand(0).getType());
+        for (const Place &pl : walk.resolvePlaces(call.getOperand(0), inst)) {
+            if (!built || !pl.root || pl.unknownIndex || pl.loop) { ctorUnplaced.insert(op); continue; }
+            const Key k{pl.root, pl.offset};
+            ctorKeys[op].insert(k);
+            keyCtors[k].insert(op);
+            auto [it, fresh] = keyType.try_emplace(k, built.getPointee());
+            if (!fresh && it->second != built.getPointee()) it->second = Type();   // two types: neither
+        }
+    }
+
+    for (auto [op, inst] : visits) {
+        // A handle may name one of several queues -- loaded from a field or
+        // a slot written in more than one place -- and then the access is
+        // counted on each of them: a thread too many on a queue it does not
+        // touch costs a specialisation, a thread missing from one it does
+        // would let a race through.
+        llvm::SmallVector<Key, 4> rs;
+        const char *why = nullptr;
+        const Type queueTy = queueObjectTypeOfOp(op);
+        for (const Place &pl : walk.resolvePlaces(queueOf(op), inst)) {
+            if (!pl.root) { why = "the queue object could not be identified"; break; }
+            // One element of an array of queues: which one is the thread's,
+            // and every element is built by one constructor call.
+            if (pl.unknownIndex || pl.loop) { why = "the queue is an element of an array"; break; }
+            // A queue is the whole of a global or a slot, or what some
+            // constructor call builds; anything else at that place -- a
+            // struct whose first member is not the queue, a heap object
+            // whose constructor the walk never saw -- is not one.
+            const Key k{pl.root, pl.offset};
+            if (!isWhole(k, queueTy) && keyType.lookup(k) != queueTy) {
+                why = "the queue object could not be identified";
+                break;
+            }
+            rs.push_back(k);
+        }
+        if (why) { poison(op, why); continue; }
+        for (const Key &root : rs) {
+            RootInfo &info = roots[root];
+            SideInfo &side = isa<QueuePopOp>(op) ? info.consumers : info.producers;
+            side.threads.insert(inst->thread);
+            side.accesses.push_back(accessOf(op, *inst));
+            side.accesses.back().oneOf = rs.size() > 1;
+            if (inst->threadMult == Mult::Many) side.anyMany = true;
+            opRoots[op].insert(root);
+        }
+    }
 
     remarks += walk.remarks();
 

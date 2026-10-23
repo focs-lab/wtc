@@ -1,9 +1,11 @@
 // RUN: wtc-opt %s --queue-ownership-analysis 2>&1 >/dev/null | FileCheck %s
+// RUN: wtc-opt %s --queue-ownership-analysis 2>/dev/null | FileCheck %s --check-prefix=IR
 
 // The same slot written twice, so which queue the load yields depends on
-// where in the function it is read. The forwarding rule requires a single
-// store precisely so that this case stops rather than picks one, and the
-// access becomes unresolvable instead of being attributed to a guess.
+// where in the function it is read. The analysis does not pick one: the
+// push may act on either, and it is counted on both, a producer too many
+// on the queue it does not touch rather than one missing on the queue it
+// does. The operation names no queue, since it has two.
 
 !s32i = !cir.int<s, 32>
 module {
@@ -34,5 +36,7 @@ module {
   }
 }
 
-// CHECK: queue access is unresolvable
-// CHECK-NOT: producers:
+// CHECK-NOT: queue access is unresolvable
+// CHECK-DAG: queue @other: spsc (producers: 1, consumers: 0)
+// CHECK-DAG: queue %q: spsc (producers: 1, consumers: 0)
+// IR: "wtc.queue_push"(%{{.*}}) <{topology = #wtc.topology<spsc>}> :

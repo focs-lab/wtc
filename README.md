@@ -37,7 +37,7 @@ and a census of what seventeen codebases pad by hand.
 | --- | --- |
 | `wtc` dialect: `mutex` and `queue<T>` types, seven operations, topology and implementation attributes | each operation is verified against the call it lowers to, carries the contract of `decisions/0003`, and answers what it guarantees about progress under its implementation (`decisions/0004`); no memory-ordering attribute yet |
 | Lifting CIR calls into the dialect | reads operands through the calling convention, including calls with a hidden return slot; driven from C++ source by the tests |
-| Queue ownership analysis | thread instances by call string; a spawn in a loop is many threads, `main` is a thread, parameters resolve by index; whatever it cannot resolve is `unknown`. A topology the program declares is checked: certainly broken fails the build, naming the threads |
+| Queue ownership analysis | thread instances by call string; a spawn in a loop is many threads, `main` is a thread, parameters resolve by index; a queue pointer loaded from a field, or from a slot or global written more than once, is resolved from every write of it, and an operation that may act on one of several queues counts on each; a queue may be a global, a local, a member of a struct or a heap object, whose verdict is kept on the one constructor call that builds it; whatever it cannot resolve is `unknown`. A topology the program declares is checked: certainly broken fails the build, naming the threads |
 | Borrow analysis | proves, for each pop of an spsc queue, that the program keeps neither the returned `shared_ptr` nor a pointer into the element past its next pop |
 | Specialisation | rewrites the topology tag of every queue proved SPSC, to inline storage when its consumer borrows and the element type allows it; anything unclear keeps the general-purpose implementation |
 | Batching | in a function marked `WTC_BATCH`, a loop of pushes in which nothing can wait for an unpublished element becomes one batched run |
@@ -48,9 +48,10 @@ and a census of what seventeen codebases pad by hand.
 | False-sharing diagnosis | the same thread walk over field accesses; `definite`, `possible` and `cold` verdicts, each a claim with a test; arrays and heap objects are counted as unidentified, not guessed at |
 | Alignment by owner | raises a global a different thread repeatedly touches to a line of its own; kept as a measurement, since on memcached it is close to a build flag |
 
-The analysis assumes one translation unit. Queues reached through a member or
-the heap are `unknown` and keep the general-purpose implementation, which is
-the safe direction but not the useful one. `docs/audit.md` records what is
+The analysis assumes one translation unit. A queue in an array is `unknown`,
+and a queue whose constructor call also builds another queue (a struct's
+constructor run for two objects) keeps the general-purpose implementation:
+the safe direction, but not the useful one. `docs/audit.md` records what is
 closed and what is not.
 
 ## Building

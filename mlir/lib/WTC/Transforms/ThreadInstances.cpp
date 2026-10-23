@@ -10,6 +10,8 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 
+#include <functional>
+
 using namespace mlir;
 using namespace mlir::wtc;
 
@@ -796,6 +798,48 @@ void ThreadInstanceWalk::computeFieldStores() const {
         return FieldKey{rec, gm.getIndex()};
     };
     auto harmless = [](cir::FuncOp f) { return harmlessCallee(f); };
+    // A constant of type t, written where an object of type t lives: each
+    // pointer member it names becomes a value its field takes, in records
+    // nested in it and in every element of an array of them. False when the
+    // constant's layout is not the type's own (a union, a record emitted
+    // as an anonymous one for its padding), which the caller treats as the
+    // record written whole.
+    std::function<bool(Type, Attribute)> listConstant = [&](Type t, Attribute a) -> bool {
+        if (namesNoObject(a)) return true;
+        if (auto arrTy = dyn_cast<cir::ArrayType>(t)) {
+            auto arr = dyn_cast<cir::ConstArrayAttr>(a);
+            auto elts = arr ? dyn_cast<ArrayAttr>(arr.getElts()) : ArrayAttr();
+            if (!elts) return false;
+            for (Attribute e : elts)
+                if (!listConstant(arrTy.getElementType(), e)) return false;
+            return true;
+        }
+        auto rec = dyn_cast<cir::RecordType>(t);
+        auto r = dyn_cast<cir::ConstRecordAttr>(a);
+        if (!rec || !r || rec.isIncomplete() || rec.isUnion() || r.getType() != t) return false;
+        ArrayAttr members = r.getMembers();
+        if (members.size() != rec.getMembers().size()) return false;
+        for (unsigned i = 0; i < members.size(); ++i) {
+            Type mt = rec.getMembers()[i];
+            if (isa<cir::PointerType>(mt)) {
+                if (!namesNoObject(members[i])) fieldStores_[FieldKey{rec, i}].constants.push_back(members[i]);
+                continue;
+            }
+            if (!listConstant(mt, members[i])) return false;
+        }
+        return true;
+    };
+    // The constant a copy reads, when it reads all of a constant global of
+    // the type it writes.
+    auto constantCopied = [](Value src, Value dst) -> std::optional<std::pair<Type, Attribute>> {
+        auto gg = traceToLocalRoot(src).getDefiningOp<cir::GetGlobalOp>();
+        if (!gg) return std::nullopt;
+        auto g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr());
+        if (!g || !g.getConstant() || !g.getInitialValue()) return std::nullopt;
+        auto dt = dyn_cast<cir::PointerType>(dst.getType());
+        if (!dt || dt.getPointee() != g.getSymType()) return std::nullopt;
+        return std::make_pair(g.getSymType(), *g.getInitialValue());
+    };
     module.walk([&](Operation *op) {
         if (auto gm = dyn_cast<cir::GetMemberOp>(op)) {
             auto key = fieldKey(gm);
@@ -858,11 +902,13 @@ void ThreadInstanceWalk::computeFieldStores() const {
             return;
         }
         // A global record with an initialiser that names an object: its
-        // fields hold values no store lists.
+        // fields start with values no store lists, so the initialiser's are
+        // listed with them, or the record is given up when they cannot be.
         if (auto g = dyn_cast<cir::GlobalOp>(op)) {
             if (auto init = g.getInitialValue())
                 if (!namesNoObject(*init))
-                    if (Type rec = recordIn(g.getSymType())) whole.insert(rec);
+                    if (Type rec = recordIn(g.getSymType()))
+                        if (!listConstant(g.getSymType(), *init)) whole.insert(rec);
             return;
         }
         // The record seen through another type -- `(char *)&c`, `(void *)
@@ -885,6 +931,10 @@ void ThreadInstanceWalk::computeFieldStores() const {
         else if (auto mm = dyn_cast<cir::MemMoveOp>(op)) { dst = mm.getDst(); src = mm.getSrc(); }
         if (dst) {
             if (copiesNoObject(src)) return;
+            // `pair p{&a, &b}`: the front end copies the record out of a
+            // constant, whose members are the values its fields take.
+            if (auto c = constantCopied(src, traceToLocalRoot(dst)))
+                if (listConstant(c->first, c->second)) return;
             if (Type rec = recordBehind(traceToLocalRoot(dst).getType())) whole.insert(rec);
             return;
         }
@@ -956,6 +1006,20 @@ bool ThreadInstanceWalk::resolveSources(llvm::ArrayRef<cir::StoreOp> stores, Ins
     return !out.empty();
 }
 
+bool ThreadInstanceWalk::placeConstant(Attribute a, llvm::SmallVectorImpl<Place> &out) const {
+    auto gv = dyn_cast<cir::GlobalViewAttr>(a);
+    if (!gv || (gv.getIndices() && !gv.getIndices().empty())) return false;
+    auto g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(module_, gv.getSymbol().getAttr());
+    for (unsigned hop = 0; g && g.getAliasee() && hop < 8; ++hop)
+        g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(
+            module_, StringAttr::get(g.getContext(), *g.getAliasee()));
+    if (!g) return false;
+    Place p;
+    p.root = g.getOperation();
+    addPlace(out, p);
+    return true;
+}
+
 bool ThreadInstanceWalk::placesOfLoad(Value at, Instance *inst, unsigned depth,
                                       llvm::SmallVectorImpl<Place> &out, Unplaced &why) const {
     if (auto slot = at.getDefiningOp<cir::AllocaOp>()) {
@@ -1008,6 +1072,7 @@ bool ThreadInstanceWalk::placesOfLoad(Value at, Instance *inst, unsigned depth,
         return true;
     }
     llvm::ArrayRef<cir::StoreOp> stores;
+    llvm::ArrayRef<Attribute> constants;
     Operation *globalKey = nullptr;
     FieldKey fieldKey;
     if (auto gg = at.getDefiningOp<cir::GetGlobalOp>()) {
@@ -1031,6 +1096,7 @@ bool ThreadInstanceWalk::placesOfLoad(Value at, Instance *inst, unsigned depth,
         auto it = fieldStores_.find(fieldKey);
         if (it == fieldStores_.end() || it->second.poisoned) return false;
         stores = it->second.stores;
+        constants = it->second.constants;
     } else {
         return false;
     }
@@ -1049,7 +1115,11 @@ bool ThreadInstanceWalk::placesOfLoad(Value at, Instance *inst, unsigned depth,
         llvm::SmallVector<cir::StoreOp, 4> named;
         for (cir::StoreOp st : stores)
             if (!isNullPointer(st.getValue())) named.push_back(st);
-        const bool ok = resolveSources(named, nullptr, true, depth, places, w);
+        bool ok = true;
+        for (Attribute a : constants)
+            if (!placeConstant(a, places)) { ok = false; w = Unplaced::Other; break; }
+        if (ok && !named.empty()) ok = resolveSources(named, nullptr, true, depth, places, w);
+        ok = ok && !places.empty() && places.size() <= kMaxSources;
         Candidates &m = memo();
         m.inProgress = false;
         m.ok = ok;

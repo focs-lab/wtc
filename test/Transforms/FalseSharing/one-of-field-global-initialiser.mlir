@@ -2,9 +2,10 @@
 
 // The record holding the pointer field is a global with an initialiser,
 // `c = { &s }`, and one store `c.t = &t` on one path: the initialiser is a
-// write no store lists, so the field's list says nothing and the load
-// stays unplaced. With the initialiser unseen the set was {t} alone, and
-// the write through the field came out definite on t.
+// write as well, listed with the store, so the load is one of {s, t} and
+// the write through the field is possible on each. With the initialiser
+// unseen the set was {t} alone, and the write came out definite on t; once
+// it was seen but not read, the load stayed unplaced.
 
 !s32i = !cir.int<s, 32>
 !s64i = !cir.int<s, 64>
@@ -84,5 +85,7 @@ module {
   }
 }
 
-// CHECK-NOT: false sharing in
-// CHECK: false sharing: 0 definite, 0 possible, 0 cold{{.*}}, 1 field accesses on objects that could not be identified{{.*}}; of the unidentified, 1 through a pointer loaded from a field{{.*}}; 0 accesses placed as one of several objects
+// CHECK-NOT: definite false sharing
+// CHECK-DAG: possible false sharing in @s: 'a' and 'b' share one 64-byte line{{.*}}through a pointer that may name one of several objects, this among them
+// CHECK-DAG: possible false sharing in @t: 'a' and 'b' share one 64-byte line{{.*}}through a pointer that may name one of several objects, this among them
+// CHECK: false sharing: 0 definite, 2 possible, 0 cold{{.*}}, 0 field accesses on objects that could not be identified{{.*}}; 1 accesses placed as one of several objects

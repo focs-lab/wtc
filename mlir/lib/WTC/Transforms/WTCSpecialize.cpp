@@ -77,13 +77,20 @@ public:
         ModuleOp module = getOperation();
         MLIRContext *ctx = &getContext();
 
-        // Every constructor call, keyed by the root object it constructs.
+        // Every constructor call, keyed by the root object it constructs. A
+        // queue that is a member of a struct or a heap object has the one
+        // call that builds it as its root.
         auto ctorsOf = collectQueueConstructors(module);
+        module.walk([&](cir::CallOp call) {
+            if (call->hasAttr(kTopologyAttrName)) ctorsOf[call.getOperation()] = {call};
+        });
 
         unsigned rewritten = 0;
         module.walk([&](Operation *root) {
             if (!rewrite) return;
-            if (!isa<cir::GlobalOp, cir::AllocaOp>(root)) return;
+            if (!isa<cir::GlobalOp, cir::AllocaOp>(root) &&
+                !(isa<cir::CallOp>(root) && root->hasAttr(kTopologyAttrName)))
+                return;
             bool wanted = false, forcedInline = false;
             if (auto t = root->getAttrOfType<TopologyAttr>(kTopologyAttrName))
                 wanted = t.getValue() == Topology::spsc;

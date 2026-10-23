@@ -16,7 +16,7 @@ Read "Still open" and the October section before building anything on top of a v
 | `main` was not a thread and its accesses were discarded | `main` and the functions global constructors run are thread roots | `test/Integration/main_pushes.cpp`, `unresolved-thread-context.mlir` |
 | A parameter index was ignored, so a two-queue function credited everything to the first | parameters resolve through the call site of the instance, by index | `test/Integration/two_queues_one_worker.cpp` |
 | Two queues on one thread through one function collapsed | same mechanism; there is no per-function cache to collapse them | `param-passed-multi-instance.mlir` |
-| An unresolved access was dropped, turning "I don't know" into "nobody" | an unresolvable access poisons the queue's type; every queue of it becomes unknown | `unresolved-queue.mlir`, `test/Integration/queue_via_struct.cpp` |
+| An unresolved access was dropped, turning "I don't know" into "nobody" | an unresolvable access poisons the queue's type; every queue of it becomes unknown | `unresolved-queue.mlir`, `queue-in-a-struct.cpp` |
 | Function pointers and virtual calls were invisible | a function whose address is taken other than as a spawn entry is a root callable from any thread | covered by the same poison path |
 | The spawn entry had to be a bare `cir.get_global` | the operand is traced through casts | `test/Integration/*` (the real shape) |
 | Real `spawn` and `try_pop` were not understood at all | operands read through the calling convention; the hidden return slot is recognised | every `test/Integration` test |
@@ -35,18 +35,33 @@ not compile under any compiler because its move constructor was written
 ## Still open
 
 **One translation unit is assumed.** A second unit touching the same global
-queue is invisible. Nothing enforces this; `wtc-cc` compiles one file.
+queue is invisible. Nothing enforces this; `wtc-cc` compiles one file. A
+rewritten constructor call may sit in an inline function -- a struct's
+constructor -- that another unit also emits, and the linker keeps one copy.
 
-**Queues reached through a member or the heap are `unknown`.** Tracing stops
-at a load that is not from a stack slot written once. That is the safe
-direction, and it is also the direction that gives up on a large class of
-real programs. `test/Integration/queue_via_struct.cpp` pins the current
-behaviour so that improving it is a visible change.
+**A queue in an array, or built by a shared constructor, is not
+specialised.** A queue pointer loaded from a field, or from a slot or a
+global written in several places, is followed to every write of it,
+constant initialisers included, and an operation that may act on one of
+several queues counts on each (`test/Integration/queue_via_struct.cpp`,
+`one-of-field.cpp`). A queue that is a member of a struct or a heap object
+is the place its constructor call builds, and that call carries its verdict
+(`queue-in-a-struct.cpp`, `queue-on-the-heap.cpp`). One call that builds two
+queues -- a struct's constructor run for two objects -- passes one tag for
+both, so neither is specialised (`struct-constructor-shared.cpp`); an
+element of an array of queues is not told apart from the others, and every
+queue of its type is unknown (`array-of-queues.cpp`). All the objects one
+allocation site makes are one queue to the analysis: sound for counting,
+since the threads of each are among the threads of all, but a per-thread
+queue made in a loop is many producers' queue to it, and a declared spsc
+there cannot be verified (`one-per-thread.cpp`).
 
-**The dialect still says nothing CIR did not.** The operations carry no
-memory ordering, no progress guarantee and no linearisation point; the
-topology attribute is the first fact in the dialect that CIR did not already
-have. The static checks the vision describes need the rest.
+**The dialect carries no memory ordering.** The operations carry the
+contract of `decisions/0003` (a push happens before its pop, each queue is
+linearisable, each producer's elements stay in order) and the progress each
+implementation guarantees (`decisions/0004`), but no ordering attribute: a
+transformation that would move memory accesses across an operation has
+only the contract's happens-before to go on.
 
 **The ring's block size was chosen by measurement, not derived.** Below a few
 thousand slots the ring has a slow regime; `runtime/spsc_ring.hpp` records

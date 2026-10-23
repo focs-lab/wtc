@@ -1,8 +1,9 @@
 // The compiler's own builds under ThreadSanitizer, instrumented after the
-// whole pipeline: the queue it substitutes, inline storage it chooses, and
-// the pushes it batches must run without a report. The source is the same
-// as in the other tests; what is checked here is the code the compiler
-// generated, not a build of the source by another compiler.
+// whole pipeline: the queue it substitutes, inline storage it chooses --
+// for a global, a member of a struct and a heap object -- and the pushes
+// it batches must run without a report. The source is the same as in the
+// other tests; what is checked here is the code the compiler generated,
+// not a build of the source by another compiler.
 //
 // REQUIRES: tsan
 // RUN: %wtc_cc --tsan -O1 -g %examples/inline_pipeline.cpp -o %t.inline.exe 2>&1 | FileCheck %s --check-prefix=INLINE-BUILD
@@ -15,6 +16,10 @@
 // RUN: env TSAN_OPTIONS=halt_on_error=1:symbolize=0 %t.b1.exe 2>&1 | FileCheck %s --check-prefix=B1
 // RUN: %wtc_cc --tsan -O1 -g --no-specialize %examples/batch_loop.cpp -o %t.b0.exe 2>&1 | FileCheck %s --check-prefix=BATCH-BUILD
 // RUN: env TSAN_OPTIONS=halt_on_error=1:symbolize=0 %t.b0.exe 2>&1 | FileCheck %s --check-prefix=B0
+// RUN: %wtc_cc --tsan -O1 -g %wtc_src/test/Transforms/QueueOwnershipAnalysis/queue-in-a-struct.cpp -o %t.member.exe 2>&1 | FileCheck %s --check-prefix=INLINE-BUILD
+// RUN: env TSAN_OPTIONS=halt_on_error=1:symbolize=0 %t.member.exe 2>&1 | FileCheck %s --check-prefix=BUILT
+// RUN: %wtc_cc --tsan -O1 -g %wtc_src/test/Transforms/QueueOwnershipAnalysis/queue-on-the-heap.cpp -o %t.heap.exe 2>&1 | FileCheck %s --check-prefix=INLINE-BUILD
+// RUN: env TSAN_OPTIONS=halt_on_error=1:symbolize=0 %t.heap.exe 2>&1 | FileCheck %s --check-prefix=BUILT
 //
 // INLINE-BUILD: tag rewritten to spsc_inline
 // INLINE-NOT: ThreadSanitizer
@@ -31,3 +36,8 @@
 // B1: tag 1 in_order 1
 // B0-NOT: ThreadSanitizer
 // B0: tag 0 in_order 1
+//
+// A queue in a struct and one on the heap, each built inline by the
+// compiler.
+// BUILT-NOT: ThreadSanitizer
+// BUILT: tag 2 got 10
