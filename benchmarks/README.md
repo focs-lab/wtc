@@ -37,7 +37,10 @@ workloads/
 scripts/
   check_env.sh        refuses to measure in an unfit environment
   campaign.sh         one leg: interleaved reps, control runs, results dir
-  summarise.py        runs.jsonl -> SUMMARY.md with medians, CIs, ratios
+  summarise.py        runs.jsonl -> SUMMARY.md with medians, CIs, ratios,
+                      and summary.csv for the figures
+  plot.py             summary.csv -> figures: bars, latency against load,
+                      sweeps, latency distributions
   in_bench.py         drives a reservation without a terminal
   build_wtc_flavours.sh  the generic, hand-tagged and compiler-tagged builds
   build_w7_flavours.sh   W7 for each implementation, batched and not
@@ -77,22 +80,49 @@ are the ceiling.
   after warm-up and the last pop. An in-flight throttle (at most 4096
   queued) keeps unbounded queues from measuring the allocator instead; the
   bounded baselines see the same limit.
-- **W2** `w2_latency`: open loop, the producer sends one element every 1 us
-  or 10 us by busy-waiting on the TSC, the consumer records receive minus
-  send. p50/p90/p99/p99.9/p99.99/max from one million samples after warm-up.
+- **W2** `w2_latency`: open loop, the producer sends one element every
+  `--interval-ns` (1 us and 10 us in the gate's legs) by busy-waiting on the
+  TSC. Latency runs from the time each element was due, not the time it was
+  sent: a producer that falls behind its schedule charges the delay to the
+  elements it held up instead of hiding it (coordinated omission), and
+  `svc_p50`/`svc_p99`/`svc_p999`, from the send, are the queue's own share.
+  Each line records the offered rate, the rates at which the producer sent
+  and the consumer drained, and marks a run in which either fell short of
+  the offered rate `saturated`: such a run measures a backlog. The queue is
+  unbounded, so a consumer that falls behind shows only in its own rate.
+  p50/p90/p99/p99.9/p99.99/max from one million samples after warm-up.
   `--pingpong` measures half a round trip over two queues as a cross-check
   that does not depend on two cores agreeing about the counter.
 - **W3** `w3_pipeline` and `w3_pipeline_wtc`: three stages and two queues,
   with a checksum as the output oracle. The second uses the queues directly
-  rather than through an adapter, because a queue held as a struct member is
-  exactly what the analysis refuses to identify, so the adapter shape cannot
-  show the compiler's own decision.
+  rather than through an adapter: every adapter builds its queue in its own
+  constructor, which serves both queues of a pipeline, and one tag cannot
+  serve two queues, so the adapter shape cannot show the compiler's own
+  decision. Both have the same in-flight bound, and in the open loop both
+  measure latency from each record's due time and mark a run that fell
+  behind the offered rate `saturated`.
 - **W5** `w5_mpmc_control`: two producers and two consumers. The case where
   the compiler must refuse, so the question is whether the fallback costs
   anything. `--force-unsafe`, with `WTC_CHECK`, runs the single-producer ring
   under two producers on purpose: the negative control.
 - **W6** `w6_ring_shape`: block size and cache-line padding, which are
   template parameters rather than options, so one configuration per process.
+
+Every results line also records the process's peak resident set
+(`peak_rss_kib`). The latency workloads record the whole distribution as
+well as its percentiles (`hist_ns`: log-linear buckets, eight per power of
+two, as `lower:count` pairs), and W1 the cost of one element
+(`ns_per_op`). Latency timestamps are fenced on both sides, so a sample
+brackets exactly the operation.
+
+Runs that explain a result rather than time it are kept apart from the
+timed ones, because counting perturbs what it counts. `WTC_PASS=mechanism`
+marks every line of such a run (`pass`); `WTC_PERF=1` adds user-space
+hardware counters for the whole process (`cycles`, `instructions`,
+`cache_misses`, `llc_read_misses`), and `LD_PRELOAD=libwtc_alloccount.so`
+(built beside the workloads) adds the allocator calls (`allocs`, `frees`,
+`alloc_bytes`). All of them count the whole run, so they are divided by
+`n_total`, the elements pushed including warm-up.
 
 oneTBB is optional. Where `libtbb-dev` is installed CMake finds it and the
 `onetbb_cq_sp` variant appears; where it is not, the configure step says so
@@ -115,6 +145,18 @@ benchmarks/scripts/campaign.sh w1 build-bench 10
 
 Legs: `w1`, `w2`, `w2pp`, `w3`, `w3wtc`, `w5`, `w6`, `smt`, `far`, `tbb`,
 `w1check`, and `smoke`, which runs everything once, tiny, unreserved.
+
+Figures come from a summarised leg:
+
+```sh
+benchmarks/scripts/summarise.py benchmarks/results/<leg>
+benchmarks/scripts/plot.py load  benchmarks/results/<leg> --workload W2 --metric p99
+benchmarks/scripts/plot.py sweep benchmarks/results/<leg> --workload W9 --x threads --where mode=pairwise
+```
+
+A figure draws one value per variant and position, so `plot.py` refuses a
+selection that leaves a configuration field open and names the field to
+fix with `--where`.
 
 `campaign.sh` checks the environment first (governor `performance`, turbo
 off, enough cores for the leg), writes `meta.json`, discards a warm-up run,

@@ -7,7 +7,10 @@
 //
 // generate produces 64-byte records from a seeded generator, either as fast
 // as it can (closed loop, the default) or one every 1/rate seconds by
-// busy-waiting on the TSC (open loop). transform does a fixed amount of
+// busy-waiting on the TSC (open loop). In the open loop a record's latency
+// runs from the time it was due, so a generator held back by a full
+// pipeline charges the delay to the records it held up; a run that did not
+// sustain the offered rate is marked saturated. transform does a fixed amount of
 // arithmetic on each record (--work rounds of a mixing function, about 15
 // ns each) and forwards it. sink accumulates a checksum, which is the output
 // oracle: every build flavour of this program must print the same number,
@@ -58,11 +61,12 @@ struct runner {
             std::uint64_t s = 0x1234567ull;
             std::uint64_t next = rdtsc();
             for (std::uint64_t i = 0; i < n; ++i) {
-                if (interval_ticks) { while (rdtsc() < next) cpu_relax(); next += interval_ticks; }
+                std::uint64_t due = 0;
+                if (interval_ticks) { while (rdtsc() < next) cpu_relax(); due = next; next += interval_ticks; }
                 if (i == warm) t_start.store(now_ns(), std::memory_order_relaxed);
                 e.seq = i;
                 for (auto& p : e.pad) { s = mix(s + i); p = s; }
-                e.set_tsc(rdtsc());
+                e.set_tsc(interval_ticks ? due : rdtsc_fenced());
                 q1.push(e);
                 th1.producer_wait(i + 1);
             }
@@ -81,20 +85,25 @@ struct runner {
                 th2.producer_wait(got);
             }
         });
+        // The sink records into a vector of its own and hands it over at the
+        // end: ticks' end pointer, stored on every record, lives on this
+        // stack beside what the other stages read on every record.
         std::thread sink([&] {
             E64 e{};
+            std::vector<std::uint64_t> tk = std::move(ticks);
             unsigned misses = 0;
             std::uint64_t sum = 0;
             for (std::uint64_t got = 0; got < n;) {
                 if (!q2.try_pop(e)) { wait_policy(c.wait, misses); continue; }
-                const std::uint64_t t = rdtsc();
+                const std::uint64_t t = rdtsc_fenced();
                 if (e.seq != got) { ok.store(false); break; }
                 sum += e.pad[0];
-                if (got >= warm) ticks.push_back(t - e.tsc());
+                if (got >= warm) tk.push_back(t - e.tsc());
                 th2.consumer_progress(++got);
             }
             t_end.store(now_ns(), std::memory_order_relaxed);
             checksum.store(sum);
+            ticks = std::move(tk);
         });
         pin_thread(gen, c.cpus[0]); pin_thread(xform, c.cpus[1]); pin_thread(sink, c.cpus[2]);
         const long f0 = cur_freq_khz(c.cpus[0]);
@@ -117,10 +126,13 @@ struct runner {
         r.set("cpus", std::to_string(c.cpus[0]) + "," + std::to_string(c.cpus[1]) + "," + std::to_string(c.cpus[2]));
         r.set("rep", c.rep);
         r.set("n_ops", n - warm);
+        r.set("n_total", n);
         r.set("mops", mrec);
         r.set("p50", p.p50); r.set("p90", p.p90); r.set("p99", p.p99);
         r.set("p999", p.p999); r.set("p9999", p.p9999); r.set("max_ns", p.max);
         r.set("checksum", checksum.load());
+        r.set("hist_ns", log_histogram(ticks, 1e9 / c.tsc_hz));
+        if (c.rate) r.set("saturated", mrec * 1e6 < 0.95 * static_cast<double>(c.rate) ? 1 : 0);
         r.set("freq_before_khz", static_cast<std::uint64_t>(f0));
         r.set("freq_after_khz", static_cast<std::uint64_t>(f1));
         r.set("tsc_hz", c.tsc_hz);
