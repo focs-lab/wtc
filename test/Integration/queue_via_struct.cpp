@@ -8,8 +8,11 @@
 // RUN: wtc-opt %t.cir --lift-cir-to-wtc --queue-ownership-analysis --wtc-specialize 2>&1 >%t.wtc.cir | FileCheck %s
 // RUN: FileCheck %s --check-prefix=IR < %t.wtc.cir
 // RUN: %wtc_cc -DWTC_CHECK %s -o %t.exe 2>&1 | FileCheck %s --check-prefix=CC
-// RUN: %t.exe
+// RUN: %t.exe | FileCheck %s --check-prefix=RUNS
+// RUN: %if tsan %{ %wtc_cc --tsan -O1 -g %s -o %t.tsan.exe 2>&1 | FileCheck %s %}
+// RUN: %if tsan %{ env TSAN_OPTIONS=halt_on_error=1:symbolize=0 %t.tsan.exe 2>&1 | FileCheck %s --allow-empty --check-prefix=TSAN %}
 //
+// TSAN-NOT: ThreadSanitizer
 // CHECK-NOT: queue access is unresolvable
 // CHECK-DAG: queue @a: spsc (producers: 0, consumers: 1)
 // CHECK-DAG: queue @b: spsc (producers: 1, consumers: 1)
@@ -17,10 +20,12 @@
 // IR-DAG: cir.global{{.*}}@a{{.*}}wtc.specialized
 // IR-DAG: cir.global{{.*}}@b{{.*}}wtc.specialized
 // CC-NOT: unresolvable
+// RUNS: popped 10 from b, 0 from a
 
 #include "queue.hpp"
 #include "thread.hpp"
 
+#include <cstdio>
 #include <thread>
 
 wtc::queue<int> a;
@@ -36,8 +41,10 @@ void worker(void* arg) {
 int main() {
     pair p{&a, &b};
     std::thread t = wtc::spawn(worker, &p);
-    a.try_pop();
-    b.try_pop();
     t.join();
-    return 0;
+    int from_a = 0, from_b = 0;
+    while (a.try_pop()) ++from_a;
+    while (b.try_pop()) ++from_b;
+    std::printf("popped %d from b, %d from a\n", from_b, from_a);
+    return from_b == 10 && from_a == 0 ? 0 : 1;
 }

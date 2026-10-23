@@ -7,10 +7,13 @@
 //
 // RUN: %wtc_cc %s -o %t.exe 2>&1 | FileCheck %s --check-prefix=BUILD
 // RUN: %t.exe | FileCheck %s
+// RUN: %if tsan %{ %wtc_cc --tsan -O1 -g %s -o %t.tsan.exe 2>&1 | FileCheck %s --check-prefix=BUILD %}
+// RUN: %if tsan %{ env TSAN_OPTIONS=halt_on_error=1:symbolize=0 %t.tsan.exe 2>&1 | FileCheck %s --check-prefixes=TSAN,CHECK %}
 //
 // BUILD: queue @q: every pop only borrows its element
 // BUILD: every pop borrows, but this element type cannot be held inline; plain spsc
 // BUILD: tag rewritten to spsc{{$}}
+// TSAN-NOT: ThreadSanitizer
 // CHECK: tag 1 chars 3000
 
 #include "queue.hpp"

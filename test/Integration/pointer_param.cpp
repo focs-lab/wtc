@@ -10,7 +10,10 @@
 // RUN: grep -B1 'queueIiEC[12]ENS_8topologyE' %t.wtc.cir | FileCheck %s --check-prefix=CTOR
 // RUN: %wtc_cc -DWTC_CHECK %s -o %t.exe
 // RUN: %t.exe
+// RUN: %if tsan %{ %wtc_cc --tsan -O1 -g %s -o %t.tsan.exe 2>&1 | FileCheck %s %}
+// RUN: %if tsan %{ env TSAN_OPTIONS=halt_on_error=1:symbolize=0 %t.tsan.exe 2>&1 | FileCheck %s --allow-empty --check-prefix=TSAN %}
 //
+// TSAN-NOT: ThreadSanitizer
 // CHECK: queue @shared: spsc (producers: 1, consumers: 1)
 // CHECK: specialised: constructor tag rewritten to spsc
 // CTOR: cir.const #cir.int<1> : !s32i

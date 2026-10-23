@@ -7,10 +7,12 @@
 // RUN: %clangxx -std=c++17 -I%shim -fclangir -emit-cir %s -o %t.cir
 // RUN: wtc-opt %t.cir --lift-cir-to-wtc -o - | FileCheck %s --check-prefix=LIFT
 // RUN: %wtc_cc %s -o %t.exe && %t.exe | FileCheck %s
+// RUN: %if tsan %{ %wtc_cc --tsan -O1 -g %s -o %t.tsan.exe && env TSAN_OPTIONS=halt_on_error=1:symbolize=0 %t.tsan.exe 2>&1 | FileCheck %s --check-prefixes=TSAN,CHECK %}
 //
 // LIFT: "wtc.lock_batch_begin"
 // LIFT: "wtc.lock_batch_step"
 // LIFT: "wtc.lock_batch_end"
+// TSAN-NOT: ThreadSanitizer
 // CHECK: total 10000100000 ok 1
 
 #include "mutex.hpp"
