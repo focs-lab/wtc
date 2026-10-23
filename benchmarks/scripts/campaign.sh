@@ -6,7 +6,7 @@
 #
 # Legs: w1 (throughput), w2 (open-loop latency at 1 us and 10 us), w2pp
 # (ping-pong), smoke (everything once, tiny sizes, no environment check);
-# the MVP's own: w1mvp, w3wtc, w7, w8.
+# the MVP's own: w1mvp, w2mvp, w3wtc, w7, w8.
 #
 # Run this INSIDE a `bench` reservation (see benchmarks/README.md) and never
 # build inside one. Every measured run takes the host's exclusive measurement
@@ -294,6 +294,21 @@ case "$LEG" in
     for rep in $(seq 0 $((REPS-1))); do
       for cfg in 0 1 2 3 4 5 6 7 8; do
         lock "$BUILD/w6_ring_shape" --config "$cfg" --n 60000000 --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt"
+      done
+    done
+    ;;
+  w2mvp)
+    # Open-loop latency for the implementations the MVP substitutes: the
+    # general-purpose shim, its spsc and spsc_inline tags, and the bare ring
+    # popped by borrowing, at 1 us and 10 us. Needs a 2-core reservation.
+    "$HERE/check_env.sh" 2 || exit 1
+    meta
+    warmup
+    for rep in $(seq 0 $((REPS-1))); do
+      for interval in 1000 10000; do
+        for v in shim_generic shim_spsc shim_spsc_inline ring_borrowed; do
+          run_w2 "$rep" "$v" 64 "$interval"
+        done
       done
     done
     ;;

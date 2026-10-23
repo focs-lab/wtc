@@ -2,7 +2,9 @@
 // what it costs.
 //
 // T threads each run a loop that takes one mutex, updates a shared record,
-// lets the mutex go and does W rounds of arithmetic of its own. The mutex
+// lets the mutex go and does W rounds of a linear congruential step of its
+// own (the compiler folds eight rounds into one multiply and one add, so
+// W = 64 is about 15 ns on the lab server). The mutex
 // is a global used directly, so the compiler can see the loop, and both
 // builds come from this one source through tools/wtc-cc:
 //
