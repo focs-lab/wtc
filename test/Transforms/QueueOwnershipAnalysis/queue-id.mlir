@@ -3,7 +3,7 @@
 // Each queue root gets a number, and every operation that can only act on
 // that queue carries it, so a later pass can find all the operations of one
 // queue. @drain pops whichever of the two queues it is handed: it acts on
-// either, so it names neither.
+// either, so it has no queue_id and lists both in wtc.queue_ids.
 
 !s32i = !cir.int<s, 32>
 module {
@@ -40,7 +40,8 @@ module {
 // CHECK-DAG: cir.global "private" external @b : !s32i {wtc.queue_id = [[B:[0-9]+]] : i64,
 // CHECK-LABEL: cir.func @drain
 // CHECK: "wtc.queue_pop"
-// CHECK-NOT: queue_id
+// CHECK-NOT: queue_id =
+// CHECK-SAME: wtc.queue_ids = array<i64: [[A]], [[B]]>
 // CHECK-SAME: -> !cir.ptr<!s32i>
 // CHECK-LABEL: cir.func @main
 // CHECK: "wtc.queue_push"({{.*}}) <{queue_id = [[A]] : i64,

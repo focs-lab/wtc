@@ -495,10 +495,16 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
             else if (kt != t) { t = Topology::unknown; }
         }
         op->setAttr("topology", TopologyAttr::get(ctx, t));
-        // An operation that may act on several queues names none of them:
-        // a later pass reading queue_id would otherwise treat the others'
-        // operations as unrelated to this one.
-        if (ks.size() != 1) continue;
+        // An operation that may act on several queues has no queue_id: a
+        // later pass reading it would treat the others' operations as
+        // unrelated to this one. It lists them all instead.
+        if (ks.size() != 1) {
+            llvm::SmallVector<int64_t, 4> ids;
+            for (const Key &k : ks) ids.push_back(idOf(k));
+            llvm::sort(ids);
+            op->setAttr(kQueueIdsAttrName, DenseI64ArrayAttr::get(ctx, ids));
+            continue;
+        }
         op->setAttr("queue_id", IntegerAttr::get(IntegerType::get(ctx, 64), idOf(ks.front())));
     }
     // Poisoned operations that resolved to nothing: unknown, explicitly.
