@@ -39,6 +39,7 @@
 
 #include <atomic>
 #include <thread>
+#include <type_traits>
 #include <utility>
 
 #include "spsc_ring.hpp"
@@ -60,11 +61,17 @@ class spmc_ring {
 
   void publish() { ring_.publish(); }
 
-  bool try_pop(Slot& out) {
+  template <class F>
+  bool consume(F&& f) {
+    static_assert(std::is_nothrow_invocable_v<F, Slot&&>, "the taker must not throw: it runs under the lock");
     lock();
-    const bool got = ring_.try_pop(out);
+    const bool got = ring_.consume(f);
     unlock();
     return got;
+  }
+
+  bool try_pop(Slot& out) {
+    return consume([&](Slot&& s) noexcept { out = std::move(s); });
   }
 
  private:

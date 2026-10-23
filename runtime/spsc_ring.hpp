@@ -154,7 +154,9 @@ class spsc_ring {
   // of the two slows down further and the batch never fills. So the
   // consumer keeps an estimate of the producer's rate, in elements per
   // pause, and sleeps for about the time the rest of the batch should
-  // take before each poll; a wait gives up after kSlipPauses.
+  // take before each poll; a wait gives up once it has paused kSlipPauses
+  // times or more (the last gap may run past the bound by up to
+  // kSlipGapMax pauses).
   static constexpr unsigned kSlipMax = [] {
     unsigned n = 32 * kLine / static_cast<unsigned>(sizeof(Slot));
     if (n > kSlots / 4) n = kSlots / 4;
@@ -261,7 +263,10 @@ class spsc_ring {
   void slip() {
     std::uint64_t delta = c_.cached_push - c_.count;
     if (delta >= c_.batch) {
-      if (delta >= 2 * c_.batch && c_.batch < kSlipMax) c_.batch *= 2;
+      if (delta >= 2 * c_.batch && c_.batch < kSlipMax) {
+        c_.batch *= 2;
+        if (c_.batch > kSlipMax) c_.batch = kSlipMax;
+      }
       return;
     }
     ++c_.slips;
@@ -396,16 +401,27 @@ public:
   // that pointer only after it has acquired a count beyond the block.
   void publish() { push_pub_.store(p_.count, std::memory_order_release); }
 
-  bool try_pop(Slot& out) {
+  // Pops the oldest element into f, called once with the element as an
+  // rvalue still in its slot, or not at all when the queue was empty; the
+  // slot is released after f returns.
+  template <class F>
+  bool consume(F&& f) {
+    static_assert(std::is_nothrow_invocable_v<F, Slot&&>,
+                  "the taker runs with the element still in its slot, which is released after it "
+                  "returns; it must not throw");
 #ifdef WTC_CHECK
     if constexpr (kOneConsumer) claim(owner_c_, "consumer");
 #endif
     release_lent();
     Slot* e = advance();
     if (!e) return false;
-    out = std::move(*e);
+    f(std::move(*e));
     e->~Slot();
     return true;
+  }
+
+  bool try_pop(Slot& out) {
+    return consume([&](Slot&& s) noexcept { out = std::move(s); });
   }
 
   // The next element in place, or null if the queue was empty. It stays
