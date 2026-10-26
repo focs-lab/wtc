@@ -212,6 +212,26 @@ array indexed at run time (4 rows), a ring found by name in another process
 object of a loop (1), a handler reached through a function pointer and so
 callable from any thread (1, ip_pipeline's CLI).
 
+Rerun later on 26 Oct, the same translation units, with the analysis
+counting an array of queues as one, threads on exclusive arms as one, and
+following a record copied whole from a compound literal: 6 verified in this
+translation unit, 2 with nothing to check, 6 where the check stops, and
+still no broken declaration reported. The three new verified rows, all read
+as holding: packet_ordering `workers_to_tx` (its two consumers start on the
+two arms of one branch and count as one), distributor `rx_dist_ring` (the
+rings in `struct lcore_params` are placed: the copy of a compound literal
+is followed, and `rte_free`, with no body here, writes no field), and dma `rx_to_tx_ring` (with
+the arms counted as one, the union over every port's ring has one producer
+and one consumer, which is then true of each ring). distributor
+`dist_tx_ring` now stops for its own reason: its two producers,
+`lcore_distributor` and `lcore_rx_and_distributor`, start under two ifs on
+one flag with opposite senses, conditions the walk does not compare, so it
+warns rather than taking them as two; the reading above is that the ring
+holds by convention. The array rows (qos_sched x2, bbdev_app, ip_pipeline)
+do not move: there the array holds pointers to rings, or structures that
+hold them, not ring objects, and the pointer read from an element indexed
+at run time is still unplaced. The by-name rows are out of reach by design.
+
 **Library users.** Of the 14 projects of part 2, one builds as a translation
 unit with its own sources and vendored libraries alone: supercollider's
 supernova `sndfile_backend` (at b2f6e4422088), driven by the body of its own

@@ -97,7 +97,12 @@ that are elements of arrays indexed at run time (dedup), and threads
 started in a function that only another translation unit calls (dedup
 with its queues as globals; exact once `main` is in the same file). Where
 it counts many, the analysis says why, and on dedup it names the cause
-the oracle records. The
+the oracle records. Rerun on 26 Oct (`benchmarks/results/2026-10-26-reach`)
+with an array of queues counted as one queue, every element together:
+dedup's 8 refusals become 2 exact and 6 conservative verdicts, the latter
+for the other-file cause alone, and two new dedup builds with `main` in the
+file and the queues still in arrays are exact on all 8 queues; 43 queues,
+31 exact, 10 conservative, 2 refused, none wrong. The
 census of the corpus finds, besides, far more mutexes than library queues
 in unported code: 518 lines naming `pthread_mutex_t` and 3571 naming a
 `std::mutex` type, against six lines using a library queue outside DPDK's
