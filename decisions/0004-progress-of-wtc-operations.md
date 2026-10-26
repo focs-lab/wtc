@@ -3,7 +3,8 @@
 Taken 2026-10-19.
 
 Revised 2026-10-26: one chain per blocking site instead of one per
-function (under "What the check establishes").
+function, and inline assembly that cannot wait is cleared (both under
+"What the check establishes").
 
 ## Context
 
@@ -58,6 +59,25 @@ layer-2 forwarding sample of DPDK (the Data Plane Development Kit), that
 chain was a getter defined in another translation unit, and the `printf`
 the forwarding loop runs on the main lcore (DPDK's worker thread pinned to
 one core) stayed hidden behind it (26 Oct).
+
+Inline assembly is not looked into either, with two exceptions: a string
+with no instructions (the compiler barrier `asm volatile("" ::: "memory")`),
+and one made only of instructions that cannot wait, each with exactly the
+operands it takes -- prefetches (DPDK's `rte_prefetch0` is `prefetcht0` on
+x86 and `prfm pldl1keep, [%0]` on arm64), the spin hint (`pause`, also
+spelled `rep; nop`, and `yield`), fences and barriers, the time-stamp
+counter, and the stack fence: a locked add of an immediate zero to a slot
+below `%rsp` (`lock addl $0, -128(%rsp)`), one locked read-modify-write,
+with no loop, on a line no other thread holds. Statements end at a newline,
+a carriage return or a semicolon, as the assembler's lexer ends them; a
+prefix standing alone (`rep;`, `lock;`) is read with the statement after
+it; a string holding `%%` (a statement separator on some targets) or a
+control character other than those and a tab is not cleared. A bare
+instruction may be followed by a `#` comment, which on AArch64 would be an
+immediate, and only `isb` takes one there, still only as a barrier. A
+lock-free fast path is made of these: in a release build DPDK's ring
+enqueue and dequeue reach nothing blocking but that fence, and each of them
+failed the check on it alone (26 Oct).
 
 That is a necessary condition for lock-freedom, not a proof of it. A loop
 that spins on an atomic until another thread sets it is not judged: it
