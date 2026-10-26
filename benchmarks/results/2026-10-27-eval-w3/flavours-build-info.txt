@@ -1,0 +1,6 @@
+compiler=tools/wtc-cc, ClangIR 1ebf89d8c5e6
+wtc=e52c445900b5 (dirty)
+flavour generic=-O2 --no-specialize
+flavour hand=-O2 --no-specialize -DWTC_HAND
+flavour hand-inline=-O2 --no-specialize -DWTC_HAND_INLINE
+flavour compiler=-O2 
