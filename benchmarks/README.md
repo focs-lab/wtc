@@ -160,8 +160,12 @@ variants are the ceiling.
   `spsc_cell`: the rows that differ in one factor isolate it, and the
   compiler's substitution of a program as written is the diagonal,
   `mpmc_xsp` to `spsc_cell` (through the shim, where B0 is already
-  `mpmc_share`). Run under every allocator, since the `xsp` and `share` rows
-  depend on it and the `cell` rows must not.
+  `mpmc_share`). Two more rows put moodycamel's ConcurrentQueue, the
+  strongest general-purpose queue in W9, under the `xsp` and `cell` forms
+  (`mc_xsp`, `mc_cell`), so that the cell rows are also compared with a
+  strong library queue holding the element by value. Run under every
+  allocator, since the `xsp` and `share` rows depend on it and the `cell`
+  rows must not.
 
 Every results line also records the process's peak resident set
 (`peak_rss_kib`). The latency workloads record the whole distribution as

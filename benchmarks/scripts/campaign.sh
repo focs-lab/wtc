@@ -815,7 +815,9 @@ case "$LEG" in
     # at three sizes, on two cores and on the SMT siblings of one, under
     # every allocator: what synchronisation strength buys and what the
     # element's ownership buys, alone and together. The compiler's
-    # substitution of a program as written is mpmc_xsp to spsc_cell. Needs a
+    # substitution of a program as written is mpmc_xsp to spsc_cell; mc_xsp
+    # and mc_cell put moodycamel's ConcurrentQueue under the first and the
+    # last form, a strong library queue to hold the cell rows against. Needs a
     # 2-core reservation that keeps the siblings online (bench without -e).
     "$HERE/check_env.sh" 2 || exit 1
     meta

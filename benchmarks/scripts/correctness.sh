@@ -112,10 +112,11 @@ if cmake -S "$ROOT/benchmarks" -B "$BT" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_C_CO
       bad "W9 $v 2P2C: $(grep -m1 -oE 'ThreadSanitizer: [a-z ]*' "$OUT/tsan-w9-$v.log" || echo 'run failed')"
     fi
   done
-  # The ablation's six rows, the runtime's queues used directly: the
-  # segmented queue holding the element itself is what the shim builds,
-  # and a shared_ptr crossing threads in a cell is what it no longer does.
-  for v in mpmc_xsp mpmc_share mpmc_cell spsc_xsp spsc_share spsc_cell; do
+  # The ablation's eight rows, the runtime's queues used directly and
+  # moodycamel's under two of the forms: the segmented queue holding the
+  # element itself is what the shim builds, and a shared_ptr crossing
+  # threads in a cell is what it no longer does.
+  for v in mpmc_xsp mpmc_share mpmc_cell spsc_xsp spsc_share spsc_cell mc_xsp mc_cell; do
     for e in 8 256; do
       if "${RUN[@]}" timeout 600 "$BT/w10_ablation" --variant "$v" --elem "$e" --n 300000 --json /dev/null \
            >"$OUT/tsan-w10-$v-$e.log" 2>&1 && ! grep -q 'ThreadSanitizer' "$OUT/tsan-w10-$v-$e.log"; then
