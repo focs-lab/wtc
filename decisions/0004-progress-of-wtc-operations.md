@@ -27,7 +27,7 @@ blocking. The answers, by the implementation recorded on the operation
 | operation | generic | spsc | spsc_inline | mpsc | spmc |
 |---|---|---|---|---|---|
 | push | lock-free; allocates a new segment when one fills | wait-free; allocates a new block when one fills | wait-free; allocates a new block when one fills | lock-free; allocates a new segment when one fills | wait-free; allocates a new block when one fills |
-| pop | blocks: waits for a push that has taken its cell; frees drained segments | wait-free | wait-free; lends the element, allocates nothing | wait-free; frees the segments it moves past | blocks: the consumers' spin lock |
+| pop | blocks: waits for a push that has taken its cell; frees drained segments | wait-free | wait-free; lends the element, allocates nothing | wait-free: past a cell a push has taken and not filled, O(h²) in the h cells it has passed and not taken, otherwise O(1) amortised; frees the segments it moves past, and allocates when it has passed more than 64 such cells | blocks: the consumers' spin lock |
 | lock, unlock | blocks | | | | |
 
 The generic and mpsc columns are as of 22 Oct 2026, when both became the
@@ -35,6 +35,16 @@ segmented queue (`runtime/segment_queue.hpp`); until then the general-purpose
 queue blocked on its mutexes on both sides and the mpsc list's push was one
 exchange. A push to either retries when a pop skipped its cell or another
 push is linking the next segment, hence lock-free rather than wait-free.
+The mpsc pop never waits, but past a cell a push has taken and not yet
+filled it notes every cell it passes and does not take (h of them, filled
+or not: one batch still being filled can leave as many as its length, so
+a poll behind it costs O(batch)) and looks at them up to h times, while
+each look finds an earlier full one; the walk ahead and the step over
+cells it has taken out of order pass each cell once (since 26 Oct 2026,
+`decisions/0003`). The list of noted cells has room for 64 and allocates
+past that, which the progress check reports. A producer that never fills
+its cell keeps the consumer's head there for ever, and the segments after
+it are then never freed.
 
 Every implementation holds the element itself in its cell, so a push
 allocates only when the queue grows. A pop in the shared_ptr form

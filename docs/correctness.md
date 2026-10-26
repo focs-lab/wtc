@@ -137,27 +137,63 @@ contract queue with no precondition beyond the destructor's ordering;
 `segment_queue<T, one>` is a contract queue whenever exactly one thread
 ever pops.
 
-*Sketch.* Cells are taken by fetch-and-add on the segment's `enq` and
-`deq` counters (`runtime/segment_queue.hpp`, "Design"); a push writes its
-element then marks the cell full with a release (store or compare-exchange),
-a pop reads the mark with an acquire before the element, which is C4. C2:
-linearise a push at its mark and a pop at its fetch-and-add on `deq`;
-cells are consumed in index order per segment and segments in list order,
-so the sequential order is the cell order. A multi-consumer pop that finds
-its cell unreserved waits briefly and then marks it skipped, and the push
-that later takes that index moves on, so an element never lands in a cell
-that has been passed; a pop that finds its cell reserved waits for its
-mark, so a batch is never torn (C3 for batches). The single-consumer form
-takes no fetch-and-add on `deq` and returns empty at an unfilled cell;
-"empty" is then answered when the only consumer's next cell is not yet
-full, which the contract allows ("a pop that reports empty does so at its
-linearisation point"; `decisions/0003`, update of 22 Oct). Segments are
-freed through hazard pointers (`runtime/hazard.hpp`): a thread protects
-the segment it reads with a sequentially consistent store and a reload,
-and a segment is retired only after the tail and the head have moved past
-it, so no thread frees a segment another may still read. The elements
-themselves are moved into cells and out of them, so the element's memory
-never crosses threads except as the queue's own.
+*Sketch.* A push takes its cell by fetch-and-add on the segment's `enq`
+counter (`runtime/segment_queue.hpp`, "Design"), writes its element, then
+marks the cell full with a release (store or compare-exchange); a pop
+reads the mark with an acquire before the element, which is C4.
+
+*Multi-consumer form.* A pop takes its cell by fetch-and-add on `deq`;
+cells are consumed in index order per segment and segments in list order.
+A pop that finds its cell unreserved waits briefly and then marks it
+skipped, and the push that later takes that index moves on, so an element
+never lands in a cell that has been passed; a pop that finds its cell
+reserved waits for its mark, so a batch is never torn (C3 for batches).
+C2 is the linearisability of the fetch-and-add array queue this form
+follows.
+
+*Single-consumer form.* The pop takes no fetch-and-add: it takes full
+cells in index order, and at a cell that is not full it walks on among the
+cells pushes have taken to the first full one, keeps the cells it passed
+as holes, looks at the holes again until the look finds no earlier full
+one, and takes the earliest full cell out of order (the dequeue of the
+Jiffy queue). C2 is shown without naming the linearisation, through the
+characterisation of queue linearisability by forbidden patterns
+("Aspect-oriented linearizability proofs", CONCUR 2013), in the simpler
+form it takes when every value is pushed once and the pops are totally
+ordered in real time, as the one consumer's are, by its program order:
+such a history is linearisable if and only if no pop returns a value never
+pushed or one already returned; no pop returns y while x, whose push
+finished before y's push began, is returned by a later pop or not at all;
+and no pop answers empty while some x, whose push finished before that pop
+began, has not been returned by an earlier pop. (With no pop overlapping
+another, an element that covers any part of an empty pop's interval and
+was pushed before it began stays in the queue for the whole of it, so one
+such element is the general condition's witness.) Elements are distinct
+here (each lives in its own cell). The first condition holds because a pop
+returns only a cell it saw marked full and takes each cell once: it moves
+its head past a cell it takes in order and marks taken a cell it takes out
+of order, and steps over taken cells. The other two follow from one fact:
+if a push finished before a look at its cell began, the look sees the cell
+full, since the push's fetch-and-add and mark are ordered before the pop's
+acquire loads of the count and the mark. Hence an empty answer is given
+only when every push that finished before the pop began has been returned,
+and it linearises at the call's start. And if x's push finished before y's
+push began, x took the earlier cell and x's mark is ordered before y's;
+the last look over the holes, which follows the acquire load that saw y's
+cell full, sees x's cell full unless x was returned already, so x is
+returned first. Before 26 Oct 2026 this form answered empty at the first
+cell that was not full even when a later push had finished, the third
+pattern: in that window the substitution of `mpsc` for the general-purpose
+queue, whose pop waits for such a cell, could add an empty answer the
+program as written never gives
+(`runtime/test/segment_queue_empty_test.cpp`).
+
+Segments are freed through hazard pointers (`runtime/hazard.hpp`): a
+thread protects the segment it reads with a sequentially consistent store
+and a reload, and a segment is retired only after the tail and the head
+have moved past it, so no thread frees a segment another may still read.
+The elements themselves are moved into cells and out of them, so the
+element's memory never crosses threads except as the queue's own.
 
 **Lemma 5 (the general-purpose queue is a contract queue).** Immediate from
 Lemma 4 with `many`.

@@ -287,7 +287,9 @@ every thread pushes and then pops, it trails LCRQ, LPRQ and the
 fetch-and-add array queue from four threads on (0.71–0.85×). Every row
 here allocates once per element, the shim on the consumer's side, the
 libraries on the producer's, which likely favours the shim against them
-(inferred, not measured).
+(inferred, not measured). The mpsc rows predate the change of 26 Oct to
+the single consumer's empty answer (`decisions/0003`) and are to be timed
+again.
 
 Where one side is single the compiler substitutes the segmented queue's
 single-consumer form for many producers or a ring for many consumers:

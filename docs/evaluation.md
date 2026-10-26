@@ -185,7 +185,9 @@ list; these supersede its ratios.
   pairwise workload (LSCQ is behind it, 1.18×); every row allocates once
   per element, the shim on the consumer's side, which likely favours it
   (inferred, not measured). The substitutes for a single side gain 1.3× (mpsc) and
-  2.2× (spmc) over it, 2.4× and 2.1× over moodycamel.
+  2.2× (spmc) over it, 2.4× and 2.1× over moodycamel; the mpsc numbers
+  predate the change of 26 Oct to the single consumer's empty answer
+  (`decisions/0003`) and are to be timed again.
 - A thread pool (`2026-10-26-eval-pool`, RQ2 and RQ3): the ring for many
   consumers with the task by value in its cell is 2.8× the pool as written
   with no work (0.74–9.1), 1.3× at 100 ns a task and 1.04× at 1 µs. The
