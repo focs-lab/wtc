@@ -117,8 +117,8 @@ also under mimalloc and in the thread pool also under snmalloc,
 since a queue that hands its elements over through the heap is measuring
 the allocator as much as itself. Each figure below names the leg it is
 drawn from: the queue alone, the pipeline, its grain, batching and many
-threads from the 26 October legs (under glibc), latency and coarsening
-from the 21 October ones. The baselines are the ones the concurrent-queue literature measures
+threads from the 26 October legs (under glibc), coarsening from the 21
+October one. The baselines are the ones the concurrent-queue literature measures
 against:
 
 - **B0**, the program as written: the shim's general-purpose queue, since
@@ -194,16 +194,21 @@ diagonal is 24×, and no allocator closes it
 <p align="center"><img src="docs/figures/w2.svg" alt="W2 p99 latency against offered load" width="100%"></p>
 
 The producer sends on a schedule and latency counts from each element's due
-time, so a queue that falls behind shows its backlog. The program as
-written keeps up to 0.5 M elements a second, the best library to 1.4, the
-compiler's spsc ring to 2 and moodycamel's inline queue to 5; the
-compiler's inline ring keeps up to the end of the sweep, 10 M/s, as do
-rigtorp's queue and the bare ring. Below saturation, at one element every
-10 µs, the compiler's queue has a p99 of 542 ns, against 5.5 µs as written
-and 2.1 µs for the best library. These are the 21 October numbers,
-against the two-lock list; the leg is being run again. The 26 October
-pipeline leg shows a tail-latency regression of the runtime's ring at
-1 M records a second (below), which this leg may also show once run.
+time, so a queue that falls behind shows its backlog. On the segmented
+queue every queue measured keeps up through the sweep, 10 M elements a
+second, except moodycamel's ConcurrentQueue, which falls behind there (the
+program as written, on the two-lock list of 21 October, fell behind at 1
+M/s). At or below 0.5 M/s the compiler's queue has the shortest latency
+measured: a median of 102-110 ns against 134-137 as written and 144-153
+for rigtorp's ring, a p99 of 159-169 ns. Between 1.4 and 10 M/s the
+runtime's ring waits: its median is 600-850 ns where the others deliver
+in about 140, and its p99 is 2.8 times rigtorp's. The bare ring shows the
+same, so the cause is in the ring, not the shim: most likely the 23
+October consumer slip, which waits for a batch the producer fills slowly
+at these rates. A gate is proposed in PR #37 (open; its untimed A/B
+covers W2 at 1 µs and 300 ns and W3 at 1-2 M/s; a paired rerun on the
+second host is in progress); these numbers predate it
+([`2026-10-26-eval-w2`](benchmarks/results/2026-10-26-eval-w2/NOTE.md)).
 
 ### A pipeline
 
@@ -218,7 +223,8 @@ ConcurrentQueue between the stages, and ahead of the expert inline rings
 (16.4 against 14.1 M records a second for rigtorp's). Its tail latency is
 not level with theirs: at 1 M records a second the p99 is 1.59 µs against
 0.43 as written and 0.31 for rigtorp's ring, a regression of the runtime's
-ring whose cause is being investigated; a fix is in progress on a branch
+ring, most likely the consumer slip named under latency above, for which
+a gate is proposed in PR #37
 ([`2026-10-26-eval-w3`](benchmarks/results/2026-10-26-eval-w3/NOTE.md)).
 Against the two-lock list (21 October) it was 9.0×.
 
