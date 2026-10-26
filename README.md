@@ -201,33 +201,36 @@ time, so a queue that falls behind shows its backlog. On the segmented
 queue every queue measured keeps up through the sweep, 10 M elements a
 second, except moodycamel's ConcurrentQueue, which falls behind there (the
 program as written, on the two-lock list of 21 October, fell behind at 1
-M/s). At or below 0.5 M/s the compiler's queue has the shortest latency
-measured: a median of 102-110 ns against 134-137 as written and 144-153
-for rigtorp's ring, a p99 of 159-169 ns. Between 1.4 and 10 M/s the
-runtime's ring waits: its median is 600-850 ns where the others deliver
-in about 140, and its p99 is 2.8 times rigtorp's. The bare ring shows the
-same, so the cause is in the ring, not the shim: most likely the 23
-October consumer slip, which waits for a batch the producer fills slowly
-at these rates. A gate is proposed in PR #37 (open; its untimed A/B
-covers W2 at 1 µs and 300 ns and W3 at 1-2 M/s; a paired rerun on the
-second host is in progress); these numbers predate it
-([`2026-10-26-eval-w2`](benchmarks/results/2026-10-26-eval-w2/NOTE.md)).
+M/s). At every rate the runtime's ring, bare or through the shim, has the
+shortest median measured, 106-112 ns against 132-143 as written and
+144-157 for rigtorp's ring, and the compiler's queue a p99 below the
+program as written's (0.37× at 1.4-10 M/s, 0.84× at 1
+M/s, 0.70× from 0.5 M/s down) and level with rigtorp's (0.83-0.96×; this
+leg was not quiet, and that ratio moves with the repetition)
+([`2026-10-27-eval-w2`](benchmarks/results/2026-10-27-eval-w2/NOTE.md)).
+The 26 October leg, before the ring's consumer gated its wait for a batch
+on a streaming producer, had the ring waiting from 1.4 M/s (median 600-850
+ns, p99 2.8 times rigtorp's) and a p99 of 1.15 µs at 1 M/s
+([`2026-10-26-eval-w2`](benchmarks/results/2026-10-26-eval-w2/NOTE.md);
+the gate's paired A/B is
+[`2026-10-27-ring-gate-ab`](benchmarks/results/2026-10-27-ring-gate-ab/NOTE.md)).
 
 ### A pipeline
 
 <p align="center"><img src="docs/figures/w3.svg" alt="W3 pipeline throughput" width="100%"></p>
 
 Three stages, two queues, 64-byte records. From the unmodified source the
-compiler builds exactly what the best hand-written tags give: 1.89× the
-program as written under glibc and 1.76× under jemalloc, with no
-allocation per record where the program as written makes two (846 cycles a
-record against 2,396); 2.4–3.0× over the pipeline with moodycamel's
+compiler builds exactly what the best hand-written tags give: 1.90× the
+program as written under glibc and 1.81× under jemalloc, with no
+allocation per record where the program as written makes two (922 cycles a
+record against 2,752); 3.1× over the pipeline with moodycamel's
 ConcurrentQueue between the stages, and ahead of the expert inline rings
-(16.4 against 14.1 M records a second for rigtorp's). Its tail latency is
-not level with theirs: at 1 M records a second the p99 is 1.59 µs against
-0.43 as written and 0.31 for rigtorp's ring, a regression of the runtime's
-ring, most likely the consumer slip named under latency above, for which
-a gate is proposed in PR #37
+(16.9 against 14.1 M records a second for rigtorp's). Its tail latency is
+level with theirs: a p99 of 0.27-0.29 µs at every offered rate from 0.5 to
+4 M records a second, against 0.30-0.32 for the expert rings and 0.33-2.8
+for the program as written
+([`2026-10-27-eval-w3`](benchmarks/results/2026-10-27-eval-w3/NOTE.md)).
+Before the ring's gate it was 1.06-1.96 µs from 1 M/s
 ([`2026-10-26-eval-w3`](benchmarks/results/2026-10-26-eval-w3/NOTE.md)).
 Against the two-lock list (21 October) it was 9.0×.
 
@@ -239,10 +242,11 @@ The same pipeline with each stage's work swept from nothing to a
 millisecond. The program as written pays an almost constant extra per
 record for its two general-purpose queues, so the speed-up follows
 (t + c) / t. With the current general-purpose queue c is about 0.04 µs:
-1.97× with no work, 1.19× at 0.27 µs a record, 1.04× at 1.1 µs, nothing
-measurable from about 5 µs; the gain is above 10% only while a stage takes
-under about 0.5 µs
-([`2026-10-26-eval-w3grain`](benchmarks/results/2026-10-26-eval-w3grain/NOTE.md)).
+1.90-2.06× with no work, 1.16-1.19× at 0.27 µs a record, 1.04× at 1.1 µs,
+nothing measurable from about 5 µs; the gain is above 10% only while a
+stage takes under about 0.5 µs
+([`2026-10-27-eval-w3grain`](benchmarks/results/2026-10-27-eval-w3grain/NOTE.md);
+the same as before the ring's gate, `2026-10-26-eval-w3grain`).
 Against the two-lock list (21 October) c was 1.1–1.6 µs and the threshold
 about 10 µs. PARSEC's ferret and dedup sit far to the right, which is why
 they gain nothing ([applications](#applications)); the programs that gain
@@ -293,43 +297,46 @@ ConcurrentQueue and 1.6× LCRQ with producers and consumers on their own
 threads (geometric means over shapes and allocators, paired; least at
 8:8). In the pairwise workload of the lock-free queue literature, where
 every thread pushes and then pops, it trails LCRQ, LPRQ and the
-fetch-and-add array queue from four threads on (0.71–0.85×). Every row
+fetch-and-add array queue from four threads on (0.69–0.84× by thread
+count). Every row
 here allocates once per element, the shim on the consumer's side, the
 libraries on the producer's, which likely favours the shim against them
-(inferred, not measured). The mpsc rows predate the change of 26 Oct to
-the single consumer's empty answer (`decisions/0003`) and are to be timed
-again.
+(inferred, not measured).
 
 Where one side is single the compiler substitutes the segmented queue's
-single-consumer form for many producers or a ring for many consumers:
-1.3× (0.99–2.05) and 2.2× (1.6–2.9) the general-purpose queue, and 2.4×
-and 2.1× moodycamel's ConcurrentQueue
-([`2026-10-26-eval-w9`](benchmarks/results/2026-10-26-eval-w9/NOTE.md)).
-The spmc figures are those of the ring whose consumers took turns, which
-has since been replaced (below); the AMD host's W9 leg predates the swap.
+single-consumer form for many producers or the lock-free queue for one
+producer: 1.3× (0.98–2.08) and 4.6× (1.9–14) the general-purpose queue,
+and 2.3× and 4.5× moodycamel's ConcurrentQueue; the queue for one producer
+scales with its consumers, 2.1× the general queue with one, 5.0× with
+four, 14× with eight
+([`2026-10-27-eval-w9`](benchmarks/results/2026-10-27-eval-w9/NOTE.md),
+on the runtime with the single consumer's pop of 26 October and the
+lock-free queue for one producer; the 26 October leg, on the ring whose
+consumers took turns, had 2.2×, falling to 4.9 M elements a second at
+eight consumers: [`2026-10-26-eval-w9`](benchmarks/results/2026-10-26-eval-w9/NOTE.md)).
 Against the two-lock list (21 October) the substitutes were 2.5–4.0× and
 2.0–2.9×; the general queue they replace got stronger.
 
 A thread pool (W11: one submitter, 1 to 8 workers, tasks with a 16- to
-256-byte capture and 0 to 1000 ns of work) shows where that ring stops
-paying. With no work it and the task held by value in the queue's cell,
-instead of a `std::function` allocated per task, give 2.8× (0.74–9.1) the
-pool as written; at 100 ns of work 1.3×, at 1000 ns 1.04×. The ring
-alone is a loss in two places: with eight workers and 1 µs tasks, 0.51×
-on heap tasks (where the allocator weighs in: 0.18–0.20 under jemalloc at
-64 and 256 bytes) and 0.85× on tasks in the cell, and with four workers
-and 100 ns tasks, 0.72× and 0.81×. The likely cause, inferred and not
-isolated, is that its consumers take turns under one spin lock, so tasks
-are handed out one lock transfer at a time
-([`2026-10-26-eval-pool`](benchmarks/results/2026-10-26-eval-pool/NOTE.md)).
-The ring has since been replaced by a queue whose consumers claim cells
-with a compare-and-swap and take nothing in turns: in an untimed A/B on
-the Intel host it is 1.76× the general queue over the same 36
-configurations with the task in the cell (1.02–10.7) and 1.31× on the heap
-(1.03–7.2), with no configuration's median below 0.95 (single repetitions
-dipped to 0.71), where the ring was 0.40× at eight workers and
-1 µs; the AMD host's legs are still to be rerun with it
-([`2026-10-26-spmc-ab`](benchmarks/results/2026-10-26-spmc-ab/NOTE.md)).
+256-byte capture and 0 to 1000 ns of work). With no work the lock-free
+queue for one producer and the task held by value in its cell, instead of
+a `std::function` allocated per task, give 5.5× the pool as written; at
+100 ns of work 2.7×, at 1000 ns 1.09× (2.5×, 0.81–26, over all 108
+configurations). The topology alone is 2.25× on tasks in the cell and
+1.70× on heap tasks, and no longer a loss anywhere that matters: at eight
+workers and 1 µs tasks it is 1.00× on both (7.5 and 6.9 M tasks a second
+against an ideal of 8), with one configuration of 108 below 0.95 (heap
+tasks, 0.89×). The leg's control drifted 12.9% and its absolute rates rose
+18% over the repetitions; the ratios, taken within a repetition, stay
+within 2.46–2.54 from one repetition to the next
+([`2026-10-27-eval-pool`](benchmarks/results/2026-10-27-eval-pool/NOTE.md)).
+On 26 October the ring whose consumers took turns under one spin lock lost
+there, 0.51× on heap tasks and 0.85× in the cell, and at four workers and
+100 ns, 0.72× and 0.81×
+([`2026-10-26-eval-pool`](benchmarks/results/2026-10-26-eval-pool/NOTE.md));
+the pool exposed the defect, and the replacement's untimed A/B on the
+Intel host is
+[`2026-10-26-spmc-ab`](benchmarks/results/2026-10-26-spmc-ab/NOTE.md).
 
 ### Applications
 
