@@ -17,10 +17,11 @@ class WTC_Op<string mnemonic, list<Trait> traits = []> :
 // handle operand, and the call's argument attributes (which is where the
 // hidden return-slot marker lives for calls that have one).
 //
-// A lifted operation is still, for now, a tagged call: nothing here states
-// memory ordering or a progress guarantee. That is deliberate scope for
-// the gate; the topology attribute is the first fact the dialect carries
-// that CIR did not. queue_id, when present, names the one queue the
+// A lifted operation is still a tagged call: its contract (ordering,
+// linearisability) is stated in decisions/0003, and its progress answer,
+// per implementation, by ProgressOpInterface in WTCOps.cpp (decisions/0004).
+// The topology attribute is the first fact the dialect carries that CIR
+// did not. queue_id, when present, names the one queue the
 // operation acts on: the number the ownership analysis gave its root.
 
 // Every operation stands for a call it can be lowered back to. When

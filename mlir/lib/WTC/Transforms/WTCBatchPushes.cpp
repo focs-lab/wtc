@@ -1,3 +1,4 @@
+#include "WTC/Transforms/Blocking.h"
 #include "WTC/Transforms/Passes.h"
 #include "WTC/Transforms/Utils.h"
 #include "WTC/WTCAttrs.h"
@@ -11,8 +12,7 @@
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Pass/Pass.h"
 
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/StringSet.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Demangle/Demangle.h"
 
 #include <cstdlib>
@@ -43,12 +43,20 @@ using namespace mlir::wtc;
 //     (not under a condition or an inner loop, and the loop has no
 //     continue), to a queue whose handle the loop does not change;
 //   - nothing in the loop, or in what it calls, synchronises: no atomic or
-//     volatile access, no fence, no inline assembly, no call into the
-//     threading library;
+//     volatile access, no fence, no inline assembly but prefetches and
+//     no-ops without a memory clobber, and nothing the shared answer to
+//     "may this wait" (Transforms/Blocking.h) says may wait;
 //   - nothing leaves the loop but its end or a break: no return, no goto,
 //     and no call that may throw;
-//   - every call reaches only code the module can see, or external
-//     functions that are nothrow and not in the threading library.
+//   - every call reaches only code the module can see, through a pointer
+//     whose targets are all known if need be, or external functions known
+//     not to wait: the allocator (unless the program registers code for it
+//     to run), sleeping, and those that only touch the memory they are
+//     given. Any other external function is refused, nothrow or not.
+//
+// The cost is latency: an element waits for up to WTC_BATCH_K - 1 later
+// pushes, and so for up to WTC_BATCH_K times the work the loop does
+// between two pushes, before a consumer can see it.
 //
 // One exception is accepted rather than ruled out: a push allocates, and if
 // the allocation fails mid-run, the elements still waiting to be published
@@ -71,8 +79,9 @@ using namespace mlir::wtc;
 //     lock first, on every iteration;
 //   - nothing in the loop synchronises or throws, as above, and every
 //     function it calls without a body here is one that cannot wait for
-//     another thread: the allocator, or one that only touches the memory
-//     it is given;
+//     another thread by the shared answer: the allocator (unless the
+//     program registers code for it to run), or one that only touches the
+//     memory it is given;
 //   - nothing leaves the loop but its end or a break outside the critical
 //     section: no continue, return or goto, and no break between the lock
 //     and the unlock, which would leave with the mutex held in the
@@ -85,82 +94,95 @@ struct Refusal {
     std::string why;
 };
 
-bool synchronisingExternal(llvm::StringRef name) {
-    return name.starts_with("pthread_") || name.starts_with("sem_") || name.starts_with("thrd_") ||
-           name.starts_with("mtx_") || name.starts_with("cnd_") || name.contains("futex") ||
-           name == "syscall" || name == "sched_yield";
-}
-
+// Whether an operation synchronises: an atomic or volatile access, a
+// fence, or inline assembly other than prefetches and no-ops that take no
+// memory clobber. A loop that synchronises may be waiting for an element it
+// has not yet published, which is a wait the shared facts cannot see.
 bool synchronises(Operation *op) {
     StringRef n = op->getName().getStringRef();
-    if (n.starts_with("cir.atomic") || isa<cir::InlineAsmOp>(op)) return true;
+    if (n.starts_with("cir.atomic")) return true;
+    if (auto asmOp = dyn_cast<cir::InlineAsmOp>(op))
+        return asmOp.getConstraints().contains("~{memory}") ||
+               !onlyNonBlockingInstructions(asmOp.getAsmString(), /*inert=*/true);
     if (auto ld = dyn_cast<cir::LoadOp>(op)) return ld.getIsVolatile() || ld.getMemOrder();
     if (auto st = dyn_cast<cir::StoreOp>(op)) return st.getIsVolatile() || st.getMemOrder();
     return false;
 }
 
-// Functions without a body here that cannot wait for another thread: the
-// allocator, and those that only touch the memory they are given.
-bool cannotWait(cir::FuncOp f) {
-    if (isAllocator(f) || touchesOnlyItsArguments(f) || f.getSymName() == "free") return true;
-    const std::string name = llvm::demangle(f.getSymName().str());
-    return llvm::StringRef(name).starts_with("operator delete");
-}
-
+// Why code a loop being batched runs, or calls, is unfit: the shared
+// answer to whether it may wait (Transforms/Blocking.h), with what each
+// pass accepts, and two refusals of the batching's own -- it synchronises,
+// or a function it calls acts on a queue or a mutex.
+//
+// Both accept the allocator, as a leaf: it waits for no thread of the
+// program and runs none of its code, unless the module registers code for
+// it to run (allocatorCallbackRegistration), and then neither accepts it.
+// Batched pushes accept sleeping too, which waits for no thread. Neither
+// accepts a function without a body here that is not known: nothing
+// vouches that it does not wait (semop, a read from a pipe, a join), and
+// whether it is nothrow says nothing about that, least of all under
+// -fno-exceptions, where every call is. Input and output is refused as
+// well, since a write to a pipe or a socket waits for its reader, which may
+// be a consumer of the queue.
 class LegalityChecker {
 public:
-    // Strict: every external call must also be one that cannot wait.
-    explicit LegalityChecker(bool strict = false) : strict(strict) {}
+    explicit LegalityChecker(ModuleOp module, bool strict = false)
+        : registration(allocatorCallbackRegistration(module)),
+          query(module, accepted(strict, registration.has_value()),
+                [](Operation *o, bool inCallee) -> std::optional<BlockingSite> {
+                    auto refuse = [&](std::string why) {
+                        return BlockingSite{o, BlockingKind::Refused, std::move(why), cir::FuncOp(), false, {}, {}};
+                    };
+                    if (inCallee && isa<WTCDialect>(o->getDialect())) return refuse("it acts on a queue or a mutex");
+                    if (synchronises(o)) return refuse("it synchronises (" + o->getName().getStringRef().str() + ")");
+                    return std::nullopt;
+                }) {}
 
-    // Why a function, called from a loop being batched, is unfit: it could
-    // synchronise, throw, or act on a queue. Memoised; a cycle is optimistic,
-    // since every operation on it is still checked by its own walk.
-    std::optional<Refusal> callee(cir::FuncOp f);
-    std::optional<Refusal> call(cir::CallOp call);
-    std::optional<Refusal> op(Operation *op);
+    // What the module registers for the allocator to run, if anything.
+    const std::optional<std::string> &allocatorCallback() const { return registration; }
+
+    std::optional<Refusal> op(Operation *o) {
+        auto s = query.at(o);
+        if (!s) return std::nullopt;
+        return Refusal{s->chain.empty() ? s->leaf : s->chain.front(), words(*s)};
+    }
 
 private:
-    bool strict;
-    llvm::DenseMap<Operation *, std::optional<Refusal>> memo;
-};
+    std::optional<std::string> registration;
+    BlockingQuery query;
 
-std::optional<Refusal> LegalityChecker::op(Operation *o) {
-    if (synchronises(o)) return Refusal{o, "it synchronises (" + o->getName().getStringRef().str() + ")"};
-    if (isa<cir::ThrowOp>(o)) return Refusal{o, "it may throw"};
-    if (auto c = dyn_cast<cir::CallOp>(o)) return call(c);
-    return std::nullopt;
-}
-
-std::optional<Refusal> LegalityChecker::call(cir::CallOp c) {
-    cir::FuncOp f = lookupCallee(c);
-    if (!f) return Refusal{c, "it makes an indirect call"};
-    if (f.getBody().empty()) {
-        const std::string name = llvm::demangle(f.getSymName().str());
-        if (synchronisingExternal(f.getSymName()))
-            return Refusal{c, "it calls into the threading library (" + name + ")"};
-        if (!c.getNothrow()) return Refusal{c, "it calls " + name + ", which may throw"};
-        if (strict && !cannotWait(f))
-            return Refusal{c, "it calls " + name + ", which may wait for another thread"};
-        return std::nullopt;
+    static BlockingKinds accepted(bool strict, bool allocatorRunsCode) {
+        if (allocatorRunsCode) return strict ? BlockingKinds{} : BlockingKinds{BlockingKind::Sleeps};
+        return strict ? BlockingKinds{BlockingKind::Allocates}
+                      : BlockingKinds{BlockingKind::Allocates, BlockingKind::Sleeps};
     }
-    if (auto r = callee(f)) return Refusal{c, "it calls " + llvm::demangle(f.getSymName().str()) + ", where " + r->why};
-    return std::nullopt;
-}
 
-std::optional<Refusal> LegalityChecker::callee(cir::FuncOp f) {
-    if (auto it = memo.find(f); it != memo.end()) return it->second;
-    memo[f] = std::nullopt;
-    std::optional<Refusal> found;
-    f.walk([&](Operation *o) {
-        if (isa<WTCDialect>(o->getDialect()))
-            found = Refusal{o, "it acts on a queue or a mutex"};
-        else
-            found = op(o);
-        return found ? WalkResult::interrupt() : WalkResult::advance();
-    });
-    memo[f] = found;
-    return found;
-}
+    std::string words(const BlockingSite &s) const {
+        cir::FuncOp callee = s.callee;
+        const std::string name = callee ? llvm::demangle(callee.getSymName().str()) : std::string();
+        std::string why;
+        switch (s.kind) {
+        case BlockingKind::Refused: why = s.why; break;
+        case BlockingKind::Throws: why = "it may throw"; break;
+        case BlockingKind::MayThrow: why = "it calls " + name + ", which may throw"; break;
+        case BlockingKind::UnknownTarget: why = "it makes an indirect call"; break;
+        case BlockingKind::Allocates:
+            if (registration) {
+                why = "it calls " + (callee ? name : std::string("the allocator")) +
+                      ", and the program registers code for the allocator to run (" + *registration + ")";
+                break;
+            }
+            [[fallthrough]];
+        default:
+            if (s.callee && s.threading) why = "it calls into the threading library (" + name + ")";
+            else if (s.callee) why = "it calls " + name + ", which may wait for another thread";
+            else why = "it " + s.why;
+        }
+        for (cir::FuncOp f : llvm::reverse(s.via))
+            why = "it calls " + llvm::demangle(f.getSymName().str()) + ", where " + why;
+        return why;
+    }
+};
 
 // Whether a function's last parameter is an rvalue reference: push and
 // push_deferred each come in a copying and a moving overload, which CIR
@@ -208,7 +230,7 @@ public:
 
     void runOnOperation() override {
         ModuleOp module = getOperation();
-        LegalityChecker legal;
+        LegalityChecker legal(module);
         llvm::SmallVector<std::pair<cir::LoopOpInterface, QueuePushOp>, 4> todo;
 
         module.walk([&](cir::FuncOp f) {
@@ -263,6 +285,11 @@ private:
                 return Refusal{p, "the push is not made on every iteration"};
         if (!handleInvariant(loop, push))
             return Refusal{push, "the loop may change which queue it pushes to"};
+        // A push allocates when the queue grows, and the allocator may then
+        // run what the program registered for it.
+        if (const auto &reg = legal.allocatorCallback())
+            return Refusal{push, "a push may allocate, and the program registers code for the allocator to run (" +
+                                     *reg + ")"};
         std::optional<Refusal> found;
         loop->walk([&](Operation *o) {
             if (isa<cir::ContinueOp>(o))
@@ -362,7 +389,7 @@ public:
 
     void runOnOperation() override {
         ModuleOp module = getOperation();
-        LegalityChecker legal(/*strict=*/true);
+        LegalityChecker legal(module, /*strict=*/true);
         llvm::SmallVector<std::tuple<cir::LoopOpInterface, LockOp, UnlockOp>, 4> todo;
 
         module.walk([&](cir::FuncOp f) {
