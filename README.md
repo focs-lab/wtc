@@ -28,7 +28,7 @@ Whatever it cannot prove keeps the general implementation.
 | **10×** | the compiler's queue against the program as written, one producer and one consumer, geometric mean over sizes and allocators (5–23×); within 13% of the expert rings ([W1](#the-queue-alone)) |
 | **5.9× · 1.7×** | what each fact buys through the shim: the topology 5.9× (one producer and one consumer instead of the general queue), and on top of it the proof that the consumer only borrows 1.7× in code written against the `shared_ptr` API (a loss at 256 bytes); 5.9 × 1.7 ≈ the 10× above ([W1](#the-queue-alone), [ablation](#what-each-fact-buys)) |
 | **= by hand** | on a pipeline the compiler's build is byte for byte the hand-tagged one, 1.8–1.9× the program as written ([W3](#a-pipeline)) |
-| **0 wrong** | verdicts over 35 queues in examples, workloads and two PARSEC programs ([reach](#reach)) |
+| **0 wrong** | verdicts over 43 queues in examples, workloads and two PARSEC programs ([reach](#reach)) |
 | **1.65×** | compile time against the same clang, for code 0.4% larger ([cost](#cost-and-safety)) |
 
 ## Why
@@ -142,20 +142,23 @@ under [`benchmarks/results/`](benchmarks/results/), and
 ### Reach
 
 Every queue in the examples, the compiler-built workloads, and PARSEC's
-ferret and dedup in six configurations, against the topology a reader sees
+ferret and dedup in eight configurations, against the topology a reader sees
 in the source:
 
 | Queues | Exact | Conservative | Refused | Wrong |
 |:--:|:--:|:--:|:--:|:--:|
-| 35 | 21 | 4 | 10 | **0** |
+| 43 | 31 | 10 | 2 | **0** |
 
-Of the 22 that a reader would call single-producer single-consumer, 15 are
-proved so. What stops the 14 that are not exact: queues held in arrays indexed at run time
-(dedup, 8), a push from inside a recursive directory scan (ferret's loader,
-2), and threads started from a function that only another file calls
-(dedup, 4, conservative). The table, with the analysis's own account of
-each verdict, is
-[`benchmarks/results/2026-10-21-reach/TABLE.md`](benchmarks/results/2026-10-21-reach/TABLE.md).
+Of the 25 that a reader would call single-producer single-consumer, 18 are
+proved so. dedup keeps its queues in arrays indexed at run time; the
+analysis counts each array as one queue, every element together, which
+holds for each element and is exact on dedup, where every element of an
+array has the same threads. What stops the 12 that are not exact: a push
+from inside a recursive directory scan (ferret's loader, 2, refused), and
+threads started from a function that only another file calls (dedup, 10,
+conservative; exact once `main` is in the same file). The table, with the
+analysis's own account of each verdict, is
+[`benchmarks/results/2026-10-26-reach/TABLE.md`](benchmarks/results/2026-10-26-reach/TABLE.md).
 
 ### The queue alone
 

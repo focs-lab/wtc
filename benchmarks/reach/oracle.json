@@ -39,16 +39,16 @@
 
     {"program": "PARSEC dedup as written, threads per stage from argv", "log": "dedup-compiler.log",
      "queues": [
-       {"queue": "refine_que", "producers": "1", "consumers": "many", "cause": "the queues are elements of arrays, indexed at run time"},
-       {"queue": "deduplicate_que", "producers": "many", "consumers": "many", "cause": "the queues are elements of arrays, indexed at run time"},
-       {"queue": "compress_que", "producers": "many", "consumers": "many", "cause": "the queues are elements of arrays, indexed at run time"},
-       {"queue": "reorder_que", "producers": "many", "consumers": "1", "cause": "the queues are elements of arrays, indexed at run time"}]},
+       {"queue": "refine_que", "producers": "1", "consumers": "many", "cause": "the threads start in Encode, which only main, in another file, calls"},
+       {"queue": "deduplicate_que", "producers": "many", "consumers": "many", "cause": "the threads start in Encode, which only main, in another file, calls"},
+       {"queue": "compress_que", "producers": "many", "consumers": "many", "cause": "the threads start in Encode, which only main, in another file, calls"},
+       {"queue": "reorder_que", "producers": "many", "consumers": "1", "cause": "the threads start in Encode, which only main, in another file, calls"}]},
     {"program": "PARSEC dedup, one thread per stage", "log": "dedup-compiler-one.log",
      "queues": [
-       {"queue": "refine_que", "producers": "1", "consumers": "1", "cause": "the queues are elements of arrays, indexed at run time"},
-       {"queue": "deduplicate_que", "producers": "1", "consumers": "1", "cause": "the queues are elements of arrays, indexed at run time"},
-       {"queue": "compress_que", "producers": "1", "consumers": "1", "cause": "the queues are elements of arrays, indexed at run time"},
-       {"queue": "reorder_que", "producers": "many", "consumers": "1", "cause": "the queues are elements of arrays, indexed at run time"}]},
+       {"queue": "refine_que", "producers": "1", "consumers": "1", "cause": "the threads start in Encode, which only main, in another file, calls"},
+       {"queue": "deduplicate_que", "producers": "1", "consumers": "1", "cause": "the threads start in Encode, which only main, in another file, calls"},
+       {"queue": "compress_que", "producers": "1", "consumers": "1", "cause": "the threads start in Encode, which only main, in another file, calls"},
+       {"queue": "reorder_que", "producers": "many", "consumers": "1", "cause": "the threads start in Encode, which only main, in another file, calls"}]},
     {"program": "PARSEC dedup, one thread per stage, queues as globals", "log": "dedup-compiler-flat-one.log",
      "queues": [
        {"queue": "refine_que", "producers": "1", "consumers": "1", "cause": "the threads start in Encode, which only main, in another file, calls"},
@@ -56,6 +56,18 @@
        {"queue": "compress_que", "producers": "1", "consumers": "1", "cause": "the threads start in Encode, which only main, in another file, calls"},
        {"queue": "reorder_que", "producers": "many", "consumers": "1", "cause": "the threads start in Encode, which only main, in another file, calls"}]},
     {"program": "PARSEC dedup, one thread per stage, queues as globals, one translation unit", "log": "dedup-compiler-flat-one-unity.log",
+     "queues": [
+       {"queue": "refine_que", "producers": "1", "consumers": "1"},
+       {"queue": "deduplicate_que", "producers": "1", "consumers": "1"},
+       {"queue": "compress_que", "producers": "1", "consumers": "1"},
+       {"queue": "reorder_que", "producers": "many", "consumers": "1"}]},
+    {"program": "PARSEC dedup as written, threads per stage from argv, one translation unit", "log": "dedup-compiler-unity.log",
+     "queues": [
+       {"queue": "refine_que", "producers": "1", "consumers": "many"},
+       {"queue": "deduplicate_que", "producers": "many", "consumers": "many"},
+       {"queue": "compress_que", "producers": "many", "consumers": "many"},
+       {"queue": "reorder_que", "producers": "many", "consumers": "1"}]},
+    {"program": "PARSEC dedup, one thread per stage, one translation unit", "log": "dedup-compiler-one-unity.log",
      "queues": [
        {"queue": "refine_que", "producers": "1", "consumers": "1"},
        {"queue": "deduplicate_que", "producers": "1", "consumers": "1"},

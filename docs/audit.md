@@ -48,9 +48,10 @@ several queues counts on each (`test/Integration/queue_via_struct.cpp`,
 is the place its constructor call builds, and that call carries its verdict
 (`queue-in-a-struct.cpp`, `queue-on-the-heap.cpp`). One call that builds two
 queues -- a struct's constructor run for two objects -- passes one tag for
-both, so neither is specialised (`struct-constructor-shared.cpp`); an
-element of an array of queues is not told apart from the others, and every
-queue of its type is unknown (`array-of-queues.cpp`). All the objects one
+both, so neither is specialised (`struct-constructor-shared.cpp`); the
+elements of an array of queues reached with an index the walk cannot read
+are one queue, every element together, whose verdict the one constructor
+call carries to each element (`array-of-queues.cpp`). All the objects one
 allocation site makes are one queue to the analysis: sound for counting,
 since the threads of each are among the threads of all, but a per-thread
 queue made in a loop is many producers' queue to it, and a declared spsc

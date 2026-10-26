@@ -1,0 +1,29 @@
+wtc: queue access is unresolvable (reached through recursion); every queue of this type is now unknown
+wtc: queue *@q_seg_extract: mpmc (producers: many, consumers: many)
+wtc: queue *@q_seg_extract: many producers: started in a loop at ferret-wtc.cpp:547:51
+wtc: queue *@q_seg_extract: many consumers: started in a loop at ferret-wtc.cpp:548:55
+wtc: queue *@q_seg_extract: producers: one thread per iteration of the loop at ferret-wtc.cpp:547:2, so one when it runs at most once
+wtc: queue *@q_seg_extract: consumers: one thread per iteration of the loop at ferret-wtc.cpp:548:2, so one when it runs at most once
+wtc: queue *@q_extract_vec: mpmc (producers: many, consumers: many)
+wtc: queue *@q_extract_vec: many producers: started in a loop at ferret-wtc.cpp:548:55
+wtc: queue *@q_extract_vec: many consumers: started in a loop at ferret-wtc.cpp:549:51
+wtc: queue *@q_extract_vec: producers: one thread per iteration of the loop at ferret-wtc.cpp:548:2, so one when it runs at most once
+wtc: queue *@q_extract_vec: consumers: one thread per iteration of the loop at ferret-wtc.cpp:549:2, so one when it runs at most once
+wtc: queue *@q_vec_rank: mpmc (producers: many, consumers: many)
+wtc: queue *@q_vec_rank: many producers: started in a loop at ferret-wtc.cpp:549:51
+wtc: queue *@q_vec_rank: many consumers: started in a loop at ferret-wtc.cpp:550:52
+wtc: queue *@q_vec_rank: producers: one thread per iteration of the loop at ferret-wtc.cpp:549:2, so one when it runs at most once
+wtc: queue *@q_vec_rank: consumers: one thread per iteration of the loop at ferret-wtc.cpp:550:2, so one when it runs at most once
+wtc: queue *@q_rank_out: mpsc (producers: many, consumers: 1)
+wtc: queue *@q_rank_out: many producers: started in a loop at ferret-wtc.cpp:550:52
+wtc: queue *@q_rank_out: producers: one thread per iteration of the loop at ferret-wtc.cpp:550:2, so one when it runs at most once
+wtc: queue *@q_load_seg: unknown (producers: 1, consumers: many)
+wtc: queue *@q_load_seg: many consumers: started in a loop at ferret-wtc.cpp:547:51
+wtc: queue *@q_seg_extract: every pop only borrows its element (1 pop)
+wtc: queue *@q_extract_vec: every pop only borrows its element (1 pop)
+wtc: queue *@q_vec_rank: every pop only borrows its element (1 pop)
+wtc: queue *@q_rank_out: every pop only borrows its element (1 pop)
+wtc: specialised at run time: spsc_inline when the loops at ferret-wtc.cpp:547:2 (producers) and ferret-wtc.cpp:548:2 (consumers) each run at most once, mpsc when only the second does, spmc when only the first does, else generic
+wtc: specialised at run time: spsc_inline when the loops at ferret-wtc.cpp:548:2 (producers) and ferret-wtc.cpp:549:2 (consumers) each run at most once, mpsc when only the second does, spmc when only the first does, else generic
+wtc: specialised at run time: spsc_inline when the loops at ferret-wtc.cpp:549:2 (producers) and ferret-wtc.cpp:550:2 (consumers) each run at most once, mpsc when only the second does, spmc when only the first does, else generic
+wtc: specialised at run time: spsc_inline when the loop at ferret-wtc.cpp:550:2 (producers) runs at most once, else mpsc

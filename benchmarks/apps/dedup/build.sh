@@ -17,6 +17,10 @@
 #   dedup-compiler-flat-one-unity  the same with dedup's main in the
 #                            encoder's translation unit: what it would see
 #                            if, besides, it saw the whole program
+#   dedup-compiler-unity     the port as written, arrays of queues and
+#                            threads per stage from argv, with main in the
+#                            encoder's translation unit: the arrays alone
+#   dedup-compiler-one-unity the same with one spawn per stage
 #
 #   build.sh <parsec-dir> <out-dir>
 #
@@ -73,6 +77,8 @@ build hand-one           --no-specialize -DDEDUP_ONE -DDEDUP_HAND_TAG=spsc_inlin
 build hand-spsc-one      --no-specialize -DDEDUP_ONE -DDEDUP_HAND_TAG=spsc
 build compiler-flat-one  -DDEDUP_FLAT -DDEDUP_ONE
 OBJS=${OTHERS/obj\/dedup.o /} build compiler-flat-one-unity -DDEDUP_FLAT -DDEDUP_ONE -DDEDUP_UNITY
+OBJS=${OTHERS/obj\/dedup.o /} build compiler-unity -DDEDUP_UNITY
+OBJS=${OTHERS/obj\/dedup.o /} build compiler-one-unity -DDEDUP_ONE -DDEDUP_UNITY
 # TSAN=1 adds the compiler's builds under ThreadSanitizer, every file
 # instrumented, for the safety question: the build as written, whose
 # queues stay general, and the one translation unit whose proved queues

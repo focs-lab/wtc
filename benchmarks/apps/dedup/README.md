@@ -28,15 +28,19 @@ producer. The other files are PARSEC's, compiled as C.
 
 | build | what the analysis says | why |
 |---|---|---|
-| as written | every queue unknown | the queue is an element of an array |
-| queues as globals (`DEDUP_FLAT`) | every queue `mpmc` | the threads start in `Encode`, which only `main`, in another file, calls: from this file it may run any number of times |
-| the same with `main` in this file (`DEDUP_UNITY`) | refine, deduplicate, compress `spsc`; reorder `mpsc` | what a reader would say |
+| as written | every queue `mpmc` | each array of queues is counted as one queue, every element together; the threads start in `Encode`, which only `main`, in another file, calls: from this file it may run any number of times |
+| queues as globals (`DEDUP_FLAT`) | every queue `mpmc` | the same: `Encode` is called only from another file |
+| the arrays kept, `main` in this file (`DEDUP_UNITY`) | with one thread per stage, refine, deduplicate, compress `spsc`; reorder `mpsc`; with threads per stage from `argv`, what a reader would say at any count | the union over each array's elements is what a reader would say, since every element of an array has the same threads |
+| queues as globals, `main` in this file (`DEDUP_FLAT DEDUP_UNITY`) | the same as the arrays kept | what a reader would say |
 
 Every verdict is sound: the reorder queue has two producing stages at any
-thread count, and nothing proved wrong is specialised. The three steps
+thread count, and nothing proved wrong is specialised. The builds
 locate dedup's two obstacles, arrays of queues and a program spread over
-several files. In the last build the three queues become inline rings,
-the tags an expert would write by hand: the one pop, inside the helper
+several files. Before arrays of queues were counted as one (26 Oct), the
+build as written got no verdict at all: every queue was an element of an
+array indexed at run time. In the one-file builds with one thread per
+stage the three queues become inline rings, the tags an expert would
+write by hand: the one pop, inside the helper
 every stage calls, is checked as a pop of each queue it may act on, and
 every stage copies its element out before the next pop. The reorder queue,
 two stages into one, becomes the shim's list for many producers.
