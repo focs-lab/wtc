@@ -319,6 +319,18 @@ public:
     // touches as shared between them.
     bool exclusive(unsigned threadA, unsigned threadB) const;
 
+    // Whether each of two accounted-for threads is started under a
+    // condition the other's start is not under -- `if (!f) spawn(a); ...
+    // if (f) spawn(b);` -- so that the two conditions may never hold
+    // together and nothing shows that both threads exist. The conditions
+    // are any if, ternary or switch case between the function that started
+    // them both, below the point where their paths part, and each spawn,
+    // in that function and in the callees on the way. Two ifs on one local
+    // with the same sense and no write between are one condition, not two.
+    // Neither exclusive nor
+    // the opposite of it: a claim that two threads both exist asks here.
+    bool bothConditional(unsigned threadA, unsigned threadB) const;
+
     // How many instances the walk created for f. A stack slot of f is one
     // object only if f ran once.
     unsigned instanceCount(cir::FuncOp f) const;

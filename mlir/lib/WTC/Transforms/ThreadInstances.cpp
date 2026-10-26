@@ -177,6 +177,134 @@ bool ThreadInstanceWalk::exclusive(unsigned threadA, unsigned threadB) const {
     return false;
 }
 
+bool ThreadInstanceWalk::bothConditional(unsigned threadA, unsigned threadB) const {
+    const Instance *a = threadRoot_.lookup(threadA), *b = threadRoot_.lookup(threadB);
+    if (!a || !b || !a->site || !b->site) return false;
+    llvm::DenseMap<const Instance *, const Instance *> childOnA;
+    for (const Instance *i = a; i->parent; i = i->parent) childOnA[i->parent] = i;
+    const Instance *common = nullptr, *childB = nullptr;
+    for (const Instance *i = b; i->parent; i = i->parent)
+        if (childOnA.count(i->parent)) { common = i->parent; childB = i; break; }
+    if (!common) return false;
+    const Instance *childA = childOnA.lookup(common);
+    auto conditional = [](Operation *holder) { return isa<cir::IfOp, cir::TernaryOp, cir::CaseOp>(holder); };
+    // A condition inside a callee on the way down from the common function.
+    auto underCondition = [&](const Instance *leaf, const Instance *stop) {
+        for (const Instance *i = leaf; i && i != stop && i->parent; i = i->parent) {
+            llvm::SmallVector<std::pair<Operation *, unsigned>, 8> path;
+            regionPath(cir::CallOp(i->site).getOperation(), i->parent->func, path);
+            if (llvm::any_of(path, [&](const auto &h) { return conditional(h.first); })) return true;
+        }
+        return false;
+    };
+    llvm::SmallVector<std::pair<Operation *, unsigned>, 8> pa, pb;
+    regionPath(cir::CallOp(childA->site).getOperation(), common->func, pa);
+    regionPath(cir::CallOp(childB->site).getOperation(), common->func, pb);
+    size_t i = 0;
+    while (i < pa.size() && i < pb.size() && pa[i] == pb[i]) ++i;
+    auto below = [&](const auto &path) {
+        for (size_t j = i; j < path.size(); ++j)
+            if (conditional(path[j].first)) return true;
+        return false;
+    };
+    if (!(below(pa) || underCondition(a, childA)) || !(below(pb) || underCondition(b, childB))) return false;
+    // `if (n) spawn(a); if (n) spawn(b);`: two ifs side by side on one
+    // local, same sense, nothing else conditional on either way down, and
+    // the local written only before both tests and never published. Then
+    // both threads start or neither does, and that is no condition of its
+    // own.
+    auto sameTest = [&]() {
+        if (i >= pa.size() || i >= pb.size()) return false;
+        // The if on each path, below statement scopes only.
+        auto ifOn = [&](const auto &path) -> std::pair<cir::IfOp, unsigned> {
+            size_t j = i;
+            while (j < path.size() && isa<cir::ScopeOp>(path[j].first)) ++j;
+            if (j >= path.size()) return {};
+            for (size_t k = j + 1; k < path.size(); ++k)
+                if (conditional(path[k].first)) return {};
+            return {dyn_cast<cir::IfOp>(path[j].first), path[j].second};
+        };
+        auto [ia, ra] = ifOn(pa);
+        auto [ib, rb] = ifOn(pb);
+        if (!ia || !ib || ia == ib || ra != rb) return false;
+        if (underCondition(a, childA) || underCondition(b, childB)) return false;
+        // The local itself tested, not a narrowing of it: `(char)n` and
+        // `n` differ in truth.
+        auto loadOf = [](Value c) {
+            if (auto cc = c.getDefiningOp<cir::CastOp>();
+                cc && (cc.getKind() == cir::CastKind::int_to_bool || cc.getKind() == cir::CastKind::ptr_to_bool))
+                c = cc.getSrc();
+            return c.getDefiningOp<cir::LoadOp>();
+        };
+        cir::LoadOp la = loadOf(ia.getCondition()), lb = loadOf(ib.getCondition());
+        if (!la || !lb || la.getAddr() != lb.getAddr()) return false;
+        auto slot = la.getAddr().getDefiningOp<cir::AllocaOp>();
+        if (!slot || addressEscapes(slot)) return false;
+        // Program order, read in the block where the two paths part.
+        Block *where = pa[i].first->getBlock();
+        auto inBlock = [&](Operation *op) -> Operation * {
+            for (Operation *p = op; p; p = p->getParentOp())
+                if (p->getBlock() == where) return p;
+            return nullptr;
+        };
+        Operation *ta = inBlock(la), *tb = inBlock(lb);
+        if (!ta || !tb || ta == tb) return false;
+        Operation *firstTest = ta->isBeforeInBlock(tb) ? ta : tb;
+        Operation *secondTest = firstTest == ta ? tb : ta;
+        for (Operation *u : slot->getUsers()) {
+            if (isa<cir::LoadOp>(u)) continue;
+            Operation *w = inBlock(u);
+            if (!w || w == firstTest || !w->isBeforeInBlock(firstTest)) return false;
+        }
+        // And control reaches the second test from the first: nothing from
+        // the first up to the second leaves -- a return, break, continue,
+        // goto or throw, or a call that does not return, here or in a body
+        // it calls -- and the function's flow is what its regions show.
+        if (isUnstructured(common->func)) return false;
+        llvm::DenseSet<Operation *> seen;
+        std::function<bool(Operation *, unsigned)> leaves = [&](Operation *top, unsigned depth) {
+            bool out = false;
+            top->walk([&](Operation *op) {
+                if (out) return WalkResult::interrupt();
+                // In a callee, a return ends only the callee, and a break,
+                // continue or goto stays inside it. An exception is not
+                // followed there: the C++ library's own throws and
+                // terminate, on its error paths, are not exits of the
+                // program's choosing, and an exception that escapes stops
+                // the second start as well.
+                if (depth == 0 && isa<cir::ReturnOp, cir::BreakOp, cir::ContinueOp, cir::GotoOp, cir::ThrowOp>(op))
+                    out = true;
+                if (auto call = dyn_cast<cir::CallOp>(op)) {
+                    cir::FuncOp f = call.isIndirect() ? cir::FuncOp() : lookupCallee(call);
+                    const bool noReturn = call->hasAttr("noreturn") || (f && f->hasAttr("noreturn"));
+                    const StringRef n = f ? f.getSymName() : StringRef();
+                    const bool libraryThrow = depth > 0 && (n.starts_with("_ZSt") || n.starts_with("__cxa_"));
+                    // An indirect call in the code between the tests may go
+                    // anywhere; one in a callee is taken to return, as a
+                    // call with no body is.
+                    if ((!f && depth == 0) || (noReturn && !libraryThrow)) { out = true; return WalkResult::interrupt(); }
+                    if (!f) return WalkResult::advance();
+                    // The C++ library and the WTC shim are taken to return
+                    // as they say; the program's own bodies are read.
+                    const bool library = n.starts_with("_ZNSt") || n.starts_with("_ZNKSt") ||
+                                         n.starts_with("_ZSt") || n.starts_with("_ZN3wtc") ||
+                                         n.starts_with("_ZNK3wtc");
+                    if (!library && !f.getBody().empty() && seen.insert(f).second) {
+                        if (depth >= 8) { out = true; return WalkResult::interrupt(); }
+                        if (leaves(f, depth + 1)) out = true;
+                    }
+                }
+                return out ? WalkResult::interrupt() : WalkResult::advance();
+            });
+            return out;
+        };
+        for (Operation *op = firstTest; op && op != secondTest; op = op->getNextNode())
+            if (leaves(op, 0)) return false;
+        return true;
+    };
+    return !sameTest();
+}
+
 // Whether a spawn's entry operand is a parameter of the function it sits
 // in, through casts and single-assignment slots: then a caller decides the
 // entry, and only a walk that knows the caller can resolve it.

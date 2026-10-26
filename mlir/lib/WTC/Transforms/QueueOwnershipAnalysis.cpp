@@ -1055,7 +1055,7 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
     }
     // Certainly broken: on one side, two threads the module accounts for
     // that can both exist, or one that certainly stands for several.
-    const char *exclusiveSide = nullptr;
+    const char *exclusiveSide = nullptr, *conditionalSide = nullptr;
     for (const SideInfo *side : {&info.producers, &info.consumers}) {
         if (summary) break;
         const bool pushes = side == &info.producers;
@@ -1071,12 +1071,22 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
         // Threads started on different arms of one branch cannot both
         // exist (ThreadInstanceWalk::exclusive), and two of those are no
         // proof of two producers.
-        bool coexist = false;
+        // Two threads each started under a condition of its own may be
+        // exclusive too, by conditions the walk does not compare -- `if (!f)
+        // spawn(a); ... if (f) spawn(b);` -- and are no proof either.
+        bool coexist = false, conditional = false;
         for (size_t i = 0; i < firstOfThread.size() && !coexist; ++i)
-            for (size_t j = i + 1; j < firstOfThread.size() && !coexist; ++j)
-                coexist = !walk->exclusive(firstOfThread[i]->thread, firstOfThread[j]->thread);
+            for (size_t j = i + 1; j < firstOfThread.size() && !coexist; ++j) {
+                const unsigned ta = firstOfThread[i]->thread, tb = firstOfThread[j]->thread;
+                if (walk->exclusive(ta, tb)) continue;
+                if (walk->bothConditional(ta, tb)) { conditional = true; continue; }
+                coexist = true;
+            }
         if (!certainMany && !coexist) {
-            if (firstOfThread.size() >= 2) exclusiveSide = pushes ? "push to it" : "pop from it";
+            if (firstOfThread.size() >= 2) {
+                const char *what = pushes ? "push to it" : "pop from it";
+                (conditional ? conditionalSide : exclusiveSide) = what;
+            }
             continue;
         }
         InFlightDiagnostic d = at->emitError()
@@ -1111,6 +1121,9 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
     else if (llvm::any_of(info.producers.accesses, [](const Access &a) { return a.oneOf; }) ||
              llvm::any_of(info.consumers.accesses, [](const Access &a) { return a.oneOf; }))
         w << "an operation may act on it or on another queue";
+    else if (conditionalSide)
+        w << "the threads that " << conditionalSide << " are each started under a condition of its own, "
+          << "and whether the conditions can hold together is not known";
     else if (exclusiveSide)
         w << "the threads that " << exclusiveSide << " are started on different arms of one branch, so "
           << "at most one of them exists, which the count does not tell";
