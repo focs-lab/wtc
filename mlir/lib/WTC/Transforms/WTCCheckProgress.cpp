@@ -85,6 +85,11 @@ public:
     explicit ProgressChecker(ModuleOp module) : module(module) { collectExemptions(); }
 
     std::optional<Finding> blockingIn(cir::FuncOp f);
+    // Every operation of f's own body that can block, each with the first
+    // chain found below it: one report per blocking site, not only the
+    // first, since a real function usually has several and a reader fixes
+    // them one by one.
+    llvm::SmallVector<Finding> blockingSitesIn(cir::FuncOp f);
 
 private:
     ModuleOp module;
@@ -174,6 +179,33 @@ std::optional<Finding> ProgressChecker::blockingIn(cir::FuncOp f) {
     return found;
 }
 
+llvm::SmallVector<Finding> ProgressChecker::blockingSitesIn(cir::FuncOp f) {
+    llvm::SmallVector<Finding> sites;
+    // A site is reported once per distinct chain of source locations and
+    // reason. Distinct calls inside one macro expansion share a location
+    // (spdlog's catch clauses expand to several calls at one line) and are
+    // merged; that changes how many notes repeat a finding, never whether
+    // the function is reported.
+    llvm::StringSet<> seen;
+    auto key = [](const Finding &found) {
+        std::string k;
+        llvm::raw_string_ostream os(k);
+        for (Operation *call : found.chain) os << call->getLoc() << ';';
+        os << found.leaf->getLoc() << ';' << found.why;
+        return k;
+    };
+    // f is marked as being walked so that a call back into it is a cycle,
+    // whose sites this walk reports itself; f's own answer is not memoised.
+    inProgress.insert(f);
+    f.walk([&](Operation *op) {
+        if (auto found = blockingAt(op))
+            if (seen.insert(key(*found)).second) sites.push_back(*found);
+    });
+    inProgress.erase(f);
+    metCycle = false;
+    return sites;
+}
+
 class WTCCheckProgressPass : public PassWrapper<WTCCheckProgressPass, OperationPass<ModuleOp>> {
 public:
     MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(WTCCheckProgressPass)
@@ -195,19 +227,26 @@ public:
         module.walk([&](cir::FuncOp f) {
             if (!hasAnnotation(f, "wtc_progress_lock_free") || f.getBody().empty()) return;
             const std::string name = llvm::demangle(f.getSymName().str());
-            auto found = checker.blockingIn(f);
-            if (!found) {
+            auto sites = checker.blockingSitesIn(f);
+            if (sites.empty()) {
                 f.emitRemark() << "wtc: " << name << " is declared lock-free: nothing it reaches blocks";
                 return;
             }
             failed = true;
             InFlightDiagnostic d = f.emitError() << "wtc: " << name << " is declared lock-free but can block";
-            for (auto [call, target] : llvm::zip(found->chain, found->via)) {
-                const bool indirect = !lookupCallee(cast<cir::CallOp>(call));
-                d.attachNote(call->getLoc()) << "calls " << llvm::demangle(target.getSymName().str())
-                                             << (indirect ? " through a pointer" : "");
+            // Enough chains to act on; the rest are counted, not listed.
+            constexpr size_t kMaxSites = 8;
+            for (Finding &found : llvm::MutableArrayRef(sites).take_front(kMaxSites)) {
+                for (auto [call, target] : llvm::zip(found.chain, found.via)) {
+                    const bool indirect = !lookupCallee(cast<cir::CallOp>(call));
+                    d.attachNote(call->getLoc()) << "calls " << llvm::demangle(target.getSymName().str())
+                                                 << (indirect ? " through a pointer" : "");
+                }
+                d.attachNote(found.leaf->getLoc()) << "which " << found.why;
             }
-            d.attachNote(found->leaf->getLoc()) << "which " << found->why;
+            if (const size_t more = sites.size() > kMaxSites ? sites.size() - kMaxSites : 0)
+                d.attachNote(f.getLoc()) << "and " << more << " more blocking site"
+                                         << (more == 1 ? "" : "s") << ", not shown";
         });
         if (failed) signalPassFailure();
         markAllAnalysesPreserved();
