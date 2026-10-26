@@ -1,0 +1,125 @@
+threadcensus: 248932 mutexes, 1007019 acquisitions (0 on mutexes the table could not hold; table of 1048576)
+single-thread mutexes: 33785 of 248932; their acquisitions: 37486 of 1007019 (3.7%)
+acquisitions on mutexes with more than 8 threads (count not kept): 41461
+
+top 20 by acquisitions (address, acquisitions, threads, first event's stack):
+
+0x7ff723180978  198093  8
+dedup-orig: sub_Deduplicate
+dedup-orig: Deduplicate
+libc.so.6(+0x9cb84)[0x7ff73b704b84]
+libc.so.6(__clone+0x44)[0x7ff73b791cc4]
+
+0x7ff6ec0013b8  198093  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7ff73b704b84]
+libc.so.6(__clone+0x44)[0x7ff73b791cc4]
+
+0x55c605b82948  20952  >8
+dedup-orig: queue_dequeue
+dedup-orig: Reorder
+libc.so.6(+0x9cb84)[0x7ff73b704b84]
+libc.so.6(__clone+0x44)[0x7ff73b791cc4]
+
+0x55c605b82688  20934  8
+dedup-orig: queue_dequeue
+dedup-orig: Deduplicate
+libc.so.6(+0x9cb84)[0x7ff73b704b84]
+libc.so.6(__clone+0x44)[0x7ff73b791cc4]
+
+0x55c605b828a0  20509  >8
+dedup-orig: queue_dequeue
+dedup-orig: Reorder
+libc.so.6(+0x9cb84)[0x7ff73b704b84]
+libc.so.6(__clone+0x44)[0x7ff73b791cc4]
+
+0x55c605b825e0  19112  8
+dedup-orig: queue_dequeue
+dedup-orig: Deduplicate
+libc.so.6(+0x9cb84)[0x7ff73b704b84]
+libc.so.6(__clone+0x44)[0x7ff73b791cc4]
+
+0x55c605b82a00  8447  8
+dedup-orig: queue_dequeue
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7ff73b704b84]
+libc.so.6(__clone+0x44)[0x7ff73b791cc4]
+
+0x55c605b82aa8  8418  8
+dedup-orig: queue_dequeue
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7ff73b704b84]
+libc.so.6(__clone+0x44)[0x7ff73b791cc4]
+
+0x7ff723462cb8  1138  8
+dedup-orig: sub_Deduplicate
+dedup-orig: Deduplicate
+libc.so.6(+0x9cb84)[0x7ff73b704b84]
+libc.so.6(__clone+0x44)[0x7ff73b791cc4]
+
+0x7ff6e402f788  1138  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7ff73b704b84]
+libc.so.6(__clone+0x44)[0x7ff73b791cc4]
+
+0x7ff7234673d0  241  8
+dedup-orig: sub_Deduplicate
+dedup-orig: Deduplicate
+libc.so.6(+0x9cb84)[0x7ff73b704b84]
+libc.so.6(__clone+0x44)[0x7ff73b791cc4]
+
+0x7ff6c406b578  241  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7ff73b704b84]
+libc.so.6(__clone+0x44)[0x7ff73b791cc4]
+
+0x7ff7233373e8  221  8
+dedup-orig: sub_Deduplicate
+dedup-orig: Deduplicate
+libc.so.6(+0x9cb84)[0x7ff73b704b84]
+libc.so.6(__clone+0x44)[0x7ff73b791cc4]
+
+0x7ff6c406b4a8  220  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7ff73b704b84]
+libc.so.6(__clone+0x44)[0x7ff73b791cc4]
+
+0x55c605b827e8  197  5
+dedup-orig: queue_dequeue
+dedup-orig: FragmentRefine
+libc.so.6(+0x9cb84)[0x7ff73b704b84]
+libc.so.6(__clone+0x44)[0x7ff73b791cc4]
+
+0x55c605b82740  196  5
+dedup-orig: queue_dequeue
+dedup-orig: FragmentRefine
+libc.so.6(+0x9cb84)[0x7ff73b704b84]
+libc.so.6(__clone+0x44)[0x7ff73b791cc4]
+
+0x7ff72329afe8  131  6
+dedup-orig: sub_Deduplicate
+dedup-orig: Deduplicate
+libc.so.6(+0x9cb84)[0x7ff73b704b84]
+libc.so.6(__clone+0x44)[0x7ff73b791cc4]
+
+0x7ff6e8228498  129  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7ff73b704b84]
+libc.so.6(__clone+0x44)[0x7ff73b791cc4]
+
+0x7ff7231bc8b0  102  8
+dedup-orig: sub_Deduplicate
+dedup-orig: Deduplicate
+libc.so.6(+0x9cb84)[0x7ff73b704b84]
+libc.so.6(__clone+0x44)[0x7ff73b791cc4]
+
+0x7ff6e808c0b8  101  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7ff73b704b84]
+libc.so.6(__clone+0x44)[0x7ff73b791cc4]

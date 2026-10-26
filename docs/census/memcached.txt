@@ -1,70 +1,159 @@
-threadcensus: 2840 mutexes, 1808264 acquisitions (0 on mutexes the table could not hold; table of 1048576)
-single-thread mutexes: 1539 of 2840; their acquisitions: 1163201 of 1808264 (64.3%)
+threadcensus: 2840 mutexes, 1780928 acquisitions (0 on mutexes the table could not hold; table of 1048576)
+single-thread mutexes: 1539 of 2840; their acquisitions: 1156609 of 1780928 (64.9%)
 
-top 20 by acquisitions (address, acquisitions, threads, first acquisition's stack):
+top 20 by acquisitions (address, acquisitions, threads, first event's stack):
 
-0x561e4f31abe8  250001  1
-.apps/census/memcached/memcached(+0xd133)[0x561e2c178133]
-/lib/x86_64-linux-gnu/libevent-2.1.so.7(+0x20ae8)[0x7f690f6cbae8]
-/lib/x86_64-linux-gnu/libevent-2.1.so.7(event_base_loop+0x4af)[0x7f690f6cd46f]
-.apps/census/memcached/memcached(+0x1848e)[0x561e2c18348e]
-/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f690f534b84]
-/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f690f5c1cc4]
+0x56422eedebc8  250001  1
+memcached: try_read_network (memcached.c:2474)
+libevent-2.1.so.7(+0x20ae8)[0x7fa866ee7ae8]
+libevent-2.1.so.7(event_base_loop+0x4af)[0x7fa866ee946f]
+memcached: worker_libevent (thread.c:525)
+libc.so.6(+0x9cb84)[0x7fa866d50b84]
+libc.so.6(__clone+0x44)[0x7fa866dddcc4]
 
-0x561e4f31c738  250001  1
-.apps/census/memcached/memcached(+0xd133)[0x561e2c178133]
-/lib/x86_64-linux-gnu/libevent-2.1.so.7(+0x20ae8)[0x7f690f6cbae8]
-/lib/x86_64-linux-gnu/libevent-2.1.so.7(event_base_loop+0x4af)[0x7f690f6cd46f]
-.apps/census/memcached/memcached(+0x1848e)[0x561e2c18348e]
-/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f690f534b84]
-/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f690f5c1cc4]
+0x56422eee0718  250001  1
+memcached: try_read_network (memcached.c:2474)
+libevent-2.1.so.7(+0x20ae8)[0x7fa866ee7ae8]
+libevent-2.1.so.7(event_base_loop+0x4af)[0x7fa866ee946f]
+memcached: worker_libevent (thread.c:525)
+libc.so.6(+0x9cb84)[0x7fa866d50b84]
+libc.so.6(__clone+0x44)[0x7fa866dddcc4]
 
-0x561e4f31e288  250001  1
-.apps/census/memcached/memcached(+0xd133)[0x561e2c178133]
-/lib/x86_64-linux-gnu/libevent-2.1.so.7(+0x20ae8)[0x7f690f6cbae8]
-/lib/x86_64-linux-gnu/libevent-2.1.so.7(event_base_loop+0x4af)[0x7f690f6cd46f]
-.apps/census/memcached/memcached(+0x1848e)[0x561e2c18348e]
-/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f690f534b84]
-/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f690f5c1cc4]
+0x56422eee2268  250001  1
+memcached: try_read_network (memcached.c:2474)
+libevent-2.1.so.7(+0x20ae8)[0x7fa866ee7ae8]
+libevent-2.1.so.7(event_base_loop+0x4af)[0x7fa866ee946f]
+memcached: worker_libevent (thread.c:525)
+libc.so.6(+0x9cb84)[0x7fa866d50b84]
+libc.so.6(__clone+0x44)[0x7fa866dddcc4]
 
-0x561e4f31fdd8  250001  1
-.apps/census/memcached/memcached(+0xd133)[0x561e2c178133]
-/lib/x86_64-linux-gnu/libevent-2.1.so.7(+0x20ae8)[0x7f690f6cbae8]
-/lib/x86_64-linux-gnu/libevent-2.1.so.7(event_base_loop+0x4af)[0x7f690f6cd46f]
-.apps/census/memcached/memcached(+0x1848e)[0x561e2c18348e]
-/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f690f534b84]
-/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f690f5c1cc4]
+0x56422eee3db8  250001  1
+memcached: try_read_network (memcached.c:2474)
+libevent-2.1.so.7(+0x20ae8)[0x7fa866ee7ae8]
+libevent-2.1.so.7(event_base_loop+0x4af)[0x7fa866ee946f]
+memcached: worker_libevent (thread.c:525)
+libc.so.6(+0x9cb84)[0x7fa866d50b84]
+libc.so.6(__clone+0x44)[0x7fa866dddcc4]
 
-0x561e2c1be918  98787  8
-.apps/census/memcached/memcached(+0x1394e)[0x561e2c17e94e]
-.apps/census/memcached/memcached(+0x1eda9)[0x561e2c189da9]
-.apps/census/memcached/memcached(+0x20309)[0x561e2c18b309]
-.apps/census/memcached/memcached(+0x7cfb)[0x561e2c172cfb]
-/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f690f4c21ca]
-/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f690f4c228b]
-.apps/census/memcached/memcached(+0x8b55)[0x561e2c173b55]
+0x5641f8ef2918  95498  8
+memcached: fill_item_stats_automove (items.c:707)
+memcached: slab_automove_init (slab_automove.c:49)
+memcached: start_slab_maintenance_thread (slabs_mover.c:785)
+memcached: main (memcached.c:6083)
+libc.so.6(+0x2a1ca)[0x7fa866cde1ca]
+libc.so.6(__libc_start_main+0x8b)[0x7fa866cde28b]
+memcached: _start
 
-0x561e2c1bd518  79187  8
-.apps/census/memcached/memcached(+0x13916)[0x561e2c17e916]
-.apps/census/memcached/memcached(+0x1eda9)[0x561e2c189da9]
-.apps/census/memcached/memcached(+0x20309)[0x561e2c18b309]
-.apps/census/memcached/memcached(+0x7cfb)[0x561e2c172cfb]
-/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f690f4c21ca]
-/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f690f4c228b]
-.apps/census/memcached/memcached(+0x8b55)[0x561e2c173b55]
+0x5641f8ef1518  75898  8
+memcached: fill_item_stats_automove (items.c:701)
+memcached: slab_automove_init (slab_automove.c:49)
+memcached: start_slab_maintenance_thread (slabs_mover.c:785)
+memcached: main (memcached.c:6083)
+libc.so.6(+0x2a1ca)[0x7fa866cde1ca]
+libc.so.6(__libc_start_main+0x8b)[0x7fa866cde28b]
+memcached: _start
 
-0x561e2c1afc60  63753  7
-.apps/census/memcached/memcached(+0x12afd)[0x561e2c17dafd]
-.apps/census/memcached/memcached(+0x1edb5)[0x561e2c189db5]
-.apps/census/memcached/memcached(+0x20309)[0x561e2c18b309]
-.apps/census/memcached/memcached(+0x7cfb)[0x561e2c172cfb]
-/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f690f4c21ca]
-/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f690f4c228b]
-.apps/census/memcached/memcached(+0x8b55)[0x561e2c173b55]
+0x5641f8ee3c60  61983  7
+memcached: slabs_available_chunks (slabs.c:704)
+memcached: lru_maintainer_juggle (items.c:1378)
+libc.so.6(+0x9cb84)[0x7fa866d50b84]
+libc.so.6(__clone+0x44)[0x7fa866dddcc4]
 
-0x561e2c1bfd80  59206  8
-.apps/census/memcached/memcached(+0x1797d)[0x561e2c18297d]
-.apps/census/memcached/memcached(+0x79cd)[0x561e2c1729cd]
-/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f690f4c21ca]
-/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f690f4c228b]
-.apps/census/memcached/memcached(+0x8b55)[0x561e2c173b55]
+0x5641f8ef3d80  57558  8
+memcached: assoc_init (assoc.c:64)
+memcached: main (memcached.c:5986)
+libc.so.6(+0x2a1ca)[0x7fa866cde1ca]
+libc.so.6(__libc_start_main+0x8b)[0x7fa866cde28b]
+memcached: _start
+
+0x5641f8ef1f18  35875  2
+memcached: lru_maintainer_juggle (items.c:1412)
+libc.so.6(+0x9cb84)[0x7fa866d50b84]
+libc.so.6(__clone+0x44)[0x7fa866dddcc4]
+
+0x5641f8ee4f20  20000  4
+memcached: get_cas_id (items.c:105)
+memcached: complete_nread_ascii (proto_text.c:163)
+memcached: complete_nread (memcached.c:1433)
+libevent-2.1.so.7(+0x20ae8)[0x7fa866ee7ae8]
+libevent-2.1.so.7(event_base_loop+0x4af)[0x7fa866ee946f]
+memcached: worker_libevent (thread.c:525)
+libc.so.6(+0x9cb84)[0x7fa866d50b84]
+libc.so.6(__clone+0x44)[0x7fa866dddcc4]
+
+0x5641f8ee4ee0  17941  5
+memcached: lru_bump_buf_link_q (items.c:1256)
+memcached: worker_libevent (thread.c:514)
+libc.so.6(+0x9cb84)[0x7fa866d50b84]
+libc.so.6(__clone+0x44)[0x7fa866dddcc4]
+
+0x5641f8ee4f60  17940  2
+memcached: start_lru_maintainer_thread (items.c:1652)
+memcached: main (memcached.c:6073)
+libc.so.6(+0x2a1ca)[0x7fa866cde1ca]
+libc.so.6(__libc_start_main+0x8b)[0x7fa866cde28b]
+memcached: _start
+
+0x7fa844010c10  17937  1
+memcached: lru_maintainer_bumps (items.c:1323)
+libc.so.6(+0x9cb84)[0x7fa866d50b84]
+libc.so.6(__clone+0x44)[0x7fa866dddcc4]
+
+0x7fa83c010c10  17937  1
+memcached: lru_maintainer_bumps (items.c:1323)
+libc.so.6(+0x9cb84)[0x7fa866d50b84]
+libc.so.6(__clone+0x44)[0x7fa866dddcc4]
+
+0x7fa840010c10  17937  1
+memcached: lru_maintainer_bumps (items.c:1323)
+libc.so.6(+0x9cb84)[0x7fa866d50b84]
+libc.so.6(__clone+0x44)[0x7fa866dddcc4]
+
+0x7fa838010c10  17937  1
+memcached: lru_maintainer_bumps (items.c:1323)
+libc.so.6(+0x9cb84)[0x7fa866d50b84]
+libc.so.6(__clone+0x44)[0x7fa866dddcc4]
+
+0x7fa84e3dc550  885  4
+memcached: item_lock (thread.c:118)
+memcached: limited_get (memcached.c:2191)
+memcached: process_get_cmd (proto_parser.c:660)
+memcached: process_get_command (proto_text.c:453)
+memcached: process_command_ascii (proto_text.c:1582)
+memcached: try_read_command_ascii (proto_text.c:401)
+memcached: drive_machine (memcached.c:3099)
+libevent-2.1.so.7(+0x20ae8)[0x7fa866ee7ae8]
+libevent-2.1.so.7(event_base_loop+0x4af)[0x7fa866ee946f]
+memcached: worker_libevent (thread.c:525)
+
+0x7fa84e3dd9a0  858  3
+memcached: item_lock (thread.c:118)
+memcached: limited_get (memcached.c:2191)
+memcached: process_get_cmd (proto_parser.c:660)
+memcached: process_get_command (proto_text.c:453)
+memcached: process_command_ascii (proto_text.c:1582)
+memcached: try_read_command_ascii (proto_text.c:401)
+memcached: drive_machine (memcached.c:3099)
+libevent-2.1.so.7(+0x20ae8)[0x7fa866ee7ae8]
+libevent-2.1.so.7(event_base_loop+0x4af)[0x7fa866ee946f]
+memcached: worker_libevent (thread.c:525)
+
+0x7fa84e3fb8d8  809  2
+memcached: item_lock (thread.c:118)
+memcached: complete_nread_ascii (proto_text.c:163)
+memcached: complete_nread (memcached.c:1433)
+libevent-2.1.so.7(+0x20ae8)[0x7fa866ee7ae8]
+libevent-2.1.so.7(event_base_loop+0x4af)[0x7fa866ee946f]
+memcached: worker_libevent (thread.c:525)
+libc.so.6(+0x9cb84)[0x7fa866d50b84]
+libc.so.6(__clone+0x44)[0x7fa866dddcc4]
+
+0x7fa84e3dd338  760  3
+memcached: item_lock (thread.c:118)
+memcached: complete_nread_ascii (proto_text.c:163)
+memcached: complete_nread (memcached.c:1433)
+libevent-2.1.so.7(+0x20ae8)[0x7fa866ee7ae8]
+libevent-2.1.so.7(event_base_loop+0x4af)[0x7fa866ee946f]
+memcached: worker_libevent (thread.c:525)
+libc.so.6(+0x9cb84)[0x7fa866d50b84]
+libc.so.6(__clone+0x44)[0x7fa866dddcc4]

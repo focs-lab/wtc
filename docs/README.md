@@ -9,7 +9,7 @@
 | `mvp.md` | What the compiler does now, with a command and its remarks for each transformation |
 | `evaluation.md` | The evaluation: its questions, baselines and method, the results so far, and the threats to them |
 | `corpus.md` | What people pad by hand, counted across 17 codebases, and what the false-sharing analysis finds on memcached |
-| `census-dynamic.md` | Which mutexes only one thread takes, counted at run time in five programs: the ceiling for removing a mutex by proving it confined |
+| `census-dynamic.md` | Which mutexes and `shared_ptr` counts only one thread touches, counted at run time in six programs under two loads each: the ceiling for removing a mutex or an atomic count by proving the object confined |
 | `related-work.md` | What the compiler does against where each technique was done before, claim by claim, with checked citations; papers collected earlier are under `related-works/` |
 | `declared-topology-audit.md` | Hand-declared queue topologies read in DPDK's examples and in users of four SPSC libraries: which hold, which only by convention, and what a compiler check needs |
 | `correctness.md` | Why substituting a queue preserves the program: one lemma per implementation under its precondition, the facts the analyses must prove, and what is assumed rather than derived |

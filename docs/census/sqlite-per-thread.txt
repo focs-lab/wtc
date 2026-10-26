@@ -1,0 +1,114 @@
+threadcensus: 13 mutexes, 428402 acquisitions (0 on mutexes the table could not hold; table of 1048576)
+single-thread mutexes: 6 of 13; their acquisitions: 160172 of 428402 (37.4%)
+
+top 13 by acquisitions (address, acquisitions, threads, first event's stack):
+
+0x557f8f38a6d8  160713  5
+sqlite_driver: sqlite3_mutex_enter (sqlite3.c:28751)
+sqlite_driver: sqlite3OsShmMap (sqlite3.c:25917)
+sqlite_driver: walIndexPage (sqlite3.c:65303)
+sqlite_driver: walTryBeginRead (sqlite3.c:67553)
+sqlite_driver: walBeginReadTransaction (sqlite3.c:67876)
+sqlite_driver: lockBtree (sqlite3.c:73359)
+sqlite_driver: sqlite3VdbeExec (sqlite3.c:96590)
+sqlite_driver: sqlite3Step (sqlite3.c:90667)
+sqlite_driver: sqlite3_exec (sqlite3.c:135324)
+sqlite_driver: main (sqlite_driver.c:78)
+
+0x557f5ffbe488  100415  5
+sqlite_driver: sqlite3_mutex_enter (sqlite3.c:28751)
+sqlite_driver: sqlite3OsOpen (sqlite3.c:25959)
+sqlite_driver: openDatabase (sqlite3.c:181588)
+sqlite_driver: main (sqlite_driver.c:71)
+libc.so.6(+0x2a1ca)[0x7fdce4a771ca]
+libc.so.6(__libc_start_main+0x8b)[0x7fdce4a7728b]
+sqlite_driver: _start
+
+0x7fdcc0000e98  40032  1
+sqlite_driver: sqlite3_mutex_enter (sqlite3.c:28751)
+sqlite_driver: work (sqlite_driver.c:38)
+libc.so.6(+0x9cb84)[0x7fdce4ae9b84]
+libc.so.6(__clone+0x44)[0x7fdce4b76cc4]
+
+0x7fdcc4000e98  40032  1
+sqlite_driver: sqlite3_mutex_enter (sqlite3.c:28751)
+sqlite_driver: work (sqlite_driver.c:38)
+libc.so.6(+0x9cb84)[0x7fdce4ae9b84]
+libc.so.6(__clone+0x44)[0x7fdce4b76cc4]
+
+0x7fdcb4000e98  40032  1
+sqlite_driver: sqlite3_mutex_enter (sqlite3.c:28751)
+sqlite_driver: work (sqlite_driver.c:38)
+libc.so.6(+0x9cb84)[0x7fdce4ae9b84]
+libc.so.6(__clone+0x44)[0x7fdce4b76cc4]
+
+0x7fdcbc000e98  40031  1
+sqlite_driver: sqlite3_mutex_enter (sqlite3.c:28751)
+sqlite_driver: work (sqlite_driver.c:38)
+libc.so.6(+0x9cb84)[0x7fdce4ae9b84]
+libc.so.6(__clone+0x44)[0x7fdce4b76cc4]
+
+0x557f5ffbe348  4920  5
+sqlite_driver: sqlite3_mutex_enter (sqlite3.c:28751)
+sqlite_driver: sqlite3MallocZero (sqlite3.c:30491)
+sqlite_driver: sqlite3MutexAlloc (sqlite3.c:28731)
+sqlite_driver: sqlite3_initialize (sqlite3.c:178357)
+sqlite_driver: main (sqlite_driver.c:71)
+libc.so.6(+0x2a1ca)[0x7fdce4a771ca]
+libc.so.6(__libc_start_main+0x8b)[0x7fdce4a7728b]
+sqlite_driver: _start
+
+0x557f5ffbe3e8  2096  5
+sqlite_driver: sqlite3_mutex_enter (sqlite3.c:28751)
+sqlite_driver: sqlite3PageMalloc (sqlite3.c:55239)
+sqlite_driver: sqlite3PagerOpen (sqlite3.c:61688)
+sqlite_driver: openDatabase (sqlite3.c:181588)
+sqlite_driver: main (sqlite_driver.c:71)
+libc.so.6(+0x2a1ca)[0x7fdce4a771ca]
+libc.so.6(__libc_start_main+0x8b)[0x7fdce4a7728b]
+sqlite_driver: _start
+
+0x557f8f365468  37  1
+sqlite_driver: sqlite3_mutex_enter (sqlite3.c:28751)
+sqlite_driver: main (sqlite_driver.c:71)
+libc.so.6(+0x2a1ca)[0x7fdce4a771ca]
+libc.so.6(__libc_start_main+0x8b)[0x7fdce4a7728b]
+sqlite_driver: _start
+
+0x557f8f365bc8  32  5
+sqlite_driver: sqlite3_mutex_enter (sqlite3.c:28751)
+sqlite_driver: sqlite3OsLock (sqlite3.c:25840)
+sqlite_driver: sqlite3PagerSharedLock (sqlite3.c:61942)
+sqlite_driver: lockBtree (sqlite3.c:73359)
+sqlite_driver: sqlite3BtreeBeginTrans (sqlite3.c:73849)
+sqlite_driver: sqlite3Init (sqlite3.c:141106)
+sqlite_driver: sqlite3ReadSchema (sqlite3.c:141132)
+sqlite_driver: sqlite3Pragma (sqlite3.c:138191)
+sqlite_driver: yy_reduce (sqlite3.c:175596)
+sqlite_driver: sqlite3Parser (sqlite3.c:176227)
+
+0x557f5ffbe320  28  5
+sqlite_driver: sqlite3_mutex_enter (sqlite3.c:28751)
+sqlite_driver: sqlite3_initialize (sqlite3.c:178357)
+sqlite_driver: main (sqlite_driver.c:71)
+libc.so.6(+0x2a1ca)[0x7fdce4a771ca]
+libc.so.6(__libc_start_main+0x8b)[0x7fdce4a7728b]
+sqlite_driver: _start
+
+0x557f5ffbe398  26  5
+sqlite_driver: sqlite3_mutex_enter (sqlite3.c:28751)
+sqlite_driver: sqlite3_randomness (sqlite3.c:178345)
+sqlite_driver: sqlite3OsOpen (sqlite3.c:25959)
+sqlite_driver: openDatabase (sqlite3.c:181588)
+sqlite_driver: main (sqlite_driver.c:71)
+libc.so.6(+0x2a1ca)[0x7fdce4a771ca]
+libc.so.6(__libc_start_main+0x8b)[0x7fdce4a7728b]
+sqlite_driver: _start
+
+0x557f8f365468  8  1
+sqlite_driver: sqlite3_mutex_enter (sqlite3.c:28751)
+sqlite_driver: sqlite3_initialize (sqlite3.c:178357)
+sqlite_driver: main (sqlite_driver.c:71)
+libc.so.6(+0x2a1ca)[0x7fdce4a771ca]
+libc.so.6(__libc_start_main+0x8b)[0x7fdce4a7728b]
+sqlite_driver: _start

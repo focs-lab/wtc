@@ -1,0 +1,35 @@
+threadcensus: 4 mutexes, 2499291 acquisitions (0 on mutexes the table could not hold; table of 1048576)
+single-thread mutexes: 3 of 4; their acquisitions: 7 of 2499291 (0.0%)
+
+top 4 by acquisitions (address, acquisitions, threads, first event's stack):
+
+0x55ba38a85b80  2499284  7
+spdlog-orig: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::dequeue(spdlog::details::async_msg&)
+spdlog-orig: spdlog::details::thread_pool::process_next_msg_()
+spdlog-orig: std::thread::_State_impl<std::thread::_Invoker<std::tuple<spdlog::details::thread_pool::thread_pool(unsigned long, unsigned long, std::function<...
+libstdc++.so.6(+0xecdb4)[0x7f900f94cdb4]
+libc.so.6(+0x9cb84)[0x7f900f5d2b84]
+libc.so.6(__clone+0x44)[0x7f900f65fcc4]
+
+0x55ba21167510  4  1
+spdlog-orig: spdlog::init_thread_pool(unsigned long, unsigned long, std::function<void ()>, std::function<void ()>)
+spdlog-orig: spdlog::init_thread_pool(unsigned long, unsigned long, std::function<void ()>)
+spdlog-orig: main
+libc.so.6(+0x2a1ca)[0x7f900f5601ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f900f56028b]
+spdlog-orig: _start
+
+0x55ba211674c0  2  1
+spdlog-orig: spdlog::details::registry::initialize_logger(std::shared_ptr<spdlog::logger>)
+spdlog-orig: std::shared_ptr<spdlog::async_logger> spdlog::async_factory_impl<(spdlog::async_overflow_policy)0>::create<spdlog::sinks::null_sink<spdlog::deta...
+spdlog-orig: main
+libc.so.6(+0x2a1ca)[0x7f900f5601ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f900f56028b]
+spdlog-orig: _start
+
+0x55ba211674e8  1  1
+spdlog-orig: spdlog::details::registry::shutdown()
+spdlog-orig: main
+libc.so.6(+0x2a1ca)[0x7f900f5601ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f900f56028b]
+spdlog-orig: _start

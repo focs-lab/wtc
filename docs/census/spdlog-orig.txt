@@ -1,35 +1,35 @@
-threadcensus: 4 mutexes, 3301145 acquisitions (0 on mutexes the table could not hold; table of 1048576)
-single-thread mutexes: 3 of 4; their acquisitions: 7 of 3301145 (0.0%)
+threadcensus: 4 mutexes, 3315635 acquisitions (0 on mutexes the table could not hold; table of 1048576)
+single-thread mutexes: 3 of 4; their acquisitions: 7 of 3315635 (0.0%)
 
-top 4 by acquisitions (address, acquisitions, threads, first acquisition's stack):
+top 4 by acquisitions (address, acquisitions, threads, first event's stack):
 
-0x56198d20da30  3301138  6
-spdlog-build/bin/spdlog-orig(+0x1511b)[0x56198c3cf11b]
-spdlog-build/bin/spdlog-orig(+0x14fd5)[0x56198c3cefd5]
-spdlog-build/bin/spdlog-orig(+0x14f88)[0x56198c3cef88]
-/lib/x86_64-linux-gnu/libstdc++.so.6(+0xecdb4)[0x7f1a729bbdb4]
-/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f1a72641b84]
-/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f1a726cecc4]
+0x55b086c77ae0  3315628  6
+spdlog-orig: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::dequeue(spdlog::details::async_msg&)
+spdlog-orig: spdlog::details::thread_pool::process_next_msg_()
+spdlog-orig: std::thread::_State_impl<std::thread::_Invoker<std::tuple<spdlog::details::thread_pool::thread_pool(unsigned long, unsigned long, std::function<...
+libstdc++.so.6(+0xecdb4)[0x7f6703c9fdb4]
+libc.so.6(+0x9cb84)[0x7f6703925b84]
+libc.so.6(__clone+0x44)[0x7f67039b2cc4]
 
-0x56198c40c510  4  1
-spdlog-build/bin/spdlog-orig(+0x1379f)[0x56198c3cd79f]
-spdlog-build/bin/spdlog-orig(+0xf201)[0x56198c3c9201]
-spdlog-build/bin/spdlog-orig(+0xbf01)[0x56198c3c5f01]
-/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f1a725cf1ca]
-/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f1a725cf28b]
-spdlog-build/bin/spdlog-orig(+0xabf5)[0x56198c3c4bf5]
+0x55b05782c510  4  1
+spdlog-orig: spdlog::init_thread_pool(unsigned long, unsigned long, std::function<void ()>, std::function<void ()>)
+spdlog-orig: spdlog::init_thread_pool(unsigned long, unsigned long, std::function<void ()>)
+spdlog-orig: main
+libc.so.6(+0x2a1ca)[0x7f67038b31ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f67038b328b]
+spdlog-orig: _start
 
-0x56198c40c4c0  2  1
-spdlog-build/bin/spdlog-orig(+0x3a989)[0x56198c3f4989]
-spdlog-build/bin/spdlog-orig(+0x3d93a)[0x56198c3f793a]
-spdlog-build/bin/spdlog-orig(+0xc0f7)[0x56198c3c60f7]
-/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f1a725cf1ca]
-/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f1a725cf28b]
-spdlog-build/bin/spdlog-orig(+0xabf5)[0x56198c3c4bf5]
+0x55b05782c4c0  2  1
+spdlog-orig: spdlog::details::registry::initialize_logger(std::shared_ptr<spdlog::logger>)
+spdlog-orig: std::shared_ptr<spdlog::async_logger> spdlog::async_factory_impl<(spdlog::async_overflow_policy)0>::create<spdlog::sinks::null_sink<spdlog::deta...
+spdlog-orig: main
+libc.so.6(+0x2a1ca)[0x7f67038b31ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f67038b328b]
+spdlog-orig: _start
 
-0x56198c40c4e8  1  1
-spdlog-build/bin/spdlog-orig(+0x387c4)[0x56198c3f27c4]
-spdlog-build/bin/spdlog-orig(+0xd012)[0x56198c3c7012]
-/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f1a725cf1ca]
-/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f1a725cf28b]
-spdlog-build/bin/spdlog-orig(+0xabf5)[0x56198c3c4bf5]
+0x55b05782c4e8  1  1
+spdlog-orig: spdlog::details::registry::shutdown()
+spdlog-orig: main
+libc.so.6(+0x2a1ca)[0x7f67038b31ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f67038b328b]
+spdlog-orig: _start
