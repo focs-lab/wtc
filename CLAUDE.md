@@ -1,9 +1,9 @@
 # Working in this repository
 
-Rules for anyone, person or agent, who changes this repository. They hold for every branch.
+Rules for anyone who changes this repository. They hold for every branch.
 
-This file itself changes only with approval: an agent shows the exact change first and edits
-the file only after an explicit yes, rules asked for in passing included.
+This file changes only with approval: the exact change is shown first and the file is edited
+only after an explicit yes, rules asked for in passing included.
 
 ## Language
 
