@@ -52,14 +52,17 @@
 // crosses once per element in it, and the producer's publish has to win
 // the counter line back every time: throughput falls by a factor of five
 // to ten and which of the two regimes a run lands in is a matter of timing.
-// So when the consumer catches up and finds fewer than a batch of elements
-// published, it waits, briefly and boundedly, for the batch to fill before
-// reading any of them, and the batch grows while the producer keeps
-// delivering it and shrinks when it does not: a trickle is read one element
-// at a time with no wait at all, a stream a few lines at a time with the
-// producer always ahead. try_pop still never blocks: it says empty the
-// moment the queue is, and waits only when there is something to take.
-// This is FastForward's temporal slip with B-Queue's bounded backtracking.
+// So when the consumer catches up on a producer that streams and finds
+// fewer than a batch of elements published, it waits, briefly and
+// boundedly, for the batch to fill before reading any of them, and the
+// batch grows while the producer keeps delivering it and shrinks when it
+// does not: a stream is read a few lines at a time with the producer
+// always ahead, and a paced producer the moment it publishes, with no wait
+// at all. Whether the producer streams is measured at each catch-up
+// (stream_gate.hpp, which also says why a probe is needed). try_pop still
+// never blocks: it says empty the moment the queue is, and waits only when
+// there is something to take. This is FastForward's temporal slip with
+// B-Queue's bounded backtracking.
 //
 // A block is reused when the consumer has left it, which the consumer
 // announces only after it has read the block's next pointer. That ordering
@@ -96,6 +99,8 @@
 #ifdef WTC_CHECK
 #include <pthread.h>
 #endif
+
+#include "stream_gate.hpp"
 
 namespace wtc::rt {
 
@@ -196,6 +201,8 @@ class spsc_ring {
     unsigned batch;            // elements the slip waits for, 1..kSlipMax
     unsigned rate;             // the producer's elements per pause, times kRateScale
     std::uint64_t slips;       // bounded waits entered, a hint for tests
+    std::uint64_t at_catch;    // push_pub_ as read at the last catch-up
+    stream_gate gate;          // whether the producer streams
   };
 
   alignas(kLine) producer_state p_;
@@ -252,15 +259,23 @@ class spsc_ring {
   // after the producer is done with them and the counter line once per
   // batch. The batch doubles while the producer delivers two of them at a
   // time and halves when a wait runs out, so it tracks the producer's rate:
-  // one for a trickle, where no wait ever happens, and up to kSlipMax for
-  // a stream.
+  // up to kSlipMax for a stream, and one, with no wait, while the producer
+  // does not stream (but for a probe, a wait for two, once in a while).
   void slip() {
+    const std::uint64_t arrived = c_.cached_push - c_.at_catch;
+    c_.at_catch = c_.cached_push;
+    if (!c_.gate.should_wait(arrived)) {
+      c_.batch = 1;
+      return;
+    }
+    if (c_.gate.probing() && c_.batch < 2) c_.batch = 2;
     std::uint64_t delta = c_.cached_push - c_.count;
     if (delta >= c_.batch) {
       if (delta >= 2 * c_.batch && c_.batch < kSlipMax) {
         c_.batch *= 2;
         if (c_.batch > kSlipMax) c_.batch = kSlipMax;
       }
+      c_.gate.waited(true);
       return;
     }
     ++c_.slips;
@@ -281,9 +296,13 @@ class spsc_ring {
       unsigned seen = static_cast<unsigned>((delta - before) * kRateScale / gap);
       c_.rate = (3 * c_.rate + seen) / 4;
       if (c_.rate < 1) c_.rate = 1;
-      if (delta >= c_.batch) return;
+      if (delta >= c_.batch) {
+        c_.gate.waited(true);
+        return;
+      }
     }
     if (c_.batch > 1) c_.batch /= 2;
+    c_.gate.waited(false);
   }
 
   // Ends the life of the element the last try_pop_borrow lent out.
@@ -333,7 +352,7 @@ public:
     // reads as drained one lap later, and is reused under the consumer.
     a->end = kSlots;
     p_ = producer_state{a, 0, 0, 0};
-    c_ = consumer_state{a, 0, 0, 0, nullptr, 1, kRateScale, 0};
+    c_ = consumer_state{a, 0, 0, 0, nullptr, 1, kRateScale, 0, 0, stream_gate{}};
   }
 
   spsc_ring(const spsc_ring&) = delete;
@@ -435,6 +454,7 @@ public:
   std::uint64_t pushed() const { return p_.count; }
   std::uint64_t popped() const { return c_.count; }
   std::uint64_t slips() const { return c_.slips; }
+  std::uint64_t streams() const { return c_.gate.streams(); }
 
 private:
   void turn_over() {

@@ -5,10 +5,12 @@
 
 #include "spsc_ring.hpp"
 
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -100,10 +102,25 @@ void growth_then_drain_then_reuse() {
   }
 }
 
+#if defined(__SANITIZE_THREAD__)
+#define WTC_TEST_SLOW 1
+#elif defined(__has_feature)
+#if __has_feature(thread_sanitizer)
+#define WTC_TEST_SLOW 1
+#endif
+#endif
+
+// The only waits a non-streaming consumer makes are probes, at most one
+// per kProbeEvery catch-ups (stream_gate.hpp).
+constexpr std::uint64_t probes(std::uint64_t catch_ups) {
+  return catch_ups / wtc::rt::stream_gate::kProbeEvery + 1;
+}
+
 void lockstep_never_slips() {
   // One element in, one out: the consumer catches up every time with one
   // element published, which is the batch it waits for, so it never waits
-  // and the batch never grows. A consumer that waited here would add a
+  // and the batch never grows, but for the probes if the round trip is too
+  // slow to read as a stream. A consumer that waited here would add a
   // bounded spin to every round trip of a request-reply pair.
   ring q;
   for (std::uint64_t i = 0; i < 100000; ++i) {
@@ -112,26 +129,100 @@ void lockstep_never_slips() {
     EXPECT(q.try_pop(v));
     EXPECT(v == i);
   }
-  EXPECT(q.slips() == 0);
+  EXPECT(q.slips() <= probes(100000));
 }
 
-void slip_waits_boundedly_then_takes_what_is_there() {
-  // A burst grows the batch; a lone element after it finds fewer than a
-  // batch published and no producer to deliver more. The wait must end on
-  // its own, the element must come out, and the batch must shrink so the
-  // next lone element is read without a wait.
+// Spins for about d of wall time, as a producer that paces itself would.
+void spin_for(std::chrono::nanoseconds d) {
+  const auto t0 = std::chrono::steady_clock::now();
+  while (std::chrono::steady_clock::now() - t0 < d) {
+  }
+}
+
+void trickle_never_waits() {
+  // A producer that publishes one element every few microseconds is read
+  // the moment it publishes, even right after a burst: a wait would only
+  // add its own length to every element's latency.
   ring q;
   std::uint64_t v = ~0ull;
-  for (std::uint64_t i = 0; i < 4; ++i) q.push(i);
-  for (std::uint64_t i = 0; i < 4; ++i) EXPECT(q.try_pop(v) && v == i);
-  EXPECT(q.slips() == 0);
-  q.push(4);
-  EXPECT(q.try_pop(v));   // waits, times out, returns the element
-  EXPECT(v == 4);
-  EXPECT(q.slips() == 1);
-  q.push(5);
-  EXPECT(q.try_pop(v) && v == 5);
-  EXPECT(q.slips() == 1); // batch is back to one
+  for (std::uint64_t i = 0; i < 16; ++i) q.push(i);
+  for (std::uint64_t i = 0; i < 16; ++i) EXPECT(q.try_pop(v) && v == i);
+  for (std::uint64_t i = 16; i < 1016; ++i) {
+    spin_for(std::chrono::microseconds(5));
+    q.push(i);
+    EXPECT(q.try_pop(v) && v == i);
+  }
+  EXPECT(q.slips() <= probes(1000));
+}
+
+void stream_waits_boundedly_then_takes_what_is_there() {
+  // A stream grows the batch; a lone element after it finds fewer than a
+  // batch published and no producer to deliver more. The wait must end on
+  // its own within its bound, the element must come out, and once the
+  // producer has paused the next lone element is read without a wait.
+  ring q;
+  std::uint64_t v = ~0ull, n = 0;
+  for (int r = 0; r < 64; ++r) {
+    const std::uint64_t first = n;
+    for (int k = 0; k < 4; ++k) q.push(n++);
+    for (std::uint64_t i = first; i < n; ++i) EXPECT(q.try_pop(v) && v == i);
+  }
+  const std::uint64_t before = q.slips();
+  q.push(n);
+  const auto t0 = std::chrono::steady_clock::now();
+  EXPECT(q.try_pop(v) && v == n);
+  const auto took = std::chrono::steady_clock::now() - t0;
+  ++n;
+  // The wait is bounded by a count of pauses, about a hundred, which is a
+  // few microseconds on processors with slow pauses; generous here for a
+  // sanitized build on a loaded host.
+  EXPECT(took < std::chrono::milliseconds(100));
+  // At most one wait. Whether there was one depends on the rate the rounds
+  // above measured, which a loaded host or a sanitizer can push past the
+  // streaming threshold, so the test does not insist on it.
+  EXPECT(q.slips() <= before + 1);
+  const std::uint64_t after = q.slips();
+  spin_for(std::chrono::microseconds(50));
+  q.push(n);
+  EXPECT(q.try_pop(v) && v == n);
+  EXPECT(q.slips() == after);
+  EXPECT(!q.try_pop(v));
+}
+
+void streaming_is_reached() {
+  // Rounds of a few pushes and their pops, as fast as one thread goes: the
+  // consumer must read this as a stream. A gate that never opens fails here.
+  ring q;
+  std::uint64_t v = ~0ull, n = 0;
+  for (int r = 0; r < 512; ++r) {
+    const std::uint64_t first = n;
+    for (int k = 0; k < 64; ++k) q.push(n++);
+    for (std::uint64_t i = first; i < n; ++i) EXPECT(q.try_pop(v) && v == i);
+  }
+#ifndef WTC_TEST_SLOW
+  EXPECT(q.streams() > 0);
+#endif
+}
+
+void fast_producer_end_to_end() {
+  // A producer pushing flat out on another thread, a consumer popping as
+  // fast as it can, through whichever regimes the gate moves between: a
+  // smoke check that order holds. Which regimes a run sees depends on the
+  // host and the sanitizer; stream_gate_test pins those down.
+  using big = wtc::rt::spsc_ring<std::uint64_t>;
+  big q;
+  constexpr std::uint64_t kN = 2000000;
+  std::thread producer([&] {
+    for (std::uint64_t i = 0; i < kN; ++i) q.push(i);
+  });
+  std::uint64_t v = ~0ull, next = 0;
+  while (next < kN) {
+    if (q.try_pop(v)) {
+      EXPECT(v == next);
+      ++next;
+    }
+  }
+  producer.join();
   EXPECT(!q.try_pop(v));
 }
 
@@ -269,7 +360,10 @@ int main() {
   interleaved_reuses_blocks_without_growing();
   exact_block_lockstep();
   lockstep_never_slips();
-  slip_waits_boundedly_then_takes_what_is_there();
+  trickle_never_waits();
+  stream_waits_boundedly_then_takes_what_is_there();
+  streaming_is_reached();
+  fast_producer_end_to_end();
   growth_then_drain_then_reuse();
   destructor_releases_unpopped_elements();
   moved_out_slot_is_empty();
