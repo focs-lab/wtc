@@ -26,7 +26,7 @@ Whatever it cannot prove keeps the general implementation.
 | | |
 |:--|:--|
 | **10×** | the compiler's queue against the program as written, one producer and one consumer, geometric mean over sizes and allocators (5–23×); within 13% of the expert rings ([W1](#the-queue-alone)) |
-| **17×** | what the two proved facts buy on a hand-over: the topology 8.3×, borrowing the element 2.0× ([ablation](#what-each-fact-buys)) |
+| **5.9× · 1.7×** | what each fact buys through the shim: the topology 5.9× (one producer and one consumer instead of the general queue), and on top of it the proof that the consumer only borrows 1.7× in code written against the `shared_ptr` API (a loss at 256 bytes); 5.9 × 1.7 ≈ the 10× above ([W1](#the-queue-alone), [ablation](#what-each-fact-buys)) |
 | **= by hand** | on a pipeline the compiler's build is byte for byte the hand-tagged one, 1.8–1.9× the program as written ([W3](#a-pipeline)) |
 | **0 wrong** | verdicts over 35 queues in examples, workloads and two PARSEC programs ([reach](#reach)) |
 | **1.65×** | compile time against the same clang, for code 0.4% larger ([cost](#cost-and-safety)) |
@@ -175,11 +175,15 @@ Against the two-lock list (21 October) the compiler's queue was 17–60×.
 
 The ablation runs the runtime's queues directly, each fact on its own and
 both together. Over the program as written through the shim, the
-compiler's step is 17× on the hand-over (geometric mean, 5.3–54): the
-topology alone 8.3×, borrowing the element on top 2.0× (a loss at 256
-bytes). Against moodycamel holding the element by value, so that nothing
-is allocated on either side, the topology still buys 8.8× (26× at 8 bytes,
-3× at 256). Against a queue that allocates every element on the heap the
+step from the general queue to the single-producer ring with the element
+moved out is 17× on the hand-over (geometric mean, 5.3–54): the topology
+alone 8.3×, and moving the element out instead of popping a `shared_ptr`
+2.0× (a loss at 256 bytes). Moving it out needs no proof (`try_pop(T&)`);
+the proof that the consumer only borrows buys the same step for code
+written against the `shared_ptr` API, 1.7× in W1 (3.5× at 8 bytes, 1.6×
+at 64, 0.94× at 256). Against moodycamel holding the element by value, so
+that nothing is allocated on either side, the topology still buys 8.8×
+(26× at 8 bytes, 3× at 256). Against a queue that allocates every element on the heap the
 diagonal is 24×, and no allocator closes it
 ([`2026-10-26-eval-ablation`](benchmarks/results/2026-10-26-eval-ablation/NOTE.md)).
 

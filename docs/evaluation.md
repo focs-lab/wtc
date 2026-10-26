@@ -156,9 +156,12 @@ list; these supersede its ratios.
   general-purpose library of those measured, which the program as written
   now matches (1.00×); against the expert rings it is within 13%, 0.87×
   rigtorp's (0.62–1.43; behind at 8 B, within about 10% at 64 and 256 B).
-- The ablation (`2026-10-26-eval-ablation`): the compiler's step over the
-  program as written is 17× on the hand-over (5.3–54), the topology 8.3×
-  and borrowing the element 2.0× of it; against moodycamel holding the
+- The ablation (`2026-10-26-eval-ablation`): from the general queue to
+  the single-producer ring with the element moved out is 17× on the
+  hand-over (5.3–54), the topology 8.3× and the pop form 2.0× of it
+  (moving the element out needs no proof); the borrow proof's own step,
+  lending instead of popping a shared_ptr, is 1.7× in W1 (0.89–4.49, a
+  loss at 256 B); against moodycamel holding the
   element by value the topology alone buys 8.8× (3.1–28); against a
   heap-allocating queue the diagonal is 24×.
 - The pipeline (`2026-10-26-eval-w3`): 1.89× (glibc) and 1.76× (jemalloc),
