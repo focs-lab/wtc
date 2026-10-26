@@ -10,9 +10,9 @@
    RUN: sed -n '/queue \*@workers_only is declared/,/queue \*@with_main/p' %t.out | FileCheck %s --check-prefix=SKIP
 
    CHECK-DAG: remark: wtc: queue *@workers_only: many consumers: started on every worker lcore at dpdk-mp-launch.c:{{[0-9]+}}:{{[0-9]+}}
-   CHECK-DAG: error: wtc: queue *@workers_only is declared spsc (by its flags) but many threads pop from it
-   CHECK-DAG: error: wtc: queue *@with_main is declared spsc (by its flags) but many threads pop from it
-   CHECK-DAG: remark: wtc: queue *@from_main: declared spmc (by its flags), verified in this translation unit
+   CHECK-DAG: error: wtc: queue *@workers_only is declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ) but many threads pop from it
+   CHECK-DAG: error: wtc: queue *@with_main is declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ) but many threads pop from it
+   CHECK-DAG: remark: wtc: queue *@from_main: declared spmc (by its flags RING_F_SP_ENQ), verified in this translation unit
 
    CALL: note: pop on a thread that starts in main (the program's own thread)
    SKIP: note: pop on a thread that starts in skip_worker, one of several started

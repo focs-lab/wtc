@@ -795,11 +795,13 @@ static bool firstArgIsSret(cir::FuncOp f) {
 // each side through its type, whether its constructor is in sight or only
 // its pushes and pops are. An rte_ring declares a side single through an
 // rte_ring_sp_* or rte_ring_sc_* call on that side, and through its flags
-// (RING_F_SP_ENQ 0x1, RING_F_SC_DEQ 0x2, rte_ring_core.h) only when some
-// call on that side follows them: a side reached only by rte_ring_mp_* or
-// rte_ring_mc_* calls is many whatever the flags say. Flags computed at run
-// time, given differently by two creations, or never seen because the
-// creation is out of sight leave such a side unknown.
+// (RING_F_SP_ENQ 0x1, RING_F_SC_DEQ 0x2, rte_ring_core.h) when some call on
+// that side follows them or when no call on that side is seen at all: a
+// side reached only by rte_ring_mp_* or rte_ring_mc_* calls is many
+// whatever the flags say. The flags are reported as written, with what
+// qualifies them on each side. Flags computed at run time, given
+// differently by two creations, or never seen because the creation is out
+// of sight leave such a side unknown.
 QueueOwnershipAnalysisPass::LibraryDeclaration
 QueueOwnershipAnalysisPass::libraryDeclared(llvm::ArrayRef<cir::CallOp> ctors, const RootInfo &info) {
     LibraryDeclaration d;
@@ -834,8 +836,18 @@ QueueOwnershipAnalysisPass::libraryDeclared(llvm::ArrayRef<cir::CallOp> ctors, c
         }
         flags = f;
     }
-    for (auto [side, out, bit] : {std::tuple{&info.producers, &d.producers, int64_t(1)},
-                                  std::tuple{&info.consumers, &d.consumers, int64_t(2)}}) {
+    // The flags as written, then what qualifies them on a side, then the
+    // calls that declare a side single themselves.
+    const bool flagsKnown = d.unknown.empty() && flags;
+    std::string byFlags, byCalls;
+    if (flagsKnown && (*flags & 3)) {
+        byFlags = "by its flags ";
+        if (*flags & 1) byFlags += "RING_F_SP_ENQ";
+        if ((*flags & 3) == 3) byFlags += " | ";
+        if (*flags & 2) byFlags += "RING_F_SC_DEQ";
+    }
+    for (auto [side, out, bit, name] : {std::tuple{&info.producers, &d.producers, int64_t(1), "producer"},
+                                        std::tuple{&info.consumers, &d.consumers, int64_t(2), "consumer"}}) {
         const Access *single = nullptr;
         bool followsFlags = false;
         for (const Access &a : side->accesses) {
@@ -843,21 +855,25 @@ QueueOwnershipAnalysisPass::libraryDeclared(llvm::ArrayRef<cir::CallOp> ctors, c
             if (sync == LibraryQueueSync::Single && !single) single = &a;
             if (sync == LibraryQueueSync::ByFlags) followsFlags = true;
         }
+        const bool flagged = flagsKnown && (*flags & bit);
         if (single) {
             *out = Declared::One;
             auto call = cast<cir::CallOp>(single->op);
-            if (!d.how.empty()) d.how += ", and ";
-            d.how += ("by " + lookupCallee(call).getSymName() + " at " +
-                      whereOf(call.getLoc(), /*fileOnly=*/true)).str();
-        } else if (followsFlags) {
+            if (!byCalls.empty()) byCalls += ", and ";
+            byCalls += ("by " + lookupCallee(call).getSymName() + " at " +
+                        whereOf(call.getLoc(), /*fileOnly=*/true)).str();
+        } else if (followsFlags || side->accesses.empty()) {
             if (!d.unknown.empty()) *out = Declared::Unknown;
-            else if (*flags & bit) {
+            else if (flagged) {
                 *out = Declared::One;
-                if (d.how.find("by its flags") == std::string::npos)
-                    d.how = d.how.empty() ? "by its flags" : "by its flags, and " + d.how;
+                if (side->accesses.empty()) byFlags += std::string("; no ") + name + " access seen";
             }
+        } else if (flagged) {
+            byFlags += std::string("; its ") + name + "s call the explicit multi-thread form, which the flag does not bind";
         }
     }
+    d.how = byFlags;
+    if (!byCalls.empty()) d.how += d.how.empty() ? byCalls : ", and " + byCalls;
     return d;
 }
 

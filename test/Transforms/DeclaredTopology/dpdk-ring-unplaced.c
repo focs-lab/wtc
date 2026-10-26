@@ -18,10 +18,10 @@
    ARRAY: remark: wtc: queue access is unresolvable ({{.*}}); every queue of this type is now unknown
    ARRAY-NOT: verified
    POINTER: remark: wtc: the address of rte_ring_sp_enqueue is taken, and calls through it are not counted; every queue of its type is now unknown
-   POINTER: warning: wtc: queue *@ring is declared mpsc (by its flags); cannot verify: the address of rte_ring_sp_enqueue is taken, and calls through it are not counted
+   POINTER: warning: wtc: queue *@ring is declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ; no producer access seen); cannot verify: the address of rte_ring_sp_enqueue is taken, and calls through it are not counted
    POINTER-NOT: verified
    INIT: remark: wtc: queue @storage[*]: mpsc (producers: many, consumers: 1)
-   INIT: warning: wtc: queue @storage[*] is declared spsc (by its flags); cannot verify: it stands for every element of an array, counted together, and each element may have threads of its own
+   INIT: warning: wtc: queue @storage[*] is declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ); cannot verify: it stands for every element of an array, counted together, and each element may have threads of its own
    INIT-NOT: verified
    INIT-NOT: error
 */
