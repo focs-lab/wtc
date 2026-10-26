@@ -56,6 +56,7 @@ enum rte_rmt_call_main_t { SKIP_MAIN = 0, CALL_MAIN };
 int rte_eal_remote_launch(lcore_function_t *f, void *arg, unsigned worker_id);
 int rte_eal_mp_remote_launch(lcore_function_t *f, void *arg, enum rte_rmt_call_main_t call_main);
 int rte_eal_mp_wait_lcore(void);
+void rte_free(void *ptr);
 
 /* A DPDK function that takes rings and has no body here
  * (drivers/net/ring/rte_eth_ring.h). */
