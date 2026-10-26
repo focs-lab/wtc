@@ -65,6 +65,7 @@
 #include <vector>
 
 #include "hazard.hpp"
+#include "stream_gate.hpp"
 
 #ifdef WTC_CHECK
 #include <pthread.h>
@@ -273,6 +274,12 @@ class segment_queue {
         return consume([&](Slot&& s) noexcept { out = std::move(s); });
     }
 
+    // Not synchronised; hints for the single consumer's own thread: bounded
+    // waits entered, and slip points at which the producers read as a
+    // stream.
+    std::uint64_t slips() const { return slips_; }
+    std::uint64_t streams() const { return gate_.streams(); }
+
  private:
     // Moves the head past a drained segment and retires it. The tail is
     // moved past it first, so that no push can find it through tail_ once
@@ -338,38 +345,56 @@ class segment_queue {
         }
     }
 
-    // The single consumer keeps its distance from the producers, as the
-    // spsc ring's does: at the first cell of every pair of lines of states
-    // (kSlipMax states) it waits a
-    // bounded while for the last cell of its batch to be filled, so that
-    // the states' line is read once the pushes are done with it rather
-    // than once per push. The batch doubles while the pushes stay two
-    // batches ahead and halves when a wait runs out, so a trickle never
-    // waits. Multi-consumer pops do not slip: a cell they wait for could
-    // be the one another consumer is about to take.
+    // The single consumer keeps its distance from producers that stream,
+    // as the spsc ring's does: at the first cell of every pair of lines of
+    // states (kSlipMax states) it waits a bounded while for the last cell
+    // of its batch to be filled, so that the states' line is read once the
+    // pushes are done with it rather than once per push. The batch doubles
+    // while the pushes stay two batches ahead and halves when a wait runs
+    // out. Whether the producers stream is measured over the cells the
+    // consumer passes between these points (stream_gate.hpp): a paced
+    // producer is read the moment it publishes, with no wait, except for a
+    // probe once in a while. Multi-consumer pops do not slip: a cell they
+    // wait for could be the one another consumer is about to take.
     static constexpr unsigned kSlipMax = 2 * kLine / sizeof(std::uint32_t);
     static constexpr unsigned kSlipPauses = 64;
     static constexpr unsigned kSlipGapMax = 4;
     unsigned batch_ = 1;
+    stream_gate gate_;
+    std::uint64_t slips_ = 0;
 
     void slip_one(segment* h, std::uint64_t i) {
         if (i % kSlipMax != 0) return;
+        if (!gate_.should_wait(kSlipMax)) {
+            batch_ = 1;
+            return;
+        }
+        if (gate_.probing() && batch_ < 2) batch_ = 2;
         std::uint64_t last = i + batch_ - 1;
-        if (last >= kSegment) return;
+        if (last >= kSegment) {
+            gate_.waited(false);
+            return;
+        }
         if (h->state[last].load(std::memory_order_acquire) == kFull) {
             std::uint64_t ahead = i + 2 * batch_ - 1;
             if (batch_ < kSlipMax && ahead < kSegment &&
                 h->state[ahead].load(std::memory_order_acquire) == kFull)
                 batch_ *= 2;
+            gate_.waited(true);
             return;
         }
+        ++slips_;
         unsigned gap = 1;
         for (unsigned waited = 0; waited < kSlipPauses; gap = gap < kSlipGapMax ? 2 * gap : gap) {
             for (unsigned k = 0; k < gap; ++k) pause();
             waited += gap;
-            if (h->state[last].load(std::memory_order_acquire) == kFull) return;
+            if (h->state[last].load(std::memory_order_acquire) == kFull) {
+                gate_.waited(true);
+                return;
+            }
         }
         if (batch_ > 1) batch_ /= 2;
+        gate_.waited(false);
     }
 
     // The single consumer takes the cells in index order while they are
