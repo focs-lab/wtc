@@ -207,10 +207,14 @@ WTC_UNPINNED=1 taskset -c 16-31,48-63 benchmarks/scripts/campaign.sh eval-w1 bui
 ```
 
 The environment check then reports the governor and turbo instead of
-requiring them, `meta.json` says `"unpinned": true`, and every run's
-effective frequency (user cycles over task-clock) and the busy share of
-the processors outside the set are written to `unpinned.tsv` beside
-`runs.jsonl`, keyed by the lines each run wrote there. Such a leg answers
+requiring them, `meta.json` says `"unpinned": true`, and each run goes
+through `scripts/unpinned_run.sh`, which writes a row to `unpinned.tsv`
+beside `runs.jsonl`: the lines the run wrote there, its user cycles,
+reference cycles and task-clock, and the busy share of the processors
+outside the set. The script's header says what each column can be used
+for; user cycles over task-clock understate the clock of a run that
+sleeps in the kernel, so compare it only between runs of one variant.
+Such a leg needs `perf` and `perf_event_paranoid` at most 2. It answers
 how variants compare within a repetition, which is what the legs report;
 its absolute numbers are not comparable with another host's. On the
 two-socket host the paired ratio of two spdlog builds, 1.08, came out
