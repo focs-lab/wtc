@@ -1,0 +1,42 @@
+name: Attribution
+
+# Every branch, not only main: a trailer crediting an AI tool on any pushed
+# branch lists the vendor's account among the repository's contributors.
+# A failure here cannot undo the push; it says which commits to rewrite.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  attribution:
+    name: No AI attribution in commits
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check the new commits
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = pull_request ]; then
+            range="$BASE..$HEAD"
+          elif [ -z "$BEFORE" ] || [ "$BEFORE" = 0000000000000000000000000000000000000000 ] \
+               || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            # A new branch, or a force push whose old tip is gone: check
+            # everything the branch has that main does not.
+            range="origin/main..$AFTER"
+          else
+            range="$BEFORE..$AFTER"
+          fi
+          echo "checking $range"
+          tools/check-attribution.sh "$range"

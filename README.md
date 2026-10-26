@@ -392,7 +392,7 @@ test/         lit tests, including .cpp tests that start from source
 decisions/    why the project is built the way it is
 docs/         motivation, glossary, audit, related work; figures/ for this page
 docker/       the toolchain image CI and contributors build against
-tools/        wtc-cc (the whole pipeline), publishing, branch policy
+tools/        wtc-cc (the whole pipeline), publishing, branch policy, commit checks
 .github/      the workflow and the review rules
 ```
 
@@ -405,6 +405,11 @@ never mixed with substantive changes.
 
 `CODEOWNERS` assigns reviewers by directory, on purpose: whoever does not own a
 part reviews it.
+
+Commits carry no trailer or footer crediting the tool they were written with;
+authorship is git's author field. `tools/check-attribution.sh` checks every
+push and pull request on every branch, and `git config core.hooksPath
+tools/hooks` runs it on each commit message before the commit exists.
 
 To change LLVM itself, commit inside `llvm/` on `wtc/main` and push it, then
 record the new commit in a pull request here that changes nothing else. The pin

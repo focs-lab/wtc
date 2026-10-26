@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Installed by `git config core.hooksPath tools/hooks`; see
+# tools/check-attribution.sh.
+exec "$(git rev-parse --show-toplevel)/tools/check-attribution.sh" --message "$1"
