@@ -8,8 +8,8 @@
 # (ping-pong), smoke (everything once, tiny sizes, no environment check);
 # the MVP's own: w1mvp, w2mvp, w3wtc, w7, w8; the evaluation's: eval-w1,
 # eval-w1smt, eval-w2, eval-w3, eval-w3grain, eval-w7, eval-w8, eval-w9,
-# eval-ferret, eval-dedup, eval-ablation, eval-spdlog, each with the question
-# it answers in its comment below.
+# eval-ferret, eval-dedup, eval-ablation, eval-spdlog, eval-pool,
+# eval-fusion, each with the question it answers in its comment below.
 #
 # Legs that run builds made by tools/wtc-cc take the directory holding them
 # as BUILD and need the CMake build too, for the controls and the
@@ -221,6 +221,36 @@ warmup() { # [placement arguments]
     lock "$CONTROL_BUILD/w1_throughput" --variant shim_generic --elem 64 --wait spin \
          --n 20000000 "$@" --json "" 2>>"$OUT/log.txt" >/dev/null
   done
+}
+
+# The legs whose work is a count of rounds of arithmetic (eval-pool,
+# eval-fusion) calibrate it once, after the warm-up and as a run of the leg
+# (under its lock, on glibc), and pass every run the same count: a run that
+# calibrated for itself would do a different amount of work from the
+# variant beside it.
+work_calibration() { # workload binary name; prints rounds per ns
+  local rpn
+  use_alloc glibc
+  rpn=$(lock "$BUILD/$1" --calibrate) || rpn=""
+  # set -e does not reach into $(...): an empty or garbled answer would
+  # turn every run's --rounds into 0 and measure nothing, checksums agreeing.
+  if ! [[ $rpn =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    echo "work calibration ($1) failed: '$rpn'" | tee -a "$OUT/log.txt" >&2
+    return 1
+  fi
+  echo "work calibration ($1): $rpn rounds/ns" >> "$OUT/log.txt"
+  echo "$rpn"
+}
+rounds_of() { awk -v ns="$1" -v r="$RPN" 'BEGIN { printf "%d", ns * r + 0.5 }'; }
+# What a failed run's status means, for the legs that log a failure and go
+# on (eval-pool, eval-fusion): timeout's 124, unpinned_run.sh's and the
+# shell's 128 + signal, or the workload's own check.
+run_status() {
+  case $1 in
+    124) echo "timed out" ;;
+    2|75|125|126|127) echo "could not run (status $1: launcher or lock)" ;;
+    *) if [ "$1" -gt 128 ]; then echo "killed by signal $(( $1 - 128 ))"; else echo "failed its check (status $1)"; fi ;;
+  esac
 }
 
 case "$LEG" in
@@ -838,6 +868,90 @@ case "$LEG" in
       done
     done
     control 901
+    ;;
+  eval-pool)
+    # RQ2/RQ3 for a thread pool (W11): one submitter and 1 to 8 workers,
+    # tasks whose capture is 16, 64 or 256 bytes and whose work is 0, 100 or
+    # 1000 ns; the task as a std::function on the heap or by value in the
+    # queue's cell, through the general queue or the ring for one producer
+    # and many consumers. Which of the two a pool gains from, under every
+    # allocator, and how the gain falls as the task grows. The work is
+    # calibrated once for the leg and passed to every run as an exact count
+    # of rounds. Each run lasts about a second; a run that fails its check
+    # or exceeds its time is logged and the leg goes on. Needs 9 cores.
+    "$HERE/check_env.sh" 9 || exit 1
+    meta
+    ALLOCS=$(allocs_for glibc jemalloc tcmalloc mimalloc snmalloc)
+    warmup
+    RPN=$(work_calibration w11_pool) || exit 1
+    control 900
+    for rep in $(seq 0 $((REPS-1))); do
+      for alloc in $ALLOCS; do
+        use_alloc "$alloc"
+        for elem in 16 64 256; do
+          for consumers in 1 2 4 8; do
+            for work in 0 100 1000; do
+              for v in heap_mpmc heap_spmc cell_mpmc cell_spmc; do
+                lock timeout 60 "$BUILD/w11_pool" --variant "$v" --elem "$elem" --consumers "$consumers" \
+                     --work "$work" --rounds "$(rounds_of "$work")" --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt" \
+                  || echo "w11 $v E$elem consumers=$consumers work=$work rep $rep: $(run_status $?)" | tee -a "$OUT/log.txt"
+              done
+            done
+          done
+        done
+      done
+    done
+    control 901
+    # Allocations per task, beside the times: the cell rows allocate only
+    # the queue's own segments and blocks, amortised over their tasks.
+    for elem in 16 64 256; do
+      for consumers in 1 4; do
+        for v in heap_mpmc heap_spmc cell_mpmc cell_spmc; do
+          mech timeout 60 "$CONTROL_BUILD/w11_pool" --variant "$v" --elem "$elem" --consumers "$consumers" --work 0 \
+               --rounds 0 --seconds 0.5 --rep 0 --json "$RUNS" 2>>"$OUT/log.txt" \
+            || echo "w11 mechanism $v E$elem consumers=$consumers: $(run_status $?)" | tee -a "$OUT/log.txt"
+        done
+      done
+    done
+    ;;
+  eval-fusion)
+    # RQ2: when a pipeline should not be spread over threads at all (W12).
+    # Three stages of 0 to 200 ns each, on three threads joined by the SPSC
+    # ring or fused on one: the grain below which passing a record between
+    # cores costs more than its work. Throughput only, and the pipeline
+    # spends three cores where the fused loop spends one. The work is
+    # calibrated once for the leg; at every grain both variants must have
+    # printed a checksum, and one and the same. Nothing here allocates, so
+    # glibc only. Needs 3 cores.
+    "$HERE/check_env.sh" 3 || exit 1
+    meta
+    rm -f "$OUT"/checksums*.txt   # a same-day rerun writes the same directory
+    warmup
+    RPN=$(work_calibration w12_fusion) || exit 1
+    control 900
+    use_alloc glibc
+    for rep in $(seq 0 $((REPS-1))); do
+      for work in 0 2 5 10 20 40 60 100 200; do
+        for v in fused pipeline; do
+          lock timeout 120 "$BUILD/w12_fusion" --variant "$v" --work "$work" --rounds "$(rounds_of "$work")" \
+               --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt" >>"$OUT/checksums.txt" \
+            || echo "w12 $v work=$work rep $rep: $(run_status $?)" | tee -a "$OUT/log.txt"
+        done
+      done
+    done
+    control 901
+    # Lines are "checksum <variant> <work> <rounds> <value>"; a grain one
+    # variant never finished has no checksum to disagree with, so both must
+    # be there.
+    touch "$OUT/checksums.txt"
+    for work in 0 2 5 10 20 40 60 100 200; do
+      awk -v work="$work" -v rounds="$(rounds_of "$work")" '
+        $1 == "checksum" && $3 == work && $4 == rounds { seen[$2] = 1; if (!($5 in val)) { val[$5] = 1; n++ } }
+        END { ok = seen["fused"] && seen["pipeline"] && n == 1
+              printf "work %s (%s rounds): %d distinct checksum(s), fused %s, pipeline %s: %s\n", work, rounds, n,
+                     seen["fused"] ? "present" : "MISSING", seen["pipeline"] ? "present" : "MISSING", ok ? "ok" : "**FAILED**" }' \
+        "$OUT/checksums.txt" | tee -a "$OUT/log.txt"
+    done
     ;;
   *) echo "unknown leg $LEG" >&2; exit 2 ;;
 esac
