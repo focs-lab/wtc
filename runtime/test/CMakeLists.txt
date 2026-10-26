@@ -142,3 +142,28 @@ add_executable(segment_queue_one_consumer_stall_stress segment_queue_stress.cpp)
 target_link_libraries(segment_queue_one_consumer_stall_stress PRIVATE wtc_rt_flags)
 target_compile_definitions(segment_queue_one_consumer_stall_stress PRIVATE WTC_STRESS_ONE_CONSUMER=1 WTC_STRESS_STALL=1)
 add_test(NAME segment_queue_one_consumer_stall_stress COMMAND segment_queue_one_consumer_stall_stress 200000)
+
+# The lemmas of docs/correctness.md, each on the interleaving its sketch
+# relies on, forced by holding a thread at a named point (lemma_util.hpp).
+add_executable(lemma_rings_test lemma_rings_test.cpp)
+target_link_libraries(lemma_rings_test PRIVATE wtc_rt_flags)
+add_test(NAME lemma_rings_test COMMAND lemma_rings_test 200000)
+
+add_executable(lemma_segment_test lemma_segment_test.cpp)
+target_link_libraries(lemma_segment_test PRIVATE wtc_rt_flags)
+add_test(NAME lemma_segment_test COMMAND lemma_segment_test 100000)
+
+# Section 7's claim that a substitution adds no wait: holds for the general
+# queue, and does not for spmc, whose consumers wait for each other's move
+# of the element. The spmc run passes only on that exact report, so that a
+# race report or a wrong element is not mistaken for the known wait.
+add_executable(lemma_spmc_liveness lemma_spmc_liveness.cpp)
+target_link_libraries(lemma_spmc_liveness PRIVATE wtc_rt_flags)
+add_test(NAME lemma_spmc_liveness_generic COMMAND lemma_spmc_liveness generic)
+add_test(NAME lemma_spmc_liveness_spmc COMMAND lemma_spmc_liveness spmc)
+set_tests_properties(lemma_spmc_liveness_spmc PROPERTIES
+                     PASS_REGULAR_EXPRESSION "\\(spmc\\): a consumer waited"
+                     FAIL_REGULAR_EXPRESSION "ThreadSanitizer|wrong element")
+# A held thread that is never let go would hang the run.
+set_tests_properties(lemma_rings_test lemma_segment_test lemma_spmc_liveness_generic
+                     lemma_spmc_liveness_spmc PROPERTIES TIMEOUT 300)
