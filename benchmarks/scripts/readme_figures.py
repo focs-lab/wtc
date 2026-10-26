@@ -17,10 +17,14 @@ general-purpose library slate, the compiler's spsc ring blue, its inline
 ring orange, the best expert SPSC queue peach.
 
 Rerun after every leg that changes a figure, and commit the figures with
-the results they show.
+the results they show. Each figure's subtitle names the leg it was drawn
+from and how that leg was run (reserved cores and fixed frequency, or
+paired rounds with the frequency not fixed), read from its meta.json; a
+leg whose allocator is a factor is drawn under glibc.
 """
 import argparse
 import csv
+import json
 import math
 import sys
 from pathlib import Path
@@ -106,18 +110,45 @@ def fmt(v):
 
 class Leg:
     def __init__(self, results, name):
-        dirs = sorted(results.glob(f"*-{name}"))
+        # The newest directory of the leg that has a summary: a leg still
+        # running has a directory and no summary.csv yet.
+        dirs = [d for d in sorted(results.glob(f"*-{name}")) if (d / "summary.csv").exists()]
         self.dir = dirs[-1] if dirs else None
-        self.rows = []
-        if self.dir and (self.dir / "summary.csv").exists():
+        self.rows, self.meta = [], {}
+        if self.dir:
             self.rows = list(csv.DictReader(open(self.dir / "summary.csv", encoding="utf-8")))
+            if (self.dir / "meta.json").exists():
+                self.meta = json.load(open(self.dir / "meta.json", encoding="utf-8"))
+        # Legs with the allocator as a factor have a row per allocator; the
+        # figures show glibc's, the allocator every leg runs.
+        self.by_alloc = any(r.get("alloc") for r in self.rows)
 
     def __bool__(self):
         return bool(self.rows)
 
+    def how(self):
+        """Which leg, and how it was run, for a figure's subtitle."""
+        reps = self.meta.get("reps", "?")
+        date = self.dir.name[:10] if self.dir else ""
+        if self.meta.get("unpinned"):
+            run = f"paired, frequency not fixed, {reps} reps"
+        else:
+            run = f"reserved cores, median of {reps} runs"
+        alloc = ", glibc" if self.by_alloc else ""
+        return f"{run}{alloc}, {date}"
+
+    def has(self, metric="mops", **want):
+        try:
+            self.get(metric, **want)
+            return True
+        except KeyError:
+            return False
+
     def get(self, metric="mops", field="median", **want):
         """The one row matching every field given; an empty field matches ''."""
         want.setdefault("pass", "")
+        if self.by_alloc:
+            want.setdefault("alloc", "glibc")
         hits = [r for r in self.rows if r["metric"] == metric and all(r.get(k, "") == str(v) for k, v in want.items())]
         if len(hits) != 1:
             raise KeyError(f"{self.dir.name}: {len(hits)} rows for {metric} {want}")
@@ -133,11 +164,11 @@ SERIES = [("shim_generic", "as written (B0)", B0), ("moodycamel_cq_sp", "moodyca
 
 def w1(leg):
     f = Fig(410, "The queue alone: one producer, one consumer",
-            "million elements a second, log scale, median of 10 runs; W1, 2 reserved cores", "W1 throughput by element size")
+            f"million elements a second, log scale; W1, two cores; {leg.how()}", "W1 throughput by element size")
     f.legend([(lab, col, "box") for _, lab, col in SERIES], 28, 92, 16)
     top, bottom, left, right = 112, 350, 64, W - 24
-    y = log_axis(1, 300, bottom, top)
-    for v in (1, 3, 10, 30, 100, 300):
+    y = log_axis(1, 1000, bottom, top)
+    for v in (1, 3, 10, 30, 100, 300, 1000):
         f.line(left, y(v), right, y(v))
         f.add(f.text(left - 10, y(v) + 5, v, 13, MUTED, "end"))
     gw, bw = (right - left) / 3, 40
@@ -156,7 +187,7 @@ def w1(leg):
 
 def w2(leg):
     f = Fig(450, "Latency against offered load",
-            "p99 from each element's due time, log–log; open points: the runs fell behind; W2, 64-byte elements",
+            f"p99 from each element's due time, log–log; open: behind; W2, 64 B; {leg.how()}",
             "W2 p99 latency against offered load")
     f.legend([(lab, col, "line") for _, lab, col in SERIES], 28, 92, 14)
     top, bottom, left, right = 114, 390, 84, W - 28
@@ -195,31 +226,44 @@ def w3(leg):
             ("moodycamel RWQ, inline (B2)", ("W3", "moodycamel_rw_inline"), B2),
             ("the shim's inline ring", ("W3", "shim_spsc_inline"), INLINE)]
     f = Fig(96 + 34 * len(rows) + 20, "A three-stage pipeline",
-            "million records a second, closed loop, median of 10 runs; W3, 64-byte records, 3 reserved cores",
+            f"M records/s, closed loop; W3, 64-byte records, 3 cores; {leg.how()}",
             "W3 pipeline throughput")
-    left, scale, yy = 330, 470 / 9.5, 100
+    hi = max(leg.get(workload=k[0], mode="closed", variant=k[1], work=4, **({"rate": 0} if k[0] == "W3" else {}))
+             for _, k, _ in rows if k and leg.has(workload=k[0], mode="closed", variant=k[1], work=4,
+                                                  **({"rate": 0} if k[0] == "W3" else {})))
+    left, scale, yy = 330, 470 / (hi * 1.12), 100
     for label, key, col in rows:
         if key is None:
             f.add(f.text(28, yy + 18, label.upper(), 12, MUTED, "start", 600))
         else:
             wl, v = key
-            m = leg.get(workload=wl, mode="closed", variant=v, work=4, rate=0) if wl == "W3" else \
-                leg.get(workload=wl, mode="closed", variant=v, work=4)
+            want = dict(workload=wl, mode="closed", variant=v, work=4) | ({"rate": 0} if wl == "W3" else {})
             bold = 600 if v == "compiler" else 400
             f.add(f.text(left - 12, yy + 19, label, 14, INLINE if v == "compiler" else INK, "end", bold))
-            f.rect(left, yy + 6, m * scale, 18, col, 3)
-            f.add(f.text(left + m * scale + 8, yy + 20, f"{m:.2f}", 14, INK, "start", bold))
+            if not leg.has(**want):
+                f.add(f.text(left + 8, yy + 20, "not run on this host", 14, MUTED, "start"))
+            else:
+                m = leg.get(**want)
+                f.rect(left, yy + 6, m * scale, 18, col, 3)
+                f.add(f.text(left + m * scale + 8, yy + 20, f"{m:.2f}", 14, INK, "start", bold))
         yy += 34
     return f
 
 
 def grain(leg):
+    works = sorted({int(r["work"]) for r in leg.rows if r["workload"] == "W3wtc"} - {0})
+    t = {w: 1 / leg.get(workload="W3wtc", mode="closed", variant="compiler", work=w) for w in works}
+    base = {w: leg.get(workload="W3wtc", mode="closed", variant="generic", work=w) for w in works}
+    # The model's constant: what the program as written pays per record
+    # beyond the compiler's build, at the finest grain measured.
+    c = 1 / base[works[0]] - t[works[0]]
+    cs = f"{c:.2f}" if c < 1 else f"{c:.1f}"
     f = Fig(430, "Where the gain goes",
-            "speed-up over the program as written against the time a record takes in the slowest stage; W3 with its work swept",
-            "Speed-up against the grain, with the model (t + 1.1 µs) / t")
-    f.legend([("the compiler", INLINE, "dot"), ("spsc tags by hand", SPSC, "dot"), ("model: (t + 1.1 µs) / t", INK, "dash")], 28, 92, 18)
+            f"speed-up over as written by µs a record in the slowest stage; W3 swept; {leg.how()}",
+            f"Speed-up against the grain, with the model (t + {cs} µs) / t")
+    f.legend([("the compiler", INLINE, "dot"), ("spsc tags by hand", SPSC, "dot"), (f"model: (t + {cs} µs) / t", INK, "dash")], 28, 92, 18)
     top, bottom, left, right = 112, 370, 64, W - 28
-    x = log_axis(0.05, 30000, left, right)
+    x = log_axis(0.02, 30000, left, right)
     y = log_axis(0.9, 12, bottom, top)
     # The applications at one thread a stage: run time over elements, which
     # in a pipeline is the slowest stage's time (eval-dedup, eval-ferret).
@@ -232,13 +276,10 @@ def grain(leg):
     for v in (0.1, 1, 10, 100, 1000, 10000):
         f.add(f.text(x(v), bottom + 22, f"{v:g}", 13, MUTED))
     f.add(f.text((left + right) / 2, bottom + 46, "µs a record, log scale", 14, MUTED))
-    # From 4 rounds: at 0 and 4 a record takes the same 0.11 µs, and two
-    # points stacked at one x read as a kink in the curve.
-    works = sorted({int(r["work"]) for r in leg.rows if r["workload"] == "W3wtc"} - {0})
-    t = {w: 1 / leg.get(workload="W3wtc", mode="closed", variant="compiler", work=w) for w in works}
-    base = {w: leg.get(workload="W3wtc", mode="closed", variant="generic", work=w) for w in works}
-    c = 1.1
-    ts = [10 ** (math.log10(0.6) + i * (math.log10(30000) - math.log10(0.6)) / 50) for i in range(51)]
+    # From 4 rounds (works above excludes 0): at no work the record's time
+    # is mostly the hand-over itself, and a point there reads as a kink.
+    t0 = min(t.values())
+    ts = [10 ** (math.log10(t0) + i * (math.log10(30000) - math.log10(t0)) / 50) for i in range(51)]
     f.polyline([(x(s), y((s + c) / s)) for s in ts], INK, 1.5, "6 4")
     for v, col in (("hand", SPSC), ("compiler", INLINE)):
         pts = [(x(t[w]), y(leg.get(workload="W3wtc", mode="closed", variant=v, work=w) / base[w])) for w in works]
@@ -250,7 +291,7 @@ def grain(leg):
 
 def w7(leg):
     f = Fig(462, "Batched pushes: what they buy and what they cost",
-            "W7, 64-byte elements, median of 10 runs; left closed loop, right paced at one element a microsecond",
+            f"W7, 64 B; left closed loop, right paced at 1 M/s; {leg.how()}",
             "W7 throughput and delay against the batch size")
     ks = [("none", None), ("1", 1), ("4", 4), ("16", 16), ("64", 64), ("256", 256), ("1024", 1024)]
 
@@ -261,8 +302,11 @@ def w7(leg):
     # left: the general-purpose queue's throughput
     top, bottom, left, pw = 120, 360, 60, 360
     f.add(f.text(left, 100, "general-purpose queue, M elements/s", 13, MUTED, "start"))
-    y = lambda v: bottom - (bottom - top) * v / 2.2
-    for v in (0, 0.5, 1, 1.5, 2):
+    hi = 1.1 * max(leg.get(workload="W7", mode="closed", variant=name("generic", kind, k))
+                   for kind in ("batch", "hand") for _, k in ks)
+    step = next(s for s in (0.5, 1, 2, 5, 10, 20, 50) if hi / s <= 5)
+    y = lambda v: bottom - (bottom - top) * v / hi
+    for v in [i * step for i in range(int(hi / step) + 1)]:
         f.line(left, y(v), left + pw, y(v), B0 if v == 0 else GRID, 2 if v == 0 else 1.5)
         f.add(f.text(left - 8, y(v) + 5, f"{v:g}", 13, MUTED, "end"))
     gw = pw / len(ks)
@@ -301,7 +345,7 @@ def w7(leg):
 
 def w8(leg):
     f = Fig(420, "Batched critical sections: when holding the lock pays",
-            "speed-up of the batched loop (K = 64) over the loop as written, log scale; W8, one mutex, 8 reserved cores",
+            f"batched loop (K = 64) over the loop as written, log scale; W8, one mutex; {leg.how()}",
             "W8 speed-up against the work between sections")
     f.legend([("2 threads", B2, "dot"), ("4 threads", INLINE, "dot"), ("8 threads", INK, "dot")], 28, 92, 18)
     top, bottom, left, right = 112, 350, 64, W - 28
@@ -327,7 +371,7 @@ def w8(leg):
 
 def w9(leg):
     f = Fig(430, "Many threads: what the compiler substitutes, and what it leaves",
-            "million elements a second, median of 10 runs; W9, producers and consumers on their own cores, 16 reserved cores",
+            f"million elements a second; W9, each thread on its own core; {leg.how()}",
             "W9 throughput of the general-purpose queues and of the mpsc and spmc substitutes")
     m = lambda v, p, c: leg.get(workload="W9", mode="split", producers=p, consumers=c, variant=v)
     top, bottom = 120, 350
