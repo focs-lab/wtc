@@ -48,8 +48,9 @@ def topology(p, c):
 
 def label_matches(label, name):
     # @q, a mangled name ending in the queue's (@_ZL10refine_que,
-    # @_ZN..6stage1E), or *@q for the heap object a pointer global holds
-    return re.search(rf"(^\*?@|\d){re.escape(name)}E?$", label) is not None
+    # @_ZN..6stage1E), or *@q for the heap object a pointer global holds;
+    # [*] after it for every element of an array of them
+    return re.search(rf"(^\*?@|\d){re.escape(name)}E?(\[\*\])?$", label) is not None
 
 
 def main():

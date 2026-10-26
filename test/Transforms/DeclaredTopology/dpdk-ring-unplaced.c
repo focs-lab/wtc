@@ -1,8 +1,10 @@
-/* Rings the walk cannot tell apart, one per lcore in an array; a ring
-   initialised by rte_ring_init where the walk cannot name it, as one of an
-   array; and enqueues made through a pointer to rte_ring_sp_enqueue, set
-   in a function or by a file-scope initialiser, which no call site shows.
-   None is verified: each makes every ring unknown, and says why.
+/* Rings the walk cannot tell apart, one per lcore in an array of
+   pointers; rings initialised by rte_ring_init on the elements of an
+   array, which are counted together; and enqueues made through a pointer
+   to rte_ring_sp_enqueue, set in a function or by a file-scope
+   initialiser, which no call site shows. None is verified: the first and
+   the last make every ring unknown, and the array of rings is a summary
+   whose union cannot be held against one element's declaration.
 
    RUN: %clang -std=gnu11 -I%S/Inputs -fclangir -emit-cir %s -DARRAY -o %t.array.cir
    RUN: wtc-opt %t.array.cir --lift-cir-to-wtc --queue-ownership-analysis -o /dev/null 2>&1 | FileCheck %s --check-prefix=ARRAY
@@ -18,8 +20,10 @@
    POINTER: remark: wtc: the address of rte_ring_sp_enqueue is taken, and calls through it are not counted; every queue of its type is now unknown
    POINTER: warning: wtc: queue *@ring is declared mpsc (by its flags); cannot verify: the address of rte_ring_sp_enqueue is taken, and calls through it are not counted
    POINTER-NOT: verified
-   INIT: remark: wtc: this queue is built where the analysis cannot name the object; every queue of its type is now unknown
+   INIT: remark: wtc: queue @storage[*]: mpsc (producers: many, consumers: 1)
+   INIT: warning: wtc: queue @storage[*] is declared spsc (by its flags); cannot verify: it stands for every element of an array, counted together, and each element may have threads of its own
    INIT-NOT: verified
+   INIT-NOT: error
 */
 
 #include "rte_ring.h"
