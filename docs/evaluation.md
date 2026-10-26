@@ -170,14 +170,16 @@ list; these supersede its ratios.
   loss at 256 B); against moodycamel holding the
   element by value the topology alone buys 8.8× (3.1–28); against a
   heap-allocating queue the diagonal is 24×.
-- The pipeline (`2026-10-26-eval-w3`): 1.89× (glibc) and 1.76× (jemalloc),
-  equal to the hand-tagged build; but at 1 M records a second the p99 of
-  every build on the runtime's ring is 1.56–1.61 µs against 0.43 as written
-  and 0.31 for the expert rings (0.30–0.51 across the rates), a regression
-  under investigation.
-- The grain (`2026-10-26-eval-w3grain`): the constant is about 0.04 µs a
+- The pipeline (`2026-10-27-eval-w3`, after the ring's gate of PR #37):
+  1.90× (glibc) and 1.81× (jemalloc), equal to the hand-tagged build, and a
+  p99 of 0.27–0.29 µs at every offered rate from 0.5 to 4 M records a
+  second, level with the expert rings (0.30–0.32) and 0.12–0.89× the
+  program as written's. The leg before the gate
+  (`2026-10-26-eval-w3`) had 1.06–1.96 µs from 1 M/s.
+- The grain (`2026-10-27-eval-w3grain`): the constant is about 0.04 µs a
   record, so the gain is above 10% only for stages under about 0.5 µs
-  (1.97× at no work, 1.04× at 1.1 µs, 1.00× from about 5 µs).
+  (1.90–2.06× at no work, 1.04× at 1.1 µs, 1.00× from about 5 µs); the
+  same as before the gate (`2026-10-26-eval-w3grain`).
 - spdlog (`2026-10-26-eval-spdlog-rerun`, with the waiting control
   spinning outside the queue's mutex): 2.52× over spdlog as released
   (1.21–6.35), faster in all 36 configurations, of which the topology's
@@ -188,43 +190,42 @@ list; these supersede its ratios.
   configurations, all at 256 bytes under glibc. The first leg of the day
   (`2026-10-26-eval-spdlog`), whose control re-took the mutex, gave the
   same 2.52× and 1.06×.
-- Latency under load (`2026-10-26-eval-w2`, on the runtime before the
-  slip's gate of PR #37): every queue keeps up to 10 M/s except
-  moodycamel's ConcurrentQueue; at or below 0.5 M/s the compiler's queue has
-  the shortest median and p99 measured (0.81× and 0.69× as written, 0.72×
-  and 0.81× rigtorp's ring); from 1.4 to 10 M/s the runtime's ring waits,
-  a median 5.1× as written and a p99 2.8× rigtorp's, the same regression
-  as the pipeline's tail. The bare ring shows it too, so the cause is in
-  the ring, most likely the 23 October consumer slip; a gate is proposed
-  in PR #37 (open; its untimed A/B covers W2 at 1 µs and 300 ns and W3 at
-  1–2 M/s; a paired rerun on the second host is in progress).
-- Many threads (`2026-10-26-eval-w9`): the general queue, kept where both
-  sides are many, is 7.9× the two-lock list (2:2 to 8:8), 1.7× moodycamel's
-  ConcurrentQueue and 1.6× LCRQ with producers and consumers split
-  (geometric means over shapes and three allocators; least at 8:8), and
-  0.82–0.89× LCRQ, LPRQ and the fetch-and-add array queue in the
-  pairwise workload (LSCQ is behind it, 1.18×); every row allocates once
-  per element, the shim on the consumer's side, which likely favours it
-  (inferred, not measured). The substitutes for a single side gain 1.3× (mpsc) and
-  2.2× (spmc, the turn-taking ring, before the swap) over it, 2.4× and
-  2.1× over moodycamel; the mpsc numbers predate the change of 26 Oct to
-  the single consumer's empty answer (`decisions/0003`) and are to be
-  timed again.
-- A thread pool (`2026-10-26-eval-pool`, RQ2 and RQ3): the ring for many
-  consumers with the task by value in its cell is 2.8× the pool as written
-  with no work (0.74–9.1), 1.3× at 100 ns a task and 1.04× at 1 µs. The
-  ring alone is a loss with eight workers and 1 µs tasks (0.51× on heap
-  tasks, where jemalloc at 64 and 256 bytes drives it to 0.18–0.20; 0.85×
-  on tasks in the cell) and with four workers and 100 ns tasks (0.72× and
-  0.81×); the likely cause, inferred and not isolated, is that its
-  consumers take turns under one spin lock. The task in the cell removes the per-task allocation (1.09 to
-  0.002 a task) and gains 1.11× on the general queue, 1.46× on the ring.
-  The ring has since been replaced by a queue whose consumers claim cells
-  with a compare-and-swap (`2026-10-26-spmc-ab`, untimed, Intel host):
-  1.76× the general queue in the cell (1.02–10.7) and 1.31× on the heap
-  (1.03–7.2) over the same 36 configurations, no median below 0.95
-  (single repetitions dipped to 0.71); the pool
-  and W9 legs on the AMD host are to be rerun with it.
+- Latency under load (`2026-10-27-eval-w2`, after the ring's gate): every
+  queue keeps up to 10 M/s except moodycamel's ConcurrentQueue; at every
+  rate the runtime's ring, bare or through the shim, has the shortest
+  median measured (the compiler's queue 0.81–0.83× as written, 0.72–0.74×
+  rigtorp's ring) and a p99 below as written's (0.37× at 1.4–10 M/s, 0.84×
+  at 1 M/s, 0.70× at 0.1–0.5 M/s) and level with rigtorp's (0.83–0.96×,
+  moving with the repetition; the leg was not quiet). Before the gate
+  (`2026-10-26-eval-w2`) the ring waited from 1.4 M/s (a median 5.1× as
+  written, a p99 2.8× rigtorp's) and had a p99 of 1.15 µs at 1 M/s; the
+  gate's paired A/B is `2026-10-27-ring-gate-ab`.
+- Many threads (`2026-10-27-eval-w9`, on the single consumer's pop of 26
+  October and the lock-free queue for one producer): the general queue,
+  kept where both sides are many, is 7.9× the two-lock list (2:2 to 8:8),
+  1.7× moodycamel's ConcurrentQueue and 1.6× LCRQ with producers and
+  consumers split (geometric means over shapes and three allocators; least
+  at 8:8), and 0.82–0.89× LCRQ, LPRQ and the fetch-and-add array queue in
+  the pairwise workload (LSCQ is behind it, 1.18×); every row allocates
+  once per element, the shim on the consumer's side, which likely favours
+  it (inferred, not measured). The substitutes for a single side gain 1.3×
+  (mpsc, unchanged by the new pop) and 4.6× (spmc, 2.1× with one consumer
+  to 14× with eight) over it, 2.3× and 4.5× over moodycamel. The leg
+  before (`2026-10-26-eval-w9`) had the turn-taking ring at 2.2×.
+- A thread pool (`2026-10-27-eval-pool`, RQ2 and RQ3): the lock-free queue
+  for one producer with the task by value in its cell is 5.5× the pool as
+  written with no work, 2.7× at 100 ns a task and 1.09× at 1 µs (2.5×,
+  0.81–26, over 108 configurations); the topology alone is 2.25× on tasks
+  in the cell and 1.70× on heap tasks, 1.00× on both at eight workers and
+  1 µs, with one configuration below 0.95 (0.89×); the leg's control
+  drifted 12.9%, which the ratios, taken within a repetition, do not
+  follow (2.46–2.54 from one repetition to the next). The task in the cell
+  removes the per-task allocation (1.10 to 0.002 a task) and gains 1.12×
+  on the general queue, 1.47× on the queue for one producer. The leg
+  before (`2026-10-26-eval-pool`) ran the ring whose consumers took turns
+  under one spin lock, which lost at eight workers and 1 µs (0.51× on heap
+  tasks, 0.85× in the cell) and at four workers and 100 ns (0.72×, 0.81×);
+  its replacement's untimed A/B on the Intel host is `2026-10-26-spmc-ab`.
 - Fusing a pipeline (`2026-10-26-eval-fusion`): three stages fused into
   one loop beat three threads below about 18 ns of work a stage (up to
   33×) and lose 2.5–2.7× from about 100 ns. Like coarsening (RQ4), fusion
