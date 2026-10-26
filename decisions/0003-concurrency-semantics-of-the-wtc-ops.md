@@ -100,10 +100,10 @@ contract above and promises nothing beyond it:
 
 - every push happens-before the pop that returns its element;
 - it is linearisable, so a push that finishes before another starts comes
-  out first, and a pop that finds the queue empty with many consumers does so
-  when every reserved cell has been taken; the single-consumer form, like
-  the list before it, may report empty while a push that started earlier is
-  between taking its cell and filling it;
+  out first, and a pop that finds the queue empty does so when every push
+  that finished before it began has been popped: with many consumers a pop
+  waits for a cell a push has taken and not yet filled, and the single
+  consumer takes the first full cell after it instead (update below);
 - it is FIFO per producer, and a producer's batch comes out in its order;
 - it orders nothing against other objects. A program that relied on the
   mutex of the original queue to order its operations against its other
@@ -115,3 +115,24 @@ as written. The original two-lock queue stays in the tree as a baseline
 (`benchmarks/queues/generic_original.hpp`), not as an implementation the
 shim offers.
 
+## Update, 26 Oct 2026: the single consumer's empty answer
+
+Until this date the single-consumer form answered empty at the first cell
+that was not full, as the list before it did, even when a later push had
+finished. That is no linearisation of a queue, and the general-purpose
+queue, whose pop waits for such a cell, never gives it, so the
+substitution of `mpsc` could add an empty answer to the program: a
+producer pushes and then sets a flag, and the only consumer, having seen
+the flag, pops while another producer is between taking an earlier cell
+and filling it. The general-purpose queue returns an element there; the
+`mpsc` form returned empty. It now takes the earliest full cell past the
+unfilled one, as the Jiffy queue's dequeue does, and stays wait-free
+(`runtime/segment_queue.hpp`, `pop_one`;
+`runtime/test/segment_queue_empty_test.cpp`).
+
+What the contract now asks of a producer changes with it. A producer that
+stops for ever between taking its cell and filling it (a thread killed
+there, or one that never runs again) used to leave the consumer answering
+empty for ever at that cell; now the consumer goes on past it, and the
+cell keeps the head where it is, so no segment after it is freed and the
+queue's memory grows with every element pushed after it.
