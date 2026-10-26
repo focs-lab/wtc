@@ -5,7 +5,8 @@ Taken 2026-10-19.
 Revised 2026-10-26: one chain per blocking site instead of one per
 function, and inline assembly that cannot wait is cleared (both under
 "What the check establishes"); the table follows the elements held by
-value in every implementation since 24 Oct.
+value in every implementation since 24 Oct; the facts are shared with the
+batching passes ("The same facts for batching").
 
 ## Context
 
@@ -91,6 +92,125 @@ that spins on an atomic until another thread sets it is not judged: it
 reaches nothing blocking and is still not lock-free. Proving progress of a
 loop is a different analysis, and the bounded waiting the project's
 proposal describes is where it belongs.
+
+## The same facts for batching
+
+The batching passes (`--wtc-batch-pushes`, `--wtc-batch-locks`) ask the
+same question of the code in a loop they would batch: may it wait for
+another thread? Each used to answer it with its own list of functions
+and its own walk, and the answers had drifted: both refused every
+indirect call the progress check could follow and every inline assembly
+string, the lock batching took `realloc` for a wait where the progress
+check knew it as the allocator, and the push batching accepted any
+function without a body here that was declared nothrow, which says
+nothing about waiting (`semop`, a read from a pipe, a join). The facts
+now live in one place (`mlir/include/WTC/Transforms/Blocking.h`), and
+each pass says only which kinds it accepts: the progress check no kind
+of blocking, the lock batching the allocator, the push batching the
+allocator and sleeping. Input and output is refused by both: a write to
+a pipe or a socket waits for its reader, which may be a consumer of the
+queue.
+
+The batching passes add two refusals of their own. One is about
+synchronising, not waiting: any atomic or volatile access, fence, or
+inline assembly other than prefetches, no-ops and the time-stamp counter
+(`rdtsc`, `rdtscp`), or any assembly with a memory clobber, since a loop
+that synchronises may be waiting for an element it has not published.
+The other is a function the loop calls that acts on a queue or a mutex.
+
+A body is followed only where it is final. A weak definition, a non-ODR
+linkonce one, a common or an extern_weak symbol may be replaced at link
+time by another translation unit's, which may do anything, and counts as
+no body; an ODR inline or template body, an available_externally one and
+an internal one are followed. An indirect call is resolved through a
+pointer parameter only in a function with internal linkage: an external,
+inline or template function can be called from another translation unit
+with any other pointer, so its calls seen here are not all its calls.
+
+The allocator is the C library's (`malloc` and its family, `realloc`,
+`free`), DPDK's heap, and the replaceable global `operator new` and
+`operator delete`, matched by their exact mangled names: plain, array,
+aligned, sized and nothrow. A class's `operator new`, or a placement
+form taking the program's own arguments (a pool), is the program's code
+and may take any lock; without a body here it is opaque.
+
+Accepting the allocator assumes it is a leaf: it waits for no thread of
+the program and runs none of its code. A program can register code for
+it to run -- a DPDK memory event callback or allocation validator, run
+inside `rte_malloc` and `rte_free`; a new-handler, run inside `operator
+new` when memory runs short; one of glibc's old allocation hooks -- and
+a module that does is given no allocator by either pass, and no batched
+pushes at all, since a push allocates when its queue grows. What this
+does not see, and assumes away: a registration made in another
+translation unit (`set_new_handler` in `main.cpp` while the loop is in
+`worker.cpp`); a replaced global `operator new`, an allocator interposed
+with `LD_PRELOAD`, and the hooks of jemalloc or tcmalloc, all taken for
+leaves; and DPDK's own memory callbacks (VFIO, the mlx5 driver), taken
+to hold only locks internal to the library.
+
+Batching pushes costs latency, which is why only a function marked
+`WTC_BATCH` is touched: an element waits for up to `WTC_BATCH_K - 1`
+later pushes before a consumer can see it, that is, for up to
+`WTC_BATCH_K` times the work the loop does between two pushes, sleeps
+included. A sleep waits for no thread, so accepting it cannot deadlock:
+the batch is published every `WTC_BATCH_K` pushes and at the end of the
+loop whatever the consumer does. It can change behaviour: a consumer
+that takes a pop timing out for "the producer is gone" may now see that
+sooner. In practice the C library's sleeps are declared without nothrow,
+and a call to them is refused as one that may throw; a sleep is accepted
+only when declared nothrow.
+
+What changed (26 Oct), in verdicts:
+
+- progress check: a call through a pointer parameter of a function with
+  external linkage is counted as an indirect call whose target is not
+  known, where its targets in this module were followed before; a call
+  to a weak or non-ODR linkonce function counts as blocking, where its
+  body was followed before;
+- push batching, accepted now: a call through a pointer whose targets
+  are all known and fit; prefetches, no-ops and the time-stamp counter
+  without a memory clobber; the destructor of the shared_ptr of a
+  borrowed pop from an inline queue, which owns nothing (a pop is inline
+  only after specialisation, which wtc-cc runs after batching, so this
+  applies only to IR batched later);
+- push batching, refused now: any function without a body here that is
+  not the allocator, sleeping, or one that only touches its arguments,
+  nothrow or not (in the ClangIR in use, calls into the C library are
+  not marked nothrow, so most were refused before as calls that may
+  throw; the change matters for functions declared `noexcept`); a weak
+  or non-ODR linkonce body; a class or placement `operator new`; a
+  static-initialisation guard (in practice the guard's atomic load is
+  refused first); any other operation whose name contains `asm`; every
+  loop of a module that registers code for the allocator to run;
+- lock batching, accepted now: the same resolved indirect calls and
+  prefetches; `realloc`, and `rte_free` when declared nothrow;
+- lock batching, refused now: `rte_ring_create`, `rte_ring_create_elem`
+  and `rte_stack_create`, which take the EAL's tail-queue lock and were
+  accepted as the allocator when declared nothrow; a weak or non-ODR
+  linkonce body; a class or placement `operator new`; the allocator in a
+  module that registers code for it to run; any other operation whose
+  name contains `asm`.
+
+And in the progress check's reasons, its verdicts otherwise unchanged: a
+call into the threading library that is not a wait (`pthread_create`,
+`pthread_self`, keys, attributes) "calls into the threading library";
+spin locks, barriers, `pthread_once`, timed and non-blocking joins, C11
+`mtx_`, `cnd_` and `thrd_join`, `std::thread::join` and
+`std::condition_variable::wait` "wait in the threading library";
+`thrd_yield` and `pthread_yield` "sleep or yield"; `semop`,
+`semtimedop`, `flock`, `lockf`, `poll`, `ppoll`, `epoll_wait`,
+`epoll_pwait`, `select`, `pselect`, the `recv` and `accept` family, the
+`wait` family, `pause`, the `sigwait` family, `sigsuspend`,
+`rte_eal_wait_lcore`, `rte_eal_mp_wait_lcore` and `rte_thread_join`
+"wait for another thread or process"; `__cxa_guard_acquire` "takes a
+static-initialisation lock"; `__cxa_throw`, `__cxa_allocate_exception`
+and `__cxa_rethrow` "throw"; DPDK's `rte_malloc` family, `rte_free` and
+`memalign` "call the allocator"; and DPDK's ring and stack constructors
+"take a DPDK library lock". All of these but the guard, `__cxa_throw`
+and `__cxa_allocate_exception` ("throws or takes a static-initialisation
+lock") were "whose body is not visible here" before. The other way, a
+class or placement `operator new` without a body, "calls the allocator"
+before, is now "whose body is not visible here".
 
 ## Options not taken
 

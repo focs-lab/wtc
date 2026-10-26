@@ -67,11 +67,23 @@ WTC_LOCK_FREE void waits() { pthread_mutex_lock(&raw); ++plain; pthread_mutex_un
 // CHECK-DAG: note: which sleeps or yields (usleep)
 WTC_LOCK_FREE void sleeps() { usleep(1); }
 
+// A function-local static initialised at run time is guarded, and the
+// guard waits for the thread running the initialiser.
+// CHECK-DAG: error: wtc: guarded() is declared lock-free but can block
+// CHECK-DAG: note: which takes a static-initialisation lock (__cxa_guard_acquire)
+WTC_LOCK_FREE long guarded() { static long once = plain * 2; return once; }
+
 // A throw is spelled as operations, not as a call into the runtime, and
 // blocks all the same.
 // CHECK-DAG: error: wtc: throws() is declared lock-free but can block
 // CHECK-DAG: note: which throws: the C++ runtime allocates the exception and unwinds the stack
 WTC_LOCK_FREE void throws() { if (plain < 0) throw plain; }
+
+// A weak body may be replaced at link time: it is not followed.
+// CHECK-DAG: error: wtc: weakly() is declared lock-free but can block
+// CHECK-DAG: note: which calls weak_hook(), whose body here may be replaced at link time, so it is counted as blocking
+__attribute__((weak)) void weak_hook() {}
+WTC_LOCK_FREE void weakly() { weak_hook(); }
 
 // CHECK-DAG: error: wtc: unseen() is declared lock-free but can block
 // CHECK-DAG: note: which calls opaque(), whose body is not visible here, so it is counted as blocking
