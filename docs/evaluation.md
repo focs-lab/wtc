@@ -10,7 +10,7 @@ numbers live in `benchmarks/results/`, one directory per leg with its own
 | | question | answered by |
 |---|---|---|
 | RQ1 | Reach and precision: of the queues in real programs, how many does the analysis prove, how many does it refuse and why, and does it ever claim a topology the program does not have? | `benchmarks/scripts/reach.sh` against `benchmarks/reach/oracle.json`; `tools/corpus-sync-census.py` for what unported code holds |
-| RQ2 | Substitution: what does the specialised queue buy in throughput, cost per element, latency under load and scaling, against strong libraries as well as against the program as written? | legs `eval-w1`, `eval-w1smt`, `eval-w2`, `eval-w3`, `eval-w3grain`, `eval-w9`, `eval-ferret`, `eval-dedup` |
+| RQ2 | Substitution: what does the specialised queue buy in throughput, cost per element, latency under load and scaling, against strong libraries as well as against the program as written? | legs `eval-w1`, `eval-w1smt`, `eval-w2`, `eval-w3`, `eval-w3grain`, `eval-w9`, `eval-pool`, `eval-fusion`, `eval-ferret`, `eval-dedup` |
 | RQ3 | Allocation: what does an element cost in allocations and resident memory with each implementation? | the mechanism runs of `eval-w1` (allocation counter, `perf` counters, peak RSS) |
 | RQ4 | Batching: throughput against latency as the batch grows, for a producer's pushes and for a mutex's sections, and fairness between threads | legs `eval-w7`, `eval-w8` |
 | RQ5 | Cost: compile time by pass, code size, and nothing lost where nothing is proved | `benchmarks/scripts/compile_cost.sh`; the general and compiler builds of every leg |
@@ -142,7 +142,7 @@ eight producers and eight consumers. Both findings led to the segmented
 queue (`runtime/segment_queue.hpp`), since 22 October the general-purpose
 implementation and, in its single-consumer form, the one for many
 producers; the legs whose B0 it changes were run again on 26 October
-(below), except the many-thread and latency legs, still running.
+(below), except the latency leg, still running.
 
 **RQ2, re-measured on 26 October** against the current general-purpose
 queue (`benchmarks/results/2026-10-26-*`; paired runs on a second host
@@ -177,6 +177,28 @@ list; these supersede its ratios.
   rest is the general-purpose queue the program gets without proof. Its
   waiting control re-took the queue's mutex; a rerun with the fixed control
   is in progress.
+- Many threads (`2026-10-26-eval-w9`): the general queue, kept where both
+  sides are many, is 7.9× the two-lock list (2:2 to 8:8), 1.7× moodycamel's
+  ConcurrentQueue and 1.6× LCRQ with producers and consumers split
+  (geometric means over shapes and three allocators; least at 8:8), and
+  0.82–0.89× LCRQ, LPRQ and the fetch-and-add array queue in the
+  pairwise workload (LSCQ is behind it, 1.18×); every row allocates once
+  per element, the shim on the consumer's side, which likely favours it
+  (inferred, not measured). The substitutes for a single side gain 1.3× (mpsc) and
+  2.2× (spmc) over it, 2.4× and 2.1× over moodycamel.
+- A thread pool (`2026-10-26-eval-pool`, RQ2 and RQ3): the ring for many
+  consumers with the task by value in its cell is 2.8× the pool as written
+  with no work (0.74–9.1), 1.3× at 100 ns a task and 1.04× at 1 µs. The
+  ring alone is a loss with eight workers and 1 µs tasks (0.51× on heap
+  tasks, where jemalloc at 64 and 256 bytes drives it to 0.18–0.20; 0.85×
+  on tasks in the cell) and with four workers and 100 ns tasks (0.72× and
+  0.81×); the likely cause, inferred and not isolated, is that its
+  consumers take turns under one spin lock. The task in the cell removes the per-task allocation (1.09 to
+  0.002 a task) and gains 1.11× on the general queue, 1.46× on the ring.
+- Fusing a pipeline (`2026-10-26-eval-fusion`): three stages fused into
+  one loop beat three threads below about 18 ns of work a stage (up to
+  33×) and lose 2.5–2.7× from about 100 ns. Like coarsening (RQ4), fusion
+  needs an estimate of the work between the operations it removes.
 
 **RQ3** (the legs' mechanism passes). On the pipeline the compiler's build
 allocates nothing per record. Against the two-lock list (21 October) the
