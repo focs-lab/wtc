@@ -98,7 +98,7 @@ class segment_queue {
     // it. kTaken: the single consumer took the element out of order (see
     // pop_one), and its in-order walk passes the cell when it gets there.
     enum : std::uint32_t { kEmpty = 0, kFull = 1, kSkipped = 2, kTaken = 3 };
-    enum : unsigned { kTail = 0, kHead = 1 };
+    enum : unsigned { kTail = hazard::kPushSlot, kHead = hazard::kPopSlot };
     // How long a pop waits, in pause instructions, for a push to reserve
     // the cell it took before it skips the cell.
     static constexpr unsigned kPatience = 64;
@@ -249,7 +249,8 @@ class segment_queue {
     // element as an rvalue still in its cell, or not at all when the queue
     // was empty; the cell is released after f returns. A caller that wants
     // the element somewhere without a default-constructed object to assign
-    // to, or wants to build something else from it, pops this way.
+    // to, or wants to build something else from it, pops this way. f may
+    // push to any queue but must not pop from one (hazard.hpp, kPopSlot).
     template <class F>
     bool consume(F&& f) {
         static_assert(std::is_nothrow_invocable_v<F, Slot&&>,

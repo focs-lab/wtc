@@ -24,6 +24,17 @@
 namespace wtc::rt::hazard {
 
 constexpr unsigned kSlots = 2;
+// Which slot each queue operation protects its segment with, the same on
+// every queue: pushes use kPushSlot, pops kPopSlot. A pop runs the
+// program's code while it still needs its segment -- the taker, which moves
+// the element out and may destroy the destination's old value -- and that
+// code may push to any queue: a push never touches the pop's slot, so it
+// cannot unprotect the segment under the pop. A pop inside another pop's
+// taker would overwrite the slot and is not allowed (the shim states it as
+// a rule of the element type: its move, copy and destructor may push to a
+// wtc::queue but not pop from one).
+constexpr unsigned kPushSlot = 0;
+constexpr unsigned kPopSlot = 1;
 // A scan reads every record's slots, so it waits for this many retired
 // nodes. The queues retire one segment per thousand-odd elements, so the
 // nodes waiting are a few segments at most.
