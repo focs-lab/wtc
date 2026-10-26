@@ -20,6 +20,7 @@ using namespace mlir::wtc;
 #include "llvm/Demangle/Demangle.h"
 #include "llvm/Support/Path.h"
 
+#include <functional>
 #include <optional>
 
 // For every queue object the module touches, how many threads push to it
@@ -189,17 +190,56 @@ private:
     bool globalPoison = false;   // an access with no type to poison
     unsigned remarks = 0;
 
-    // Every operation on a queue. Only a pop consumes; push and the three
-    // operations of a batched run are the producer's side.
-    static bool isQueueOp(Operation *op) {
-        return isa<QueuePushOp, QueuePopOp, QueueBatchBeginOp, QueuePushDeferredOp, QueueBatchEndOp>(op);
+    // What each modelled library function is, asked once per function and
+    // per run: the walk asks of every call it visits, and the answer comes
+    // from demangling the name.
+    llvm::DenseMap<Operation *, LibraryQueueFunction> libraryFunctions;
+    LibraryQueueFunction libraryFunction(cir::FuncOp f) {
+        if (!f) return {};
+        auto [it, fresh] = libraryFunctions.try_emplace(f.getOperation());
+        if (fresh) it->second = libraryQueueFunction(f);
+        return it->second;
     }
-    static Value queueOf(Operation *op) {
+    LibraryQueueCall libraryCall(cir::CallOp call) {
+        return libraryQueueCall(call, libraryFunction(lookupCallee(call)));
+    }
+    bool isLibraryFunction(cir::FuncOp f) { return libraryFunction(f).member; }
+    // A modelled push, pop or constructor inside a modelled library's own
+    // function: the library's, not the program's. rte_ring_enqueue
+    // dispatches to rte_ring_sp_enqueue_bulk_elem on the ring's flags,
+    // which promises nothing for the program; moodycamel's blocking queue
+    // builds the queue it wraps, which is not a second queue.
+    bool inLibraryBody(Operation *op) {
+        auto call = dyn_cast<cir::CallOp>(op);
+        if (!call || !libraryCall(call)) return false;
+        auto in = op->getParentOfType<cir::FuncOp>();
+        return in && isLibraryFunction(in);
+    }
+
+    // Every operation on a queue. Only a pop consumes; push and the three
+    // operations of a batched run are the producer's side. A push or a pop
+    // of a modelled library queue is one too, left as the call it is.
+    LibraryQueueCall libraryOp(Operation *op) {
+        auto call = dyn_cast<cir::CallOp>(op);
+        if (!call) return {};
+        LibraryQueueCall l = libraryCall(call);
+        if (l.role != LibraryQueueRole::Push && l.role != LibraryQueueRole::Pop) return {};
+        return l;
+    }
+    bool isQueueOp(Operation *op) {
+        return isa<QueuePushOp, QueuePopOp, QueueBatchBeginOp, QueuePushDeferredOp, QueueBatchEndOp>(op) ||
+               libraryOp(op);
+    }
+    bool isConsumerOp(Operation *op) {
+        return isa<QueuePopOp>(op) || libraryOp(op).role == LibraryQueueRole::Pop;
+    }
+    Value queueOf(Operation *op) {
         if (auto o = dyn_cast<QueuePushOp>(op)) return o.getQueue();
         if (auto o = dyn_cast<QueuePopOp>(op)) return o.getQueue();
         if (auto o = dyn_cast<QueueBatchBeginOp>(op)) return o.getQueue();
         if (auto o = dyn_cast<QueuePushDeferredOp>(op)) return o.getQueue();
-        return cast<QueueBatchEndOp>(op).getQueue();
+        if (auto o = dyn_cast<QueueBatchEndOp>(op)) return o.getQueue();
+        return op->getOperand(libraryOp(op).queueOperand);
     }
 
     static Type queueObjectType(Operation *root) {
@@ -208,20 +248,30 @@ private:
         return Type();
     }
 
-    static Type queueObjectTypeOfOp(Operation *op) {
+    Type queueObjectTypeOfOp(Operation *op) {
         Value q = queueOf(op);
         if (auto qt = dyn_cast<QueueType>(q.getType())) return qt.getElementType();
+        if (auto pt = dyn_cast<cir::PointerType>(q.getType())) return pt.getPointee();
         return Type();
     }
 
-    // A call of the shim's queue constructor, whose first operand is the
-    // object it builds.
-    static bool isQueueConstructor(Operation *op) {
+    // A call of the shim's queue constructor, or of a modelled library
+    // queue's, whose first operand is the object it builds; or
+    // rte_ring_create, whose result is.
+    bool isQueueConstructor(Operation *op) {
         auto call = dyn_cast<cir::CallOp>(op);
-        return call && getSemanticKind(lookupCallee(call)) == SemanticOpKind::QueueConstruction &&
-               call.getNumOperands() > 0 && firstRealOperand(call) == 0;
+        if (!call) return false;
+        if (getSemanticKind(lookupCallee(call)) == SemanticOpKind::QueueConstruction)
+            return call.getNumOperands() > 0 && firstRealOperand(call) == 0;
+        LibraryQueueCall l = libraryCall(call);
+        return l.role == LibraryQueueRole::Create ||
+               (l.role == LibraryQueueRole::Construct && l.queueOperand == 0);
     }
-    static bool isQueueOpOrConstructor(Operation *op) { return isQueueOp(op) || isQueueConstructor(op); }
+    bool isRingCreate(Operation *op) {
+        auto call = dyn_cast<cir::CallOp>(op);
+        return call && libraryCall(call).role == LibraryQueueRole::Create;
+    }
+    bool isQueueOpOrConstructor(Operation *op) { return isQueueOp(op) || isQueueConstructor(op); }
 
     // The whole of a global or a slot of the queue's own type.
     static bool isWhole(const Key &k, Type queueTy) {
@@ -283,7 +333,7 @@ private:
             cir::FuncOp cur = work.pop_back_val();
             if (!seen.insert(cur.getOperation()).second) continue;
             cur.walk([&](Operation *op) {
-                if (isQueueOp(op)) poison(op, "reached through recursion");
+                if (isQueueOp(op) && !inLibraryBody(op)) poison(op, "reached through recursion");
                 if (auto call = dyn_cast<cir::CallOp>(op))
                     if (auto callee = lookupCallee(call))
                         if (!callee.getBody().empty()) work.push_back(callee);
@@ -293,8 +343,15 @@ private:
 
     // A queue's number is its position in discovery order, which follows
     // the walk and is therefore deterministic.
+    // Library queues are not numbered: they carry no verdict a later pass
+    // reads, and a program's shim queues keep the numbers they had.
     int64_t idOf(const Key &k) const {
-        return static_cast<int64_t>(roots.find(k) - roots.begin());
+        int64_t n = 0;
+        for (const auto &entry : roots) {
+            if (entry.first == k) return n;
+            if (!libraryKeys.contains(entry.first)) ++n;
+        }
+        return n;
     }
 
     void writeVerdicts(bool capExceeded);
@@ -302,7 +359,28 @@ private:
     // stands for every object one allocation site makes, and threads on two
     // of them are no proof against either.
     bool checkDeclared(Operation *root, const RootInfo &info, Topology verdict, const std::string &label,
-                       llvm::ArrayRef<cir::CallOp> ctors, bool capExceeded, bool summary);
+                       llvm::ArrayRef<cir::CallOp> ctors, bool capExceeded, bool summary, bool library,
+                       Type objTy);
+    // What a library queue declares on each side: many threads, one, or
+    // not known before the run, with what says so.
+    enum class Declared { Many, One, Unknown };
+    struct LibraryDeclaration {
+        Declared producers = Declared::Many, consumers = Declared::Many;
+        std::string how;      // what declares a side single
+        std::string unknown;  // why a side is not known
+    };
+    LibraryDeclaration libraryDeclared(llvm::ArrayRef<cir::CallOp> ctors, const RootInfo &info);
+    // Why a library queue of this type may be used by code the module does
+    // not show, or empty: verdicts on it hold in this translation unit only.
+    std::string openWhy(Type t);
+    llvm::DenseMap<Type, std::string> openWhyCache;
+    // A modelled push or pop whose address the program takes: calls
+    // through the pointer are not counted, so every queue of its type is
+    // unknown.
+    void poisonAddressTakenLibraryOps();
+    // Queues of a modelled library (Utils.h, LibraryQueueCall): counted and
+    // checked, never rewritten, so no constructor carries a verdict.
+    llvm::DenseSet<Key> libraryKeys;
     static Access accessOf(Operation *op, const Instance &inst);
     // Why one side of a queue counts many, in the program's own terms.
     std::string whyMany(const SideInfo &side);
@@ -593,23 +671,289 @@ std::string QueueOwnershipAnalysisPass::labelOf(const Key &k, bool whole) const 
     return member.empty() ? base + "+" + std::to_string(k.second) : base + "." + member;
 }
 
+// An integer the program fixes before it runs: a constant, an or of such,
+// through integral casts and a slot stored once. DPDK's flags are spelled
+// `RING_F_SP_ENQ | RING_F_SC_DEQ`, and often kept in a local first.
+static std::optional<int64_t> constantInteger(Value v, unsigned depth = 0) {
+    if (!v || depth > 8) return std::nullopt;
+    v = traceToRoot(v);
+    if (auto c = v.getDefiningOp<cir::ConstantOp>())
+        if (auto i = dyn_cast<cir::IntAttr>(c.getValue())) return i.getSInt();
+    if (auto c = v.getDefiningOp<cir::CastOp>()) return constantInteger(c.getSrc(), depth + 1);
+    if (auto o = v.getDefiningOp<cir::OrOp>()) {
+        auto l = constantInteger(o.getLhs(), depth + 1), r = constantInteger(o.getRhs(), depth + 1);
+        if (l && r) return *l | *r;
+    }
+    return std::nullopt;
+}
+
+// Whether a function's first argument is the hidden return slot.
+static bool firstArgIsSret(cir::FuncOp f) {
+    auto attrs = f.getArgAttrsAttr();
+    if (!attrs || attrs.empty()) return false;
+    auto d = dyn_cast<DictionaryAttr>(attrs[0]);
+    return d && d.get("llvm.sret");
+}
+
+// What a modelled library queue declares. A class declares one thread on
+// each side through its type, whether its constructor is in sight or only
+// its pushes and pops are. An rte_ring declares a side single through an
+// rte_ring_sp_* or rte_ring_sc_* call on that side, and through its flags
+// (RING_F_SP_ENQ 0x1, RING_F_SC_DEQ 0x2, rte_ring_core.h) only when some
+// call on that side follows them: a side reached only by rte_ring_mp_* or
+// rte_ring_mc_* calls is many whatever the flags say. Flags computed at run
+// time, given differently by two creations, or never seen because the
+// creation is out of sight leave such a side unknown.
+QueueOwnershipAnalysisPass::LibraryDeclaration
+QueueOwnershipAnalysisPass::libraryDeclared(llvm::ArrayRef<cir::CallOp> ctors, const RootInfo &info) {
+    LibraryDeclaration d;
+    auto syncOf = [this](Operation *op) { return libraryOp(op).sync; };
+    auto byTypeCall = [&](Operation *op) {
+        auto call = dyn_cast<cir::CallOp>(op);
+        return call && libraryCall(call).sync == LibraryQueueSync::ByType;
+    };
+    auto byTypeAccess = [&](const Access &a) { return byTypeCall(a.op); };
+    const bool byType = llvm::any_of(ctors, [&](cir::CallOp c) { return byTypeCall(c.getOperation()); }) ||
+                        llvm::any_of(info.producers.accesses, byTypeAccess) ||
+                        llvm::any_of(info.consumers.accesses, byTypeAccess);
+    if (byType) {
+        d.producers = d.consumers = Declared::One;
+        d.how = "by its type";
+        return d;
+    }
+    std::optional<int64_t> flags;
+    if (ctors.empty()) d.unknown = "its creation is not in this translation unit, so its flags are not known";
+    for (cir::CallOp ctor : ctors) {
+        LibraryQueueCall l = libraryCall(ctor);
+        std::optional<int64_t> f = l.flagsOperand && *l.flagsOperand < ctor.getNumOperands()
+                                       ? constantInteger(ctor.getOperand(*l.flagsOperand))
+                                       : std::nullopt;
+        if (!f) {
+            d.unknown = "its flags are computed at run time";
+            break;
+        }
+        if (flags && (*flags & 3) != (*f & 3)) {
+            d.unknown = "its creations give it different flags";
+            break;
+        }
+        flags = f;
+    }
+    for (auto [side, out, bit] : {std::tuple{&info.producers, &d.producers, int64_t(1)},
+                                  std::tuple{&info.consumers, &d.consumers, int64_t(2)}}) {
+        const Access *single = nullptr;
+        bool followsFlags = false;
+        for (const Access &a : side->accesses) {
+            const LibraryQueueSync sync = syncOf(a.op);
+            if (sync == LibraryQueueSync::Single && !single) single = &a;
+            if (sync == LibraryQueueSync::ByFlags) followsFlags = true;
+        }
+        if (single) {
+            *out = Declared::One;
+            auto call = cast<cir::CallOp>(single->op);
+            if (!d.how.empty()) d.how += ", and ";
+            d.how += ("by " + lookupCallee(call).getSymName() + " at " +
+                      whereOf(call.getLoc(), /*fileOnly=*/true)).str();
+        } else if (followsFlags) {
+            if (!d.unknown.empty()) *out = Declared::Unknown;
+            else if (*flags & bit) {
+                *out = Declared::One;
+                if (d.how.find("by its flags") == std::string::npos)
+                    d.how = d.how.empty() ? "by its flags" : "by its flags, and " + d.how;
+            }
+        }
+    }
+    return d;
+}
+
+std::string QueueOwnershipAnalysisPass::openWhy(Type t) {
+    auto [it, fresh] = openWhyCache.try_emplace(t);
+    if (!fresh) return it->second;
+    std::string why;
+    auto isRing = [](Type ty) {
+        auto rec = dyn_cast_or_null<cir::RecordType>(ty);
+        return rec && rec.getName() && rec.getName().getValue() == "rte_ring";
+    };
+    // A pointer to a queue of this type, or to one (an array of rings).
+    auto pointsToQueue = [&](Type ty) {
+        auto p = dyn_cast<cir::PointerType>(ty);
+        if (!p) return false;
+        if (p.getPointee() == t) return true;
+        auto pp = dyn_cast<cir::PointerType>(p.getPointee());
+        return pp && pp.getPointee() == t;
+    };
+    // A record with such a pointer among its members, directly, in an
+    // array member, or in a record held by value at any depth: a structure
+    // of parameters naming a ring, or DPDK's per-lcore configuration with
+    // its array of rings. Records cannot hold themselves by value, so the
+    // descent ends; `seen` only spares repeated work.
+    llvm::DenseSet<Type> seen;
+    std::function<bool(Type)> holdsQueue = [&](Type ty) {
+        while (auto arr = dyn_cast_or_null<cir::ArrayType>(ty)) ty = arr.getElementType();
+        if (pointsToQueue(ty)) return true;
+        auto rec = dyn_cast_or_null<cir::RecordType>(ty);
+        if (!rec || rec.isIncomplete() || !seen.insert(rec).second) return false;
+        return llvm::any_of(rec.getMembers(), [&](Type m) { return holdsQueue(m); });
+    };
+    // What an operand hands over, seen through the casts to void * it
+    // went through: (void *)ring is a ring, (void *)&conf a structure.
+    auto reaches = [&](Value v) {
+        for (Type ty : {v.getType(), traceToLocalRoot(v).getType()}) {
+            auto p = dyn_cast<cir::PointerType>(ty);
+            if (pointsToQueue(ty) || (p && holdsQueue(p.getPointee()))) return true;
+        }
+        return false;
+    };
+    // Whether a pointer to a queue of this type is stored into a member of
+    // some record, or into an element of an array member: then a void *
+    // handed to code out of sight may hold it.
+    bool storedInRecord = false;
+    module.walk([&](cir::StoreOp st) {
+        if (!pointsToQueue(st.getValue().getType())) return WalkResult::advance();
+        Value a = traceToLocalRoot(st.getAddr());
+        for (unsigned depth = 0; depth < 8; ++depth) {
+            if (auto ps = a.getDefiningOp<cir::PtrStrideOp>()) a = traceToLocalRoot(ps.getBase());
+            else if (auto ge = a.getDefiningOp<cir::GetElementOp>()) a = traceToLocalRoot(ge.getBase());
+            else break;
+        }
+        if (a.getDefiningOp<cir::GetMemberOp>()) {
+            storedInRecord = true;
+            return WalkResult::interrupt();
+        }
+        return WalkResult::advance();
+    });
+    auto isVoidPointer = [](Type ty) {
+        auto p = dyn_cast<cir::PointerType>(ty);
+        return p && isa<cir::VoidType>(p.getPointee());
+    };
+    module.walk([&](cir::CallOp call) {
+        if (!why.empty()) return WalkResult::interrupt();
+        cir::FuncOp callee = lookupCallee(call);
+        if (!callee) return WalkResult::advance();
+        if (auto f = call->getParentOfType<cir::FuncOp>(); f && isLibraryFunction(f))
+            return WalkResult::advance();
+        if (isRing(t) && callee.getSymName() == "rte_ring_lookup") {
+            why = "rte_ring_lookup hands rings to code that finds them by name";
+            return WalkResult::interrupt();
+        }
+        // A thread start's argument goes to an entry the walk follows.
+        if (!callee.getBody().empty() || isLibraryFunction(callee) || isAllocator(callee) ||
+            touchesOnlyItsArguments(callee) || callee.getSymName() == "free" ||
+            getSemanticKind(callee) == SemanticOpKind::ThreadSpawn)
+            return WalkResult::advance();
+        if (llvm::any_of(call.getOperands(), reaches))
+            why = ("it is handed to " + callee.getSymName() + ", whose body is not here").str();
+        else if (storedInRecord &&
+                 llvm::any_of(call.getOperands(), [&](Value v) { return isVoidPointer(v.getType()); }))
+            why = ("it is kept in a structure, and " + callee.getSymName() +
+                   ", whose body is not here, takes a void * that may hold one")
+                      .str();
+        return WalkResult::advance();
+    });
+    it = openWhyCache.find(t);
+    it->second = why;
+    return why;
+}
+
+void QueueOwnershipAnalysisPass::poisonAddressTakenLibraryOps() {
+    // Every use of the function's symbol that is not a direct call takes
+    // its address: a cir.get_global, a global's initialiser
+    // (#cir.global_view), a member-function pointer (#cir.method, or the
+    // __const. global holding one), a thread's entry. Uses inside the
+    // library's own functions are the library's.
+    module.walk([&](cir::FuncOp f) {
+        LibraryQueueFunction l = libraryFunction(f);
+        if (l.role != LibraryQueueRole::Push && l.role != LibraryQueueRole::Pop) return;
+        std::optional<SymbolTable::UseRange> uses = SymbolTable::getSymbolUses(f, module);
+        Operation *taken = nullptr;
+        if (!uses) taken = f.getOperation();
+        else
+            for (const SymbolTable::SymbolUse &u : *uses) {
+                Operation *user = u.getUser();
+                if (auto call = dyn_cast<cir::CallOp>(user); call && !call.isIndirect()) continue;
+                if (auto in = user->getParentOfType<cir::FuncOp>(); in && isLibraryFunction(in)) continue;
+                taken = user;
+                break;
+            }
+        if (!taken) return;
+        const unsigned arg = (firstArgIsSret(f) ? 1 : 0) + l.queueArg;
+        auto inputs = f.getFunctionType().getInputs();
+        auto pt = arg < inputs.size() ? dyn_cast<cir::PointerType>(inputs[arg]) : cir::PointerType();
+        const std::string why = "the address of " + llvm::demangle(f.getSymName().str()) +
+                                " is taken, and calls through it are not counted";
+        if (!pt) globalPoison = true;
+        else if (poisonedTypes.insert(pt.getPointee()).second) poisonWhy[pt.getPointee()] = why;
+        taken->emitRemark() << "wtc: " << why << "; every queue of its type is now unknown";
+        ++remarks;
+    });
+}
+
 bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &info, Topology verdict,
                                                const std::string &label,
                                                llvm::ArrayRef<cir::CallOp> ctors, bool capExceeded,
-                                               bool summary) {
-    auto tag = constructorTag(ctors);
+                                               bool summary, bool library, Type objTy) {
+    std::string how, open;
+    std::optional<int64_t> tag;
+    // Where a library queue's diagnostics go: its constructor, or with none
+    // seen, the queue itself.
+    Operation *at = ctors.empty() ? root : cir::CallOp(ctors.front()).getOperation();
+    if (!library) {
+        tag = constructorTag(ctors);
+    } else {
+        LibraryDeclaration d = libraryDeclared(ctors, info);
+        open = openWhy(objTy);
+        how = d.how;
+        const bool manyProducers = verdict == Topology::mpsc || verdict == Topology::mpmc ||
+                                   verdict == Topology::unknown;
+        const bool manyConsumers = verdict == Topology::spmc || verdict == Topology::mpmc ||
+                                   verdict == Topology::unknown;
+        // A type whose queues are all unknown is past checking whatever is
+        // declared; say why, as for a shim queue below.
+        auto poisoned = poisonWhy.find(objTy);
+        // A side whose declaration is not known is checked only when this
+        // translation unit has at most one thread on it.
+        if (poisoned == poisonWhy.end() && ((d.producers == Declared::Unknown && manyProducers) ||
+                                            (d.consumers == Declared::Unknown && manyConsumers))) {
+            at->emitWarning() << "wtc: queue " << label << " cannot be checked: " << d.unknown;
+            ++remarks;
+            return true;
+        }
+        const bool oneProducer = d.producers == Declared::One, oneConsumer = d.consumers == Declared::One;
+        tag = oneProducer && oneConsumer ? 1 : oneConsumer ? 3 : oneProducer ? 4 : 0;
+        if (*tag == 0 && poisoned != poisonWhy.end()) {
+            at->emitWarning() << "wtc: queue " << label << " cannot be checked: " << poisoned->second;
+            ++remarks;
+            return true;
+        }
+        // Declared for many on both sides: more cautious than needed when
+        // the threads allow less, unless code out of sight may use it too.
+        if (*tag == 0) {
+            if (d.producers == Declared::Many && d.consumers == Declared::Many && open.empty() &&
+                (verdict == Topology::spsc || verdict == Topology::mpsc || verdict == Topology::spmc)) {
+                at->emitRemark() << "wtc: queue " << label
+                                 << " is declared mpmc, but in this translation unit its threads allow "
+                                 << stringifyTopology(verdict);
+                ++remarks;
+            }
+            return true;
+        }
+    }
     if (!tag || *tag == 0) return true;  // nothing declared, or nothing readable
-    cir::CallOp ctor = ctors.front();
     // mpsc promises one consumer and any number of producers, spmc one
     // producer and any number of consumers; the others, one of each.
     const bool declaredMpsc = *tag == 3, declaredSpmc = *tag == 4;
-    const char *declared = *tag == 2       ? "spsc_inline"
+    std::string declared = *tag == 2       ? "spsc_inline"
                            : declaredMpsc ? "mpsc"
                            : declaredSpmc ? "spmc"
                                           : "spsc";
+    if (!how.empty()) declared += " (" + how + ")";
     if (verdict == Topology::spsc || (declaredMpsc && verdict == Topology::mpsc) ||
         (declaredSpmc && verdict == Topology::spmc)) {
-        ctor.emitRemark() << "wtc: queue " << label << ": declared " << declared << ", verified";
+        InFlightDiagnostic r =
+            at->emitRemark() << "wtc: queue " << label << ": declared " << declared << ", verified";
+        // A library queue may be shared with code the module does not show:
+        // another file, another process, a library that takes it whole or
+        // inside a structure. The verdict is about this one.
+        if (library) r << " in this translation unit" << (open.empty() ? "" : "; " + open);
         ++remarks;
         return true;
     }
@@ -639,7 +983,7 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
             if (firstOfThread.size() >= 2) exclusiveSide = pushes ? "push to it" : "pop from it";
             continue;
         }
-        InFlightDiagnostic d = ctor.emitError()
+        InFlightDiagnostic d = at->emitError()
                                << "wtc: queue " << label << " is declared " << declared << " but ";
         if (certainMany) d << "many threads ";
         else d << firstOfThread.size() << " threads ";
@@ -657,10 +1001,13 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
         return false;
     }
     // Not as declared, but nothing certain: say why it could not be checked.
-    InFlightDiagnostic w = ctor.emitWarning()
+    InFlightDiagnostic w = at->emitWarning()
                            << "wtc: queue " << label << " is declared " << declared << "; cannot verify: ";
-    auto built = dyn_cast<cir::PointerType>(ctor.getOperand(0).getType());
-    const Type objTy = built ? built.getPointee() : queueObjectType(root);
+    if (!objTy) {
+        cir::CallOp first = ctors.empty() ? cir::CallOp() : cir::CallOp(ctors.front());
+        auto built = first ? dyn_cast<cir::PointerType>(first.getOperand(0).getType()) : cir::PointerType();
+        objTy = built ? built.getPointee() : queueObjectType(root);
+    }
     if (capExceeded) w << "the program has too many function instances";
     else if (globalPoison) w << "an access to some queue could not be attributed";
     else if (auto it = poisonWhy.find(objTy); it != poisonWhy.end()) w << it->second;
@@ -699,9 +1046,10 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
 
         Operation *root = key.first;
         const bool whole = isWhole(key, objTy);
+        const bool library = libraryKeys.contains(key);
         const std::string label = labelOf(key, whole);
         const char *noCarrier = nullptr;
-        Operation *carrier = whole ? root : carrierOf(key, noCarrier);
+        Operation *carrier = library ? nullptr : whole ? root : carrierOf(key, noCarrier);
         if (carrier) {
             carrier->setAttr(kTopologyAttrName, TopologyAttr::get(ctx, t));
             carrier->setAttr(kQueueIdAttrName, IntegerAttr::get(IntegerType::get(ctx, 64), idOf(key)));
@@ -739,26 +1087,31 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
                                    << ", so one when it runs at most once";
                 ++remarks;
             }
-        if (!carrier && t == Topology::spsc) {
+        if (!carrier && !library && t == Topology::spsc) {
             root->emitRemark() << "wtc: queue " << label << " keeps the general-purpose implementation: "
                                << noCarrier;
             ++remarks;
         }
         llvm::SmallVector<cir::CallOp, 2> ctors;
-        if (whole) {
+        if (whole && !library) {
             if (auto it = ctorsOf.find(root); it != ctorsOf.end()) ctors.assign(it->second.begin(), it->second.end());
         } else if (auto it = keyCtors.find(key); it != keyCtors.end()) {
             for (Operation *c : it->second) ctors.push_back(cast<cir::CallOp>(c));
         }
-        if (!ctors.empty()) {
+        // A library queue declares through its calls too, so it is checked
+        // even when its constructor is out of sight.
+        if (!ctors.empty() || library) {
             const bool summary = isa<cir::CallOp>(root) && !walk->siteRunsOnce(root);
-            contractsHold &= checkDeclared(root, info, t, label, ctors, capExceeded, summary);
+            contractsHold &= checkDeclared(root, info, t, label, ctors, capExceeded, summary, library,
+                                           library ? objTy : Type());
         }
     }
     if (!contractsHold) signalPassFailure();
 
-    // Each operation gets the meet over every queue it may act on.
+    // Each operation gets the meet over every queue it may act on; a
+    // library's calls stay as the program wrote them.
     for (auto &[op, ks] : opRoots) {
+        if (libraryOp(op)) continue;
         Topology t = Topology::unknown;
         bool first = true;
         for (const Key &k : ks) {
@@ -781,7 +1134,7 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
     }
     // Poisoned operations that resolved to nothing: unknown, explicitly.
     module.walk([&](Operation *op) {
-        if (isQueueOp(op) && !op->getAttr("topology"))
+        if (isQueueOp(op) && !libraryOp(op) && !op->getAttr("topology"))
             op->setAttr("topology", TopologyAttr::get(ctx, Topology::unknown));
     });
 }
@@ -791,7 +1144,8 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
     roots.clear(); poisonedTypes.clear(); poisonWhy.clear(); opRoots.clear();
     ctorKeys.clear(); keyCtors.clear(); ctorUnplaced.clear(); keyType.clear();
     memberCtors.clear(); abstractKeys.clear(); layout.reset();
-    keyCtorInst.clear(); captureStores.clear();
+    keyCtorInst.clear(); captureStores.clear(); libraryKeys.clear(); openWhyCache.clear();
+    libraryFunctions.clear();
     globalPoison = false; remarks = 0;
     poisonedOps.clear();
 
@@ -801,7 +1155,17 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
     // needs the predicate, so the lambda is named: a temporary would die at
     // the end of the constructor call and leave function_ref dangling.
     ThreadInstanceWalk *self = nullptr;
-    auto relevant = [&](cir::FuncOp f) { return self->reachesOp(f, isQueueOpOrConstructor); };
+    // A modelled library's bodies are walked like any other when they reach
+    // the program's code (a functor handed to consume_one, an element's
+    // constructor inside emplace), which may use queues of its own. The
+    // modelled operations inside them are not counted (inLibraryBody), nor
+    // do they make a body worth entering: DPDK's chains of inline ring
+    // functions reach nothing of the program's.
+    auto relevant = [&](cir::FuncOp f) {
+        return self->reachesOp(f, [this](Operation *op) {
+            return isQueueOpOrConstructor(op) && !inLibraryBody(op);
+        });
+    };
     ThreadInstanceWalk walk(module, relevant);
     self = &walk;
     this->walk = &walk;
@@ -814,6 +1178,7 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
     walk.run(
         [&](Instance &inst) {
             inst.func.walk([&](Operation *op) {
+                if (inLibraryBody(op)) return;
                 if (isQueueOp(op)) visits.push_back({op, &inst});
                 else if (isQueueConstructor(op)) ctorVisits.push_back({op, &inst});
             });
@@ -825,9 +1190,39 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
     // object; a heap queue by the call after its allocation.
     for (auto [op, inst] : ctorVisits) {
         auto call = cast<cir::CallOp>(op);
+        // rte_ring_create is the allocation and the constructor in one: the
+        // ring is the object the call hands back, which the walk places at
+        // the call itself.
+        if (isRingCreate(op)) {
+            auto made = call.getNumResults() ? dyn_cast<cir::PointerType>(call.getResult().getType())
+                                             : cir::PointerType();
+            if (!made) { ctorUnplaced.insert(op); continue; }
+            const Key k{op, 0};
+            ctorKeys[op].insert(k);
+            keyCtors[k].insert(op);
+            keyType.try_emplace(k, made.getPointee());
+            auto [ci, first] = keyCtorInst.try_emplace(k, inst);
+            if (!first && ci->second != inst) ci->second = kAmbiguous;
+            continue;
+        }
         auto built = dyn_cast<cir::PointerType>(call.getOperand(0).getType());
+        // A library queue built where the walk cannot name the object --
+        // rte_ring_init on an element of an array, say -- leaves its
+        // declaration unread wherever its pushes and pops land: every
+        // queue of its type is unknown, rather than undeclared.
+        const bool library = static_cast<bool>(libraryCall(call));
         for (const Place &pl : walk.resolvePlaces(call.getOperand(0), inst)) {
-            if (!built || !pl.root || pl.unknownIndex || pl.loop) { ctorUnplaced.insert(op); continue; }
+            if (!built || !pl.root || pl.unknownIndex || pl.loop) {
+                ctorUnplaced.insert(op);
+                if (library && built && poisonedTypes.insert(built.getPointee()).second) {
+                    poisonWhy[built.getPointee()] =
+                        "a queue of its type is built where the analysis cannot name the object";
+                    call.emitRemark() << "wtc: this queue is built where the analysis cannot name the "
+                                         "object; every queue of its type is now unknown";
+                    ++remarks;
+                }
+                continue;
+            }
             const Key k{pl.root, pl.offset};
             ctorKeys[op].insert(k);
             keyCtors[k].insert(op);
@@ -921,7 +1316,8 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
         }
         for (const Key &root : rs) {
             RootInfo &info = roots[root];
-            SideInfo &side = isa<QueuePopOp>(op) ? info.consumers : info.producers;
+            if (libraryOp(op)) libraryKeys.insert(root);
+            SideInfo &side = isConsumerOp(op) ? info.consumers : info.producers;
             side.threads.insert(inst->thread);
             Access a = accessOf(op, *inst);
             a.oneOf = rs.size() > 1;
@@ -963,6 +1359,8 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
                             << " function instances; every queue is unknown";
         ++remarks;
     }
+    // Before the remarks below: it may leave an access with no type.
+    poisonAddressTakenLibraryOps();
     if (globalPoison) {
         module.emitRemark() << "wtc: an unresolvable queue access had no type to attribute it to; "
                                "every queue is unknown";

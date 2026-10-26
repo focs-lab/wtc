@@ -44,6 +44,57 @@ bool isWTCAnnotatedCall(cir::CallOp op, StringRef annotation);
 
 SemanticOpKind getSemanticKind(cir::FuncOp funcOp);
 
+// Queues of libraries the analysis has a model of, read from the callee's
+// name: DPDK's rte_ring, and the single-producer single-consumer queues of
+// rigtorp (SPSCQueue), folly (ProducerConsumerQueue), boost
+// (lockfree::spsc_queue) and moodycamel (ReaderWriterQueue,
+// BlockingReaderWriterQueue). Their threads are counted like a shim
+// queue's and what they declare is checked; nothing about them is
+// rewritten. A model is a reading of the library's API, stated as such:
+// the method names in Utils.cpp, and DPDK's naming, in which an
+// rte_ring_sp_* or rte_ring_sc_* call is the single-thread form of its
+// side whatever the ring's flags say, rte_ring_mp_* and rte_ring_mc_* the
+// multi-thread form, and the rest follow the flags.
+enum class LibraryQueueRole {
+    None,
+    Create,     // rte_ring_create: the result is the queue
+    Construct,  // a constructor, or rte_ring_init: an operand is the queue
+    Push,
+    Pop,
+};
+// What decides how many threads a call may share its side with.
+enum class LibraryQueueSync {
+    ByType,   // a single-producer single-consumer class: one each
+    ByFlags,  // rte_ring_enqueue and the like: the ring's flags
+    Single,   // rte_ring_sp_*, rte_ring_sc_*: one, whatever the flags
+    Multi,    // rte_ring_mp_*, rte_ring_mc_*: any number
+};
+// A function as the model reads it. `member` is set for every function of
+// a modelled class or of DPDK's ring library, whatever its role: its body
+// is the library's, not the program's.
+struct LibraryQueueFunction {
+    LibraryQueueRole role = LibraryQueueRole::None;
+    LibraryQueueSync sync = LibraryQueueSync::ByType;
+    unsigned queueArg = 0;               // the queue, counted over the source's arguments
+    std::optional<unsigned> flagsArg;    // an rte_ring's flags, at its creation
+    bool member = false;
+    explicit operator bool() const { return role != LibraryQueueRole::None; }
+};
+// Read from the name each time it is asked; a pass that asks often keeps
+// its own answers (QueueOwnershipAnalysis does, per run).
+LibraryQueueFunction libraryQueueFunction(cir::FuncOp f);
+// The same for one call, with the operands counted over all of the call's.
+struct LibraryQueueCall {
+    LibraryQueueRole role = LibraryQueueRole::None;
+    LibraryQueueSync sync = LibraryQueueSync::ByType;
+    unsigned queueOperand = 0;           // unused for Create
+    std::optional<unsigned> flagsOperand;
+    explicit operator bool() const { return role != LibraryQueueRole::None; }
+};
+LibraryQueueCall libraryQueueCall(cir::CallOp call, const LibraryQueueFunction &callee);
+LibraryQueueCall libraryQueueCall(cir::CallOp call);
+bool isLibraryQueueFunction(cir::FuncOp f);
+
 // Whether operand `idx` of the call is the hidden return slot the calling
 // convention inserts for a non-trivial return type. ClangIR marks it with
 // the `llvm.sret` argument attribute on the call site and on the callee;

@@ -6,6 +6,9 @@
 
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/StringSet.h"
+#include "llvm/Demangle/Demangle.h"
+
+#include <cstdlib>
 
 namespace mlir::wtc {
 
@@ -92,6 +95,129 @@ SemanticOpKind getSemanticKind(cir::FuncOp funcOp) {
     }
     return SemanticOpKind::Unknown;
 }
+
+namespace {
+// A single-producer single-consumer class: how its name appears inside a
+// mangled nested name (a cheap filter), the class as demangled, and the
+// methods that push and those that pop. Anything else -- size, empty,
+// capacity, the destructor -- is neither.
+struct LibraryClass {
+    StringRef mangled, qualified;
+    llvm::ArrayRef<StringLiteral> pushes, pops;
+};
+constexpr StringLiteral kRigtorpPush[] = {"emplace", "try_emplace", "push", "try_push"};
+constexpr StringLiteral kRigtorpPop[] = {"front", "pop"};
+constexpr StringLiteral kFollyPush[] = {"write"};
+constexpr StringLiteral kFollyPop[] = {"read", "frontPtr", "popFront"};
+constexpr StringLiteral kBoostPush[] = {"push"};
+constexpr StringLiteral kBoostPop[] = {"pop", "consume_one", "consume_all", "front"};
+constexpr StringLiteral kMoodyPush[] = {"enqueue", "try_enqueue", "emplace", "try_emplace"};
+constexpr StringLiteral kMoodyPop[] = {"try_dequeue", "peek", "pop", "wait_dequeue", "wait_dequeue_timed"};
+const LibraryClass kLibraryClasses[] = {
+    {"7rigtorp9SPSCQueue", "rigtorp::SPSCQueue", kRigtorpPush, kRigtorpPop},
+    {"5folly21ProducerConsumerQueue", "folly::ProducerConsumerQueue", kFollyPush, kFollyPop},
+    {"5boost8lockfree10spsc_queue", "boost::lockfree::spsc_queue", kBoostPush, kBoostPop},
+    {"10moodycamel17ReaderWriterQueue", "moodycamel::ReaderWriterQueue", kMoodyPush, kMoodyPop},
+    {"10moodycamel25BlockingReaderWriterQueue", "moodycamel::BlockingReaderWriterQueue", kMoodyPush,
+     kMoodyPop},
+};
+
+// The class among those above whose member `mangled` is, with the member's
+// base name and whether it is a constructor; null for anything else,
+// including a function that only takes such a queue as an argument. A name
+// may mention several of the classes (a queue of queues); the member's own
+// class is the one its context starts with.
+const LibraryClass *libraryClassOf(StringRef mangled, std::string &base, bool &ctor) {
+    if (!mangled.starts_with("_Z")) return nullptr;
+    if (llvm::none_of(kLibraryClasses, [&](const LibraryClass &c) { return mangled.contains(c.mangled); }))
+        return nullptr;
+    // The demangler's nodes point into the name it parsed, so the copy
+    // lives as long as they are read.
+    const std::string name = mangled.str();
+    llvm::ItaniumPartialDemangler d;
+    if (d.partialDemangle(name.c_str()) || !d.isFunction()) return nullptr;
+    size_t n = 0;
+    char *c = d.getFunctionDeclContextName(nullptr, &n);
+    const std::string context = c ? c : "";
+    std::free(c);
+    const LibraryClass *cls = nullptr;
+    for (const LibraryClass &k : kLibraryClasses)
+        if (mangled.contains(k.mangled) && StringRef(context).starts_with((k.qualified + "<").str()))
+            cls = &k;
+    if (!cls) return nullptr;
+    char *b = d.getFunctionBaseName(nullptr, &n);
+    base = b ? b : "";
+    std::free(b);
+    ctor = d.isCtorOrDtor() && !StringRef(base).starts_with("~");
+    return cls;
+}
+
+bool isDpdkRingFunction(StringRef n) { return n.starts_with("rte_ring_") || n.starts_with("__rte_ring"); }
+
+// What a function is, read from its name alone.
+LibraryQueueFunction classify(StringRef n) {
+    LibraryQueueFunction r;
+    if (isDpdkRingFunction(n)) {
+        r.member = true;
+        r.sync = LibraryQueueSync::ByFlags;
+        // rte_ring_create(name, count, socket, flags),
+        // rte_ring_create_elem(name, esize, count, socket, flags),
+        // rte_ring_init(r, name, count, flags).
+        if (n == "rte_ring_create") {
+            r.role = LibraryQueueRole::Create;
+            r.flagsArg = 3;
+        } else if (n == "rte_ring_create_elem") {
+            r.role = LibraryQueueRole::Create;
+            r.flagsArg = 4;
+        } else if (n == "rte_ring_init") {
+            r.role = LibraryQueueRole::Construct;
+            r.flagsArg = 3;
+        } else if (n.contains("enqueue") || n.contains("dequeue")) {
+            // Every enqueue and dequeue, bulk, burst, element-sized, peek
+            // and zero-copy, takes the ring first. sp_ and sc_ name the
+            // single-thread forms, mp_ and mc_ the multi-thread ones
+            // (with their rts_ and hts_ kinds); the rest follow the flags.
+            const bool push = n.contains("enqueue");
+            r.role = push ? LibraryQueueRole::Push : LibraryQueueRole::Pop;
+            if (n.contains(push ? "_sp_" : "_sc_")) r.sync = LibraryQueueSync::Single;
+            else if (n.contains(push ? "_mp_" : "_mc_")) r.sync = LibraryQueueSync::Multi;
+        }
+        return r;
+    }
+    std::string base;
+    bool ctor = false;
+    const LibraryClass *cls = libraryClassOf(n, base, ctor);
+    if (!cls) return r;
+    r.member = true;
+    r.sync = LibraryQueueSync::ByType;
+    if (ctor) r.role = LibraryQueueRole::Construct;
+    else if (llvm::is_contained(cls->pushes, base)) r.role = LibraryQueueRole::Push;
+    else if (llvm::is_contained(cls->pops, base)) r.role = LibraryQueueRole::Pop;
+    return r;
+}
+} // namespace
+
+LibraryQueueFunction libraryQueueFunction(cir::FuncOp f) {
+    return f ? classify(f.getSymName()) : LibraryQueueFunction();
+}
+
+LibraryQueueCall libraryQueueCall(cir::CallOp call, const LibraryQueueFunction &f) {
+    if (!f) return {};
+    LibraryQueueCall r;
+    const unsigned k = firstRealOperand(call);
+    r.role = f.role;
+    r.sync = f.sync;
+    r.queueOperand = k + f.queueArg;
+    if (f.flagsArg) r.flagsOperand = k + *f.flagsArg;
+    if (r.role != LibraryQueueRole::Create && r.queueOperand >= call.getNumOperands()) return {};
+    return r;
+}
+
+LibraryQueueCall libraryQueueCall(cir::CallOp call) {
+    return libraryQueueCall(call, libraryQueueFunction(lookupCallee(call)));
+}
+
+bool isLibraryQueueFunction(cir::FuncOp f) { return libraryQueueFunction(f).member; }
 
 static bool dictHasSret(Attribute dictLike) {
     auto dict = mlir::dyn_cast_or_null<DictionaryAttr>(dictLike);
