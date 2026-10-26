@@ -112,12 +112,13 @@ repetitions with the variants interleaved, ratios taken within a
 repetition, and the current general-purpose queue as the program as
 written; they report ratios, not absolute speeds to compare across hosts.
 In them the allocator is a factor: each variant under glibc and jemalloc,
-and in W1 and the ablation also under tcmalloc, mimalloc and snmalloc,
+in W1 and the ablation also under tcmalloc, mimalloc and snmalloc, in W9
+also under mimalloc and in the thread pool also under snmalloc,
 since a queue that hands its elements over through the heap is measuring
 the allocator as much as itself. Each figure below names the leg it is
-drawn from: the queue alone, the pipeline, its grain and batching from the
-26 October legs (under glibc), latency, coarsening and many threads from
-the 21 October ones. The baselines are the ones the concurrent-queue literature measures
+drawn from: the queue alone, the pipeline, its grain, batching and many
+threads from the 26 October legs (under glibc), latency and coarsening
+from the 21 October ones. The baselines are the ones the concurrent-queue literature measures
 against:
 
 - **B0**, the program as written: the shim's general-purpose queue, since
@@ -127,7 +128,8 @@ against:
 - **B1**, general-purpose libraries: oneTBB, moodycamel ConcurrentQueue
   (CQ), Boost lock-free and `std::mutex`, and in W9 the queues the
   lock-free queue literature measures against, from the LPRQ paper's
-  artifact: LCRQ, LPRQ, LSCQ and the fetch-and-add array queue;
+  artifact: LCRQ, LPRQ, LSCQ and the fetch-and-add array queue (oneTBB
+  only in the 21 October legs: the second host has none);
 - **B2**, expert single-producer queues: rigtorp's, moodycamel
   ReaderWriterQueue (RWQ) and Boost spsc;
 - **B3**, the same source with its tags written by hand.
@@ -237,6 +239,16 @@ about 10 µs. PARSEC's ferret and dedup sit far to the right, which is why
 they gain nothing ([applications](#applications)); the programs that gain
 are fine-grained ones.
 
+The other end of the same axis is a pipeline that should not be one: three
+stages fused into one loop on one thread against three threads joined by
+rings (W12). Fused is faster below about 18 ns of work a stage, up to 33×
+with no work, where the pipeline is bound by its two hand-overs; from about
+100 ns the pipeline wins 2.5–2.7× on its three cores
+([`2026-10-26-eval-fusion`](benchmarks/results/2026-10-26-eval-fusion/NOTE.md)).
+Fusion, like coarsening below, is a transformation whose legality is not
+its profitability; both need an estimate of the work between the operations
+they remove.
+
 ### Batching
 
 <p align="center"><img src="docs/figures/w7.svg" alt="W7 throughput and delay against the batch size" width="100%"></p>
@@ -265,28 +277,40 @@ estimate of that work is the next step for this transformation.
 
 <p align="center"><img src="docs/figures/w9.svg" alt="W9 throughput of the general-purpose queues and of the mpsc and spmc substitutes" width="100%"></p>
 
-Where one side is single, the compiler substitutes a list for many
-producers or a ring for many consumers: 2.5–4.0× and 2.0–2.9× the
-general-purpose queue. The ring is level with the best library or ahead of
-it; the list reaches 87–94% of oneTBB and 63–86% of moodycamel, whose
-producers each fill a sub-queue of their own. Where both sides are many
-the compiler keeps the general-purpose queue, and that queue, a two-lock
-list, does not scale: at eight producers and eight consumers it is 7–8×
-behind oneTBB and moodycamel. Every queue the analysis cannot prove keeps
-it, so a strong queue for many producers and many consumers in its place
-would raise the floor for all of them.
+Where both sides are many the compiler keeps the general-purpose queue,
+the segmented queue every unproved queue keeps, and it is no longer the
+weak link: 7.9× the two-lock list it replaced (2:2 to 8:8), 1.7× moodycamel's
+ConcurrentQueue and 1.6× LCRQ with producers and consumers on their own
+threads (geometric means over shapes and allocators, paired; least at
+8:8). In the pairwise workload of the lock-free queue literature, where
+every thread pushes and then pops, it trails LCRQ, LPRQ and the
+fetch-and-add array queue from four threads on (0.71–0.85×). Every row
+here allocates once per element, the shim on the consumer's side, the
+libraries on the producer's, which likely favours the shim against them
+(inferred, not measured).
 
-That queue now exists. The general-purpose implementation is a list of
-array segments whose cells producers and consumers each take with one
-fetch-and-add, linearisable and freed through hazard pointers
-(`runtime/segment_queue.hpp`); its single-consumer form replaces the list
-for many producers. No leg has measured it yet; untimed runs, which the
-rule above excludes from this page's figures, put it ahead of moodycamel
-and oneTBB wherever both sides are many, level with them for many
-producers and one consumer, and within about 15% where one producer feeds
-many consumers, where the compiler substitutes the ring anyway. The legs
-re-run against it on 26 October are reported above; the many-thread leg
-is still running.
+Where one side is single the compiler substitutes the segmented queue's
+single-consumer form for many producers or a ring for many consumers:
+1.3× (0.99–2.05) and 2.2× (1.6–2.9) the general-purpose queue, and 2.4×
+and 2.1× moodycamel's ConcurrentQueue
+([`2026-10-26-eval-w9`](benchmarks/results/2026-10-26-eval-w9/NOTE.md)).
+Against the two-lock list (21 October) the substitutes were 2.5–4.0× and
+2.0–2.9×; the general queue they replace got stronger.
+
+A thread pool (W11: one submitter, 1 to 8 workers, tasks with a 16- to
+256-byte capture and 0 to 1000 ns of work) shows where that ring stops
+paying. With no work it and the task held by value in the queue's cell,
+instead of a `std::function` allocated per task, give 2.8× (0.74–9.1) the
+pool as written; at 100 ns of work 1.3×, at 1000 ns 1.04×. The ring
+alone is a loss in two places: with eight workers and 1 µs tasks, 0.51×
+on heap tasks (where the allocator weighs in: 0.18–0.20 under jemalloc at
+64 and 256 bytes) and 0.85× on tasks in the cell, and with four workers
+and 100 ns tasks, 0.72× and 0.81×. The likely cause, inferred and not
+isolated, is that its consumers take turns under one spin lock, so tasks
+are handed out one lock transfer at a time
+([`2026-10-26-eval-pool`](benchmarks/results/2026-10-26-eval-pool/NOTE.md)).
+Before the compiler substitutes it for a pool by default it needs a ring
+whose consumers do not take turns, or an estimate of a task's work.
 
 ### Applications
 
