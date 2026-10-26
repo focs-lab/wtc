@@ -5,7 +5,8 @@
 #
 #   spdlog-orig       spdlog as released, header-only: the mutex and
 #                     condition-variable queue (what a program gets today)
-#   spdlog-orig-spin  the same queue waiting by spinning, then yielding,
+#   spdlog-orig-spin  the same queue, its waiters spinning on a published
+#                     size instead of sleeping, then taking the mutex,
 #                     as the port does (spin_original.py): the control that
 #                     separates the queue from the way it waits
 #   spdlog-generic    the port, wtc-cc --no-specialize: the shim's

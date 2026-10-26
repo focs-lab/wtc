@@ -30,9 +30,12 @@ original sleeps on a condition variable; a worker spins, then yields,
 where the original sleeps on one too. These are the three ways the port is
 not the original; all are stated here. Waiting by spinning favours
 whoever does it while there are free cores, so the leg also runs
-`spdlog-orig-spin`: spdlog's own queue, mutex and ring unchanged, waiting
-the way the port does (`spin_original.py`). Against it the port's gain is
-the queue's alone. The sampling state of the bound is per
+`spdlog-orig-spin`: spdlog's own queue, mutex and ring unchanged, its
+waiters spinning on a size the queue publishes instead of sleeping, then
+taking the mutex, as the port's waiters spin and yield
+(`spin_original.py`). Against it most of the port's gain is the queue's:
+the control still has one shared size line the port does not, and its
+waiters take the mutex once per wake-up. The sampling state of the bound is per
 thread, not per pool, so the port assumes one pool per process, which is
 what spdlog's registry builds. The queue is a member of the pool, not of a
 queue class of its own, so that one constructor builds it and starts the
