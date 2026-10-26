@@ -302,6 +302,8 @@ single-consumer form for many producers or a ring for many consumers:
 1.3× (0.99–2.05) and 2.2× (1.6–2.9) the general-purpose queue, and 2.4×
 and 2.1× moodycamel's ConcurrentQueue
 ([`2026-10-26-eval-w9`](benchmarks/results/2026-10-26-eval-w9/NOTE.md)).
+The spmc figures are those of the ring whose consumers took turns, which
+has since been replaced (below); the AMD host's W9 leg predates the swap.
 Against the two-lock list (21 October) the substitutes were 2.5–4.0× and
 2.0–2.9×; the general queue they replace got stronger.
 
@@ -317,8 +319,14 @@ and 100 ns tasks, 0.72× and 0.81×. The likely cause, inferred and not
 isolated, is that its consumers take turns under one spin lock, so tasks
 are handed out one lock transfer at a time
 ([`2026-10-26-eval-pool`](benchmarks/results/2026-10-26-eval-pool/NOTE.md)).
-Before the compiler substitutes it for a pool by default it needs a ring
-whose consumers do not take turns, or an estimate of a task's work.
+The ring has since been replaced by a queue whose consumers claim cells
+with a compare-and-swap and take nothing in turns: in an untimed A/B on
+the Intel host it is 1.76× the general queue over the same 36
+configurations with the task in the cell (1.02–10.7) and 1.31× on the heap
+(1.03–7.2), with no configuration's median below 0.95 (single repetitions
+dipped to 0.71), where the ring was 0.40× at eight workers and
+1 µs; the AMD host's legs are still to be rerun with it
+([`2026-10-26-spmc-ab`](benchmarks/results/2026-10-26-spmc-ab/NOTE.md)).
 
 ### Applications
 

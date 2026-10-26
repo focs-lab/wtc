@@ -134,7 +134,8 @@ of t: above 10% only while a stage takes under about 10 µs. ferret (13 ms
 an image) and dedup (57 µs a chunk) lie to the right of that, and every
 build of each is within 2% of the others. With many threads, the
 substitutes for a single side gain 2.5 to 4.0 times (the list for many
-producers) and 2.0 to 2.9 times (the ring for many consumers) over the
+producers) and 2.0 to 2.9 times (the ring for many consumers, since
+replaced; these legs predate the swap) over the
 general queue; the ring is level with the best library or ahead, the list
 reaches 63 to 94% of oneTBB's and moodycamel's queues, and the general
 queue, kept where both sides are many, ends 7 to 8 times behind them at
@@ -200,9 +201,10 @@ list; these supersede its ratios.
   pairwise workload (LSCQ is behind it, 1.18×); every row allocates once
   per element, the shim on the consumer's side, which likely favours it
   (inferred, not measured). The substitutes for a single side gain 1.3× (mpsc) and
-  2.2× (spmc) over it, 2.4× and 2.1× over moodycamel; the mpsc numbers
-  predate the change of 26 Oct to the single consumer's empty answer
-  (`decisions/0003`) and are to be timed again.
+  2.2× (spmc, the turn-taking ring, before the swap) over it, 2.4× and
+  2.1× over moodycamel; the mpsc numbers predate the change of 26 Oct to
+  the single consumer's empty answer (`decisions/0003`) and are to be
+  timed again.
 - A thread pool (`2026-10-26-eval-pool`, RQ2 and RQ3): the ring for many
   consumers with the task by value in its cell is 2.8× the pool as written
   with no work (0.74–9.1), 1.3× at 100 ns a task and 1.04× at 1 µs. The
@@ -212,6 +214,12 @@ list; these supersede its ratios.
   0.81×); the likely cause, inferred and not isolated, is that its
   consumers take turns under one spin lock. The task in the cell removes the per-task allocation (1.09 to
   0.002 a task) and gains 1.11× on the general queue, 1.46× on the ring.
+  The ring has since been replaced by a queue whose consumers claim cells
+  with a compare-and-swap (`2026-10-26-spmc-ab`, untimed, Intel host):
+  1.76× the general queue in the cell (1.02–10.7) and 1.31× on the heap
+  (1.03–7.2) over the same 36 configurations, no median below 0.95
+  (single repetitions dipped to 0.71); the pool
+  and W9 legs on the AMD host are to be rerun with it.
 - Fusing a pipeline (`2026-10-26-eval-fusion`): three stages fused into
   one loop beat three threads below about 18 ns of work a stage (up to
   33×) and lose 2.5–2.7× from about 100 ns. Like coarsening (RQ4), fusion
