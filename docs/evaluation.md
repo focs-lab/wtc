@@ -141,11 +141,45 @@ queue, kept where both sides are many, ends 7 to 8 times behind them at
 eight producers and eight consumers. Both findings led to the segmented
 queue (`runtime/segment_queue.hpp`), since 22 October the general-purpose
 implementation and, in its single-consumer form, the one for many
-producers; the legs whose B0 it changes are being run again.
+producers; the legs whose B0 it changes were run again on 26 October
+(below), except the many-thread and latency legs, still running.
+
+**RQ2, re-measured on 26 October** against the current general-purpose
+queue (`benchmarks/results/2026-10-26-*`; paired runs on a second host
+whose frequency is not fixed, so ratios within a repetition, not absolute
+speeds, carry over). The paragraph above measured against the two-lock
+list; these supersede its ratios.
+
+- The queue alone (`2026-10-26-eval-w1`): the compiler's queue is 10× the
+  program as written (geometric mean over sizes and five allocators,
+  5.1–23×) and the same over moodycamel's ConcurrentQueue, the best
+  general-purpose library of those measured, which the program as written
+  now matches (1.00×); against the expert rings it is within 13%, 0.87×
+  rigtorp's (0.62–1.43; behind at 8 B, within about 10% at 64 and 256 B).
+- The ablation (`2026-10-26-eval-ablation`): the compiler's step over the
+  program as written is 17× on the hand-over (5.3–54), the topology 8.3×
+  and borrowing the element 2.0× of it; against moodycamel holding the
+  element by value the topology alone buys 8.8× (3.1–28); against a
+  heap-allocating queue the diagonal is 24×.
+- The pipeline (`2026-10-26-eval-w3`): 1.89× (glibc) and 1.76× (jemalloc),
+  equal to the hand-tagged build; but at 1 M records a second the p99 of
+  every build on the runtime's ring is 1.56–1.61 µs against 0.43 as written
+  and 0.31 for the expert rings (0.30–0.51 across the rates), a regression
+  under investigation.
+- The grain (`2026-10-26-eval-w3grain`): the constant is about 0.04 µs a
+  record, so the gain is above 10% only for stages under about 0.5 µs
+  (1.97× at no work, 1.04× at 1.1 µs, 1.00× from about 5 µs).
+- spdlog (`2026-10-26-eval-spdlog`): 2.52× over spdlog as released
+  (1.21–6.09), of which the topology's share is 1.06× (1.01–1.17); the
+  rest is the general-purpose queue the program gets without proof. Its
+  waiting control re-took the queue's mutex; a rerun with the fixed control
+  is in progress.
 
 **RQ3** (the legs' mechanism passes). On the pipeline the compiler's build
-allocates nothing per record where the program as written allocates four,
-and spends 785 cycles a record against 7,677.
+allocates nothing per record. Against the two-lock list (21 October) the
+program as written allocated four per record and spent 785 cycles a record
+against 7,677; against the current queue (26 October) it allocates two
+per record, and the cycles are 846 against 2,396.
 
 **RQ4** (`eval-w7`, `eval-w8`). Batching a producer's pushes gains 1.8
 times on the general queue at the default K = 64 and nothing on the rings,
@@ -156,6 +190,12 @@ K = 64. Holding a mutex across 64 critical sections is 11 to 12 times
 faster when nothing happens between them, and turns into a loss somewhere
 between 100 and 500 ns of work between sections, at a cost in fairness
 (Jain's index 0.59 at eight threads): legal is not profitable.
+
+Re-measured on 26 October (`2026-10-26-eval-w7`): on the current queues
+batching a producer's pushes gains nothing, 1.00× at every K from 1 to
+1024 on all three, since the segmented queue reserves a batch of cells
+with one atomic and the rings publish with one store; the 1.8× above was
+the two-lock list's. The delay remains, 33 µs at K = 64.
 
 Each leg's NOTE.md, beside its summary, gives the setup, the controls and
 what the numbers can and cannot carry.

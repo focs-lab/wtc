@@ -25,9 +25,9 @@ Whatever it cannot prove keeps the general implementation.
 
 | | |
 |:--|:--|
-| **17–60×** | the compiler's queue against the program as written, one producer and one consumer ([W1](#the-queue-alone)) |
-| **= by hand** | on a pipeline the compiler's build is byte for byte the hand-tagged one, 9.0× the original ([W3](#a-pipeline)) |
-| **10 M/s** | the load its queue keeps up with, the end of the sweep; the original falls behind at 1 M/s ([W2](#latency-under-load)) |
+| **10×** | the compiler's queue against the program as written, one producer and one consumer, geometric mean over sizes and allocators (5–23×); within 13% of the expert rings ([W1](#the-queue-alone)) |
+| **17×** | what the two proved facts buy on a hand-over: the topology 8.3×, borrowing the element 2.0× ([ablation](#what-each-fact-buys)) |
+| **= by hand** | on a pipeline the compiler's build is byte for byte the hand-tagged one, 1.8–1.9× the program as written ([W3](#a-pipeline)) |
 | **0 wrong** | verdicts over 35 queues in examples, workloads and two PARSEC programs ([reach](#reach)) |
 | **1.65×** | compile time against the same clang, for code 0.4% larger ([cost](#cost-and-safety)) |
 
@@ -102,20 +102,28 @@ a function marked `WTC_LOCK_FREE` that can reach a blocking operation.
 
 ## Results
 
-Every number here comes from a timed leg on reserved cores of one Xeon
-w9-3495X, their SMT siblings offline, turbo off and the rest of the machine
-quiet: ten repetitions, each a fresh process, reported as medians with
-bootstrap 95% intervals. The allocator is a factor of the legs being run
-again: each variant under glibc and jemalloc, and in W1, W2, W9 and the
-ablation also under tcmalloc, mimalloc and snmalloc, since a queue that
-hands its elements over through the heap is measuring the allocator as much
-as itself. The baselines are the ones the concurrent-queue literature
-measures against:
+The numbers come from two kinds of leg. The 21 October legs are timed:
+reserved cores of one Xeon w9-3495X, their SMT siblings offline, turbo off,
+the rest of the machine quiet, ten repetitions, medians with bootstrap 95%
+intervals; their program as written is the retired two-lock list. The
+26 October legs are paired runs on a two-socket AMD EPYC 9115 whose
+frequency is not fixed (`WTC_UNPINNED`, see `benchmarks/README.md`): five
+repetitions with the variants interleaved, ratios taken within a
+repetition, and the current general-purpose queue as the program as
+written; they report ratios, not absolute speeds to compare across hosts.
+In them the allocator is a factor: each variant under glibc and jemalloc,
+and in W1 and the ablation also under tcmalloc, mimalloc and snmalloc,
+since a queue that hands its elements over through the heap is measuring
+the allocator as much as itself. Each figure below names the leg it is
+drawn from: the queue alone, the pipeline, its grain and batching from the
+26 October legs (under glibc), latency, coarsening and many threads from
+the 21 October ones. The baselines are the ones the concurrent-queue literature measures
+against:
 
-- **B0**, the program as written: the shim's general-purpose queue, which
-  in the legs below was still the two-lock list it started as (kept as
-  `orig_generic`); it has since become the segmented queue described
-  under [Many threads](#many-threads), and the legs are being run again;
+- **B0**, the program as written: the shim's general-purpose queue, since
+  22 October the segmented queue described under
+  [Many threads](#many-threads); the 21 October legs ran against the
+  two-lock list it started as, kept as `orig_generic`;
 - **B1**, general-purpose libraries: oneTBB, moodycamel ConcurrentQueue
   (CQ), Boost lock-free and `std::mutex`, and in W9 the queues the
   lock-free queue literature measures against, from the LPRQ paper's
@@ -151,15 +159,29 @@ each verdict, is
 
 <p align="center"><img src="docs/figures/w1.svg" alt="W1 throughput by element size" width="100%"></p>
 
-One producer and one consumer, on two cores. The compiler's inline queue is
-17× the program as written at 8-byte elements, 60× at 64 and 33× at 256,
-and at 256 bytes it matches the best expert queue. Used the same way, by
-pointer, the compiler's spsc ring runs level with the expert queues (3.4
-against rigtorp's 3.7 M/s at 64 bytes). At small elements the expert is
-ahead, for two reasons the leg's mechanism pass shows and the runtime can
-fix: the shim's layer costs about 70 instructions an element, and at 8
-bytes our ring falls into a slow regime with the consumer right behind the
-producer.
+One producer and one consumer, on two cores. Against the current
+program as written the compiler's queue is 10× (geometric mean over three
+sizes and five allocators, 5.1–23×), and the same over moodycamel's
+ConcurrentQueue, the best general-purpose library of those measured, which
+the program as written now matches (1.00×). Against the expert rings it is
+within 13%: 0.87× rigtorp's in the geometric mean, behind at 8 bytes
+(0.62–0.71) and within about 10% at 64 and 256 (ahead under glibc only),
+and 2.2× moodycamel's ReaderWriterQueue. Moving the element out instead of lending it runs as
+fast and needs no proof
+([`2026-10-26-eval-w1`](benchmarks/results/2026-10-26-eval-w1/NOTE.md)).
+Against the two-lock list (21 October) the compiler's queue was 17–60×.
+
+### What each fact buys
+
+The ablation runs the runtime's queues directly, each fact on its own and
+both together. Over the program as written through the shim, the
+compiler's step is 17× on the hand-over (geometric mean, 5.3–54): the
+topology alone 8.3×, borrowing the element on top 2.0× (a loss at 256
+bytes). Against moodycamel holding the element by value, so that nothing
+is allocated on either side, the topology still buys 8.8× (26× at 8 bytes,
+3× at 256). Against a queue that allocates every element on the heap the
+diagonal is 24×, and no allocator closes it
+([`2026-10-26-eval-ablation`](benchmarks/results/2026-10-26-eval-ablation/NOTE.md)).
 
 ### Latency under load
 
@@ -172,43 +194,59 @@ compiler's spsc ring to 2 and moodycamel's inline queue to 5; the
 compiler's inline ring keeps up to the end of the sweep, 10 M/s, as do
 rigtorp's queue and the bare ring. Below saturation, at one element every
 10 µs, the compiler's queue has a p99 of 542 ns, against 5.5 µs as written
-and 2.1 µs for the best library.
+and 2.1 µs for the best library. These are the 21 October numbers,
+against the two-lock list; the leg is being run again. The 26 October
+pipeline leg shows a tail-latency regression of the runtime's ring at
+1 M records a second (below), which this leg may also show once run.
 
 ### A pipeline
 
 <p align="center"><img src="docs/figures/w3.svg" alt="W3 pipeline throughput" width="100%"></p>
 
 Three stages, two queues, 64-byte records. From the unmodified source the
-compiler builds exactly what the best hand-written tags give: 8.9 M records
-a second, 9.0× the program as written, with no allocation per record where
-the original makes four (785 cycles a record against 7,677). With a
-library's queue between the stages instead, the general-purpose libraries
-reach 1.6–1.8, the expert inline queues 7.0–7.5 and the shim's inline ring
-8.5.
+compiler builds exactly what the best hand-written tags give: 1.89× the
+program as written under glibc and 1.76× under jemalloc, with no
+allocation per record where the program as written makes two (846 cycles a
+record against 2,396); 2.4–3.0× over the pipeline with moodycamel's
+ConcurrentQueue between the stages, and ahead of the expert inline rings
+(16.4 against 14.1 M records a second for rigtorp's). Its tail latency is
+not level with theirs: at 1 M records a second the p99 is 1.59 µs against
+0.43 as written and 0.31 for rigtorp's ring, a regression of the runtime's
+ring whose cause is being investigated; a fix is in progress on a branch
+([`2026-10-26-eval-w3`](benchmarks/results/2026-10-26-eval-w3/NOTE.md)).
+Against the two-lock list (21 October) it was 9.0×.
 
 ### Where the gain goes
 
 <p align="center"><img src="docs/figures/grain.svg" alt="Speed-up against the grain" width="100%"></p>
 
 The same pipeline with each stage's work swept from nothing to a
-millisecond. From half a microsecond a record on, the program as written
-pays an almost constant 1.1–1.6 µs a record more, what its two
-general-purpose queues cost, so the speed-up follows (t + 1.1 µs) / t:
-nine times with no work, above 10% while a stage takes under about 10 µs,
-nothing measurable past 100 µs. PARSEC's ferret and dedup sit far to the
-right, which is why they gain nothing ([applications](#applications)); the
-programs that gain are fine-grained ones.
+millisecond. The program as written pays an almost constant extra per
+record for its two general-purpose queues, so the speed-up follows
+(t + c) / t. With the current general-purpose queue c is about 0.04 µs:
+1.97× with no work, 1.19× at 0.27 µs a record, 1.04× at 1.1 µs, nothing
+measurable from about 5 µs; the gain is above 10% only while a stage takes
+under about 0.5 µs
+([`2026-10-26-eval-w3grain`](benchmarks/results/2026-10-26-eval-w3grain/NOTE.md)).
+Against the two-lock list (21 October) c was 1.1–1.6 µs and the threshold
+about 10 µs. PARSEC's ferret and dedup sit far to the right, which is why
+they gain nothing ([applications](#applications)); the programs that gain
+are fine-grained ones.
 
 ### Batching
 
 <p align="center"><img src="docs/figures/w7.svg" alt="W7 throughput and delay against the batch size" width="100%"></p>
 
-Publishing a loop's pushes once per batch pays only where a push takes a
-lock: 1.8× on the general-purpose queue at the default K = 64, nothing on
-the rings, which already publish with one store. The compiler's batching
+Publishing a loop's pushes once per batch would pay only where a push takes
+a lock, and none of the runtime's queues does any more: batched over plain
+is 1.00× at every K from 1 to 1024, on the general-purpose queue and on
+both rings, since the segmented queue reserves a batch of cells with one
+atomic and the rings publish with one store. The compiler's batching
 matches batching written by hand at every K. The price is delay: with no
-flush on idle, an element at light load waits for its batch to fill, 34–44
-µs at K = 64.
+flush on idle, an element at light load waits for its batch to fill, 33 µs
+at K = 64 ([`2026-10-26-eval-w7`](benchmarks/results/2026-10-26-eval-w7/NOTE.md)).
+Against the two-lock list (21 October), whose push took a mutex, the gain
+was 1.8×.
 
 <p align="center"><img src="docs/figures/w8.svg" alt="W8 speed-up against the work between sections" width="100%"></p>
 
@@ -242,8 +280,9 @@ for many producers. No leg has measured it yet; untimed runs, which the
 rule above excludes from this page's figures, put it ahead of moodycamel
 and oneTBB wherever both sides are many, level with them for many
 producers and one consumer, and within about 15% where one producer feeds
-many consumers, where the compiler substitutes the ring anyway. The timed
-legs are being run again with it.
+many consumers, where the compiler substitutes the ring anyway. The legs
+re-run against it on 26 October are reported above; the many-thread leg
+is still running.
 
 ### Applications
 
