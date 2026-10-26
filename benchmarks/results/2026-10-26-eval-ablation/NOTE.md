@@ -19,7 +19,7 @@ moodycamel's ConcurrentQueue, the strongest general-purpose library
 measured. xsp: the element behind a shared_ptr the producer allocates;
 share: the element in the cell, handed out as a shared_ptr the consumer
 allocates (what the shim does unless something is proved: the program as
-written); cell: the element in the cell, moved out or lent.
+written); cell: the element in the cell, moved out (try_pop(T&)).
 
 Medians, separate cores, M elements/s, glibc (the other allocators in
 SUMMARY.md):
@@ -34,10 +34,13 @@ SUMMARY.md):
 
 Geometric means over sizes and allocators, separate cores (range):
 
-- The compiler's own step over the program as written through the shim,
-  spsc_cell / mpmc_share: 17.0× (5.3-54); by size 47 / 17 / 6.1. It splits
-  into the topology, spsc_share / mpmc_share, 8.3× (3.9-14.2), and the
-  borrow proof, spsc_cell / spsc_share, 2.0× (0.82-7.35; a loss at 256 B).
+- From the general queue to the single-producer ring with the element
+  moved out, spsc_cell / mpmc_share: 17.0× (5.3-54); by size 47 / 17 / 6.1.
+  It splits into the topology, spsc_share / mpmc_share, 8.3× (3.9-14.2),
+  and the pop form, spsc_cell / spsc_share, 2.0× (0.82-7.35; a loss at
+  256 B). spsc_cell moves the element out (try_pop(T&)), which needs no
+  proof; nothing in this leg lends. What the borrow proof buys is measured
+  in eval-w1: shim_spsc_inline / shim_spsc, 1.7× (0.89-4.49).
 - Against a strong library that already holds the element by value,
   spsc_cell / mc_cell: 8.8× (3.1-28); 26× at 8 B, 8× at 64 B, 3× at 256 B.
   The topology matters when nothing is allocated.
