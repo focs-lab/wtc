@@ -119,6 +119,10 @@ endif()
 # The segmented queue: many producers and many consumers, then the
 # single-consumer form, and the latter's test that must fail: a second
 # consumer.
+add_executable(segment_queue_test segment_queue_test.cpp)
+target_link_libraries(segment_queue_test PRIVATE wtc_rt_flags)
+add_test(NAME segment_queue_test COMMAND segment_queue_test)
+
 add_executable(segment_queue_stress segment_queue_stress.cpp)
 target_link_libraries(segment_queue_stress PRIVATE wtc_rt_flags)
 add_test(NAME segment_queue_stress COMMAND segment_queue_stress 500000)
