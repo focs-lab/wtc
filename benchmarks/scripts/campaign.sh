@@ -90,11 +90,37 @@ use_alloc() {
   ALLOC_PRELOAD=${lib:+$WTC_ALLOC_DIR/$lib}
 }
 
+# WTC_UNPINNED=1 (check_env.sh says when it is acceptable): each run is
+# wrapped in `perf stat` for its effective frequency (user cycles over
+# task-clock) and samples the busy share of the processors outside the
+# leg's set over its duration, written to unpinned.tsv beside runs.jsonl
+# with the range of runs.jsonl lines the run wrote, so every result line
+# carries the frequency it ran at and the load around it.
+unpinned_run() {
+  local before after b0 t0 b1 t1 pf ghz
+  before=$(wc -l < "$RUNS")
+  read -r b0 t0 < <(outside_busy)
+  pf=$(mktemp)
+  perf stat -x, -e cycles:u,task-clock -o "$pf" -- "$@" || { rm -f "$pf"; return 1; }
+  read -r b1 t1 < <(outside_busy)
+  after=$(wc -l < "$RUNS")
+  ghz=$(awk -F, '/cycles/{c=$1} /task-clock/{t=$1} END{if (t>0) printf "%.3f", c/(t*1e6); else print "nan"}' "$pf")
+  rm -f "$pf"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$((before+1))" "$after" "$ghz" \
+    "$(awk -v b=$((b1-b0)) -v t=$((t1-t0)) 'BEGIN{if (t>0) printf "%.3f", b/t; else print "nan"}')" \
+    "${WTC_ALLOC:-glibc}" "$*" >> "$OUT/unpinned.tsv"
+}
+outside_busy() { # busy and total jiffies over the processors outside this shell's set
+  awk -v set=",$(taskset -pc $$ | sed 's/.*: //' | awk -F, '{for(i=1;i<=NF;i++){if($i~/-/){split($i,r,"-");for(j=r[1];j<=r[2];j++)printf "%s%d",(n++?",":""),j}else printf "%s%s",(n++?",":""),$i}}')," \
+    '/^cpu[0-9]/{c=substr($1,4); if (index(set, ","c",")) next; t=0; for(i=2;i<=NF;i++) t+=$i; b+=t-$5-$6; tt+=t} END{print b+0, tt+0}' /proc/stat
+}
+
 lock() {
   # Exclusive measurement lock for one run. --no-scope: inside a bench shell a
   # user scope may not be creatable, and the memory cap it would give is not
   # needed for a benchmark of a few hundred megabytes.
   if [ -n "$ALLOC_PRELOAD" ]; then set -- env "LD_PRELOAD=$ALLOC_PRELOAD" "$@"; fi
+  if [ "${WTC_UNPINNED:-0}" = 1 ]; then set -- unpinned_run "$@"; fi
   if command -v machine-lock >/dev/null; then
     machine-lock --lane wtc-bench --measure --minutes 5 --why "wtc $LEG" --no-scope -- "$@"
   else
@@ -130,6 +156,7 @@ meta() {
     echo "  \"vendored\": \"$(sed -n 's/^| \([a-z]*\)\/ | [^|]* | \([^ |]*\)[^|]*|.*/\1@\2/p' "$ROOT/benchmarks/third_party/VENDORED.md" | tr '\n' ' ')\","
     echo "  \"control_build\": \"$CONTROL_BUILD\","
     echo "  \"alloc_dir\": \"$WTC_ALLOC_DIR\", \"allocators\": \"$(ls "$WTC_ALLOC_DIR" 2>/dev/null | grep '\.so' | tr '\n' ' ')\","
+    echo "  \"unpinned\": $([ "${WTC_UNPINNED:-0}" = 1 ] && echo true || echo false),"
     echo "  \"reps\": $REPS"
     echo "}"
   } > "$OUT/meta.json"
