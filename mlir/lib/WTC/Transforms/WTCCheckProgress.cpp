@@ -12,8 +12,11 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/Demangle/Demangle.h"
+#include "llvm/Support/Regex.h"
 
 #include <optional>
 #include <string>
@@ -34,7 +37,8 @@ using namespace mlir::wtc;
 //     output, sleeping, throwing; and a throw itself;
 //   - any other function without a body here, and any indirect call whose
 //     targets are not known: what cannot be seen is counted as blocking;
-//   - inline assembly.
+//   - inline assembly, unless it is made only of instructions that cannot
+//     wait (onlyNonBlockingInstructions below).
 // A call to a function with a body is followed into it. A loop that spins
 // on an atomic waiting for another thread is not judged: the check is a
 // necessary condition for lock-freedom, not a proof of it.
@@ -78,6 +82,93 @@ std::string externalReason(llvm::StringRef mangled) {
         mangled.starts_with("__cxa_guard_acquire"))
         return "throws or takes a static-initialisation lock (" + name + ")";
     return "calls " + name + ", whose body is not visible here, so it is counted as blocking";
+}
+
+// Inline assembly is not looked into, except for the handful of
+// instructions a lock-free fast path is made of and none of which can wait:
+// prefetches, the spin-wait hint, fences and the time-stamp counter. A
+// string made only of those (DPDK's rte_prefetch0 is "prefetcht0 $0", its
+// rte_pause "pause"), or of nothing at all (the compiler barrier
+// asm volatile("" ::: "memory")), is cleared; anything else keeps the
+// default. One locked instruction is among them: adding an immediate zero
+// to a slot below the stack pointer, the full fence DPDK and others use
+// instead of mfence ("lock addl $0, -128(%rsp)", spelled "$$0" in the
+// template). It is one locked read-modify-write, with no loop, on a line
+// no other thread holds, so it cannot wait.
+//
+// Statements end at a newline, a carriage return or a semicolon, as the
+// assembler's lexer ends them; a string holding "%%" (a statement separator
+// on some targets) or a control character other than those and a tab is
+// not cleared. A prefix standing alone ("rep;", "lock;") belongs to the
+// next statement and is read with it. Each allowed instruction is matched
+// with its operands: the bare ones may be followed only by a comment, the
+// others only by the operands they take. A comment is "//" anywhere, or
+// "#" after a bare instruction: "#" starts a comment in x86 assembly and
+// marks an immediate on AArch64, where of the bare instructions only isb
+// takes one, and an isb with any option is still only a barrier.
+bool onlyNonBlockingInstructions(llvm::StringRef text) {
+    static const llvm::StringSet<> bare = {"pause",  "lfence", "mfence", "sfence", "rdtsc",
+                                           "rdtscp", "nop",    "yield",  "isb"};
+    static const llvm::Regex x86Prefetch(
+        "^prefetch(t0|t1|t2|nta|w)?[ \t]+"
+        "(\\$[0-9]+|\\$\\{[0-9]+(:[a-z]+)?\\}|-?[0-9]*\\(%[a-z0-9]+(,[ \t]*%[a-z0-9]+(,[ \t]*[1248])?)?\\))$");
+    static const llvm::Regex armPrefetch(
+        "^prfm[ \t]+p(ld|li|st)l[123](keep|strm),[ \t]*"
+        "(\\[[a-z0-9]+(,[ \t]*#-?[0-9]+)?\\]|\\[\\$[0-9]+\\]|\\[\\$\\{[0-9]+(:[a-z]+)?\\}\\]"
+        "|\\$[0-9]+|\\$\\{[0-9]+(:[a-z]+)?\\})$");
+    static const llvm::Regex armBarrier(
+        "^(dmb|dsb)[ \t]+(sy|ld|st|ish|ishld|ishst|osh|oshld|oshst|nsh|nshld|nshst)$");
+    static const llvm::Regex stackFence("^lock[ \t]+add[bwlq]?[ \t]+\\$\\$0,[ \t]*-[0-9]+\\(%rsp\\)$");
+
+    if (text.contains("%%")) return false;
+    for (char c : text)
+        if ((static_cast<unsigned char>(c) < 0x20 && c != '\n' && c != '\r' && c != '\t') || c == 0x7f)
+            return false;
+
+    llvm::SmallVector<llvm::StringRef, 8> stmts;
+    for (size_t start = 0, i = 0; i <= text.size(); ++i)
+        if (i == text.size() || text[i] == '\n' || text[i] == '\r' || text[i] == ';') {
+            stmts.push_back(text.slice(start, i));
+            start = i + 1;
+        }
+
+    llvm::SmallString<64> lower;
+    auto lowered = [&](llvm::StringRef stmt) -> llvm::StringRef {
+        lower.clear();
+        for (char c : stmt) lower.push_back(llvm::toLower(c));
+        return lower.str();
+    };
+    // A bare instruction, optionally followed by a comment.
+    auto bareAlone = [&](llvm::StringRef stmt, llvm::StringRef only = {}) {
+        auto [mnemonic, rest] = stmt.split(' ');
+        if (mnemonic.contains('\t')) std::tie(mnemonic, rest) = stmt.split('\t');
+        rest = rest.trim();
+        if (!bare.contains(mnemonic) || (!only.empty() && mnemonic != only)) return false;
+        return rest.empty() || rest.starts_with("#");
+    };
+    llvm::SmallString<64> joined;
+    for (size_t i = 0; i < stmts.size(); ++i) {
+        llvm::StringRef stmt = lowered(stmts[i].trim());
+        stmt = stmt.split("//").first.rtrim();
+        if (stmt.empty() || stmt.starts_with("#")) continue;  // nothing, or a comment
+        if ((stmt == "rep" || stmt == "lock") && i + 1 < stmts.size()) {
+            joined = stmt;
+            joined += ' ';
+            joined += lowered(stmts[++i].trim());
+            stmt = llvm::StringRef(joined).split("//").first.rtrim();
+        }
+        if (bareAlone(stmt)) continue;
+        // "rep; nop" and "rep nop" are pause, spelled out.
+        if (stmt.starts_with("rep ") || stmt.starts_with("rep\t")) {
+            if (!bareAlone(stmt.drop_front(4).ltrim(), "nop")) return false;
+            continue;
+        }
+        if (x86Prefetch.match(stmt) || armPrefetch.match(stmt) || armBarrier.match(stmt) ||
+            stackFence.match(stmt))
+            continue;
+        return false;
+    }
+    return true;
 }
 
 class ProgressChecker {
@@ -125,6 +216,10 @@ std::optional<Finding> ProgressChecker::blockingAt(Operation *op) {
         if (p.getProgress() == Progress::blocking || p.mayCallAllocator())
             return Finding{op, p.getBlockingReason(), {}};
         return std::nullopt;
+    }
+    if (auto asmOp = dyn_cast<cir::InlineAsmOp>(op)) {
+        if (onlyNonBlockingInstructions(asmOp.getAsmString())) return std::nullopt;
+        return Finding{op, "runs inline assembly, which is not looked into", {}};
     }
     if (op->getName().getStringRef().contains("asm"))
         return Finding{op, "runs inline assembly, which is not looked into", {}};

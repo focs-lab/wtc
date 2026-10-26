@@ -93,6 +93,67 @@ WTC_LOCK_FREE void two_sites() {
     std::fputs("x\n", stderr);
 }
 
+// Inline assembly is not looked into, except when it is made only of
+// instructions that cannot wait: prefetches, the spin hint (also spelled
+// "rep; nop"), fences, the time-stamp counter, the stack fence, or nothing
+// at all. DPDK's fast path uses them.
+// CHECK-DAG: remark: wtc: spin_hints() is declared lock-free: nothing it reaches blocks
+WTC_LOCK_FREE void spin_hints() {
+    asm volatile("prefetcht0 %0" : : "m"(plain));
+    asm volatile("pause");
+    asm volatile("pause # wait a little");
+    asm volatile("rep; nop" : : : "memory");
+    asm volatile("rep; nop # spin" : : : "memory");
+    asm volatile("mfence\n\tlfence" : : : "memory");
+    asm volatile("lock addl $0, -128(%%rsp); " : : : "memory");
+    asm volatile("lock; addl $0,-4(%%rsp)" : : : "memory");
+    asm volatile("" : : : "memory");
+    asm volatile("# a comment only");
+    long lo, hi;
+    asm volatile("rdtsc" : "=a"(lo), "=d"(hi));
+    plain += lo + hi;
+}
+
+// Anything else counts: another instruction after an allowed one, however
+// the statements are separated (a carriage return ends one too), an
+// allowed mnemonic with operands it does not take, a locked instruction on
+// memory other than a slot below the stack pointer, or an operand where
+// the fence's immediate zero belongs.
+// CHECK-DAG: error: wtc: traps() is declared lock-free but can block
+// CHECK-DAG: note: which runs inline assembly, which is not looked into
+WTC_LOCK_FREE void traps() { asm volatile("pause; syscall" : : : "memory"); }
+// CHECK-DAG: error: wtc: traps_after_cr() is declared lock-free but can block
+WTC_LOCK_FREE void traps_after_cr() { asm volatile("pause \rsyscall" : : : "memory"); }
+// A comment ends at the end of its statement: what follows a carriage
+// return or a newline is another instruction, not more of the comment.
+// CHECK-DAG: error: wtc: traps_after_comment_cr() is declared lock-free but can block
+WTC_LOCK_FREE void traps_after_comment_cr() { asm volatile("pause # x\rsyscall" : : : "memory"); }
+// CHECK-DAG: error: wtc: traps_after_comment_nl() is declared lock-free but can block
+WTC_LOCK_FREE void traps_after_comment_nl() { asm volatile("pause # x\nsyscall" : : : "memory"); }
+// CHECK-DAG: error: wtc: pause_with_operand() is declared lock-free but can block
+WTC_LOCK_FREE void pause_with_operand() { asm volatile("pause %0" : : "r"(plain)); }
+// CHECK-DAG: error: wtc: locked_shared() is declared lock-free but can block
+WTC_LOCK_FREE void locked_shared() { asm volatile("lock addl $1, %0" : "+m"(plain)); }
+// CHECK-DAG: error: wtc: locked_cmpxchg() is declared lock-free but can block
+WTC_LOCK_FREE void locked_cmpxchg() {
+    long old = 0;
+    asm volatile("lock; cmpxchgq %2, %1" : "+a"(old), "+m"(plain) : "r"(1L) : "memory");
+}
+// CHECK-DAG: error: wtc: exchanges() is declared lock-free but can block
+WTC_LOCK_FREE void exchanges() { long v = 1; asm volatile("xchg %0, %1" : "+r"(v), "+m"(plain)); }
+// CHECK-DAG: error: wtc: fence_off_stack() is declared lock-free but can block
+WTC_LOCK_FREE void fence_off_stack() { asm volatile("lock addl $0,-128(%%rax)" : : : "memory"); }
+// CHECK-DAG: error: wtc: fence_above_stack() is declared lock-free but can block
+WTC_LOCK_FREE void fence_above_stack() { asm volatile("lock addl $0, 8(%%rsp)" : : : "memory"); }
+// CHECK-DAG: error: wtc: fence_by_or() is declared lock-free but can block
+WTC_LOCK_FREE void fence_by_or() { asm volatile("lock orl $0, -128(%%rsp)" : : : "memory"); }
+// CHECK-DAG: error: wtc: fence_of_operand() is declared lock-free but can block
+WTC_LOCK_FREE void fence_of_operand() { asm volatile("lock addl %0, -128(%%rsp)" : : "i"(0) : "memory"); }
+// CHECK-DAG: error: wtc: spin_until() is declared lock-free but can block
+WTC_LOCK_FREE void spin_until() { asm volatile("1: pause; cmpq $0, %0; jnz 1b" : : "m"(plain)); }
+// CHECK-DAG: error: wtc: waits_for_store() is declared lock-free but can block
+WTC_LOCK_FREE void waits_for_store() { asm volatile("umwait %0" : : "r"(0) : "memory"); }
+
 // Not declared: nothing is said about it, whatever it does.
 // CHECK-NOT: undeclared
 void undeclared() { std::printf("x\n"); }
@@ -100,5 +161,8 @@ void undeclared() { std::printf("x\n"); }
 int main() {
     locked(); logs(); allocates(); hooked(); unseen(); recursive(0); clean(); undeclared();
     throws(); known_target(); known_blocking_target(); waits(); sleeps();
-    two_sites();
+    two_sites(); spin_hints(); traps(); traps_after_cr(); traps_after_comment_cr();
+    traps_after_comment_nl(); pause_with_operand(); locked_shared();
+    locked_cmpxchg(); exchanges(); fence_off_stack(); fence_above_stack(); fence_by_or();
+    fence_of_operand(); spin_until(); waits_for_store();
 }
