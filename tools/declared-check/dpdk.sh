@@ -15,7 +15,11 @@
 # lines about rings are printed.
 #
 # Environment: CLANG (ClangIR's clang, default: the pinned build's),
-# WTC_OPT (default: build/bin/wtc-opt), MESON (default: meson).
+# WTC_OPT (default: build/bin/wtc-opt), MESON (default: meson). For a
+# modified copy of the examples (benchmarks/scripts/declared_recall.sh):
+# EXAMPLES (the examples directory to read, default: the checkout's),
+# DPDK_BUILD (an already configured build directory, default: <work
+# dir>/dpdk-build) and ONLY (one application's name, default: all).
 set -euo pipefail
 
 COMMIT=6bbb7b38b17f9ea4c981b5d374612a16833df41e
@@ -37,14 +41,15 @@ if [ "$(git -C "$D" rev-parse HEAD)" != "$COMMIT" ]; then
   exit 1
 fi
 
-B=$OUT/dpdk-build
+EX=$(cd "${EXAMPLES:-$D/examples}" && pwd)
+B=${DPDK_BUILD:-$OUT/dpdk-build}
 if [ ! -f "$B/rte_build_config.h" ]; then
   # No NUMA library and no drivers: only the configuration header matters.
   "$MESON" setup "$B" "$D" -Dplatform=generic -Dmax_numa_nodes=1 \
     -Ddisable_drivers='*' -Denable_apps= -Dtests=false -Dexamples= >"$OUT/meson.log"
 fi
 
-INC="-I$B -I$D/config -I$D/examples/common"
+INC="-I$B -I$D/config -I$EX/common"
 for d in "$D"/lib/eal/include "$D"/lib/eal/x86/include "$D"/lib/eal/linux/include "$D"/lib/*/; do
   INC="$INC -I${d%/}"
 done
@@ -58,16 +63,17 @@ python3 "$D/buildtools/dpdk-cmdline-gen.py" --context-name=simple_mp_ctx \
 run() {  # name dir files...
   local name=$1 dir=$2 f
   shift 2
+  [ -n "${ONLY:-}" ] && [ "$ONLY" != "$name" ] && return
   local tu=$OUT/$name.tu.c
   : >"$tu"
   for f in "$@"; do
     # One static in qos_sched's args.c shares its name with init.c's global.
     [ "$name/$f" = qos_sched/args.c ] && echo '#define app_numa_mask args_app_numa_mask' >>"$tu"
-    echo "#include \"$D/examples/$dir/$f\"" >>"$tu"
+    echo "#include \"$EX/$dir/$f\"" >>"$tu"
     [ "$name/$f" = qos_sched/args.c ] && echo '#undef app_numa_mask' >>"$tu"
   done
   # shellcheck disable=SC2086
-  if ! "$CLANG" $FLAGS $INC -I"$D/examples/$dir" -I"$D/examples/$dir/shared" -I"$OUT" \
+  if ! "$CLANG" $FLAGS $INC -I"$EX/$dir" -I"$EX/$dir/shared" -I"$OUT" \
        -fclangir -emit-cir "$tu" -o "$OUT/$name.cir" 2>"$OUT/$name.cir.err"; then
     echo "== $name: no CIR: $(grep -m1 error "$OUT/$name.cir.err")"
     return
@@ -79,7 +85,7 @@ run() {  # name dir files...
   grep -E 'wtc: (queue|the address)' "$OUT/$name.log" | sed -E 's#^[^ ]*/##' | sort -u || true
 }
 
-cd "$D/examples"
+cd "$EX"
 run packet_ordering packet_ordering main.c
 run distributor distributor main.c
 run dma dma dmafwd.c
