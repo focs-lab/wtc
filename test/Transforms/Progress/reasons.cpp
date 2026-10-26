@@ -51,6 +51,14 @@ WTC_LOCK_FREE void known_target() { void (*step)() = count_one; step(); }
 void log_plain() { log_value(plain); }
 WTC_LOCK_FREE void known_blocking_target() { void (*step)() = log_plain; step(); }
 
+// A pointer parameter is resolved from the calls seen here only when no
+// other translation unit can call the function.
+// CHECK-DAG: remark: wtc: through_static(void (*)()) is declared lock-free: nothing it reaches blocks
+WTC_LOCK_FREE static void through_static(void (*step)()) { step(); }
+// CHECK-DAG: error: wtc: through_extern(void (*)()) is declared lock-free but can block
+WTC_LOCK_FREE void through_extern(void (*step)()) { step(); }
+void calls_through() { through_static(count_one); through_extern(count_one); }
+
 // CHECK-DAG: error: wtc: waits() is declared lock-free but can block
 // CHECK-DAG: note: which waits in the threading library (pthread_mutex_lock)
 WTC_LOCK_FREE void waits() { pthread_mutex_lock(&raw); ++plain; pthread_mutex_unlock(&raw); }
