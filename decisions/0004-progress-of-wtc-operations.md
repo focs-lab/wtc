@@ -2,6 +2,9 @@
 
 Taken 2026-10-19.
 
+Revised 2026-10-26: one chain per blocking site instead of one per
+function (under "What the check establishes").
+
 ## Context
 
 A function can be declared lock-free (`WTC_LOCK_FREE`, `shim/progress.hpp`),
@@ -46,6 +49,16 @@ and output, sleeping, throwing), and no call it cannot see into -- a
 function without a body here, or an indirect call whose targets are not
 known -- since what cannot be seen cannot be cleared.
 
+How it reports: one chain for each blocking site of the declared
+function's own body -- each call or operation in it that reaches something
+blocking -- with the first chain found below that site, deduplicated by the
+chain of source locations and the reason, at most eight per function and a
+count of the rest. It first reported one chain per function. In l2fwd, the
+layer-2 forwarding sample of DPDK (the Data Plane Development Kit), that
+chain was a getter defined in another translation unit, and the `printf`
+the forwarding loop runs on the main lcore (DPDK's worker thread pinned to
+one core) stayed hidden behind it (26 Oct).
+
 That is a necessary condition for lock-freedom, not a proof of it. A loop
 that spins on an atomic until another thread sets it is not judged: it
 reaches nothing blocking and is still not lock-free. Proving progress of a
@@ -54,9 +67,8 @@ proposal describes is where it belongs.
 
 ## Options not taken
 
-- **Report every blocking path.** More complete, and noisier than a first
-  error should be: one chain names the problem, and fixing it shows the
-  next. Kept to the first found per function.
+- **Report every blocking path.** More complete, and noisier than an error
+  should be: below each blocking site only the first chain is followed.
 - **Trust functions without a body.** Most are harmless, and the ones that
   are not are the ones that matter. Only a short list that touches nothing
   but its arguments' memory (`memcpy`, `memset`, `strlen` and the like) is

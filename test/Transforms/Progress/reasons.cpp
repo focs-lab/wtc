@@ -83,6 +83,16 @@ WTC_LOCK_FREE void clean() {
     counter.fetch_add(helper(out[2]), std::memory_order_relaxed);
 }
 
+// Every blocking site of the declared function is named, each with its
+// own chain, not only the first: real code usually has several.
+// CHECK-DAG: error: wtc: two_sites() is declared lock-free but can block
+// CHECK-DAG: note: which waits in the threading library (pthread_mutex_trylock)
+// CHECK-DAG: note: which does input or output (fputs)
+WTC_LOCK_FREE void two_sites() {
+    if (pthread_mutex_trylock(&raw) == 0) { ++plain; pthread_mutex_unlock(&raw); }
+    std::fputs("x\n", stderr);
+}
+
 // Not declared: nothing is said about it, whatever it does.
 // CHECK-NOT: undeclared
 void undeclared() { std::printf("x\n"); }
@@ -90,4 +100,5 @@ void undeclared() { std::printf("x\n"); }
 int main() {
     locked(); logs(); allocates(); hooked(); unseen(); recursive(0); clean(); undeclared();
     throws(); known_target(); known_blocking_target(); waits(); sleeps();
+    two_sites();
 }
