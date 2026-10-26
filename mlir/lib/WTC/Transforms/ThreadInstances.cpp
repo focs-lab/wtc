@@ -1234,13 +1234,27 @@ llvm::ArrayRef<Instance *> ThreadInstanceWalk::instancesOf(cir::FuncOp f) const 
 // the walk would want to know of: a memset writes zeros, and a null names
 // no object. A copy is not one: it writes whatever pointers it copies.
 // Output writes nothing in the program's memory, so it is one here, as it
-// is not to the progress check.
+// is not to the progress check; nor does giving a block back to its heap,
+// free or DPDK's rte_free, which ends the block's life and writes no field
+// a later load could read.
+//
+// Exempt by name, so only where the module has no body of its own for the
+// name: a body is read instead. And never for an out-parameter, which the
+// function writes: posix_memalign's block pointer, pthread_create's thread
+// id (writesOutParam).
 static bool harmlessCallee(cir::FuncOp f) {
     if (!f) return false;
     if (isAllocator(f) || getSemanticKind(f) == SemanticOpKind::ThreadSpawn) return true;
     const StringRef n = f.getSymName();
     if (n == "memcpy" || n == "memmove") return false;
-    return touchesOnlyItsArguments(f) || n == "free" || n == "puts" || n == "printf" || n == "fprintf";
+    return touchesOnlyItsArguments(f) || n == "free" || n == "rte_free" || n == "puts" || n == "printf" || n == "fprintf";
+}
+
+// Whether the function, by its name, writes through its argument `arg`.
+static bool writesOutParam(cir::FuncOp f, unsigned arg) {
+    if (!f) return false;
+    const StringRef n = f.getSymName();
+    return arg == 0 && (n == "posix_memalign" || n == "pthread_create");
 }
 
 // The functions a call may reach with a body each, for the operand rules
@@ -1299,12 +1313,21 @@ static bool viewWritten(Value p0, Type rec, unsigned depth, llvm::DenseSet<Value
             if (auto mm = dyn_cast<cir::MemMoveOp>(u))
                 if (mm.getSrc() == p && mm.getDst() != p) continue;
             if (auto call = dyn_cast<cir::CallOp>(u)) {
-                if (!call.isIndirect() && harmlessCallee(lookupCallee(call))) continue;
-                llvm::SmallVector<cir::FuncOp, 4> targets = calleesWithBodies(call);
-                if (targets.empty()) return true;
+                // An out-parameter is written. A thread start is known by
+                // what it is (the walk follows its argument to the entry);
+                // any other body is read, whatever the name: an allocator or
+                // a free of the program's own may write the block.
                 const unsigned first = firstRealOperand(call) + (call.isIndirect() ? 1 : 0);
                 const unsigned idx = use.getOperandNumber();
                 if (idx < first) return true;
+                cir::FuncOp callee = call.isIndirect() ? cir::FuncOp() : lookupCallee(call);
+                if (writesOutParam(callee, idx - first)) return true;
+                if (callee && getSemanticKind(callee) == SemanticOpKind::ThreadSpawn) continue;
+                llvm::SmallVector<cir::FuncOp, 4> targets = calleesWithBodies(call);
+                if (targets.empty()) {
+                    if (harmlessCallee(callee)) continue;
+                    return true;
+                }
                 for (cir::FuncOp f : targets) {
                     if (idx - first >= f.getNumArguments()) return true;
                     if (viewWritten(f.getArgument(idx - first), rec, depth + 1, seen)) return true;
@@ -1502,9 +1525,13 @@ void ThreadInstanceWalk::computeFieldStores() const {
         // come back with any of its fields rewritten.
         if (auto call = dyn_cast<cir::CallOp>(op)) {
             if (!calleesWithBodies(call).empty()) return;
-            if (!call.isIndirect() && harmless(lookupCallee(call))) return;
-            for (Value arg : call.getOperands())
+            cir::FuncOp callee = call.isIndirect() ? cir::FuncOp() : lookupCallee(call);
+            const unsigned first = firstRealOperand(call);
+            for (auto [i, arg] : llvm::enumerate(call.getOperands())) {
+                // Exempt by name, except an out-parameter it writes.
+                if (harmless(callee) && !(i >= first && writesOutParam(callee, i - first))) continue;
                 if (Type rec = recordBehind(traceToRoot(arg).getType())) whole.insert(rec);
+            }
         }
     });
     // A record written as a whole takes every record nested in it along.
