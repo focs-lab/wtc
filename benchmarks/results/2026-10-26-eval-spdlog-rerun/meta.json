@@ -1,0 +1,23 @@
+{
+  "leg": "eval-spdlog", "date": "2026-10-26T10:59:49Z",
+  "git_sha": "", "git_dirty": false,
+  "kernel": "6.8.0-137-generic",
+  "cpu_model": "AMD EPYC 9115 16-Core Processor",
+  "sockets": "2", "numa_nodes": "2",
+  "allowed_cpus": "16-31,48-63",
+  "smt_control": "on",
+  "smt_siblings": "offline or reserved",
+  "load_average": "6.54 7.42 9.70",
+  "build": "compiler=tools/wtc-cc, ClangIR ;wtc=;spdlog=27cb4c767086;orig=clang++-18 -O2 header-only;",
+  "governor": "schedutil",
+  "no_turbo": "boost=1",
+  "freq_khz": "4131287",
+  "llvm_sha": "",
+  "boost": "1_83",
+  "tbb": "none",
+  "vendored": "readerwriterqueue@6867b56452352acf077fccd5f6cc7e3a8cfde0fb concurrentqueue@683b9e31ea15eb69f1b81cc1defc7850d5f20b71 rigtorp@1053918dbd251fbff69b24ef27fa5d51c29ec2af lprq@zenodo-7337237 ",
+  "control_build": "$CONTROL_BUILD",
+  "alloc_dir": ".apps/allocs", "allocators": "libjemalloc.so.2 libmimalloc.so libsnmalloc.so libtcmalloc_minimal.so.4 ",
+  "unpinned": true,
+  "reps": 5
+}

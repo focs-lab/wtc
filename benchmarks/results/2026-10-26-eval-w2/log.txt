@@ -1,0 +1,953 @@
+W1 shim_generic           E64   spin     15.17 Mops/s
+W1 shim_generic           E64   spin     15.52 Mops/s
+W1 shim_generic           E64   spin     15.33 Mops/s
+W1 shim_generic           E64   spin     15.97 Mops/s
+W1 shim_generic           E64   spin     16.44 Mops/s
+W2 open      shim_generic           E64   @  100ns  p50     139  p99    2820  p99.9   12137  p99.99    32323  max     34968 ns
+W2 open      moodycamel_cq_sp       E64   @  100ns  p50 67543178  p99 82819465  p99.9 83042926  p99.99 83063684  max  83066196 ns
+W2 open      rigtorp_inline         E64   @  100ns  p50     151  p99    1317  p99.9  110628  p99.99   145991  max    151421 ns
+W2 open      moodycamel_rw_inline   E64   @  100ns  p50     147  p99    1431  p99.9  129519  p99.99   196162  max    203715 ns
+W2 open      shim_spsc              E64   @  100ns  p50    1305  p99    2632  p99.9  123605  p99.99   180004  max    186325 ns
+W2 open      shim_spsc_inline       E64   @  100ns  p50     649  p99    1706  p99.9   84093  p99.99   151267  max    158800 ns
+W2 open      ring_borrowed          E64   @  100ns  p50     659  p99    1950  p99.9  117768  p99.99   183031  max    190554 ns
+W2 open      shim_generic           E64   @  200ns  p50     138  p99    1486  p99.9    6477  p99.99    19493  max     32114 ns
+W2 open      moodycamel_cq_sp       E64   @  200ns  p50     286  p99    1676  p99.9  103864  p99.99   180522  max    188947 ns
+W2 open      rigtorp_inline         E64   @  200ns  p50     144  p99     798  p99.9   87219  p99.99   174358  max    192046 ns
+W2 open      moodycamel_rw_inline   E64   @  200ns  p50     134  p99     994  p99.9  100601  p99.99   245530  max    263118 ns
+W2 open      shim_spsc              E64   @  200ns  p50     589  p99    1613  p99.9   88591  p99.99   202343  max    218689 ns
+W2 open      shim_spsc_inline       E64   @  200ns  p50     591  p99    1766  p99.9  169540  p99.99   250691  max    268149 ns
+W2 open      ring_borrowed          E64   @  200ns  p50     589  p99    1416  p99.9   59255  p99.99   143728  max    160354 ns
+W2 open      shim_generic           E64   @  300ns  p50     139  p99    1064  p99.9    4794  p99.99     9888  max     25815 ns
+W2 open      moodycamel_cq_sp       E64   @  300ns  p50     247  p99    1082  p99.9  108506  p99.99   220004  max    240257 ns
+W2 open      rigtorp_inline         E64   @  300ns  p50     153  p99     565  p99.9   33961  p99.99   153938  max    181562 ns
+W2 open      moodycamel_rw_inline   E64   @  300ns  p50     133  p99     522  p99.9   59960  p99.99   228028  max    255603 ns
+W2 open      shim_spsc              E64   @  300ns  p50     783  p99    1282  p99.9    9614  p99.99   124137  max    150309 ns
+W2 open      shim_spsc_inline       E64   @  300ns  p50     841  p99    1239  p99.9   43224  p99.99   172874  max    200368 ns
+W2 open      ring_borrowed          E64   @  300ns  p50     833  p99    1219  p99.9    6474  p99.99   131571  max    159186 ns
+W2 open      shim_generic           E64   @  500ns  p50     136  p99     664  p99.9    3202  p99.99     7077  max     29040 ns
+W2 open      moodycamel_cq_sp       E64   @  500ns  p50     245  p99     540  p99.9   54672  p99.99   229237  max    271434 ns
+W2 open      rigtorp_inline         E64   @  500ns  p50     154  p99     190  p99.9   12698  p99.99   204663  max    252368 ns
+W2 open      moodycamel_rw_inline   E64   @  500ns  p50     134  p99     178  p99.9    8831  p99.99   209590  max    257194 ns
+W2 open      shim_spsc              E64   @  500ns  p50     612  p99     887  p99.9    9457  p99.99   195674  max    242047 ns
+W2 open      shim_spsc_inline       E64   @  500ns  p50     602  p99     887  p99.9   23068  p99.99   177841  max    225395 ns
+W2 open      ring_borrowed          E64   @  500ns  p50     596  p99     884  p99.9   16096  p99.99   208796  max    256411 ns
+W2 open      shim_generic           E64   @  700ns  p50     133  p99     367  p99.9    3212  p99.99    84503  max    146781 ns
+W2 open      moodycamel_cq_sp       E64   @  700ns  p50     243  p99     479  p99.9    4097  p99.99   134433  max    175732 ns
+W2 open      rigtorp_inline         E64   @  700ns  p50     154  p99     187  p99.9    3377  p99.99   190454  max    258130 ns
+W2 open      moodycamel_rw_inline   E64   @  700ns  p50     140  p99     186  p99.9   11900  p99.99   196206  max    263772 ns
+W2 open      shim_spsc              E64   @  700ns  p50     862  p99     950  p99.9    2505  p99.99    65353  max    131727 ns
+W2 open      shim_spsc_inline       E64   @  700ns  p50     851  p99     939  p99.9    3024  p99.99   114318  max    148291 ns
+W2 open      ring_borrowed          E64   @  700ns  p50     852  p99     919  p99.9    2847  p99.99   115718  max    149205 ns
+W2 open      shim_generic           E64   @ 1000ns  p50     136  p99     192  p99.9    3780  p99.99    88336  max    181632 ns
+W2 open      moodycamel_cq_sp       E64   @ 1000ns  p50     243  p99     470  p99.9    2810  p99.99   102582  max    142553 ns
+W2 open      rigtorp_inline         E64   @ 1000ns  p50     146  p99     183  p99.9    6116  p99.99   264486  max    360358 ns
+W2 open      moodycamel_rw_inline   E64   @ 1000ns  p50     146  p99     186  p99.9    2357  p99.99    33513  max    104331 ns
+W2 open      shim_spsc              E64   @ 1000ns  p50     128  p99    1176  p99.9    2461  p99.99   104165  max    154832 ns
+W2 open      shim_spsc_inline       E64   @ 1000ns  p50     106  p99    1147  p99.9    3294  p99.99   202334  max    256768 ns
+W2 open      ring_borrowed          E64   @ 1000ns  p50     104  p99    1135  p99.9    3082  p99.99   130930  max    199555 ns
+W2 open      shim_generic           E64   @ 2000ns  p50     133  p99     175  p99.9    2422  p99.99    43739  max    147679 ns
+W2 open      moodycamel_cq_sp       E64   @ 2000ns  p50     245  p99     472  p99.9    2474  p99.99   101810  max    249848 ns
+W2 open      rigtorp_inline         E64   @ 2000ns  p50     148  p99     180  p99.9    2186  p99.99   104760  max    237046 ns
+W2 open      moodycamel_rw_inline   E64   @ 2000ns  p50     139  p99     180  p99.9    2270  p99.99    87044  max    225555 ns
+W2 open      shim_spsc              E64   @ 2000ns  p50     127  p99     177  p99.9    2383  p99.99    74206  max    158963 ns
+W2 open      shim_spsc_inline       E64   @ 2000ns  p50     102  p99     169  p99.9    2685  p99.99   135792  max    298055 ns
+W2 open      ring_borrowed          E64   @ 2000ns  p50     103  p99     137  p99.9    2256  p99.99    68625  max    145039 ns
+W2 open      shim_generic           E64   @ 5000ns  p50     136  p99     178  p99.9    3088  p99.99   271506  max    668969 ns
+W2 open      moodycamel_cq_sp       E64   @ 5000ns  p50     245  p99     468  p99.9    2324  p99.99    26471  max    152821 ns
+W2 open      rigtorp_inline         E64   @ 5000ns  p50     160  p99     337  p99.9    4503  p99.99   118774  max    243582 ns
+W2 open      moodycamel_rw_inline   E64   @ 5000ns  p50     193  p99     246  p99.9   34330  p99.99  2527896  max   3024252 ns
+W2 open      shim_spsc              E64   @ 5000ns  p50     170  p99     260  p99.9    7185  p99.99   192257  max    326709 ns
+W2 open      shim_spsc_inline       E64   @ 5000ns  p50     115  p99     146  p99.9    1891  p99.99    37995  max    157134 ns
+W2 open      ring_borrowed          E64   @ 5000ns  p50     108  p99     147  p99.9    1981  p99.99    80845  max    213789 ns
+W2 open      shim_generic           E64   @10000ns  p50     136  p99     178  p99.9    2448  p99.99    22247  max    151212 ns
+W2 open      moodycamel_cq_sp       E64   @10000ns  p50     245  p99     458  p99.9    2146  p99.99    30518  max    150544 ns
+W2 open      rigtorp_inline         E64   @10000ns  p50     153  p99     243  p99.9    2146  p99.99    28893  max    158973 ns
+W2 open      moodycamel_rw_inline   E64   @10000ns  p50     143  p99     176  p99.9    2661  p99.99    50184  max    233865 ns
+W2 open      shim_spsc              E64   @10000ns  p50     138  p99     169  p99.9    2507  p99.99    70551  max    269793 ns
+W2 open      shim_spsc_inline       E64   @10000ns  p50     109  p99     159  p99.9    2276  p99.99    48887  max    254324 ns
+W2 open      ring_borrowed          E64   @10000ns  p50     106  p99     142  p99.9    2381  p99.99    47479  max    235100 ns
+W2 open      shim_generic           E64   @  100ns  p50     138  p99    3456  p99.9  153432  p99.99   205152  max    210904 ns
+W2 open      moodycamel_cq_sp       E64   @  100ns  p50 12735688  p99 18040804  p99.9 18140538  p99.99 18148302  max  18148982 ns
+W2 open      rigtorp_inline         E64   @  100ns  p50     138  p99     730  p99.9   48291  p99.99   114990  max    122653 ns
+W2 open      moodycamel_rw_inline   E64   @  100ns  p50     151  p99    1239  p99.9  189363  p99.99   255867  max    263390 ns
+W2 open      shim_spsc              E64   @  100ns  p50    1310  p99   14312  p99.9  202384  p99.99   258803  max    265194 ns
+W2 open      shim_spsc_inline       E64   @  100ns  p50     640  p99    1775  p99.9  185589  p99.99   251892  max    259405 ns
+W2 open      ring_borrowed          E64   @  100ns  p50     653  p99    2025  p99.9  197192  p99.99   263735  max    271288 ns
+W2 open      shim_generic           E64   @  200ns  p50     135  p99    1405  p99.9  109859  p99.99   229422  max    245358 ns
+W2 open      moodycamel_cq_sp       E64   @  200ns  p50     228  p99     927  p99.9    8535  p99.99    37268  max     48917 ns
+W2 open      rigtorp_inline         E64   @  200ns  p50     140  p99     437  p99.9   23451  p99.99   127973  max    143618 ns
+W2 open      moodycamel_rw_inline   E64   @  200ns  p50     134  p99     349  p99.9   18301  p99.99    85161  max    102729 ns
+W2 open      shim_spsc              E64   @  200ns  p50     596  p99    1141  p99.9  103394  p99.99   176970  max    193416 ns
+W2 open      shim_spsc_inline       E64   @  200ns  p50     541  p99    1000  p99.9  122945  p99.99   251422  max    268970 ns
+W2 open      ring_borrowed          E64   @  200ns  p50     582  p99     968  p99.9   94432  p99.99   251465  max    269063 ns
+W2 open      shim_generic           E64   @  300ns  p50     132  p99     700  p99.9   21719  p99.99   107237  max    131460 ns
+W2 open      moodycamel_cq_sp       E64   @  300ns  p50     227  p99     612  p99.9   91014  p99.99   242797  max    264873 ns
+W2 open      rigtorp_inline         E64   @  300ns  p50     149  p99     269  p99.9   81428  p99.99   224136  max    251790 ns
+W2 open      moodycamel_rw_inline   E64   @  300ns  p50     135  p99     228  p99.9   64812  p99.99   235905  max    263459 ns
+W2 open      shim_spsc              E64   @  300ns  p50     755  p99    1263  p99.9   21741  p99.99   122468  max    148941 ns
+W2 open      shim_spsc_inline       E64   @  300ns  p50     668  p99    1267  p99.9    6602  p99.99    96974  max    124508 ns
+W2 open      ring_borrowed          E64   @  300ns  p50     656  p99    1224  p99.9   54999  p99.99   215273  max    242858 ns
+W2 open      shim_generic           E64   @  500ns  p50     133  p99     316  p99.9   11305  p99.99   148696  max    194358 ns
+W2 open      moodycamel_cq_sp       E64   @  500ns  p50     234  p99     568  p99.9   52678  p99.99   172498  max    211198 ns
+W2 open      rigtorp_inline         E64   @  500ns  p50     150  p99     189  p99.9   42390  p99.99   236891  max    284586 ns
+W2 open      moodycamel_rw_inline   E64   @  500ns  p50     133  p99     175  p99.9    7819  p99.99   200705  max    247639 ns
+W2 open      shim_spsc              E64   @  500ns  p50     602  p99     884  p99.9   10684  p99.99   206799  max    253252 ns
+W2 open      shim_spsc_inline       E64   @  500ns  p50     603  p99     887  p99.9   11422  p99.99   238556  max    286131 ns
+W2 open      ring_borrowed          E64   @  500ns  p50     601  p99     884  p99.9   41836  p99.99   247031  max    294595 ns
+W2 open      shim_generic           E64   @  700ns  p50     131  p99     188  p99.9    2581  p99.99    63211  max    124795 ns
+W2 open      moodycamel_cq_sp       E64   @  700ns  p50     230  p99     532  p99.9   23333  p99.99   225114  max    277974 ns
+W2 open      rigtorp_inline         E64   @  700ns  p50     146  p99     178  p99.9    3011  p99.99   220319  max    288015 ns
+W2 open      moodycamel_rw_inline   E64   @  700ns  p50     149  p99     185  p99.9    4078  p99.99   139341  max    203474 ns
+W2 open      shim_spsc              E64   @  700ns  p50     863  p99     961  p99.9    3343  p99.99   109838  max    146889 ns
+W2 open      shim_spsc_inline       E64   @  700ns  p50     852  p99     939  p99.9    3156  p99.99   180475  max    247450 ns
+W2 open      ring_borrowed          E64   @  700ns  p50     853  p99     918  p99.9    3227  p99.99   171197  max    238803 ns
+W2 open      shim_generic           E64   @ 1000ns  p50     132  p99     179  p99.9    3089  p99.99   154698  max    218831 ns
+W2 open      moodycamel_cq_sp       E64   @ 1000ns  p50     233  p99     532  p99.9    6789  p99.99   181337  max    258287 ns
+W2 open      rigtorp_inline         E64   @ 1000ns  p50     147  p99     180  p99.9   39248  p99.99   586332  max    682141 ns
+W2 open      moodycamel_rw_inline   E64   @ 1000ns  p50     136  p99     176  p99.9    3587  p99.99   162682  max    259273 ns
+W2 open      shim_spsc              E64   @ 1000ns  p50     132  p99    1172  p99.9    2825  p99.99   201565  max    296604 ns
+W2 open      shim_spsc_inline       E64   @ 1000ns  p50     106  p99    1132  p99.9   10240  p99.99   209189  max    279802 ns
+W2 open      ring_borrowed          E64   @ 1000ns  p50      99  p99    1116  p99.9    2247  p99.99   178184  max    227714 ns
+W2 open      shim_generic           E64   @ 2000ns  p50     133  p99     159  p99.9    2833  p99.99   135120  max    266605 ns
+W2 open      moodycamel_cq_sp       E64   @ 2000ns  p50     234  p99     535  p99.9    2804  p99.99   131557  max    266584 ns
+W2 open      rigtorp_inline         E64   @ 2000ns  p50     145  p99     222  p99.9    3205  p99.99   154143  max    254060 ns
+W2 open      moodycamel_rw_inline   E64   @ 2000ns  p50     141  p99     179  p99.9    2605  p99.99   123956  max    258328 ns
+W2 open      shim_spsc              E64   @ 2000ns  p50     122  p99     159  p99.9    2787  p99.99   132794  max    255041 ns
+W2 open      shim_spsc_inline       E64   @ 2000ns  p50     104  p99     158  p99.9    2819  p99.99   127145  max    252376 ns
+W2 open      ring_borrowed          E64   @ 2000ns  p50     105  p99     139  p99.9    2753  p99.99   128657  max    267310 ns
+W2 open      shim_generic           E64   @ 5000ns  p50     134  p99     169  p99.9    2424  p99.99   112206  max    229486 ns
+W2 open      moodycamel_cq_sp       E64   @ 5000ns  p50     236  p99     497  p99.9    2027  p99.99    79333  max    248004 ns
+W2 open      rigtorp_inline         E64   @ 5000ns  p50     147  p99     169  p99.9    1967  p99.99    94126  max    245309 ns
+W2 open      moodycamel_rw_inline   E64   @ 5000ns  p50     153  p99     183  p99.9    2421  p99.99    70042  max    264011 ns
+W2 open      shim_spsc              E64   @ 5000ns  p50     133  p99     167  p99.9    2696  p99.99    75773  max    240014 ns
+W2 open      shim_spsc_inline       E64   @ 5000ns  p50     108  p99     156  p99.9    2604  p99.99    67229  max    248744 ns
+W2 open      ring_borrowed          E64   @ 5000ns  p50     106  p99     139  p99.9    2328  p99.99   100029  max    265133 ns
+W2 open      shim_generic           E64   @10000ns  p50     133  p99     174  p99.9    2785  p99.99    46387  max    246823 ns
+W2 open      moodycamel_cq_sp       E64   @10000ns  p50     233  p99     547  p99.9    2595  p99.99    55343  max    239539 ns
+W2 open      rigtorp_inline         E64   @10000ns  p50     156  p99     180  p99.9    2011  p99.99    55954  max    210186 ns
+W2 open      moodycamel_rw_inline   E64   @10000ns  p50     143  p99     177  p99.9    2682  p99.99    59256  max    244234 ns
+W2 open      shim_spsc              E64   @10000ns  p50     133  p99     162  p99.9    2003  p99.99    39571  max    236376 ns
+W2 open      shim_spsc_inline       E64   @10000ns  p50     112  p99     139  p99.9    2554  p99.99    41059  max    240101 ns
+W2 open      ring_borrowed          E64   @10000ns  p50     106  p99     139  p99.9    2506  p99.99    59727  max    245481 ns
+W2 open      shim_generic           E64   @  100ns  p50     138  p99    3722  p99.9  193066  p99.99   243496  max    249146 ns
+W2 open      moodycamel_cq_sp       E64   @  100ns  p50  155053  p99  408315  p99.9  432184  p99.99   436978  max    438054 ns
+W2 open      rigtorp_inline         E64   @  100ns  p50     138  p99    1789  p99.9  179105  p99.99   247301  max    254984 ns
+W2 open      moodycamel_rw_inline   E64   @  100ns  p50     141  p99    1325  p99.9   67444  p99.99   103529  max    111092 ns
+W2 open      shim_spsc              E64   @  100ns  p50    1304  p99    2774  p99.9  149465  p99.99   204954  max    211215 ns
+W2 open      shim_spsc_inline       E64   @  100ns  p50     641  p99    1988  p99.9   90092  p99.99   123776  max    131309 ns
+W2 open      ring_borrowed          E64   @  100ns  p50     640  p99    1828  p99.9  119433  p99.99   186527  max    194110 ns
+W2 open      shim_generic           E64   @  200ns  p50     134  p99    1322  p99.9   84141  p99.99   133386  max    145997 ns
+W2 open      moodycamel_cq_sp       E64   @  200ns  p50     290  p99    3410  p99.9  119162  p99.99   217934  max    229043 ns
+W2 open      rigtorp_inline         E64   @  200ns  p50     143  p99     835  p99.9    9341  p99.99    44588  max     54585 ns
+W2 open      moodycamel_rw_inline   E64   @  200ns  p50     133  p99     851  p99.9   45795  p99.99   116377  max    127259 ns
+W2 open      shim_spsc              E64   @  200ns  p50     594  p99    1555  p99.9  104612  p99.99   206650  max    222705 ns
+W2 open      shim_spsc_inline       E64   @  200ns  p50     596  p99    1350  p99.9   73110  p99.99   175201  max    192789 ns
+W2 open      ring_borrowed          E64   @  200ns  p50     588  p99    1214  p99.9   41908  p99.99   161262  max    178870 ns
+W2 open      shim_generic           E64   @  300ns  p50     129  p99     957  p99.9   39280  p99.99   195571  max    221303 ns
+W2 open      moodycamel_cq_sp       E64   @  300ns  p50     249  p99    1743  p99.9   34624  p99.99   168710  max    190726 ns
+W2 open      rigtorp_inline         E64   @  300ns  p50     141  p99     525  p99.9   52359  p99.99   225434  max    253079 ns
+W2 open      moodycamel_rw_inline   E64   @  300ns  p50     131  p99     389  p99.9    7817  p99.99   162223  max    189787 ns
+W2 open      shim_spsc              E64   @  300ns  p50     778  p99    1279  p99.9   18294  p99.99   171194  max    197326 ns
+W2 open      shim_spsc_inline       E64   @  300ns  p50     841  p99    1239  p99.9   53624  p99.99   220787  max    248282 ns
+W2 open      ring_borrowed          E64   @  300ns  p50     834  p99    1196  p99.9   52213  p99.99   179284  max    206879 ns
+W2 open      shim_generic           E64   @  500ns  p50     129  p99     562  p99.9   39260  p99.99   197461  max    242861 ns
+W2 open      moodycamel_cq_sp       E64   @  500ns  p50     250  p99    1058  p99.9    8535  p99.99   204350  max    247938 ns
+W2 open      rigtorp_inline         E64   @  500ns  p50     150  p99     187  p99.9   12674  p99.99   200012  max    247707 ns
+W2 open      moodycamel_rw_inline   E64   @  500ns  p50     133  p99     174  p99.9   18365  p99.99   158309  max    205894 ns
+W2 open      shim_spsc              E64   @  500ns  p50     611  p99     886  p99.9    5297  p99.99   145505  max    184328 ns
+W2 open      shim_spsc_inline       E64   @  500ns  p50     602  p99     886  p99.9    2479  p99.99    84164  max    131718 ns
+W2 open      ring_borrowed          E64   @  500ns  p50     600  p99     884  p99.9    3625  p99.99   127560  max    175204 ns
+W2 open      shim_generic           E64   @  700ns  p50     128  p99     185  p99.9    2676  p99.99   180571  max    246284 ns
+W2 open      moodycamel_cq_sp       E64   @  700ns  p50     249  p99     947  p99.9    2695  p99.99   186533  max    250204 ns
+W2 open      rigtorp_inline         E64   @  700ns  p50     146  p99     178  p99.9    2300  p99.99   178325  max    246011 ns
+W2 open      moodycamel_rw_inline   E64   @  700ns  p50     133  p99     173  p99.9    3236  p99.99   181971  max    247634 ns
+W2 open      shim_spsc              E64   @  700ns  p50     856  p99     941  p99.9    4460  p99.99   153518  max    219732 ns
+W2 open      shim_spsc_inline       E64   @  700ns  p50     853  p99     944  p99.9    3913  p99.99   172808  max    240374 ns
+W2 open      ring_borrowed          E64   @  700ns  p50     849  p99     910  p99.9    3097  p99.99   173978  max    241584 ns
+W2 open      shim_generic           E64   @ 1000ns  p50     132  p99     169  p99.9    4494  p99.99   195516  max    251162 ns
+W2 open      moodycamel_cq_sp       E64   @ 1000ns  p50     249  p99     865  p99.9    2595  p99.99   155251  max    249208 ns
+W2 open      rigtorp_inline         E64   @ 1000ns  p50     143  p99     178  p99.9    5107  p99.99   206503  max    257785 ns
+W2 open      moodycamel_rw_inline   E64   @ 1000ns  p50     137  p99     177  p99.9    2926  p99.99   176788  max    253852 ns
+W2 open      shim_spsc              E64   @ 1000ns  p50     127  p99    1169  p99.9    3374  p99.99   176613  max    243929 ns
+W2 open      shim_spsc_inline       E64   @ 1000ns  p50     107  p99     485  p99.9    2093  p99.99   126410  max    203173 ns
+W2 open      ring_borrowed          E64   @ 1000ns  p50     104  p99    1115  p99.9    7089  p99.99   171111  max    238998 ns
+W2 open      shim_generic           E64   @ 2000ns  p50     126  p99     168  p99.9    2742  p99.99   123353  max    240193 ns
+W2 open      moodycamel_cq_sp       E64   @ 2000ns  p50     252  p99     892  p99.9    3068  p99.99   105511  max    243190 ns
+W2 open      rigtorp_inline         E64   @ 2000ns  p50     151  p99     187  p99.9    2986  p99.99   123129  max    249596 ns
+W2 open      moodycamel_rw_inline   E64   @ 2000ns  p50     147  p99     186  p99.9    3085  p99.99   111097  max    233601 ns
+W2 open      shim_spsc              E64   @ 2000ns  p50     131  p99     178  p99.9    2806  p99.99   107692  max    256487 ns
+W2 open      shim_spsc_inline       E64   @ 2000ns  p50     105  p99     156  p99.9    2596  p99.99    61879  max    152423 ns
+W2 open      ring_borrowed          E64   @ 2000ns  p50     113  p99     151  p99.9    2361  p99.99   109747  max    248463 ns
+W2 open      shim_generic           E64   @ 5000ns  p50     133  p99     206  p99.9    2357  p99.99    84075  max    242850 ns
+W2 open      moodycamel_cq_sp       E64   @ 5000ns  p50     268  p99     829  p99.9    2666  p99.99    78553  max    247740 ns
+W2 open      rigtorp_inline         E64   @ 5000ns  p50     156  p99     175  p99.9    2548  p99.99    82363  max    207239 ns
+W2 open      moodycamel_rw_inline   E64   @ 5000ns  p50     151  p99     179  p99.9    2518  p99.99    67232  max    248018 ns
+W2 open      shim_spsc              E64   @ 5000ns  p50     130  p99     166  p99.9    1803  p99.99    80995  max    242146 ns
+W2 open      shim_spsc_inline       E64   @ 5000ns  p50     109  p99     148  p99.9    2444  p99.99    94966  max    246555 ns
+W2 open      ring_borrowed          E64   @ 5000ns  p50     112  p99     144  p99.9    2627  p99.99    85818  max    250021 ns
+W2 open      shim_generic           E64   @10000ns  p50     132  p99     704  p99.9    2893  p99.99    54885  max    254263 ns
+W2 open      moodycamel_cq_sp       E64   @10000ns  p50     253  p99     775  p99.9    2117  p99.99    50205  max    249611 ns
+W2 open      rigtorp_inline         E64   @10000ns  p50     146  p99     249  p99.9    2383  p99.99    87689  max    257722 ns
+W2 open      moodycamel_rw_inline   E64   @10000ns  p50     146  p99     176  p99.9    2136  p99.99    74485  max    272468 ns
+W2 open      shim_spsc              E64   @10000ns  p50     136  p99     169  p99.9    2236  p99.99    28658  max    148051 ns
+W2 open      shim_spsc_inline       E64   @10000ns  p50     109  p99     163  p99.9    1942  p99.99    35160  max    234356 ns
+W2 open      ring_borrowed          E64   @10000ns  p50     107  p99     146  p99.9    2511  p99.99    46780  max    241345 ns
+W2 open      shim_generic           E64   @  100ns  p50     141  p99    4840  p99.9    9097  p99.99    11087  max     13064 ns
+W2 open      moodycamel_cq_sp       E64   @  100ns  p50 63702030  p99 81191590  p99.9 81402778  p99.99 81426034  max  81428015 ns
+W2 open      rigtorp_inline         E64   @  100ns  p50     146  p99    1480  p99.9  103213  p99.99   154488  max    162141 ns
+W2 open      moodycamel_rw_inline   E64   @  100ns  p50     148  p99    1817  p99.9  170807  p99.99   237671  max    245214 ns
+W2 open      shim_spsc              E64   @  100ns  p50    1307  p99    3489  p99.9  108486  p99.99   146850  max    152971 ns
+W2 open      shim_spsc_inline       E64   @  100ns  p50     685  p99    2664  p99.9  169076  p99.99   234028  max    241571 ns
+W2 open      ring_borrowed          E64   @  100ns  p50     629  p99    2061  p99.9  158931  p99.99   225805  max    233378 ns
+W2 open      shim_generic           E64   @  200ns  p50     136  p99    1489  p99.9    5092  p99.99     9641  max     22221 ns
+W2 open      moodycamel_cq_sp       E64   @  200ns  p50     281  p99    2424  p99.9  150974  p99.99   239210  max    247504 ns
+W2 open      rigtorp_inline         E64   @  200ns  p50     142  p99     817  p99.9   49172  p99.99   165765  max    183403 ns
+W2 open      moodycamel_rw_inline   E64   @  200ns  p50     134  p99     858  p99.9   62344  p99.99   156559  max    174147 ns
+W2 open      shim_spsc              E64   @  200ns  p50     594  p99    1398  p99.9   63294  p99.99   169206  max    185492 ns
+W2 open      shim_spsc_inline       E64   @  200ns  p50     593  p99    1254  p99.9   34512  p99.99   101370  max    118588 ns
+W2 open      ring_borrowed          E64   @  200ns  p50     587  p99    1199  p99.9   25538  p99.99    98004  max    112774 ns
+W2 open      shim_generic           E64   @  300ns  p50     135  p99     961  p99.9    5023  p99.99     9247  max     17726 ns
+W2 open      moodycamel_cq_sp       E64   @  300ns  p50     247  p99     802  p99.9   23283  p99.99   109759  max    120086 ns
+W2 open      rigtorp_inline         E64   @  300ns  p50     143  p99     386  p99.9   23437  p99.99   125949  max    153584 ns
+W2 open      moodycamel_rw_inline   E64   @  300ns  p50     134  p99     363  p99.9   54328  p99.99   218892  max    246457 ns
+W2 open      shim_spsc              E64   @  300ns  p50     771  p99    1275  p99.9   20983  p99.99   176329  max    202632 ns
+W2 open      shim_spsc_inline       E64   @  300ns  p50     842  p99    1228  p99.9   58410  p99.99   225046  max    252581 ns
+W2 open      ring_borrowed          E64   @  300ns  p50     743  p99    1210  p99.9   22884  p99.99   198174  max    225738 ns
+W2 open      shim_generic           E64   @  500ns  p50     136  p99     640  p99.9    4190  p99.99    17326  max     36685 ns
+W2 open      moodycamel_cq_sp       E64   @  500ns  p50     243  p99     485  p99.9   16925  p99.99   198955  max    240791 ns
+W2 open      rigtorp_inline         E64   @  500ns  p50     143  p99     179  p99.9    2231  p99.99    98807  max    124074 ns
+W2 open      moodycamel_rw_inline   E64   @  500ns  p50     145  p99     187  p99.9    2623  p99.99   127745  max    175319 ns
+W2 open      shim_spsc              E64   @  500ns  p50     613  p99     887  p99.9    6273  p99.99   200146  max    246478 ns
+W2 open      shim_spsc_inline       E64   @  500ns  p50     600  p99     884  p99.9   25814  p99.99   190874  max    238469 ns
+W2 open      ring_borrowed          E64   @  500ns  p50     602  p99     887  p99.9    7503  p99.99   175232  max    222847 ns
+W2 open      shim_generic           E64   @  700ns  p50     134  p99     387  p99.9    3733  p99.99    86758  max    149377 ns
+W2 open      moodycamel_cq_sp       E64   @  700ns  p50     243  p99     478  p99.9    4779  p99.99   179768  max    242687 ns
+W2 open      rigtorp_inline         E64   @  700ns  p50     153  p99     183  p99.9    3060  p99.99   167784  max    235480 ns
+W2 open      moodycamel_rw_inline   E64   @  700ns  p50     131  p99     169  p99.9    3528  p99.99   134136  max    174942 ns
+W2 open      shim_spsc              E64   @  700ns  p50     867  p99     956  p99.9    6878  p99.99   164841  max    231245 ns
+W2 open      shim_spsc_inline       E64   @  700ns  p50     853  p99     939  p99.9    3649  p99.99   182913  max    250449 ns
+W2 open      ring_borrowed          E64   @  700ns  p50     850  p99     910  p99.9    5103  p99.99   178290  max    245886 ns
+W2 open      shim_generic           E64   @ 1000ns  p50     143  p99     194  p99.9    3370  p99.99   107018  max    201856 ns
+W2 open      moodycamel_cq_sp       E64   @ 1000ns  p50     243  p99     475  p99.9    4165  p99.99   157008  max    250595 ns
+W2 open      rigtorp_inline         E64   @ 1000ns  p50     155  p99     190  p99.9    3763  p99.99   220219  max    316802 ns
+W2 open      moodycamel_rw_inline   E64   @ 1000ns  p50     131  p99     167  p99.9    3430  p99.99   116245  max    149991 ns
+W2 open      shim_spsc              E64   @ 1000ns  p50     139  p99    1196  p99.9    3468  p99.99   144757  max    210261 ns
+W2 open      shim_spsc_inline       E64   @ 1000ns  p50     108  p99    1147  p99.9    3230  p99.99   147547  max    236559 ns
+W2 open      ring_borrowed          E64   @ 1000ns  p50     101  p99     201  p99.9    2178  p99.99   137472  max    229713 ns
+W2 open      shim_generic           E64   @ 2000ns  p50     133  p99     169  p99.9    2174  p99.99    20805  max    149281 ns
+W2 open      moodycamel_cq_sp       E64   @ 2000ns  p50     244  p99     475  p99.9    2191  p99.99   117543  max    247172 ns
+W2 open      rigtorp_inline         E64   @ 2000ns  p50     143  p99     178  p99.9    1999  p99.99   110067  max    249298 ns
+W2 open      moodycamel_rw_inline   E64   @ 2000ns  p50     136  p99     179  p99.9    1811  p99.99   108236  max    226770 ns
+W2 open      shim_spsc              E64   @ 2000ns  p50     129  p99     176  p99.9    2140  p99.99   129079  max    246937 ns
+W2 open      shim_spsc_inline       E64   @ 2000ns  p50     100  p99     167  p99.9    1994  p99.99   119891  max    251769 ns
+W2 open      ring_borrowed          E64   @ 2000ns  p50     106  p99     143  p99.9    2029  p99.99   117901  max    216036 ns
+W2 open      shim_generic           E64   @ 5000ns  p50     136  p99     183  p99.9    2929  p99.99    38558  max    160949 ns
+W2 open      moodycamel_cq_sp       E64   @ 5000ns  p50     245  p99     468  p99.9    2501  p99.99    79302  max    247293 ns
+W2 open      rigtorp_inline         E64   @ 5000ns  p50     150  p99     169  p99.9    2823  p99.99    79723  max    195731 ns
+W2 open      moodycamel_rw_inline   E64   @ 5000ns  p50     140  p99     176  p99.9    1799  p99.99    62466  max    216719 ns
+W2 open      shim_spsc              E64   @ 5000ns  p50     132  p99     163  p99.9    1871  p99.99    70700  max    174323 ns
+W2 open      shim_spsc_inline       E64   @ 5000ns  p50     109  p99     159  p99.9    2387  p99.99    71550  max    234929 ns
+W2 open      ring_borrowed          E64   @ 5000ns  p50     108  p99     149  p99.9    2452  p99.99    68793  max    231823 ns
+W2 open      shim_generic           E64   @10000ns  p50     137  p99     176  p99.9    2511  p99.99    26997  max    156030 ns
+W2 open      moodycamel_cq_sp       E64   @10000ns  p50     247  p99     470  p99.9    2693  p99.99    36554  max    216761 ns
+W2 open      rigtorp_inline         E64   @10000ns  p50     160  p99     211  p99.9    2571  p99.99    55007  max    237255 ns
+W2 open      moodycamel_rw_inline   E64   @10000ns  p50     139  p99     172  p99.9    2303  p99.99    38069  max    216772 ns
+W2 open      shim_spsc              E64   @10000ns  p50     138  p99     169  p99.9    2199  p99.99    25904  max    149410 ns
+W2 open      shim_spsc_inline       E64   @10000ns  p50     109  p99     161  p99.9    2614  p99.99    60918  max    281825 ns
+W2 open      ring_borrowed          E64   @10000ns  p50     107  p99     137  p99.9    2115  p99.99    33830  max    144183 ns
+W2 open      shim_generic           E64   @  100ns  p50     139  p99 1742020  p99.9 1789010  p99.99  1791942  max   1793875 ns
+W2 open      moodycamel_cq_sp       E64   @  100ns  p50 12150774  p99 17790158  p99.9 17886618  p99.99 17899028  max  17899843 ns
+W2 open      rigtorp_inline         E64   @  100ns  p50     138  p99    1048  p99.9  174834  p99.99   242319  max    249982 ns
+W2 open      moodycamel_rw_inline   E64   @  100ns  p50     146  p99     939  p99.9  167826  p99.99   234099  max    241682 ns
+W2 open      shim_spsc              E64   @  100ns  p50    1300  p99    2645  p99.9  193983  p99.99   251113  max    256993 ns
+W2 open      shim_spsc_inline       E64   @  100ns  p50     630  p99    1355  p99.9  157209  p99.99   223192  max    230735 ns
+W2 open      ring_borrowed          E64   @  100ns  p50     635  p99    3437  p99.9  185422  p99.99   252526  max    260099 ns
+W2 open      shim_generic           E64   @  200ns  p50     133  p99    1327  p99.9   99261  p99.99   226071  max    241957 ns
+W2 open      moodycamel_cq_sp       E64   @  200ns  p50     230  p99    1209  p99.9  135599  p99.99   218499  max    227263 ns
+W2 open      rigtorp_inline         E64   @  200ns  p50     139  p99     610  p99.9  139264  p99.99   233188  max    250856 ns
+W2 open      moodycamel_rw_inline   E64   @  200ns  p50     136  p99     474  p99.9   53595  p99.99   179895  max    197473 ns
+W2 open      shim_spsc              E64   @  200ns  p50     601  p99    1016  p99.9   41129  p99.99   166166  max    182552 ns
+W2 open      shim_spsc_inline       E64   @  200ns  p50     593  p99     957  p99.9   31427  p99.99   146789  max    164347 ns
+W2 open      ring_borrowed          E64   @  200ns  p50     586  p99     956  p99.9   74161  p99.99   218949  max    236537 ns
+W2 open      shim_generic           E64   @  300ns  p50     131  p99     762  p99.9   49697  p99.99   220832  max    246644 ns
+W2 open      moodycamel_cq_sp       E64   @  300ns  p50     226  p99     588  p99.9   41998  p99.99   181511  max    202806 ns
+W2 open      rigtorp_inline         E64   @  300ns  p50     141  p99     319  p99.9   79635  p99.99   219152  max    246817 ns
+W2 open      moodycamel_rw_inline   E64   @  300ns  p50     136  p99     216  p99.9   18327  p99.99   182380  max    209954 ns
+W2 open      shim_spsc              E64   @  300ns  p50     761  p99    1268  p99.9   28424  p99.99   200872  max    227265 ns
+W2 open      shim_spsc_inline       E64   @  300ns  p50     840  p99    1193  p99.9   29519  p99.99   203911  max    231415 ns
+W2 open      ring_borrowed          E64   @  300ns  p50     842  p99    1177  p99.9   13913  p99.99   166807  max    194402 ns
+W2 open      shim_generic           E64   @  500ns  p50     135  p99     284  p99.9   39666  p99.99   198654  max    244576 ns
+W2 open      moodycamel_cq_sp       E64   @  500ns  p50     235  p99     548  p99.9   26449  p99.99   185561  max    227978 ns
+W2 open      rigtorp_inline         E64   @  500ns  p50     142  p99     177  p99.9    2908  p99.99   191043  max    238748 ns
+W2 open      moodycamel_rw_inline   E64   @  500ns  p50     135  p99     177  p99.9    5322  p99.99   180779  max    227773 ns
+W2 open      shim_spsc              E64   @  500ns  p50     606  p99     889  p99.9    5918  p99.99   196059  max    241861 ns
+W2 open      shim_spsc_inline       E64   @  500ns  p50     594  p99     876  p99.9    2670  p99.99   159691  max    207256 ns
+W2 open      ring_borrowed          E64   @  500ns  p50     601  p99     882  p99.9   15373  p99.99   202039  max    249663 ns
+W2 open      shim_generic           E64   @  700ns  p50     131  p99     190  p99.9    5165  p99.99   168533  max    234317 ns
+W2 open      moodycamel_cq_sp       E64   @  700ns  p50     230  p99     532  p99.9    4110  p99.99   177290  max    239779 ns
+W2 open      rigtorp_inline         E64   @  700ns  p50     143  p99     173  p99.9    3695  p99.99   178119  max    245815 ns
+W2 open      moodycamel_rw_inline   E64   @  700ns  p50     139  p99     177  p99.9    4961  p99.99   179276  max    246822 ns
+W2 open      shim_spsc              E64   @  700ns  p50     863  p99     959  p99.9    3026  p99.99   180013  max    246517 ns
+W2 open      shim_spsc_inline       E64   @  700ns  p50     852  p99     936  p99.9    3528  p99.99   148212  max    215768 ns
+W2 open      ring_borrowed          E64   @  700ns  p50     851  p99     911  p99.9    2741  p99.99   142055  max    209661 ns
+W2 open      shim_generic           E64   @ 1000ns  p50     131  p99     166  p99.9    2764  p99.99   153647  max    228409 ns
+W2 open      moodycamel_cq_sp       E64   @ 1000ns  p50     230  p99     526  p99.9    2883  p99.99   186428  max    248388 ns
+W2 open      rigtorp_inline         E64   @ 1000ns  p50     147  p99     179  p99.9    3531  p99.99   194119  max    250209 ns
+W2 open      moodycamel_rw_inline   E64   @ 1000ns  p50     138  p99     173  p99.9    2349  p99.99   148051  max    245633 ns
+W2 open      shim_spsc              E64   @ 1000ns  p50     132  p99    1176  p99.9    3834  p99.99   156721  max    234024 ns
+W2 open      shim_spsc_inline       E64   @ 1000ns  p50     106  p99    1134  p99.9    3425  p99.99   158784  max    240112 ns
+W2 open      ring_borrowed          E64   @ 1000ns  p50     106  p99    1143  p99.9    4571  p99.99   174851  max    250035 ns
+W2 open      shim_generic           E64   @ 2000ns  p50     130  p99     167  p99.9    2904  p99.99   107006  max    245886 ns
+W2 open      moodycamel_cq_sp       E64   @ 2000ns  p50     231  p99     497  p99.9    3176  p99.99   110796  max    243264 ns
+W2 open      rigtorp_inline         E64   @ 2000ns  p50     142  p99     178  p99.9    2989  p99.99   116493  max    254896 ns
+W2 open      moodycamel_rw_inline   E64   @ 2000ns  p50     136  p99     177  p99.9    3051  p99.99   104586  max    237567 ns
+W2 open      shim_spsc              E64   @ 2000ns  p50     133  p99     180  p99.9    3014  p99.99   109194  max    246044 ns
+W2 open      shim_spsc_inline       E64   @ 2000ns  p50     108  p99     159  p99.9    2439  p99.99   114384  max    244797 ns
+W2 open      ring_borrowed          E64   @ 2000ns  p50     106  p99     147  p99.9    2079  p99.99   105326  max    232172 ns
+W2 open      shim_generic           E64   @ 5000ns  p50     133  p99     168  p99.9    2306  p99.99    70952  max    240214 ns
+W2 open      moodycamel_cq_sp       E64   @ 5000ns  p50     233  p99     530  p99.9    2606  p99.99    77744  max    240374 ns
+W2 open      rigtorp_inline         E64   @ 5000ns  p50     156  p99     179  p99.9    2782  p99.99    90587  max    210138 ns
+W2 open      moodycamel_rw_inline   E64   @ 5000ns  p50     152  p99     180  p99.9    2411  p99.99    51026  max    158120 ns
+W2 open      shim_spsc              E64   @ 5000ns  p50     129  p99     165  p99.9    1965  p99.99    55664  max    153681 ns
+W2 open      shim_spsc_inline       E64   @ 5000ns  p50     106  p99     156  p99.9    2386  p99.99    80541  max    229113 ns
+W2 open      ring_borrowed          E64   @ 5000ns  p50     106  p99     139  p99.9    2254  p99.99    61600  max    191610 ns
+W2 open      shim_generic           E64   @10000ns  p50     136  p99     166  p99.9    2209  p99.99    35405  max    143682 ns
+W2 open      moodycamel_cq_sp       E64   @10000ns  p50     236  p99     545  p99.9    1893  p99.99    42143  max    146078 ns
+W2 open      rigtorp_inline         E64   @10000ns  p50     159  p99     233  p99.9    1979  p99.99    67554  max    233175 ns
+W2 open      moodycamel_rw_inline   E64   @10000ns  p50     153  p99     186  p99.9    2631  p99.99    38707  max    179773 ns
+W2 open      shim_spsc              E64   @10000ns  p50     136  p99     168  p99.9    2472  p99.99    57123  max    240149 ns
+W2 open      shim_spsc_inline       E64   @10000ns  p50     115  p99     162  p99.9    2682  p99.99    39609  max    239136 ns
+W2 open      ring_borrowed          E64   @10000ns  p50     106  p99     143  p99.9    2266  p99.99    89086  max    247459 ns
+W2 open      shim_generic           E64   @  100ns  p50     137  p99    3237  p99.9  196336  p99.99   246184  max    251895 ns
+W2 open      moodycamel_cq_sp       E64   @  100ns  p50 22416559  p99 33087473  p99.9 33289751  p99.99 33314596  max  33317524 ns
+W2 open      rigtorp_inline         E64   @  100ns  p50     142  p99    1562  p99.9  158658  p99.99   226855  max    234528 ns
+W2 open      moodycamel_rw_inline   E64   @  100ns  p50     146  p99    1627  p99.9  117592  p99.99   147522  max    150797 ns
+W2 open      shim_spsc              E64   @  100ns  p50    1300  p99    2648  p99.9   46489  p99.99    73495  max     79735 ns
+W2 open      shim_spsc_inline       E64   @  100ns  p50     735  p99 9224359  p99.9 9706666  p99.99  9764256  max   9770867 ns
+W2 open      ring_borrowed          E64   @  100ns  p50     630  p99    1866  p99.9   92534  p99.99   145242  max    152805 ns
+W2 open      shim_generic           E64   @  200ns  p50     130  p99    1228  p99.9   41005  p99.99   106455  max    122210 ns
+W2 open      moodycamel_cq_sp       E64   @  200ns  p50     248  p99    2333  p99.9   79445  p99.99   168523  max    181333 ns
+W2 open      rigtorp_inline         E64   @  200ns  p50     136  p99     828  p99.9   52955  p99.99   141022  max    158680 ns
+W2 open      moodycamel_rw_inline   E64   @  200ns  p50     131  p99     895  p99.9   88431  p99.99   144490  max    157034 ns
+W2 open      shim_spsc              E64   @  200ns  p50     592  p99    1391  p99.9   56561  p99.99   170916  max    187112 ns
+W2 open      shim_spsc_inline       E64   @  200ns  p50     593  p99    1207  p99.9    5354  p99.99    47804  max     65342 ns
+W2 open      ring_borrowed          E64   @  200ns  p50     587  p99    1173  p99.9    5647  p99.99    47130  max     58142 ns
+W2 open      shim_generic           E64   @  300ns  p50     131  p99    1072  p99.9   87340  p99.99   202764  max    228165 ns
+W2 open      moodycamel_cq_sp       E64   @  300ns  p50     267  p99    3402  p99.9  169142  p99.99   213138  max    221830 ns
+W2 open      rigtorp_inline         E64   @  300ns  p50     149  p99     620  p99.9    4690  p99.99    40339  max     54435 ns
+W2 open      moodycamel_rw_inline   E64   @  300ns  p50     136  p99    1243  p99.9  148118  p99.99   220823  max    246515 ns
+W2 open      shim_spsc              E64   @  300ns  p50     777  p99    1278  p99.9    3916  p99.99    22324  max     45154 ns
+W2 open      shim_spsc_inline       E64   @  300ns  p50     836  p99    1473  p99.9   99397  p99.99   235602  max    263146 ns
+W2 open      ring_borrowed          E64   @  300ns  p50     839  p99    1377  p99.9  427514  p99.99   665919  max    692502 ns
+W2 open      shim_generic           E64   @  500ns  p50     130  p99     330  p99.9    2273  p99.99    30763  max     62617 ns
+W2 open      moodycamel_cq_sp       E64   @  500ns  p50     247  p99    1156  p99.9    2925  p99.99    30313  max     59316 ns
+W2 open      rigtorp_inline         E64   @  500ns  p50     152  p99     239  p99.9   34218  p99.99   159989  max    203834 ns
+W2 open      moodycamel_rw_inline   E64   @  500ns  p50     139  p99  655930  p99.9 2548973  p99.99  2963492  max   3008904 ns
+W2 open      shim_spsc              E64   @  500ns  p50     619  p99  849368  p99.9 2555606  p99.99  2967121  max   3013033 ns
+W2 open      shim_spsc_inline       E64   @  500ns  p50     602  p99     888  p99.9   18826  p99.99   235071  max    282626 ns
+W2 open      ring_borrowed          E64   @  500ns  p50     596  p99     884  p99.9   34328  p99.99   206206  max    253731 ns
+W2 open      shim_generic           E64   @  700ns  p50     127  p99     210  p99.9   32415  p99.99   193746  max    230181 ns
+W2 open      moodycamel_cq_sp       E64   @  700ns  p50     248  p99    1245  p99.9    3112  p99.99   105372  max    161230 ns
+W2 open      rigtorp_inline         E64   @  700ns  p50     149  p99     188  p99.9   39138  p99.99   227494  max    270723 ns
+W2 open      moodycamel_rw_inline   E64   @  700ns  p50     133  p99     179  p99.9 1330495  p99.99  1925950  max   1991443 ns
+W2 open      shim_spsc              E64   @  700ns  p50     864  p99     956  p99.9   84469  p99.99   203856  max    251710 ns
+W2 open      shim_spsc_inline       E64   @  700ns  p50     854  p99     950  p99.9   78891  p99.99   223094  max    256082 ns
+W2 open      ring_borrowed          E64   @  700ns  p50     854  p99     928  p99.9   36759  p99.99   183579  max    218041 ns
+W2 open      shim_generic           E64   @ 1000ns  p50     129  p99     184  p99.9   19380  p99.99   117118  max    187660 ns
+W2 open      moodycamel_cq_sp       E64   @ 1000ns  p50     267  p99    1032  p99.9  109010  p99.99   259113  max    322946 ns
+W2 open      rigtorp_inline         E64   @ 1000ns  p50     142  p99     180  p99.9   34798  p99.99   245901  max    331913 ns
+W2 open      moodycamel_rw_inline   E64   @ 1000ns  p50     133  p99     168  p99.9    8346  p99.99   238595  max    286900 ns
+W2 open      shim_spsc              E64   @ 1000ns  p50     252  p99    1797  p99.9 2534273  p99.99  2964426  max   3011961 ns
+W2 open      shim_spsc_inline       E64   @ 1000ns  p50     109  p99    2165  p99.9 2528898  p99.99  2964415  max   3013230 ns
+W2 open      ring_borrowed          E64   @ 1000ns  p50     102  p99    1167  p99.9   45065  p99.99   243650  max    296275 ns
+W2 open      shim_generic           E64   @ 2000ns  p50     127  p99     167  p99.9    3096  p99.99   168952  max    255610 ns
+W2 open      moodycamel_cq_sp       E64   @ 2000ns  p50     251  p99    1023  p99.9    8618  p99.99   198162  max    275453 ns
+W2 open      rigtorp_inline         E64   @ 2000ns  p50     148  p99     188  p99.9    5083  p99.99   180851  max    248790 ns
+W2 open      moodycamel_rw_inline   E64   @ 2000ns  p50     147  p99     190  p99.9 1044611  p99.99  2816601  max   3013930 ns
+W2 open      shim_spsc              E64   @ 2000ns  p50     128  p99     169  p99.9   41193  p99.99   199582  max    271147 ns
+W2 open      shim_spsc_inline       E64   @ 2000ns  p50     101  p99     169  p99.9   64024  p99.99   208130  max    269431 ns
+W2 open      ring_borrowed          E64   @ 2000ns  p50     108  p99     149  p99.9    2916  p99.99   127333  max    270297 ns
+W2 open      shim_generic           E64   @ 5000ns  p50     131  p99     622  p99.9   43234  p99.99   203975  max    280149 ns
+W2 open      moodycamel_cq_sp       E64   @ 5000ns  p50     248  p99     975  p99.9   22891  p99.99   185639  max    253392 ns
+W2 open      rigtorp_inline         E64   @ 5000ns  p50     142  p99     221  p99.9    2383  p99.99   107950  max    249567 ns
+W2 open      moodycamel_rw_inline   E64   @ 5000ns  p50     140  p99     175  p99.9    1955  p99.99    85184  max    266294 ns
+W2 open      shim_spsc              E64   @ 5000ns  p50     130  p99     166  p99.9    2093  p99.99   107943  max    231776 ns
+W2 open      shim_spsc_inline       E64   @ 5000ns  p50     106  p99     154  p99.9    1826  p99.99    60392  max    175169 ns
+W2 open      ring_borrowed          E64   @ 5000ns  p50     104  p99     137  p99.9    1914  p99.99   106853  max    255777 ns
+W2 open      shim_generic           E64   @10000ns  p50     133  p99     200  p99.9    2105  p99.99    39146  max    222723 ns
+W2 open      moodycamel_cq_sp       E64   @10000ns  p50     267  p99     767  p99.9    2090  p99.99    46011  max    154674 ns
+W2 open      rigtorp_inline         E64   @10000ns  p50     153  p99     232  p99.9    2011  p99.99    86361  max    235496 ns
+W2 open      moodycamel_rw_inline   E64   @10000ns  p50     144  p99     176  p99.9    1867  p99.99    52206  max    156348 ns
+W2 open      shim_spsc              E64   @10000ns  p50     139  p99     187  p99.9    2430  p99.99   137501  max    629610 ns
+W2 open      shim_spsc_inline       E64   @10000ns  p50     147  p99     320  p99.9 1135468  p99.99  2820520  max   3019340 ns
+W2 open      ring_borrowed          E64   @10000ns  p50     112  p99     180  p99.9    9504  p99.99   183356  max    279598 ns
+W2 open      shim_generic           E64   @  100ns  p50     139  p99    2429  p99.9    5103  p99.99     8455  max     10601 ns
+W2 open      moodycamel_cq_sp       E64   @  100ns  p50 65691426  p99 81050074  p99.9 81266239  p99.99 81287087  max  81289188 ns
+W2 open      rigtorp_inline         E64   @  100ns  p50     150  p99    1016  p99.9    2907  p99.99    22238  max     25895 ns
+W2 open      moodycamel_rw_inline   E64   @  100ns  p50     144  p99    1589  p99.9   86934  p99.99   129256  max    136759 ns
+W2 open      shim_spsc              E64   @  100ns  p50    1297  p99    2579  p99.9   55533  p99.99    94243  max    100544 ns
+W2 open      shim_spsc_inline       E64   @  100ns  p50     632  p99    1576  p99.9    9775  p99.99    34546  max     42029 ns
+W2 open      ring_borrowed          E64   @  100ns  p50     639  p99    1632  p99.9   69063  p99.99   135275  max    142878 ns
+W2 open      shim_generic           E64   @  200ns  p50     137  p99    1357  p99.9    5698  p99.99    12300  max     19408 ns
+W2 open      moodycamel_cq_sp       E64   @  200ns  p50     288  p99    1604  p99.9   87784  p99.99   131495  max    140400 ns
+W2 open      rigtorp_inline         E64   @  200ns  p50     144  p99     711  p99.9   61645  p99.99   214921  max    232599 ns
+W2 open      moodycamel_rw_inline   E64   @  200ns  p50     136  p99     762  p99.9   75875  p99.99   202698  max    220266 ns
+W2 open      shim_spsc              E64   @  200ns  p50     587  p99    1297  p99.9   78075  p99.99   194909  max    211255 ns
+W2 open      shim_spsc_inline       E64   @  200ns  p50     593  p99    1294  p99.9    9763  p99.99    49266  max     66764 ns
+W2 open      ring_borrowed          E64   @  200ns  p50     559  p99    1178  p99.9    3088  p99.99    14780  max     26412 ns
+W2 open      shim_generic           E64   @  300ns  p50     135  p99     907  p99.9    3327  p99.99     6034  max     16579 ns
+W2 open      moodycamel_cq_sp       E64   @  300ns  p50     248  p99     883  p99.9   27668  p99.99   134170  max    154564 ns
+W2 open      rigtorp_inline         E64   @  300ns  p50     143  p99     388  p99.9   71894  p99.99   201226  max    228870 ns
+W2 open      moodycamel_rw_inline   E64   @  300ns  p50     144  p99     373  p99.9   31355  p99.99   153661  max    181195 ns
+W2 open      shim_spsc              E64   @  300ns  p50     715  p99    1283  p99.9   92539  p99.99   218754  max    245026 ns
+W2 open      shim_spsc_inline       E64   @  300ns  p50     706  p99    1245  p99.9   57467  p99.99   214751  max    242315 ns
+W2 open      ring_borrowed          E64   @  300ns  p50     654  p99    1223  p99.9   66429  p99.99   239487  max    267062 ns
+W2 open      shim_generic           E64   @  500ns  p50     140  p99     825  p99.9    4331  p99.99   127981  max    165801 ns
+W2 open      moodycamel_cq_sp       E64   @  500ns  p50     253  p99     607  p99.9   25204  p99.99   185406  max    228043 ns
+W2 open      rigtorp_inline         E64   @  500ns  p50     156  p99     194  p99.9    8029  p99.99   212796  max    260481 ns
+W2 open      moodycamel_rw_inline   E64   @  500ns  p50     136  p99     180  p99.9    5997  p99.99   215816  max    263411 ns
+W2 open      shim_spsc              E64   @  500ns  p50     617  p99     834  p99.9   15225  p99.99   226071  max    272393 ns
+W2 open      shim_spsc_inline       E64   @  500ns  p50     605  p99     887  p99.9   22604  p99.99   217808  max    265372 ns
+W2 open      ring_borrowed          E64   @  500ns  p50     594  p99     880  p99.9   13439  p99.99   153080  max    184045 ns
+W2 open      shim_generic           E64   @  700ns  p50     143  p99     556  p99.9    4162  p99.99   104720  max    166928 ns
+W2 open      moodycamel_cq_sp       E64   @  700ns  p50     253  p99     488  p99.9    4100  p99.99   162712  max    225721 ns
+W2 open      rigtorp_inline         E64   @  700ns  p50     151  p99     186  p99.9   12371  p99.99   217508  max    285194 ns
+W2 open      moodycamel_rw_inline   E64   @  700ns  p50     137  p99     171  p99.9    3062  p99.99   186846  max    254432 ns
+W2 open      shim_spsc              E64   @  700ns  p50     868  p99     985  p99.9    8246  p99.99   175031  max    236736 ns
+W2 open      shim_spsc_inline       E64   @  700ns  p50     853  p99     950  p99.9    5684  p99.99   163959  max    231555 ns
+W2 open      ring_borrowed          E64   @  700ns  p50     852  p99     935  p99.9    3656  p99.99   175863  max    243509 ns
+W2 open      shim_generic           E64   @ 1000ns  p50     135  p99     188  p99.9    4106  p99.99   172033  max    249291 ns
+W2 open      moodycamel_cq_sp       E64   @ 1000ns  p50     246  p99     477  p99.9    2795  p99.99   142036  max    235423 ns
+W2 open      rigtorp_inline         E64   @ 1000ns  p50     144  p99     180  p99.9    4757  p99.99   184733  max    256852 ns
+W2 open      moodycamel_rw_inline   E64   @ 1000ns  p50     133  p99     169  p99.9    3102  p99.99   153570  max    244662 ns
+W2 open      shim_spsc              E64   @ 1000ns  p50     133  p99    1186  p99.9    3069  p99.99   178518  max    253718 ns
+W2 open      shim_spsc_inline       E64   @ 1000ns  p50     108  p99    1126  p99.9    3163  p99.99   166214  max    237239 ns
+W2 open      ring_borrowed          E64   @ 1000ns  p50     102  p99    1133  p99.9    2971  p99.99   165907  max    252811 ns
+W2 open      shim_generic           E64   @ 2000ns  p50     134  p99     180  p99.9    2256  p99.99    37272  max    154100 ns
+W2 open      moodycamel_cq_sp       E64   @ 2000ns  p50     246  p99     486  p99.9    2276  p99.99   136802  max    315552 ns
+W2 open      rigtorp_inline         E64   @ 2000ns  p50     144  p99     180  p99.9    2118  p99.99   131426  max    270545 ns
+W2 open      moodycamel_rw_inline   E64   @ 2000ns  p50     139  p99     180  p99.9    2253  p99.99   120885  max    259786 ns
+W2 open      shim_spsc              E64   @ 2000ns  p50     133  p99     169  p99.9    2055  p99.99   116886  max    246498 ns
+W2 open      shim_spsc_inline       E64   @ 2000ns  p50     101  p99     149  p99.9    2056  p99.99   134124  max    285208 ns
+W2 open      ring_borrowed          E64   @ 2000ns  p50     105  p99     139  p99.9    2108  p99.99   131450  max    271765 ns
+W2 open      shim_generic           E64   @ 5000ns  p50     136  p99     176  p99.9    2341  p99.99    30511  max    150131 ns
+W2 open      moodycamel_cq_sp       E64   @ 5000ns  p50     246  p99     468  p99.9    1891  p99.99    77959  max    310006 ns
+W2 open      rigtorp_inline         E64   @ 5000ns  p50     145  p99     166  p99.9    2036  p99.99    95313  max    281424 ns
+W2 open      moodycamel_rw_inline   E64   @ 5000ns  p50     135  p99     159  p99.9    1930  p99.99    93449  max    317611 ns
+W2 open      shim_spsc              E64   @ 5000ns  p50     133  p99     165  p99.9    2225  p99.99    47947  max    146532 ns
+W2 open      shim_spsc_inline       E64   @ 5000ns  p50     110  p99     159  p99.9    2189  p99.99    37157  max    167565 ns
+W2 open      ring_borrowed          E64   @ 5000ns  p50     111  p99     138  p99.9    2843  p99.99   123925  max    412220 ns
+W2 open      shim_generic           E64   @10000ns  p50     136  p99     180  p99.9    2647  p99.99    48484  max    200770 ns
+W2 open      moodycamel_cq_sp       E64   @10000ns  p50     246  p99     461  p99.9    2900  p99.99    57454  max    202455 ns
+W2 open      rigtorp_inline         E64   @10000ns  p50     144  p99     221  p99.9    2743  p99.99    28350  max    148018 ns
+W2 open      moodycamel_rw_inline   E64   @10000ns  p50     133  p99     159  p99.9    2561  p99.99    50675  max    379392 ns
+W2 open      shim_spsc              E64   @10000ns  p50     137  p99     169  p99.9    2628  p99.99   103940  max    457144 ns
+W2 open      shim_spsc_inline       E64   @10000ns  p50     106  p99     154  p99.9    2459  p99.99    62870  max    397114 ns
+W2 open      ring_borrowed          E64   @10000ns  p50     111  p99     138  p99.9    2568  p99.99    79640  max    404429 ns
+W2 open      shim_generic           E64   @  100ns  p50     137  p99  158340  p99.9  388643  p99.99   421309  max    427189 ns
+W2 open      moodycamel_cq_sp       E64   @  100ns  p50 10621879  p99 16605456  p99.9 16704341  p99.99 16713843  max  16715401 ns
+W2 open      rigtorp_inline         E64   @  100ns  p50     146  p99    9028  p99.9  336270  p99.99   403144  max    410787 ns
+W2 open      moodycamel_rw_inline   E64   @  100ns  p50     153  p99    5769  p99.9  327953  p99.99   393445  max    400998 ns
+W2 open      shim_spsc              E64   @  100ns  p50    1307  p99   28381  p99.9  360239  p99.99   416818  max    423259 ns
+W2 open      shim_spsc_inline       E64   @  100ns  p50     625  p99   14937  p99.9  342942  p99.99   408995  max    416468 ns
+W2 open      ring_borrowed          E64   @  100ns  p50     623  p99    2756  p99.9  300423  p99.99   367227  max    374830 ns
+W2 open      shim_generic           E64   @  200ns  p50     135  p99    1541  p99.9  174237  p99.99   299544  max    315419 ns
+W2 open      moodycamel_cq_sp       E64   @  200ns  p50     230  p99    1409  p99.9   83984  p99.99   147800  max    159209 ns
+W2 open      rigtorp_inline         E64   @  200ns  p50     153  p99     631  p99.9  157983  p99.99   271879  max    289567 ns
+W2 open      moodycamel_rw_inline   E64   @  200ns  p50     139  p99     779  p99.9  225999  p99.99   381196  max    398783 ns
+W2 open      shim_spsc              E64   @  200ns  p50     594  p99    1110  p99.9   41441  p99.99    61013  max     66506 ns
+W2 open      shim_spsc_inline       E64   @  200ns  p50     591  p99    1047  p99.9   31314  p99.99    61869  max     72712 ns
+W2 open      ring_borrowed          E64   @  200ns  p50     580  p99    1033  p99.9   33320  p99.99    70372  max     77207 ns
+W2 open      shim_generic           E64   @  300ns  p50     131  p99     842  p99.9   27075  p99.99    60807  max     69302 ns
+W2 open      moodycamel_cq_sp       E64   @  300ns  p50     227  p99     777  p99.9   52322  p99.99   137543  max    154632 ns
+W2 open      rigtorp_inline         E64   @  300ns  p50     142  p99     479  p99.9  176118  p99.99   388432  max    416057 ns
+W2 open      moodycamel_rw_inline   E64   @  300ns  p50     136  p99     370  p99.9    9467  p99.99    50493  max     68287 ns
+W2 open      shim_spsc              E64   @  300ns  p50     757  p99    1265  p99.9   13376  p99.99    57707  max     80059 ns
+W2 open      shim_spsc_inline       E64   @  300ns  p50     730  p99    1230  p99.9   27148  p99.99    81436  max    108950 ns
+W2 open      ring_borrowed          E64   @  300ns  p50     706  p99    1220  p99.9   42469  p99.99   172355  max    199939 ns
+W2 open      shim_generic           E64   @  500ns  p50     134  p99     359  p99.9   30049  p99.99   346318  max    392190 ns
+W2 open      moodycamel_cq_sp       E64   @  500ns  p50     235  p99     548  p99.9   49051  p99.99   364820  max    407277 ns
+W2 open      rigtorp_inline         E64   @  500ns  p50     141  p99     230  p99.9  129148  p99.99   373487  max    421142 ns
+W2 open      moodycamel_rw_inline   E64   @  500ns  p50     135  p99     185  p99.9   16509  p99.99   165183  max    212768 ns
+W2 open      shim_spsc              E64   @  500ns  p50     608  p99     906  p99.9  177992  p99.99   384116  max    426819 ns
+W2 open      shim_spsc_inline       E64   @  500ns  p50     602  p99     888  p99.9    7949  p99.99   150547  max    198151 ns
+W2 open      ring_borrowed          E64   @  500ns  p50     596  p99     882  p99.9   85709  p99.99   367394  max    415058 ns
+W2 open      shim_generic           E64   @  700ns  p50     131  p99     268  p99.9   89267  p99.99   384581  max    417452 ns
+W2 open      moodycamel_cq_sp       E64   @  700ns  p50     230  p99     557  p99.9   41964  p99.99   358060  max    420338 ns
+W2 open      rigtorp_inline         E64   @  700ns  p50     143  p99     176  p99.9   25066  p99.99   349317  max    417013 ns
+W2 open      moodycamel_rw_inline   E64   @  700ns  p50     148  p99     189  p99.9   20019  p99.99   331378  max    398975 ns
+W2 open      shim_spsc              E64   @  700ns  p50     862  p99     965  p99.9   20277  p99.99   348963  max    414777 ns
+W2 open      shim_spsc_inline       E64   @  700ns  p50     857  p99     951  p99.9   46465  p99.99   344305  max    411801 ns
+W2 open      ring_borrowed          E64   @  700ns  p50     854  p99     940  p99.9   36648  p99.99   266444  max    334070 ns
+W2 open      shim_generic           E64   @ 1000ns  p50     136  p99     176  p99.9    5417  p99.99   170845  max    223708 ns
+W2 open      moodycamel_cq_sp       E64   @ 1000ns  p50     233  p99     534  p99.9   69846  p99.99   395742  max    460239 ns
+W2 open      rigtorp_inline         E64   @ 1000ns  p50     147  p99     180  p99.9    6309  p99.99   191316  max    287979 ns
+W2 open      moodycamel_rw_inline   E64   @ 1000ns  p50     141  p99     177  p99.9   13513  p99.99   218524  max    313994 ns
+W2 open      shim_spsc              E64   @ 1000ns  p50     131  p99    1178  p99.9    6233  p99.99   184185  max    254906 ns
+W2 open      shim_spsc_inline       E64   @ 1000ns  p50     102  p99    1125  p99.9    5554  p99.99   130398  max    207260 ns
+W2 open      ring_borrowed          E64   @ 1000ns  p50     104  p99    1141  p99.9    5597  p99.99   205843  max    300461 ns
+W2 open      shim_generic           E64   @ 2000ns  p50     131  p99     174  p99.9    3080  p99.99    42268  max    152341 ns
+W2 open      moodycamel_cq_sp       E64   @ 2000ns  p50     232  p99     535  p99.9    3784  p99.99   171236  max    364008 ns
+W2 open      rigtorp_inline         E64   @ 2000ns  p50     154  p99     189  p99.9    4296  p99.99   248089  max    416080 ns
+W2 open      moodycamel_rw_inline   E64   @ 2000ns  p50     145  p99     184  p99.9    5446  p99.99   212658  max    410236 ns
+W2 open      shim_spsc              E64   @ 2000ns  p50     130  p99     169  p99.9    3125  p99.99   120706  max    259405 ns
+W2 open      shim_spsc_inline       E64   @ 2000ns  p50     102  p99     159  p99.9    5772  p99.99   234659  max    432248 ns
+W2 open      ring_borrowed          E64   @ 2000ns  p50     103  p99     139  p99.9    5429  p99.99   249357  max    447005 ns
+W2 open      shim_generic           E64   @ 5000ns  p50     134  p99     173  p99.9    3236  p99.99   119965  max    346277 ns
+W2 open      moodycamel_cq_sp       E64   @ 5000ns  p50     236  p99     535  p99.9    2648  p99.99    82920  max    260359 ns
+W2 open      rigtorp_inline         E64   @ 5000ns  p50     144  p99     166  p99.9    2997  p99.99   101720  max    312515 ns
+W2 open      moodycamel_rw_inline   E64   @ 5000ns  p50     138  p99     171  p99.9    2587  p99.99    63575  max    157600 ns
+W2 open      shim_spsc              E64   @ 5000ns  p50     129  p99     165  p99.9    2269  p99.99    42327  max    155302 ns
+W2 open      shim_spsc_inline       E64   @ 5000ns  p50     106  p99     153  p99.9    2367  p99.99    60000  max    204294 ns
+W2 open      ring_borrowed          E64   @ 5000ns  p50     106  p99     139  p99.9    2575  p99.99   117081  max    383254 ns
+W2 open      shim_generic           E64   @10000ns  p50     135  p99     176  p99.9    3030  p99.99   107259  max    412761 ns
+W2 open      moodycamel_cq_sp       E64   @10000ns  p50     234  p99     544  p99.9    2624  p99.99    38036  max    151635 ns
+W2 open      rigtorp_inline         E64   @10000ns  p50     159  p99     334  p99.9    2864  p99.99   111604  max    427026 ns
+W2 open      moodycamel_rw_inline   E64   @10000ns  p50     149  p99     179  p99.9    2537  p99.99    87647  max    421509 ns
+W2 open      shim_spsc              E64   @10000ns  p50     131  p99     166  p99.9    2678  p99.99    51503  max    204001 ns
+W2 open      shim_spsc_inline       E64   @10000ns  p50     110  p99     166  p99.9    2606  p99.99    78309  max    349991 ns
+W2 open      ring_borrowed          E64   @10000ns  p50     106  p99     143  p99.9    2551  p99.99    85291  max    376131 ns
+W2 open      shim_generic           E64   @  100ns  p50     137  p99   13854  p99.9  188526  p99.99   214107  max    219797 ns
+W2 open      moodycamel_cq_sp       E64   @  100ns  p50  163353  p99  530903  p99.9  561805  p99.99   570113  max    571787 ns
+W2 open      rigtorp_inline         E64   @  100ns  p50     138  p99    2006  p99.9  137460  p99.99   198192  max    205876 ns
+W2 open      moodycamel_rw_inline   E64   @  100ns  p50     140  p99    1607  p99.9  176601  p99.99   243255  max    250838 ns
+W2 open      shim_spsc              E64   @  100ns  p50    1314  p99    3396  p99.9  135482  p99.99   190750  max    196951 ns
+W2 open      shim_spsc_inline       E64   @  100ns  p50     642  p99    3147  p99.9  194204  p99.99   243596  max    251029 ns
+W2 open      ring_borrowed          E64   @  100ns  p50     636  p99    2095  p99.9  122503  p99.99   173505  max    181088 ns
+W2 open      shim_generic           E64   @  200ns  p50     133  p99    1458  p99.9  163181  p99.99   258169  max    273844 ns
+W2 open      moodycamel_cq_sp       E64   @  200ns  p50     248  p99    2948  p99.9  175315  p99.99   281088  max    293858 ns
+W2 open      rigtorp_inline         E64   @  200ns  p50     139  p99    1198  p99.9  197290  p99.99   355431  max    373099 ns
+W2 open      moodycamel_rw_inline   E64   @  200ns  p50     131  p99    1159  p99.9  135991  p99.99   246963  max    264540 ns
+W2 open      shim_spsc              E64   @  200ns  p50     595  p99    1716  p99.9  101633  p99.99   194414  max    210680 ns
+W2 open      shim_spsc_inline       E64   @  200ns  p50     598  p99    1577  p99.9   72264  p99.99   149408  max    166826 ns
+W2 open      ring_borrowed          E64   @  200ns  p50     587  p99    1691  p99.9   76672  p99.99   137506  max    154202 ns
+W2 open      shim_generic           E64   @  300ns  p50     130  p99    1331  p99.9    8389  p99.99    41392  max     60891 ns
+W2 open      moodycamel_cq_sp       E64   @  300ns  p50     247  p99    1175  p99.9    3773  p99.99    19049  max     39119 ns
+W2 open      rigtorp_inline         E64   @  300ns  p50     149  p99     263  p99.9    2501  p99.99    15675  max     35331 ns
+W2 open      moodycamel_rw_inline   E64   @  300ns  p50     131  p99     329  p99.9    2664  p99.99    16920  max     41810 ns
+W2 open      shim_spsc              E64   @  300ns  p50     780  p99    1276  p99.9    3629  p99.99    17808  max     31547 ns
+W2 open      shim_spsc_inline       E64   @  300ns  p50     830  p99    1179  p99.9    3243  p99.99    13431  max     24357 ns
+W2 open      ring_borrowed          E64   @  300ns  p50     690  p99    1173  p99.9    3134  p99.99    12724  max     26497 ns
+W2 open      shim_generic           E64   @  500ns  p50     130  p99     767  p99.9  109555  p99.99   375889  max    421450 ns
+W2 open      moodycamel_cq_sp       E64   @  500ns  p50     247  p99    1640  p99.9    6436  p99.99    66799  max    109707 ns
+W2 open      rigtorp_inline         E64   @  500ns  p50     142  p99     180  p99.9    4770  p99.99    67388  max    115083 ns
+W2 open      moodycamel_rw_inline   E64   @  500ns  p50     142  p99     297  p99.9   16387  p99.99   245967  max    293561 ns
+W2 open      shim_spsc              E64   @  500ns  p50     603  p99     888  p99.9    4783  p99.99    78900  max    125203 ns
+W2 open      shim_spsc_inline       E64   @  500ns  p50     603  p99     890  p99.9   29637  p99.99   244810  max    292384 ns
+W2 open      ring_borrowed          E64   @  500ns  p50     602  p99     889  p99.9   85471  p99.99   266217  max    313842 ns
+W2 open      shim_generic           E64   @  700ns  p50     129  p99     280  p99.9    4625  p99.99   116532  max    182115 ns
+W2 open      moodycamel_cq_sp       E64   @  700ns  p50     248  p99    1138  p99.9    5005  p99.99    96361  max    152901 ns
+W2 open      rigtorp_inline         E64   @  700ns  p50     151  p99     187  p99.9    7275  p99.99   148535  max    204798 ns
+W2 open      moodycamel_rw_inline   E64   @  700ns  p50     133  p99     175  p99.9    6907  p99.99   146040  max    213626 ns
+W2 open      shim_spsc              E64   @  700ns  p50     864  p99     955  p99.9    7917  p99.99   182753  max    249017 ns
+W2 open      shim_spsc_inline       E64   @  700ns  p50     853  p99     946  p99.9    9066  p99.99   143939  max    206180 ns
+W2 open      ring_borrowed          E64   @  700ns  p50     852  p99     924  p99.9    9273  p99.99   354969  max    422585 ns
+W2 open      shim_generic           E64   @ 1000ns  p50     130  p99     187  p99.9   10042  p99.99   186015  max    279303 ns
+W2 open      moodycamel_cq_sp       E64   @ 1000ns  p50     269  p99     855  p99.9    5918  p99.99   188568  max    246630 ns
+W2 open      rigtorp_inline         E64   @ 1000ns  p50     144  p99     180  p99.9   13498  p99.99   261548  max    357740 ns
+W2 open      moodycamel_rw_inline   E64   @ 1000ns  p50     134  p99     168  p99.9    2011  p99.99   115538  max    205935 ns
+W2 open      shim_spsc              E64   @ 1000ns  p50     129  p99    1170  p99.9    4269  p99.99   154673  max    245333 ns
+W2 open      shim_spsc_inline       E64   @ 1000ns  p50     107  p99    1129  p99.9    2705  p99.99   179810  max    244854 ns
+W2 open      ring_borrowed          E64   @ 1000ns  p50     104  p99    1132  p99.9    2959  p99.99   160261  max    247084 ns
+W2 open      shim_generic           E64   @ 2000ns  p50     128  p99     167  p99.9    3070  p99.99   152409  max    249726 ns
+W2 open      moodycamel_cq_sp       E64   @ 2000ns  p50     270  p99     840  p99.9    2394  p99.99    47852  max    158166 ns
+W2 open      rigtorp_inline         E64   @ 2000ns  p50     153  p99     190  p99.9    2146  p99.99   110928  max    205026 ns
+W2 open      moodycamel_rw_inline   E64   @ 2000ns  p50     136  p99     179  p99.9    2313  p99.99    43903  max    155305 ns
+W2 open      shim_spsc              E64   @ 2000ns  p50     131  p99     176  p99.9    2488  p99.99    51967  max    173258 ns
+W2 open      shim_spsc_inline       E64   @ 2000ns  p50     119  p99     201  p99.9  145287  p99.99   229253  max    258815 ns
+W2 open      ring_borrowed          E64   @ 2000ns  p50     119  p99     823  p99.9  146204  p99.99   227655  max    274621 ns
+W2 open      shim_generic           E64   @ 5000ns  p50     133  p99     636  p99.9    4212  p99.99   153627  max    251048 ns
+W2 open      moodycamel_cq_sp       E64   @ 5000ns  p50     251  p99     764  p99.9    2470  p99.99    67856  max    193006 ns
+W2 open      rigtorp_inline         E64   @ 5000ns  p50     143  p99     211  p99.9    2416  p99.99    78526  max    173819 ns
+W2 open      moodycamel_rw_inline   E64   @ 5000ns  p50     148  p99     178  p99.9    2172  p99.99    49567  max    164257 ns
+W2 open      shim_spsc              E64   @ 5000ns  p50     135  p99     161  p99.9    2250  p99.99   174382  max    417530 ns
+W2 open      shim_spsc_inline       E64   @ 5000ns  p50     105  p99     151  p99.9    1854  p99.99    31150  max    148320 ns
+W2 open      ring_borrowed          E64   @ 5000ns  p50     106  p99     139  p99.9    1705  p99.99    25490  max    154483 ns
+W2 open      shim_generic           E64   @10000ns  p50     133  p99     630  p99.9    2399  p99.99    28353  max    167615 ns
+W2 open      moodycamel_cq_sp       E64   @10000ns  p50     270  p99     800  p99.9    2454  p99.99    78247  max    411407 ns
+W2 open      rigtorp_inline         E64   @10000ns  p50     163  p99     262  p99.9    2560  p99.99    42092  max    159951 ns
+W2 open      moodycamel_rw_inline   E64   @10000ns  p50     153  p99     187  p99.9    2287  p99.99    41122  max    163102 ns
+W2 open      shim_spsc              E64   @10000ns  p50     145  p99     199  p99.9    2466  p99.99    80519  max    410256 ns
+W2 open      shim_spsc_inline       E64   @10000ns  p50     125  p99     198  p99.9    2373  p99.99    58663  max    167485 ns
+W2 open      ring_borrowed          E64   @10000ns  p50     118  p99     165  p99.9    2337  p99.99    46041  max    187248 ns
+W2 open      shim_generic           E64   @  100ns  p50     147  p99    6995  p99.9   12847  p99.99    26393  max     28558 ns
+W2 open      moodycamel_cq_sp       E64   @  100ns  p50 65416787  p99 91798119  p99.9 92000536  p99.99 92023818  max  92026144 ns
+W2 open      rigtorp_inline         E64   @  100ns  p50     143  p99    1695  p99.9   42406  p99.99    52623  max     56298 ns
+W2 open      moodycamel_rw_inline   E64   @  100ns  p50     138  p99    1661  p99.9   24042  p99.99    31309  max     33429 ns
+W2 open      shim_spsc              E64   @  100ns  p50    1306  p99    3177  p99.9   13843  p99.99    17640  max     23432 ns
+W2 open      shim_spsc_inline       E64   @  100ns  p50     639  p99    2418  p99.9   34562  p99.99    43708  max     51270 ns
+W2 open      ring_borrowed          E64   @  100ns  p50     632  p99    2339  p99.9   19663  p99.99    23088  max     24378 ns
+W2 open      shim_generic           E64   @  200ns  p50     146  p99    2174  p99.9    7928  p99.99    11160  max     16042 ns
+W2 open      moodycamel_cq_sp       E64   @  200ns  p50     276  p99    2842  p99.9   21189  p99.99    25504  max     28273 ns
+W2 open      rigtorp_inline         E64   @  200ns  p50     154  p99     930  p99.9   11229  p99.99    23540  max     26114 ns
+W2 open      moodycamel_rw_inline   E64   @  200ns  p50     133  p99     897  p99.9   14237  p99.99    22451  max     24785 ns
+W2 open      shim_spsc              E64   @  200ns  p50     590  p99    1441  p99.9   11250  p99.99    22885  max     25298 ns
+W2 open      shim_spsc_inline       E64   @  200ns  p50     549  p99    1325  p99.9   24727  p99.99    45170  max     48294 ns
+W2 open      ring_borrowed          E64   @  200ns  p50     543  p99    1377  p99.9   20327  p99.99    39111  max     43677 ns
+W2 open      shim_generic           E64   @  300ns  p50     139  p99    1436  p99.9    5588  p99.99    21394  max     34709 ns
+W2 open      moodycamel_cq_sp       E64   @  300ns  p50     258  p99    1425  p99.9   87237  p99.99   238165  max    259580 ns
+W2 open      rigtorp_inline         E64   @  300ns  p50     151  p99     582  p99.9   39153  p99.99   210527  max    238131 ns
+W2 open      moodycamel_rw_inline   E64   @  300ns  p50     136  p99     720  p99.9   60325  p99.99   228713  max    256278 ns
+W2 open      shim_spsc              E64   @  300ns  p50     721  p99    1376  p99.9   65221  p99.99   228308  max    254651 ns
+W2 open      shim_spsc_inline       E64   @  300ns  p50     834  p99    1226  p99.9   50514  p99.99   214081  max    241576 ns
+W2 open      ring_borrowed          E64   @  300ns  p50     777  p99    1213  p99.9   31460  p99.99   181015  max    208559 ns
+W2 open      shim_generic           E64   @  500ns  p50     135  p99     645  p99.9    3858  p99.99     8606  max     25917 ns
+W2 open      moodycamel_cq_sp       E64   @  500ns  p50     243  p99     495  p99.9    6695  p99.99    86582  max    120602 ns
+W2 open      rigtorp_inline         E64   @  500ns  p50     151  p99     190  p99.9    2934  p99.99    88054  max    135719 ns
+W2 open      moodycamel_rw_inline   E64   @  500ns  p50     139  p99     209  p99.9   19815  p99.99   216982  max    264566 ns
+W2 open      shim_spsc              E64   @  500ns  p50     621  p99     890  p99.9   39965  p99.99   213796  max    260129 ns
+W2 open      shim_spsc_inline       E64   @  500ns  p50     602  p99     886  p99.9   20357  p99.99   212183  max    259758 ns
+W2 open      ring_borrowed          E64   @  500ns  p50     600  p99     887  p99.9   12421  p99.99   208827  max    256452 ns
+W2 open      shim_generic           E64   @  700ns  p50     142  p99     671  p99.9    4845  p99.99    19316  max     48278 ns
+W2 open      moodycamel_cq_sp       E64   @  700ns  p50     253  p99     491  p99.9    7234  p99.99   182853  max    245371 ns
+W2 open      rigtorp_inline         E64   @  700ns  p50     144  p99     180  p99.9    2449  p99.99    98944  max    139526 ns
+W2 open      moodycamel_rw_inline   E64   @  700ns  p50     145  p99     186  p99.9    2818  p99.99   151243  max    218819 ns
+W2 open      shim_spsc              E64   @  700ns  p50     863  p99     956  p99.9    3426  p99.99   203094  max    269408 ns
+W2 open      shim_spsc_inline       E64   @  700ns  p50     853  p99     944  p99.9    6334  p99.99   186570  max    254106 ns
+W2 open      ring_borrowed          E64   @  700ns  p50     856  p99     920  p99.9    3294  p99.99   176874  max    244510 ns
+W2 open      shim_generic           E64   @ 1000ns  p50     137  p99     194  p99.9    3444  p99.99   136218  max    217641 ns
+W2 open      moodycamel_cq_sp       E64   @ 1000ns  p50     244  p99     519  p99.9    3045  p99.99   154531  max    224388 ns
+W2 open      rigtorp_inline         E64   @ 1000ns  p50     145  p99     180  p99.9    2722  p99.99   144401  max    233218 ns
+W2 open      moodycamel_rw_inline   E64   @ 1000ns  p50     146  p99     186  p99.9    2733  p99.99   149978  max    229692 ns
+W2 open      shim_spsc              E64   @ 1000ns  p50     134  p99    1191  p99.9    1798  p99.99    69219  max    131671 ns
+W2 open      shim_spsc_inline       E64   @ 1000ns  p50     108  p99    1174  p99.9   11993  p99.99   386765  max    484378 ns
+W2 open      ring_borrowed          E64   @ 1000ns  p50     106  p99    1145  p99.9   11982  p99.99   203212  max    282964 ns
+W2 open      shim_generic           E64   @ 2000ns  p50     135  p99     179  p99.9    2248  p99.99    30630  max    142376 ns
+W2 open      moodycamel_cq_sp       E64   @ 2000ns  p50     246  p99     474  p99.9    2353  p99.99    56499  max    147837 ns
+W2 open      rigtorp_inline         E64   @ 2000ns  p50     143  p99     179  p99.9    1864  p99.99    67138  max    184041 ns
+W2 open      moodycamel_rw_inline   E64   @ 2000ns  p50     144  p99     186  p99.9    2424  p99.99   120951  max    269360 ns
+W2 open      shim_spsc              E64   @ 2000ns  p50     136  p99     187  p99.9    2654  p99.99    98578  max    206334 ns
+W2 open      shim_spsc_inline       E64   @ 2000ns  p50     105  p99     177  p99.9    2111  p99.99    50139  max    161322 ns
+W2 open      ring_borrowed          E64   @ 2000ns  p50     103  p99     159  p99.9    2608  p99.99    99855  max    174305 ns
+W2 open      shim_generic           E64   @ 5000ns  p50     136  p99     180  p99.9    2367  p99.99    33989  max    154822 ns
+W2 open      moodycamel_cq_sp       E64   @ 5000ns  p50     245  p99     463  p99.9    2324  p99.99    53068  max    158232 ns
+W2 open      rigtorp_inline         E64   @ 5000ns  p50     144  p99     224  p99.9    2121  p99.99    54826  max    203117 ns
+W2 open      moodycamel_rw_inline   E64   @ 5000ns  p50     146  p99     178  p99.9    2249  p99.99    26824  max    145568 ns
+W2 open      shim_spsc              E64   @ 5000ns  p50     131  p99     166  p99.9    2143  p99.99    33311  max    151899 ns
+W2 open      shim_spsc_inline       E64   @ 5000ns  p50     107  p99     157  p99.9    2144  p99.99    51623  max    153220 ns
+W2 open      ring_borrowed          E64   @ 5000ns  p50     106  p99     136  p99.9    1992  p99.99    94481  max    412011 ns
+W2 open      shim_generic           E64   @10000ns  p50     138  p99     180  p99.9    2082  p99.99    26781  max    162527 ns
+W2 open      moodycamel_cq_sp       E64   @10000ns  p50     246  p99     471  p99.9    2290  p99.99    28743  max    171357 ns
+W2 open      rigtorp_inline         E64   @10000ns  p50     151  p99     216  p99.9    2341  p99.99    63001  max    244382 ns
+W2 open      moodycamel_rw_inline   E64   @10000ns  p50     138  p99     169  p99.9    1795  p99.99    43254  max    239737 ns
+W2 open      shim_spsc              E64   @10000ns  p50     136  p99     168  p99.9    1939  p99.99    45048  max    216558 ns
+W2 open      shim_spsc_inline       E64   @10000ns  p50     114  p99     139  p99.9    1820  p99.99    26857  max    161998 ns
+W2 open      ring_borrowed          E64   @10000ns  p50     106  p99     142  p99.9    1785  p99.99    49000  max    229030 ns
+W2 open      shim_generic           E64   @  100ns  p50     139  p99 1498908  p99.9 1560087  p99.99  1567923  max   1571090 ns
+W2 open      moodycamel_cq_sp       E64   @  100ns  p50 12046816  p99 17751434  p99.9 17852502  p99.99 17862048  max  17862423 ns
+W2 open      rigtorp_inline         E64   @  100ns  p50     151  p99     829  p99.9  119644  p99.99   186618  max    194261 ns
+W2 open      moodycamel_rw_inline   E64   @  100ns  p50     143  p99     740  p99.9  116377  p99.99   183021  max    190604 ns
+W2 open      shim_spsc              E64   @  100ns  p50    1298  p99    2592  p99.9  176607  p99.99   232405  max    238806 ns
+W2 open      shim_spsc_inline       E64   @  100ns  p50     613  p99    1555  p99.9  160137  p99.99   226741  max    234273 ns
+W2 open      ring_borrowed          E64   @  100ns  p50     607  p99    1308  p99.9  108972  p99.99   176617  max    183018 ns
+W2 open      shim_generic           E64   @  200ns  p50     133  p99    1258  p99.9  112638  p99.99   208702  max    224507 ns
+W2 open      moodycamel_cq_sp       E64   @  200ns  p50     230  p99     972  p99.9   45699  p99.99   114374  max    125653 ns
+W2 open      rigtorp_inline         E64   @  200ns  p50     149  p99     500  p99.9   70649  p99.99   201102  max    218800 ns
+W2 open      moodycamel_rw_inline   E64   @  200ns  p50     150  p99     483  p99.9   48843  p99.99   117084  max    134672 ns
+W2 open      shim_spsc              E64   @  200ns  p50     597  p99    1038  p99.9  102511  p99.99   179888  max    196284 ns
+W2 open      shim_spsc_inline       E64   @  200ns  p50     596  p99     941  p99.9   39797  p99.99   123942  max    141530 ns
+W2 open      ring_borrowed          E64   @  200ns  p50     590  p99    1024  p99.9   92145  p99.99   214829  max    232417 ns
+W2 open      shim_generic           E64   @  300ns  p50     132  p99     622  p99.9   14393  p99.99   126514  max    152205 ns
+W2 open      moodycamel_cq_sp       E64   @  300ns  p50     227  p99     646  p99.9   38911  p99.99   112954  max    128401 ns
+W2 open      rigtorp_inline         E64   @  300ns  p50     142  p99     197  p99.9   22722  p99.99   184133  max    210565 ns
+W2 open      moodycamel_rw_inline   E64   @  300ns  p50     143  p99 7717520  p99.9 8877459  p99.99  8993582  max   9006273 ns
+W2 open      shim_spsc              E64   @  300ns  p50     760  p99    1274  p99.9   54623  p99.99   200611  max    227004 ns
+W2 open      shim_spsc_inline       E64   @  300ns  p50     657  p99    1170  p99.9    4917  p99.99   102051  max    129585 ns
+W2 open      ring_borrowed          E64   @  300ns  p50     664  p99    1178  p99.9    9761  p99.99    97075  max    123438 ns
+W2 open      shim_generic           E64   @  500ns  p50     132  p99     267  p99.9   15875  p99.99   126396  max    149272 ns
+W2 open      moodycamel_cq_sp       E64   @  500ns  p50     233  p99     567  p99.9   21178  p99.99   209353  max    251720 ns
+W2 open      rigtorp_inline         E64   @  500ns  p50     153  p99     188  p99.9    8990  p99.99   194903  max    242597 ns
+W2 open      moodycamel_rw_inline   E64   @  500ns  p50     136  p99     176  p99.9   10707  p99.99   212673  max    259727 ns
+W2 open      shim_spsc              E64   @  500ns  p50     602  p99     887  p99.9   12739  p99.99   214518  max    261001 ns
+W2 open      shim_spsc_inline       E64   @  500ns  p50     601  p99     884  p99.9   37381  p99.99   204931  max    251934 ns
+W2 open      ring_borrowed          E64   @  500ns  p50     602  p99     885  p99.9   41155  p99.99   206977  max    254641 ns
+W2 open      shim_generic           E64   @  700ns  p50     131  p99     193  p99.9    3738  p99.99   196890  max    262803 ns
+W2 open      moodycamel_cq_sp       E64   @  700ns  p50     230  p99     530  p99.9    8529  p99.99   114050  max    154456 ns
+W2 open      rigtorp_inline         E64   @  700ns  p50     154  p99     188  p99.9    6000  p99.99   174267  max    241963 ns
+W2 open      moodycamel_rw_inline   E64   @  700ns  p50     139  p99     183  p99.9    4310  p99.99   178070  max    245646 ns
+W2 open      shim_spsc              E64   @  700ns  p50     856  p99     949  p99.9    9653  p99.99   183453  max    249918 ns
+W2 open      shim_spsc_inline       E64   @  700ns  p50     853  p99     944  p99.9    4873  p99.99   196952  max    264518 ns
+W2 open      ring_borrowed          E64   @  700ns  p50     853  p99     925  p99.9    5787  p99.99   175893  max    243539 ns
+W2 open      shim_generic           E64   @ 1000ns  p50     133  p99     180  p99.9    6098  p99.99   210410  max    305659 ns
+W2 open      moodycamel_cq_sp       E64   @ 1000ns  p50     234  p99     537  p99.9    4396  p99.99   175286  max    263354 ns
+W2 open      rigtorp_inline         E64   @ 1000ns  p50     139  p99     177  p99.9    2707  p99.99   136874  max    221036 ns
+W2 open      moodycamel_rw_inline   E64   @ 1000ns  p50     147  p99     186  p99.9    2392  p99.99   152635  max    242162 ns
+W2 open      shim_spsc              E64   @ 1000ns  p50     132  p99    1171  p99.9    2487  p99.99   128618  max    177692 ns
+W2 open      shim_spsc_inline       E64   @ 1000ns  p50     102  p99    1122  p99.9    3279  p99.99   156869  max    245299 ns
+W2 open      ring_borrowed          E64   @ 1000ns  p50     102  p99    1139  p99.9    2550  p99.99   181981  max    278101 ns
+W2 open      shim_generic           E64   @ 2000ns  p50     129  p99     173  p99.9    2371  p99.99    98871  max    166107 ns
+W2 open      moodycamel_cq_sp       E64   @ 2000ns  p50     233  p99     528  p99.9    2450  p99.99    61963  max    175728 ns
+W2 open      rigtorp_inline         E64   @ 2000ns  p50     150  p99     187  p99.9    2595  p99.99   138801  max    291680 ns
+W2 open      moodycamel_rw_inline   E64   @ 2000ns  p50     147  p99     188  p99.9    1981  p99.99    98602  max    196234 ns
+W2 open      shim_spsc              E64   @ 2000ns  p50     122  p99     159  p99.9    1924  p99.99    52551  max    178495 ns
+W2 open      shim_spsc_inline       E64   @ 2000ns  p50     104  p99     176  p99.9    1991  p99.99    75894  max    183797 ns
+W2 open      ring_borrowed          E64   @ 2000ns  p50     104  p99     157  p99.9    2234  p99.99    52654  max    170527 ns
+W2 open      shim_generic           E64   @ 5000ns  p50     133  p99     169  p99.9    2197  p99.99   131062  max    450444 ns
+W2 open      moodycamel_cq_sp       E64   @ 5000ns  p50     235  p99     541  p99.9    2416  p99.99    62657  max    199245 ns
+W2 open      rigtorp_inline         E64   @ 5000ns  p50     155  p99     334  p99.9    2391  p99.99    98164  max    238749 ns
+W2 open      moodycamel_rw_inline   E64   @ 5000ns  p50     155  p99     247  p99.9  252957  p99.99  2527117  max   3021059 ns
+W2 open      shim_spsc              E64   @ 5000ns  p50     189  p99 2643279  p99.9 7200163  p99.99 11403176  max  11898160 ns
+W2 open      shim_spsc_inline       E64   @ 5000ns  p50     128  p99     228  p99.9   37993  p99.99   230481  max    335136 ns
+W2 open      ring_borrowed          E64   @ 5000ns  p50     110  p99     143  p99.9    2281  p99.99    84562  max    240824 ns
+W2 open      shim_generic           E64   @10000ns  p50     135  p99     169  p99.9    2484  p99.99    44555  max    157915 ns
+W2 open      moodycamel_cq_sp       E64   @10000ns  p50     235  p99     556  p99.9    2292  p99.99    63960  max    221386 ns
+W2 open      rigtorp_inline         E64   @10000ns  p50     150  p99     236  p99.9    2040  p99.99    54271  max    240080 ns
+W2 open      moodycamel_rw_inline   E64   @10000ns  p50     145  p99     179  p99.9    2172  p99.99    61423  max    252292 ns
+W2 open      shim_spsc              E64   @10000ns  p50     136  p99     168  p99.9    2139  p99.99    44933  max    149748 ns
+W2 open      shim_spsc_inline       E64   @10000ns  p50     111  p99     166  p99.9    2203  p99.99    36217  max    155243 ns
+W2 open      ring_borrowed          E64   @10000ns  p50     108  p99     146  p99.9    2186  p99.99    45266  max    239354 ns
+W2 open      shim_generic           E64   @  100ns  p50     137  p99    1901  p99.9   71494  p99.99   121703  max    127393 ns
+W2 open      moodycamel_cq_sp       E64   @  100ns  p50  327971  p99  573963  p99.9  584168  p99.99   589427  max    590069 ns
+W2 open      rigtorp_inline         E64   @  100ns  p50     139  p99    1683  p99.9  123871  p99.99   186013  max    193636 ns
+W2 open      moodycamel_rw_inline   E64   @  100ns  p50     141  p99    1964  p99.9  175162  p99.99   242007  max    249580 ns
+W2 open      shim_spsc              E64   @  100ns  p50    1324  p99    2821  p99.9   28281  p99.99    62134  max     68375 ns
+W2 open      shim_spsc_inline       E64   @  100ns  p50     659  p99    2053  p99.9  165353  p99.99   227950  max    235493 ns
+W2 open      ring_borrowed          E64   @  100ns  p50     620  p99    1738  p99.9   12189  p99.99    37675  max     45248 ns
+W2 open      shim_generic           E64   @  200ns  p50     131  p99    1255  p99.9  105659  p99.99   191462  max    207197 ns
+W2 open      moodycamel_cq_sp       E64   @  200ns  p50     284  p99    3220  p99.9  124389  p99.99   216601  max    227859 ns
+W2 open      rigtorp_inline         E64   @  200ns  p50     154  p99     666  p99.9   14310  p99.99    77076  max     94754 ns
+W2 open      moodycamel_rw_inline   E64   @  200ns  p50     131  p99     825  p99.9   97630  p99.99   228838  max    246416 ns
+W2 open      shim_spsc              E64   @  200ns  p50     591  p99    1329  p99.9   51002  p99.99   196875  max    213041 ns
+W2 open      shim_spsc_inline       E64   @  200ns  p50     597  p99    1354  p99.9  100814  p99.99   231942  max    249429 ns
+W2 open      ring_borrowed          E64   @  200ns  p50     589  p99    1246  p99.9   92890  p99.99   222837  max    240455 ns
+W2 open      shim_generic           E64   @  300ns  p50     129  p99     907  p99.9   70430  p99.99   234851  max    260573 ns
+W2 open      moodycamel_cq_sp       E64   @  300ns  p50     244  p99    1593  p99.9   47563  p99.99   147782  max    170048 ns
+W2 open      rigtorp_inline         E64   @  300ns  p50     146  p99     437  p99.9   59971  p99.99   228342  max    255966 ns
+W2 open      moodycamel_rw_inline   E64   @  300ns  p50     132  p99     392  p99.9   58504  p99.99   230651  max    258215 ns
+W2 open      shim_spsc              E64   @  300ns  p50     777  p99    1276  p99.9   43514  p99.99   181134  max    207256 ns
+W2 open      shim_spsc_inline       E64   @  300ns  p50     841  p99    1227  p99.9   60492  p99.99   230027  max    257521 ns
+W2 open      ring_borrowed          E64   @  300ns  p50     827  p99    1226  p99.9   61316  p99.99   232131  max    259715 ns
+W2 open      shim_generic           E64   @  500ns  p50     130  p99     366  p99.9   12211  p99.99   205269  max    250830 ns
+W2 open      moodycamel_cq_sp       E64   @  500ns  p50     252  p99    1152  p99.9    6844  p99.99   212453  max    255611 ns
+W2 open      rigtorp_inline         E64   @  500ns  p50     153  p99     189  p99.9    8041  p99.99   204059  max    251754 ns
+W2 open      moodycamel_rw_inline   E64   @  500ns  p50     139  p99     257  p99.9   51003  p99.99   236408  max    283992 ns
+W2 open      shim_spsc              E64   @  500ns  p50     604  p99     885  p99.9   23906  p99.99   170571  max    212496 ns
+W2 open      shim_spsc_inline       E64   @  500ns  p50     602  p99     886  p99.9    3361  p99.99   175366  max    222941 ns
+W2 open      ring_borrowed          E64   @  500ns  p50     592  p99     877  p99.9    2775  p99.99   175273  max    222878 ns
+W2 open      shim_generic           E64   @  700ns  p50     128  p99     190  p99.9    2780  p99.99   184860  max    250393 ns
+W2 open      moodycamel_cq_sp       E64   @  700ns  p50     265  p99     991  p99.9    3019  p99.99   176692  max    240122 ns
+W2 open      rigtorp_inline         E64   @  700ns  p50     151  p99     183  p99.9    4694  p99.99   186663  max    254349 ns
+W2 open      moodycamel_rw_inline   E64   @  700ns  p50     139  p99     175  p99.9    2277  p99.99   133876  max    201462 ns
+W2 open      shim_spsc              E64   @  700ns  p50     862  p99     977  p99.9    3463  p99.99    93385  max    159199 ns
+W2 open      shim_spsc_inline       E64   @  700ns  p50     856  p99     942  p99.9    3288  p99.99   152123  max    212961 ns
+W2 open      ring_borrowed          E64   @  700ns  p50     852  p99     923  p99.9    3399  p99.99   166137  max    233774 ns
+W2 open      shim_generic           E64   @ 1000ns  p50     129  p99     172  p99.9    3318  p99.99   173829  max    239276 ns
+W2 open      moodycamel_cq_sp       E64   @ 1000ns  p50     246  p99     922  p99.9    2671  p99.99   135359  max    209519 ns
+W2 open      rigtorp_inline         E64   @ 1000ns  p50     139  p99     216  p99.9    4572  p99.99   262927  max    358538 ns
+W2 open      moodycamel_rw_inline   E64   @ 1000ns  p50     147  p99     183  p99.9    2062  p99.99    68635  max    165105 ns
+W2 open      shim_spsc              E64   @ 1000ns  p50     130  p99    1173  p99.9    2295  p99.99   149403  max    235882 ns
+W2 open      shim_spsc_inline       E64   @ 1000ns  p50     104  p99    1159  p99.9    2919  p99.99   178180  max    274641 ns
+W2 open      ring_borrowed          E64   @ 1000ns  p50     103  p99    1113  p99.9    2773  p99.99   166115  max    263758 ns
+W2 open      shim_generic           E64   @ 2000ns  p50     128  p99     169  p99.9    2180  p99.99   105539  max    242283 ns
+W2 open      moodycamel_cq_sp       E64   @ 2000ns  p50     247  p99     866  p99.9    2397  p99.99   124350  max    258329 ns
+W2 open      rigtorp_inline         E64   @ 2000ns  p50     145  p99     189  p99.9    2581  p99.99   157160  max    261687 ns
+W2 open      moodycamel_rw_inline   E64   @ 2000ns  p50     147  p99     183  p99.9    2434  p99.99    78318  max    148173 ns
+W2 open      shim_spsc              E64   @ 2000ns  p50     135  p99     169  p99.9    2147  p99.99    42196  max    163636 ns
+W2 open      shim_spsc_inline       E64   @ 2000ns  p50     100  p99     158  p99.9    1968  p99.99    94823  max    219965 ns
+W2 open      ring_borrowed          E64   @ 2000ns  p50     106  p99     147  p99.9    2124  p99.99   104636  max    191159 ns
+W2 open      shim_generic           E64   @ 5000ns  p50     133  p99     635  p99.9    2827  p99.99    55490  max    150896 ns
+W2 open      moodycamel_cq_sp       E64   @ 5000ns  p50     247  p99     812  p99.9    2191  p99.99    57851  max    206183 ns
+W2 open      rigtorp_inline         E64   @ 5000ns  p50     147  p99     215  p99.9    2222  p99.99    60956  max    213044 ns
+W2 open      moodycamel_rw_inline   E64   @ 5000ns  p50     136  p99     167  p99.9    2048  p99.99    79950  max    241089 ns
+W2 open      shim_spsc              E64   @ 5000ns  p50     137  p99     169  p99.9    2326  p99.99    56427  max    165944 ns
+W2 open      shim_spsc_inline       E64   @ 5000ns  p50     106  p99     150  p99.9    2008  p99.99    57502  max    150649 ns
+W2 open      ring_borrowed          E64   @ 5000ns  p50     104  p99     137  p99.9    1941  p99.99    66336  max    189742 ns
+W2 open      shim_generic           E64   @10000ns  p50     133  p99     645  p99.9    2651  p99.99    39401  max    235158 ns
+W2 open      moodycamel_cq_sp       E64   @10000ns  p50     252  p99     760  p99.9    2117  p99.99    45201  max    237483 ns
+W2 open      rigtorp_inline         E64   @10000ns  p50     156  p99     177  p99.9    1924  p99.99    58846  max    235047 ns
+W2 open      moodycamel_rw_inline   E64   @10000ns  p50     140  p99     174  p99.9    1885  p99.99    60423  max    248075 ns
+W2 open      shim_spsc              E64   @10000ns  p50     129  p99     156  p99.9    2142  p99.99    44354  max    238485 ns
+W2 open      shim_spsc_inline       E64   @10000ns  p50     110  p99     167  p99.9    2123  p99.99    52493  max    248541 ns
+W2 open      ring_borrowed          E64   @10000ns  p50     109  p99     138  p99.9    2562  p99.99   177751  max    696842 ns
+W2 open      shim_generic           E64   @  100ns  p50     143  p99    5331  p99.9    9998  p99.99    23125  max     25690 ns
+W2 open      moodycamel_cq_sp       E64   @  100ns  p50 67484824  p99 82627672  p99.9 82741686  p99.99 82755543  max  82757099 ns
+W2 open      rigtorp_inline         E64   @  100ns  p50     146  p99    1146  p99.9   17274  p99.99    54163  max     61846 ns
+W2 open      moodycamel_rw_inline   E64   @  100ns  p50     149  p99    1210  p99.9   31673  p99.99    64958  max     69432 ns
+W2 open      shim_spsc              E64   @  100ns  p50    1299  p99    2509  p99.9   12461  p99.99    41316  max     47637 ns
+W2 open      shim_spsc_inline       E64   @  100ns  p50     640  p99    1619  p99.9   17341  p99.99    47720  max     55263 ns
+W2 open      ring_borrowed          E64   @  100ns  p50     640  p99    1697  p99.9   75061  p99.99   142657  max    150270 ns
+W2 open      shim_generic           E64   @  200ns  p50     137  p99    1424  p99.9    6506  p99.99     9189  max     12230 ns
+W2 open      moodycamel_cq_sp       E64   @  200ns  p50     278  p99    2190  p99.9  163333  p99.99   246168  max    253921 ns
+W2 open      rigtorp_inline         E64   @  200ns  p50     144  p99     950  p99.9  102036  p99.99   234555  max    252253 ns
+W2 open      moodycamel_rw_inline   E64   @  200ns  p50     130  p99     659  p99.9    3985  p99.99    33834  max     51372 ns
+W2 open      shim_spsc              E64   @  200ns  p50    1406  p99 2669109  p99.9 2987770  p99.99  3017908  max   3022688 ns
+W2 open      shim_spsc_inline       E64   @  200ns  p50    1142  p99  862702  p99.9 1914953  p99.99  2053185  max   2068639 ns
+W2 open      ring_borrowed          E64   @  200ns  p50     822  p99    3095  p99.9   17241  p99.99    77970  max     94847 ns
+W2 open      shim_generic           E64   @  300ns  p50     192  p99    3811  p99.9   17356  p99.99    55550  max     66084 ns
+W2 open      moodycamel_cq_sp       E64   @  300ns  p50     337  p99  778330  p99.9 1907689  p99.99  2015388  max   2027250 ns
+W2 open      rigtorp_inline         E64   @  300ns  p50     202  p99    2137  p99.9   10200  p99.99    56110  max     80690 ns
+W2 open      moodycamel_rw_inline   E64   @  300ns  p50     184  p99  511053  p99.9 1688133  p99.99  1883092  max   1909755 ns
+W2 open      shim_spsc              E64   @  300ns  p50    1082  p99 5649104  p99.9 5989283  p99.99  6024222  max   6030682 ns
+W2 open      shim_spsc_inline       E64   @  300ns  p50     835  p99    2819  p99.9   77252  p99.99   271440  max    297792 ns
+W2 open      ring_borrowed          E64   @  300ns  p50     759  p99    6699  p99.9 1605612  p99.99  1829125  max   1854406 ns
+W2 open      shim_generic           E64   @  500ns  p50     187  p99    2817  p99.9   18553  p99.99   151666  max    189540 ns
+W2 open      moodycamel_cq_sp       E64   @  500ns  p50     336  p99 10645620  p99.9 12308122  p99.99 12654630  max  12690347 ns
+W2 open      rigtorp_inline         E64   @  500ns  p50     203  p99    1835  p99.9   73388  p99.99   359367  max    403316 ns
+W2 open      moodycamel_rw_inline   E64   @  500ns  p50     179  p99    1582  p99.9  149913  p99.99   235671  max    257888 ns
+W2 open      shim_spsc              E64   @  500ns  p50     692  p99    5956  p99.9  208767  p99.99   251009  max    287983 ns
+W2 open      shim_spsc_inline       E64   @  500ns  p50     606  p99    1018  p99.9  124498  p99.99   201885  max    232528 ns
+W2 open      ring_borrowed          E64   @  500ns  p50     601  p99     889  p99.9  103623  p99.99   221155  max    266334 ns
+W2 open      shim_generic           E64   @  700ns  p50     134  p99     337  p99.9    5273  p99.99   156445  max    205848 ns
+W2 open      moodycamel_cq_sp       E64   @  700ns  p50     243  p99     480  p99.9    7727  p99.99   186245  max    249083 ns
+W2 open      rigtorp_inline         E64   @  700ns  p50     144  p99     178  p99.9   14921  p99.99   204860  max    259815 ns
+W2 open      moodycamel_rw_inline   E64   @  700ns  p50     137  p99     175  p99.9    2763  p99.99   127218  max    191678 ns
+W2 open      shim_spsc              E64   @  700ns  p50     862  p99     949  p99.9    3215  p99.99    42725  max     75774 ns
+W2 open      shim_spsc_inline       E64   @  700ns  p50     855  p99     946  p99.9    3284  p99.99   122067  max    188051 ns
+W2 open      ring_borrowed          E64   @  700ns  p50     852  p99     933  p99.9    4447  p99.99   131564  max    197738 ns
+W2 open      shim_generic           E64   @ 1000ns  p50     140  p99     428  p99.9    5630  p99.99   137437  max    191904 ns
+W2 open      moodycamel_cq_sp       E64   @ 1000ns  p50     253  p99     563  p99.9    8310  p99.99   167233  max    228880 ns
+W2 open      rigtorp_inline         E64   @ 1000ns  p50     155  p99     190  p99.9    7263  p99.99   140139  max    195253 ns
+W2 open      moodycamel_rw_inline   E64   @ 1000ns  p50     135  p99     169  p99.9    4499  p99.99   104458  max    179743 ns
+W2 open      shim_spsc              E64   @ 1000ns  p50     190  p99    1205  p99.9    5670  p99.99   142401  max    217524 ns
+W2 open      shim_spsc_inline       E64   @ 1000ns  p50     123  p99    1194  p99.9   43001  p99.99   460615  max    556686 ns
+W2 open      ring_borrowed          E64   @ 1000ns  p50     113  p99    1165  p99.9    3266  p99.99   108890  max    162735 ns
+W2 open      shim_generic           E64   @ 2000ns  p50     141  p99     196  p99.9    3810  p99.99    40411  max    174111 ns
+W2 open      moodycamel_cq_sp       E64   @ 2000ns  p50     253  p99     490  p99.9    3619  p99.99    86764  max    175937 ns
+W2 open      rigtorp_inline         E64   @ 2000ns  p50     156  p99     188  p99.9    3064  p99.99   110988  max    206838 ns
+W2 open      moodycamel_rw_inline   E64   @ 2000ns  p50     136  p99     169  p99.9    2937  p99.99    89141  max    199464 ns
+W2 open      shim_spsc              E64   @ 2000ns  p50     137  p99     196  p99.9    3249  p99.99    95203  max    211819 ns
+W2 open      shim_spsc_inline       E64   @ 2000ns  p50     112  p99     180  p99.9    3147  p99.99    94929  max    202791 ns
+W2 open      ring_borrowed          E64   @ 2000ns  p50     109  p99     156  p99.9    3209  p99.99    71324  max    167988 ns
+W2 open      shim_generic           E64   @ 5000ns  p50     149  p99     210  p99.9    3325  p99.99    41694  max    165612 ns
+W2 open      moodycamel_cq_sp       E64   @ 5000ns  p50     255  p99     479  p99.9    3128  p99.99    89762  max    253029 ns
+W2 open      rigtorp_inline         E64   @ 5000ns  p50     156  p99     188  p99.9    2838  p99.99    83105  max    230831 ns
+W2 open      moodycamel_rw_inline   E64   @ 5000ns  p50     136  p99     169  p99.9    2867  p99.99    73570  max    240718 ns
+W2 open      shim_spsc              E64   @ 5000ns  p50     145  p99     196  p99.9    2952  p99.99    89489  max    252188 ns
+W2 open      shim_spsc_inline       E64   @ 5000ns  p50     116  p99     186  p99.9    2910  p99.99    64509  max    157402 ns
+W2 open      ring_borrowed          E64   @ 5000ns  p50     115  p99     166  p99.9   13130  p99.99   166502  max    259811 ns
+W2 open      shim_generic           E64   @10000ns  p50     151  p99     249  p99.9   23733  p99.99   189757  max    296065 ns
+W2 open      moodycamel_cq_sp       E64   @10000ns  p50     258  p99     498  p99.9   32013  p99.99   180117  max    277545 ns
+W2 open      rigtorp_inline         E64   @10000ns  p50     164  p99     299  p99.9   63370  p99.99   199057  max    282586 ns
+W2 open      moodycamel_rw_inline   E64   @10000ns  p50     146  p99     186  p99.9   49494  p99.99   198378  max    270357 ns
+W2 open      shim_spsc              E64   @10000ns  p50     146  p99     210  p99.9   35332  p99.99   207281  max    279063 ns
+W2 open      shim_spsc_inline       E64   @10000ns  p50     119  p99     189  p99.9   30308  p99.99   183713  max    284881 ns
+W2 open      ring_borrowed          E64   @10000ns  p50     116  p99     169  p99.9   46120  p99.99   202920  max    271403 ns
+W2 open      shim_generic           E64   @  100ns  p50     151  p99   29841  p99.9  180100  p99.99   231118  max    237048 ns
+W2 open      moodycamel_cq_sp       E64   @  100ns  p50 10056430  p99 15909027  p99.9 15998407  p99.99 16007215  max  16007618 ns
+W2 open      rigtorp_inline         E64   @  100ns  p50     156  p99   55928  p99.9  176053  p99.99   210945  max    218047 ns
+W2 open      moodycamel_rw_inline   E64   @  100ns  p50     138  p99     841  p99.9   43411  p99.99    90910  max     98483 ns
+W2 open      shim_spsc              E64   @  100ns  p50    1302  p99    2100  p99.9   21419  p99.99    56581  max     62401 ns
+W2 open      shim_spsc_inline       E64   @  100ns  p50     627  p99    2806  p99.9  188266  p99.99   254840  max    262353 ns
+W2 open      ring_borrowed          E64   @  100ns  p50     619  p99    2704  p99.9  169758  p99.99   236592  max    244215 ns
+W2 open      shim_generic           E64   @  200ns  p50     138  p99    1857  p99.9   15313  p99.99    50871  max     66345 ns
+W2 open      moodycamel_cq_sp       E64   @  200ns  p50     235  p99     944  p99.9   15133  p99.99    45433  max     53954 ns
+W2 open      rigtorp_inline         E64   @  200ns  p50     143  p99     435  p99.9    3630  p99.99    30600  max     43332 ns
+W2 open      moodycamel_rw_inline   E64   @  200ns  p50     137  p99     451  p99.9    4675  p99.99    25676  max     39380 ns
+W2 open      shim_spsc              E64   @  200ns  p50     569  p99    1363  p99.9   79420  p99.99   214086  max    230553 ns
+W2 open      shim_spsc_inline       E64   @  200ns  p50     546  p99     999  p99.9   70942  p99.99   176297  max    193875 ns
+W2 open      ring_borrowed          E64   @  200ns  p50     543  p99    1000  p99.9   64106  p99.99   188029  max    205007 ns
+W2 open      shim_generic           E64   @  300ns  p50     137  p99    1301  p99.9   41450  p99.99   170140  max    195671 ns
+W2 open      moodycamel_cq_sp       E64   @  300ns  p50     238  p99     728  p99.9   56684  p99.99   154066  max    172206 ns
+W2 open      rigtorp_inline         E64   @  300ns  p50     148  p99     258  p99.9   10504  p99.99    91759  max    119444 ns
+W2 open      moodycamel_rw_inline   E64   @  300ns  p50     141  p99     240  p99.9   12051  p99.99    94943  max    121947 ns
+W2 open      shim_spsc              E64   @  300ns  p50     649  p99    1234  p99.9   37343  p99.99   180227  max    206670 ns
+W2 open      shim_spsc_inline       E64   @  300ns  p50     624  p99    1199  p99.9   16714  p99.99    99572  max    116610 ns
+W2 open      ring_borrowed          E64   @  300ns  p50     619  p99    1185  p99.9   77150  p99.99   197063  max    224667 ns
+W2 open      shim_generic           E64   @  500ns  p50     136  p99     508  p99.9    5373  p99.99    34375  max     63694 ns
+W2 open      moodycamel_cq_sp       E64   @  500ns  p50     239  p99     736  p99.9   19285  p99.99   178827  max    219451 ns
+W2 open      rigtorp_inline         E64   @  500ns  p50     146  p99     180  p99.9    8939  p99.99   188863  max    235997 ns
+W2 open      moodycamel_rw_inline   E64   @  500ns  p50     135  p99     180  p99.9   28692  p99.99   177114  max    224698 ns
+W2 open      shim_spsc              E64   @  500ns  p50     611  p99     847  p99.9   14999  p99.99   200570  max    246923 ns
+W2 open      shim_spsc_inline       E64   @  500ns  p50     602  p99     884  p99.9   15271  p99.99   143655  max    172641 ns
+W2 open      ring_borrowed          E64   @  500ns  p50     602  p99     887  p99.9   17085  p99.99   207176  max    254139 ns
+W2 open      shim_generic           E64   @  700ns  p50     138  p99     209  p99.9    4158  p99.99    96779  max    152233 ns
+W2 open      moodycamel_cq_sp       E64   @  700ns  p50     239  p99     812  p99.9    4513  p99.99   171220  max    233217 ns
+W2 open      rigtorp_inline         E64   @  700ns  p50     158  p99     190  p99.9    3488  p99.99   109815  max    168023 ns
+W2 open      moodycamel_rw_inline   E64   @  700ns  p50     138  p99     176  p99.9   10868  p99.99   153214  max    210672 ns
+W2 open      shim_spsc              E64   @  700ns  p50     868  p99     966  p99.9   13445  p99.99   173757  max    239691 ns
+W2 open      shim_spsc_inline       E64   @  700ns  p50     853  p99     948  p99.9    3395  p99.99    54057  max    118433 ns
+W2 open      ring_borrowed          E64   @  700ns  p50     848  p99     935  p99.9    3634  p99.99   112738  max    170165 ns
+W2 open      shim_generic           E64   @ 1000ns  p50     137  p99     247  p99.9   11366  p99.99   197271  max    291759 ns
+W2 open      moodycamel_cq_sp       E64   @ 1000ns  p50     240  p99     871  p99.9   11356  p99.99   159436  max    251511 ns
+W2 open      rigtorp_inline         E64   @ 1000ns  p50     151  p99     183  p99.9    3747  p99.99   204945  max    300176 ns
+W2 open      moodycamel_rw_inline   E64   @ 1000ns  p50     143  p99     180  p99.9    5874  p99.99   194134  max    258550 ns
+W2 open      shim_spsc              E64   @ 1000ns  p50     192  p99    1206  p99.9   12937  p99.99   195839  max    288086 ns
+W2 open      shim_spsc_inline       E64   @ 1000ns  p50     119  p99    1178  p99.9    5939  p99.99   146913  max    196687 ns
+W2 open      ring_borrowed          E64   @ 1000ns  p50     109  p99    1156  p99.9    5130  p99.99   154134  max    212680 ns
+W2 open      shim_generic           E64   @ 2000ns  p50     140  p99     189  p99.9    3349  p99.99   122646  max    199105 ns
+W2 open      moodycamel_cq_sp       E64   @ 2000ns  p50     243  p99     929  p99.9   13754  p99.99   182298  max    269120 ns
+W2 open      rigtorp_inline         E64   @ 2000ns  p50     155  p99     187  p99.9    3179  p99.99   117290  max    238362 ns
+W2 open      moodycamel_rw_inline   E64   @ 2000ns  p50     144  p99     180  p99.9    3041  p99.99    90644  max    164764 ns
+W2 open      shim_spsc              E64   @ 2000ns  p50     133  p99     189  p99.9    3399  p99.99   125109  max    246944 ns
+W2 open      shim_spsc_inline       E64   @ 2000ns  p50     115  p99     177  p99.9    3166  p99.99   149894  max    248645 ns
+W2 open      ring_borrowed          E64   @ 2000ns  p50     110  p99     159  p99.9    3122  p99.99    83091  max    160345 ns
+W2 open      shim_generic           E64   @ 5000ns  p50     144  p99     198  p99.9    4366  p99.99   133692  max    273703 ns
+W2 open      moodycamel_cq_sp       E64   @ 5000ns  p50     233  p99     543  p99.9   22219  p99.99   189832  max    272102 ns
+W2 open      rigtorp_inline         E64   @ 5000ns  p50     152  p99     206  p99.9   41480  p99.99   205687  max    278485 ns
+W2 open      moodycamel_rw_inline   E64   @ 5000ns  p50     152  p99     186  p99.9    5614  p99.99   161458  max    278531 ns
+W2 open      shim_spsc              E64   @ 5000ns  p50     136  p99     182  p99.9    7903  p99.99   163253  max    278779 ns
+W2 open      shim_spsc_inline       E64   @ 5000ns  p50     106  p99     157  p99.9   15502  p99.99   168111  max    281109 ns
+W2 open      ring_borrowed          E64   @ 5000ns  p50     109  p99     149  p99.9   30974  p99.99   198499  max    274142 ns
+W2 open      shim_generic           E64   @10000ns  p50     135  p99     190  p99.9   36555  p99.99   209300  max    417856 ns
+W2 open      moodycamel_cq_sp       E64   @10000ns  p50     234  p99     552  p99.9   40558  p99.99   207128  max    331525 ns
+W2 open      rigtorp_inline         E64   @10000ns  p50     160  p99     285  p99.9   56278  p99.99   209433  max    277151 ns
+W2 open      moodycamel_rw_inline   E64   @10000ns  p50     152  p99     184  p99.9   49594  p99.99   207850  max    271380 ns
+W2 open      shim_spsc              E64   @10000ns  p50     126  p99     157  p99.9    1967  p99.99    70957  max    198464 ns
+W2 open      shim_spsc_inline       E64   @10000ns  p50     112  p99     155  p99.9    1953  p99.99    48783  max    209689 ns
+W2 open      ring_borrowed          E64   @10000ns  p50     107  p99     139  p99.9    1856  p99.99    32573  max    200444 ns
+W2 open      shim_generic           E64   @  100ns  p50     138  p99    3407  p99.9  154915  p99.99   205535  max    211255 ns
+W2 open      moodycamel_cq_sp       E64   @  100ns  p50  557807  p99 1439626  p99.9 1508901  p99.99  1512154  max   1513231 ns
+W2 open      rigtorp_inline         E64   @  100ns  p50     143  p99    1498  p99.9  156290  p99.99   223885  max    231568 ns
+W2 open      moodycamel_rw_inline   E64   @  100ns  p50     141  p99    1205  p99.9  111233  p99.99   178368  max    185921 ns
+W2 open      shim_spsc              E64   @  100ns  p50    1311  p99    3214  p99.9  187251  p99.99   241627  max    247818 ns
+W2 open      shim_spsc_inline       E64   @  100ns  p50     632  p99    1708  p99.9   82759  p99.99   149934  max    157477 ns
+W2 open      ring_borrowed          E64   @  100ns  p50     644  p99    1865  p99.9  145194  p99.99   212790  max    220373 ns
+W2 open      shim_generic           E64   @  200ns  p50     130  p99    1185  p99.9   60404  p99.99   149124  max    164899 ns
+W2 open      moodycamel_cq_sp       E64   @  200ns  p50     244  p99    2552  p99.9  109321  p99.99   194764  max    207055 ns
+W2 open      rigtorp_inline         E64   @  200ns  p50     146  p99     840  p99.9   94750  p99.99   225959  max    243627 ns
+W2 open      moodycamel_rw_inline   E64   @  200ns  p50     131  p99     896  p99.9   79821  p99.99   228107  max    245674 ns
+W2 open      shim_spsc              E64   @  200ns  p50     600  p99 1424904  p99.9 2870693  p99.99  3014873  max   3030818 ns
+W2 open      shim_spsc_inline       E64   @  200ns  p50     594  p99    1500  p99.9  122494  p99.99   275845  max    293403 ns
+W2 open      ring_borrowed          E64   @  200ns  p50     544  p99    1278  p99.9   34864  p99.99   184630  max    202228 ns
+W2 open      shim_generic           E64   @  300ns  p50     133  p99    1022  p99.9   29278  p99.99   204866  max    230287 ns
+W2 open      moodycamel_cq_sp       E64   @  300ns  p50     260  p99    1445  p99.9   38375  p99.99   129083  max    150939 ns
+W2 open      rigtorp_inline         E64   @  300ns  p50     151  p99     582  p99.9   98086  p99.99   217978  max    245632 ns
+W2 open      moodycamel_rw_inline   E64   @  300ns  p50     133  p99     591  p99.9   53267  p99.99   219185  max    246750 ns
+W2 open      shim_spsc              E64   @  300ns  p50     726  p99    1396  p99.9  164388  p99.99   309465  max    335497 ns
+W2 open      shim_spsc_inline       E64   @  300ns  p50     693  p99    1252  p99.9   53406  p99.99   220766  max    248320 ns
+W2 open      ring_borrowed          E64   @  300ns  p50     691  p99    1236  p99.9    7982  p99.99    94181  max    121746 ns
+W2 open      shim_generic           E64   @  500ns  p50     129  p99     371  p99.9   12746  p99.99   208240  max    249215 ns
+W2 open      moodycamel_cq_sp       E64   @  500ns  p50     245  p99    1227  p99.9   71197  p99.99   233714  max    255510 ns
+W2 open      rigtorp_inline         E64   @  500ns  p50     146  p99     179  p99.9    8046  p99.99   205754  max    253429 ns
+W2 open      moodycamel_rw_inline   E64   @  500ns  p50     134  p99     176  p99.9    8014  p99.99   207089  max    254514 ns
+W2 open      shim_spsc              E64   @  500ns  p50     611  p99     888  p99.9    2874  p99.99   173771  max    219983 ns
+W2 open      shim_spsc_inline       E64   @  500ns  p50     594  p99     878  p99.9   16972  p99.99   205191  max    252745 ns
+W2 open      ring_borrowed          E64   @  500ns  p50     597  p99     885  p99.9   48883  p99.99   197909  max    221394 ns
+W2 open      shim_generic           E64   @  700ns  p50     130  p99     322  p99.9   53090  p99.99   282275  max    347988 ns
+W2 open      moodycamel_cq_sp       E64   @  700ns  p50     247  p99    1010  p99.9    6831  p99.99   206108  max    269778 ns
+W2 open      rigtorp_inline         E64   @  700ns  p50     154  p99     186  p99.9    2494  p99.99   153578  max    215378 ns
+W2 open      moodycamel_rw_inline   E64   @  700ns  p50     134  p99     176  p99.9    5988  p99.99   173092  max    240618 ns
+W2 open      shim_spsc              E64   @  700ns  p50     863  p99     950  p99.9    3300  p99.99   180444  max    246668 ns
+W2 open      shim_spsc_inline       E64   @  700ns  p50     852  p99     943  p99.9    5358  p99.99   157305  max    220152 ns
+W2 open      ring_borrowed          E64   @  700ns  p50     851  p99     911  p99.9    2666  p99.99    58319  max    103621 ns
+W2 open      shim_generic           E64   @ 1000ns  p50     129  p99     174  p99.9    3340  p99.99   186286  max    255188 ns
+W2 open      moodycamel_cq_sp       E64   @ 1000ns  p50     267  p99     821  p99.9    2639  p99.99   126437  max    215471 ns
+W2 open      rigtorp_inline         E64   @ 1000ns  p50     140  p99     177  p99.9   25754  p99.99   213017  max    267371 ns
+W2 open      moodycamel_rw_inline   E64   @ 1000ns  p50     134  p99     168  p99.9    4747  p99.99   183176  max    247227 ns
+W2 open      shim_spsc              E64   @ 1000ns  p50     136  p99    1213  p99.9   19253  p99.99   413551  max    505470 ns
+W2 open      shim_spsc_inline       E64   @ 1000ns  p50     107  p99    1171  p99.9   10025  p99.99   200475  max    268648 ns
+W2 open      ring_borrowed          E64   @ 1000ns  p50     104  p99    1126  p99.9   62184  p99.99   193578  max    240419 ns
+W2 open      shim_generic           E64   @ 2000ns  p50     127  p99     169  p99.9    5106  p99.99   147205  max    264596 ns
+W2 open      moodycamel_cq_sp       E64   @ 2000ns  p50     247  p99    1052  p99.9    7279  p99.99   165597  max    280502 ns
+W2 open      rigtorp_inline         E64   @ 2000ns  p50     163  p99     195  p99.9    2589  p99.99    80234  max    156767 ns
+W2 open      moodycamel_rw_inline   E64   @ 2000ns  p50     139  p99     171  p99.9    2186  p99.99   124673  max    251892 ns
+W2 open      shim_spsc              E64   @ 2000ns  p50     140  p99     183  p99.9    2394  p99.99   100334  max    239654 ns
+W2 open      shim_spsc_inline       E64   @ 2000ns  p50     113  p99     165  p99.9    2179  p99.99   106208  max    237588 ns
+W2 open      ring_borrowed          E64   @ 2000ns  p50     116  p99     149  p99.9    2095  p99.99   104602  max    187993 ns
+W2 open      shim_generic           E64   @ 5000ns  p50     143  p99     495  p99.9    4537  p99.99   122920  max    246254 ns
+W2 open      moodycamel_cq_sp       E64   @ 5000ns  p50     277  p99     619  p99.9    2475  p99.99    99502  max    242744 ns
+W2 open      rigtorp_inline         E64   @ 5000ns  p50     165  p99     187  p99.9    2244  p99.99   131527  max    347471 ns
+W2 open      moodycamel_rw_inline   E64   @ 5000ns  p50     156  p99     178  p99.9    2107  p99.99   100709  max    245152 ns
+W2 open      shim_spsc              E64   @ 5000ns  p50     142  p99     176  p99.9    2234  p99.99    71802  max    260720 ns
+W2 open      shim_spsc_inline       E64   @ 5000ns  p50     113  p99     163  p99.9    2243  p99.99   133091  max    249336 ns
+W2 open      ring_borrowed          E64   @ 5000ns  p50     107  p99     146  p99.9    7859  p99.99   175147  max    275641 ns
+W2 open      shim_generic           E64   @10000ns  p50     129  p99     659  p99.9   37968  p99.99   206719  max    289001 ns
+W2 open      moodycamel_cq_sp       E64   @10000ns  p50     247  p99     758  p99.9    2478  p99.99    38396  max    183842 ns
+W2 open      rigtorp_inline         E64   @10000ns  p50     159  p99     244  p99.9    2241  p99.99    80693  max    248203 ns
+W2 open      moodycamel_rw_inline   E64   @10000ns  p50     151  p99     177  p99.9    2300  p99.99    45199  max    244082 ns
+W2 open      shim_spsc              E64   @10000ns  p50     135  p99     167  p99.9    2115  p99.99    59080  max    274600 ns
+W2 open      shim_spsc_inline       E64   @10000ns  p50     106  p99     157  p99.9    2305  p99.99    34916  max    173785 ns
+W2 open      ring_borrowed          E64   @10000ns  p50     106  p99     139  p99.9    2236  p99.99    55877  max    225153 ns
+W1 shim_generic           E64   spin     15.27 Mops/s
+W1 shim_generic           E64   spin     14.83 Mops/s
+W1 shim_generic           E64   spin     15.88 Mops/s

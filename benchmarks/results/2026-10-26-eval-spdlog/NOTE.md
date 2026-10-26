@@ -40,9 +40,9 @@ compiler's tag equals the hand tag.
 - The orig-spin control in this leg spins with spdlog's mutex re-taken after
   every pause, so its waiters contend for the lock the other side needs; it
   is slower than the original, not a clean "same queue, different waiting"
-  control. A control that spins outside the mutex is in main since
-  31e944a and its leg is being run; until then, read the 2.84× as an upper
-  bound on the queue's share.
+  control. The leg was run again the same day with a control that spins
+  outside the mutex (31e944a): `2026-10-26-eval-spdlog-rerun`, where the
+  queue's share is 2.51× and the other ratios are as here.
 - The load from other lanes was high during this leg (outside-busy median
   0.37), which widens the absolute numbers; the paired ratios held within
   their ranges.
