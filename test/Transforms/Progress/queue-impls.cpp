@@ -9,7 +9,7 @@
 // CHECK-DAG: specialised: constructor tag rewritten to mpsc
 // CHECK-DAG: specialised: constructor tag rewritten to spmc
 // CHECK-DAG: error: wtc: take_in() is declared lock-free but can block
-// CHECK-DAG: note: which frees the segments it moves past
+// CHECK-DAG: note: which frees the segments it moves past, and may allocate to note the cells it passes that a push has taken and not filled
 // CHECK-DAG: error: wtc: take_out() is declared lock-free but can block
 // CHECK-DAG: note: which waits for another consumer's pop under the consumers' spin lock
 

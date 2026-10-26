@@ -216,7 +216,8 @@ std::string QueuePopOp::getBlockingReason() {
                            "frees the segments it moves past") +
                (shares ? ", and allocates the shared_ptr it returns" : "");
     case ::mlir::wtc::Impl::mpsc:
-        return std::string("frees the segments it moves past") +
+        return std::string("frees the segments it moves past, and may allocate to note the cells "
+                           "it passes that a push has taken and not filled") +
                (shares ? ", and allocates the shared_ptr it returns" : "");
     case ::mlir::wtc::Impl::spmc:
         return std::string("waits for another consumer's pop under the consumers' spin lock") +

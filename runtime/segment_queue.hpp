@@ -16,13 +16,13 @@
 // Semantics, the dialect's contract (decisions/0003): every push
 // happens-before the pop that returns its element; the queue is
 // linearisable and FIFO per producer; a producer's batch comes out in its
-// order; no capacity. try_pop never blocks on an empty queue. A
-// multi-consumer pop that takes a cell a push has reserved waits for that
+// order; no capacity. try_pop never blocks on an empty queue, and answers
+// empty only when every push that finished before it began has been popped.
+// A multi-consumer pop that takes a cell a push has reserved waits for that
 // push to fill it, so the pop is not lock-free: its progress is that of a
 // lock whose holder is between two stores. The single consumer does not
-// wait: it returns false at a reserved cell, even if later pushes have
-// finished, and finds the element there when it comes back, as a consumer
-// that spins on try_pop, every user of the shim, does a moment later.
+// wait: at a reserved cell it takes a later full one if there is one, and
+// the reserved cell's element when it is filled (pop_one).
 //
 // Design: the fetch-and-add array queue ("FAAArrayQueue", in "A wait-free
 // queue with wait-free memory reclamation", PPoPP 2017 poster, and its
@@ -42,8 +42,9 @@
 // takes that index finds it skipped and takes the next one: this keeps a pop
 // from waiting on an empty queue. A pop that reaches a cell a push has
 // reserved waits for it, so that a batch reserved in one step is never torn
-// by a skip in its middle. With one consumer nothing is ever skipped: the
-// consumer returns false at an empty cell and comes back to the same one.
+// by a skip in its middle. With one consumer nothing is ever skipped: at a
+// cell no push has taken the consumer answers empty and comes back to the
+// same cell; at one a push has taken and not filled it looks past it.
 //
 // A batch takes its cells with one fetch-and-add and fills them in order.
 // If a pop skipped one of them in the race described above, the cells after
@@ -60,6 +61,7 @@
 #include <thread>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "hazard.hpp"
 
@@ -69,13 +71,39 @@
 
 namespace wtc::rt {
 
-template <class Slot, bool kManyConsumers = true, unsigned kSegment = 1024, unsigned kLine = 64>
+// Points where a test may hold a thread or count steps. A queue calls its
+// Hooks type's static members there; no_hooks, the default, does nothing,
+// and a test passes its own type, so that its hooks live in another
+// instantiation and cost the others nothing.
+struct no_hooks {
+    // In a push, after it has taken its cells and before it fills them.
+    static void reserved() {}
+    // In a multi-consumer pop: stage 0 after it has seen the queue
+    // non-empty and before it takes a cell, stage 1 after it has taken the
+    // cell and before it reads the cell's state.
+    static void pop_stage(unsigned) {}
+    // In the single consumer's pop, after it has found a full cell past
+    // its head (among the holes or by walking on) and before it looks at
+    // the holes again.
+    static void between_looks() {}
+    // In the single consumer's pop, at each cell it looks at past its head.
+    static void look() {}
+};
+
+template <class Slot, bool kManyConsumers = true, unsigned kSegment = 1024, unsigned kLine = 64,
+          class Hooks = no_hooks>
 class segment_queue {
-    enum : std::uint32_t { kEmpty = 0, kFull = 1, kSkipped = 2 };
+    // kSkipped: a multi-consumer pop passed the cell before any push took
+    // it. kTaken: the single consumer took the element out of order (see
+    // pop_one), and its in-order walk passes the cell when it gets there.
+    enum : std::uint32_t { kEmpty = 0, kFull = 1, kSkipped = 2, kTaken = 3 };
     enum : unsigned { kTail = 0, kHead = 1 };
     // How long a pop waits, in pause instructions, for a push to reserve
     // the cell it took before it skips the cell.
     static constexpr unsigned kPatience = 64;
+    // The same for the single consumer, while it is taking a stream, before
+    // it reads the producers' count to answer empty (pop_one).
+    static constexpr unsigned kOnePatience = 4;
 
     // Raw storage for one element, the size and alignment of the element,
     // so that the cells are an array of elements and a 64-byte element
@@ -115,6 +143,7 @@ class segment_queue {
         segment* s = new segment;
         head_.store(s, std::memory_order_relaxed);
         tail_.store(s, std::memory_order_relaxed);
+        if constexpr (!kManyConsumers) one_.holes.reserve(kHolesReserved);
     }
 
     ~segment_queue() {
@@ -148,6 +177,7 @@ class segment_queue {
             segment* t = hazard::protect(hp, kTail, tail_);
             std::uint64_t want = n - k;
             std::uint64_t i = t->enq.fetch_add(want, std::memory_order_relaxed);
+            Hooks::reserved();
             std::uint64_t end = i + want;
             if (i < kSegment) {
                 std::uint64_t stop = end < kSegment ? end : kSegment;
@@ -228,7 +258,11 @@ class segment_queue {
         if constexpr (!kManyConsumers) claim_consumer();
 #endif
         hazard::record& hp = hazard::mine();
-        bool got = kManyConsumers ? pop_many(hp, f) : pop_one(hp, f);
+        bool got;
+        if constexpr (kManyConsumers)
+            got = pop_many(hp, f);
+        else
+            got = pop_one(hp, f);
         if constexpr (kManyConsumers) hazard::clear(hp, kHead);
         return got;
     }
@@ -262,6 +296,7 @@ class segment_queue {
             if (h->deq.load(std::memory_order_relaxed) >= h->enq.load(std::memory_order_acquire) &&
                 !h->next.load(std::memory_order_acquire))
                 return false;
+            Hooks::pop_stage(0);
             std::uint64_t i = h->deq.fetch_add(1, std::memory_order_relaxed);
             if (i >= kSegment) {
                 segment* next = h->next.load(std::memory_order_acquire);
@@ -269,6 +304,7 @@ class segment_queue {
                 advance_head(hp, h, next);
                 continue;
             }
+            Hooks::pop_stage(1);
             cell& c = h->cells[i];
             std::atomic<std::uint32_t>& state = h->state[i];
             std::uint32_t st = state.load(std::memory_order_acquire);
@@ -334,6 +370,34 @@ class segment_queue {
         if (batch_ > 1) batch_ /= 2;
     }
 
+    // The single consumer takes the cells in index order while they are
+    // full. At a cell that is not, it may not simply answer empty: a push
+    // may have taken that cell and not yet filled it while a later push has
+    // finished, and the queue is then not empty, whatever order the
+    // unfinished push is given. So it walks on, among the cells pushes have
+    // taken, to the first full one, noting every cell it passes as a hole
+    // (taken by a push, not yet filled); if it finds none, every push that
+    // has finished has been popped and empty is the right answer. If it
+    // finds one, it looks at the holes again, from the earliest, until the
+    // look finds no earlier full one (a hole may have been filled since it
+    // was passed, by a push that finished before the found cell's push
+    // began), takes the earliest full cell, and marks it taken; the
+    // in-order walk steps over taken cells later. While there are holes,
+    // the next pop looks at them first and walks on from where the last
+    // walk stopped, so no cell is walked over twice. This is the dequeue of
+    // "Jiffy: a fast, memory efficient, wait-free multi-producers
+    // single-consumer queue" (arXiv 2010.14189), with the holes kept in a
+    // list. It never waits. A pop looks at each of the h holes up to h
+    // times while the look keeps finding earlier ones, so O(h^2), and
+    // otherwise costs O(1) amortised: the walk ahead and the step over
+    // taken cells each pass a cell once, and a segment's count is read
+    // once per segment walked into. h counts cells, filled or not, that
+    // the consumer has passed and not yet taken: one batch still being
+    // filled leaves up to its length of them, so a poll behind it costs
+    // O(batch). Past kHolesReserved holes the list allocates. A push that
+    // never fills its cell keeps the head where it is for ever, so the
+    // segments after it are never freed. Only this thread retires
+    // segments, so the segments it reads ahead need no hazard pointer.
     template <class F>
     bool pop_one(hazard::record& hp, F& f) {
         for (;;) {
@@ -345,15 +409,119 @@ class segment_queue {
                 advance_head(hp, h, next);
                 continue;
             }
-            cell& c = h->cells[i];
-            if (h->state[i].load(std::memory_order_acquire) != kFull) return false;
-            slip_one(h, i);
-            f(std::move(*c.slot()));
-            c.slot()->~Slot();
-            h->deq.store(i + 1, std::memory_order_relaxed);
-            return true;
+            std::uint32_t st = h->state[i].load(std::memory_order_acquire);
+            if (st == kTaken) {
+                h->deq.store(i + 1, std::memory_order_relaxed);
+                continue;
+            }
+            if (one_.holes.empty()) {
+                if (st == kFull) {
+                    slip_one(h, i);
+                    take(h, i, f);
+                    h->deq.store(i + 1, std::memory_order_relaxed);
+                    one_.streaming = true;
+                    return true;
+                }
+                // While a stream is being taken, the next cell is most
+                // likely about to be filled: give it a few pauses on this
+                // cell's line before reading the count, the producers'
+                // line, which every push writes. An idle poll does not wait.
+                if (one_.streaming) {
+                    for (unsigned spin = 0; spin < kOnePatience && st == kEmpty; ++spin) {
+                        pause();
+                        st = h->state[i].load(std::memory_order_acquire);
+                    }
+                    if (st == kFull) continue;
+                }
+                one_.walk = {h, i};
+            }
+            one_.streaming = pop_ahead(f);
+            return one_.streaming;
         }
     }
+
+    struct position {
+        segment* seg = nullptr;
+        std::uint64_t index = 0;
+    };
+
+    bool full(position p) {
+        Hooks::look();
+        return p.seg->state[p.index].load(std::memory_order_acquire) == kFull;
+    }
+
+    // Pops the earliest full cell at or past the head, as pop_one says, or
+    // answers empty.
+    template <class F>
+    bool pop_ahead(F& f) {
+        std::size_t k = 0;
+        while (k < one_.holes.size() && !full(one_.holes[k])) ++k;
+        if (k == one_.holes.size()) {
+            if (!walk_on()) return false;
+            k = one_.holes.size() - 1;  // the full cell the walk stopped at
+        }
+        Hooks::between_looks();
+        for (;;) {
+            std::size_t m = 0;
+            while (m < k && !full(one_.holes[m])) ++m;
+            if (m == k) break;
+            k = m;
+        }
+        position c = one_.holes[k];
+        one_.holes.erase(one_.holes.begin() + static_cast<std::ptrdiff_t>(k));
+        take(c.seg, c.index, f);
+        c.seg->state[c.index].store(kTaken, std::memory_order_relaxed);
+        return true;
+    }
+
+    // Walks on from where the last walk stopped, among the cells pushes
+    // have taken, adding each to the holes, up to and including the first
+    // full one; false if there is none. A push past a segment's end takes
+    // an index there too, so a segment whose count is past its end is
+    // followed into the next one.
+    bool walk_on() {
+        segment* s = one_.walk.seg;
+        std::uint64_t j = one_.walk.index;
+        for (;;) {
+            std::uint64_t taken = s->enq.load(std::memory_order_acquire);
+            std::uint64_t end = taken < kSegment ? taken : kSegment;
+            for (; j < end; ++j) {
+                one_.holes.push_back({s, j});
+                if (full({s, j})) {
+                    one_.walk = {s, j + 1};
+                    return true;
+                }
+            }
+            one_.walk = {s, j};
+            if (taken <= kSegment) return false;
+            segment* next = s->next.load(std::memory_order_acquire);
+            if (!next) return false;
+            s = next;
+            j = 0;
+            one_.walk = {s, 0};
+        }
+    }
+
+    template <class F>
+    static void take(segment* s, std::uint64_t i, F& f) {
+        cell& c = s->cells[i];
+        f(std::move(*c.slot()));
+        c.slot()->~Slot();
+    }
+
+    // The single consumer's own state: the holes, in index order (the last
+    // may be the full cell a walk stopped at), where the next walk starts,
+    // and whether the last pop took an element. Room for this many holes
+    // is made when the queue is built; more allocate. The multi-consumer
+    // form carries none of it.
+    static constexpr std::size_t kHolesReserved = 64;
+    struct one_state {
+        std::vector<position> holes;
+        position walk;
+        bool streaming = false;
+    };
+    struct no_state {};
+    [[no_unique_address]] std::conditional_t<kManyConsumers, no_state, one_state> one_;
 
 #ifdef WTC_CHECK
     void claim_consumer() {

@@ -124,3 +124,21 @@ elseif(WTC_RT_SANITIZE STREQUAL "thread")
   set_tests_properties(segment_queue_two_consumers_is_caught PROPERTIES
                        ENVIRONMENT "TSAN_OPTIONS=halt_on_error=1:symbolize=0")
 endif()
+
+# The empty answer with a push held between taking its cell and filling it:
+# no form may answer empty while a later, finished push's element is queued.
+add_executable(segment_queue_empty_test segment_queue_empty_test.cpp)
+target_link_libraries(segment_queue_empty_test PRIVATE wtc_rt_flags)
+add_test(NAME segment_queue_empty_test COMMAND segment_queue_empty_test)
+
+# Producers that stop between taking a cell and filling it, for both forms;
+# the single consumer checks each of its empty answers.
+add_executable(segment_queue_stall_stress segment_queue_stress.cpp)
+target_link_libraries(segment_queue_stall_stress PRIVATE wtc_rt_flags)
+target_compile_definitions(segment_queue_stall_stress PRIVATE WTC_STRESS_STALL=1)
+add_test(NAME segment_queue_stall_stress COMMAND segment_queue_stall_stress 200000)
+
+add_executable(segment_queue_one_consumer_stall_stress segment_queue_stress.cpp)
+target_link_libraries(segment_queue_one_consumer_stall_stress PRIVATE wtc_rt_flags)
+target_compile_definitions(segment_queue_one_consumer_stall_stress PRIVATE WTC_STRESS_ONE_CONSUMER=1 WTC_STRESS_STALL=1)
+add_test(NAME segment_queue_one_consumer_stall_stress COMMAND segment_queue_one_consumer_stall_stress 200000)
