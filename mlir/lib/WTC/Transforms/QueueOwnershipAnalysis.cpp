@@ -426,6 +426,10 @@ private:
     // element's address, then that address stepped by a constant, and the
     // call handed what the slot holds. The roots of those arrays, or none.
     llvm::SmallVector<Operation *, 2> arrayCtorRoots(Value object, Instance *inst);
+    // A side's count, as SideInfo::count, except that threads started on
+    // different arms of one branch -- `if (c) spawn(a); else spawn(b);` in
+    // a function that runs once -- are one: at most one of them exists.
+    unsigned countOf(const SideInfo &side) const;
     std::string whyThreadMany(const Instance &inst, bool &spawned);
 };
 
@@ -535,6 +539,15 @@ llvm::SmallVector<Operation *, 2> QueueOwnershipAnalysisPass::arrayCtorRoots(Val
         if (pl.root && !llvm::is_contained(out, pl.root)) out.push_back(pl.root);
         else if (!pl.root) return {};
     return out;
+}
+
+unsigned QueueOwnershipAnalysisPass::countOf(const SideInfo &side) const {
+    const unsigned n = side.count();
+    if (n != 2 || side.anyMany || side.threads.size() < 2) return n;
+    for (size_t i = 0; i < side.threads.size(); ++i)
+        for (size_t j = i + 1; j < side.threads.size(); ++j)
+            if (!walk->exclusive(side.threads[i], side.threads[j])) return n;
+    return 1;
 }
 
 // Two threads that each touch the side, or one that stands for many and
@@ -1113,7 +1126,7 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
 
     for (auto &[key, info] : roots) {
         Topology t;
-        const unsigned p = info.producers.count(), c = info.consumers.count();
+        const unsigned p = countOf(info.producers), c = countOf(info.consumers);
         const Type objTy = queueTypeOf(key);
         // An array whose constructors build queues of different types has
         // no type to check the poisoned ones against.
@@ -1145,6 +1158,15 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
                            << " (producers: " << (p == 2 ? "many" : std::to_string(p))
                            << ", consumers: " << (c == 2 ? "many" : std::to_string(c)) << ")";
         ++remarks;
+        // A side counted as one although several threads touch it.
+        for (auto [n, side, what] : {std::tuple{p, &info.producers, "producers"},
+                                     std::tuple{c, &info.consumers, "consumers"}})
+            if (n == 1 && side->count() == 2) {
+                root->emitRemark() << "wtc: queue " << label << ": " << what << ": "
+                                   << side->threads.size()
+                                   << " threads, started on different arms of one branch, so at most one exists";
+                ++remarks;
+            }
         // What a programmer would change to get a smaller count.
         for (auto [n, side, what] : {std::tuple{p, &info.producers, "producers"},
                                      std::tuple{c, &info.consumers, "consumers"}})
