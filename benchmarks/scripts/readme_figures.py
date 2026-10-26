@@ -32,7 +32,7 @@ from pathlib import Path
 FONT = "IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif"
 PANEL, EDGE, INK, MUTED, GRID = "#FBFAF7", "#E4DFD5", "#172033", "#5F6773", "#E2DDD3"
 B0, B1, SPSC, INLINE, B2 = "#9AA5B4", "#5B6676", "#2F6FB2", "#C2562A", "#E8A27E"
-TBB = "#323B49"  # oneTBB, where it stands beside moodycamel in one panel
+TBB = "#323B49"  # the second library (oneTBB or LCRQ) beside moodycamel in one panel
 W = 900
 
 
@@ -369,6 +369,14 @@ def w8(leg):
     return f
 
 
+def tick_step(hi):
+    """A step of 1, 2, 5 or a power of ten times those, giving at most eight gridlines."""
+    for step in (k * 10 ** e for e in range(6) for k in (1, 2, 5)):
+        if hi / step <= 8:
+            return step
+    return max(1, hi)
+
+
 def w9(leg):
     f = Fig(430, "Many threads: what the compiler substitutes, and what it leaves",
             f"million elements a second; W9, each thread on its own core; {leg.how()}",
@@ -379,30 +387,36 @@ def w9(leg):
     left, pw = 60, 340
     f.add(f.text(left, 100, "many producers, many consumers (P = C)", 13, MUTED, "start"))
     ps = [1, 2, 4, 8]
-    both = ("shim_generic", "moodycamel_cq_sp", "onetbb_cq_sp")
+    # oneTBB where the leg had it; on a host without it, LCRQ, the
+    # strongest of the LPRQ artifact's queues with producers and consumers
+    # split.
+    lib2, lib2_name = (("onetbb_cq_sp", "oneTBB") if leg.has(workload="W9", mode="split", producers="1",
+                                                             consumers="1", variant="onetbb_cq_sp")
+                       else ("lcrq", "LCRQ"))
+    both = ("shim_generic", "moodycamel_cq_sp", lib2)
     hi = math.ceil(max(m(v, p, p) for v in both for p in ps))
     y = lambda v: bottom - (bottom - top) * v / (hi + 0.5)
-    for v in range(hi + 1):
+    for v in range(0, hi + 1, tick_step(hi)):
         f.line(left, y(v), left + pw, y(v), B0 if v == 0 else GRID, 2 if v == 0 else 1.5)
         f.add(f.text(left - 8, y(v) + 5, v, 13, MUTED, "end"))
     x = lambda i: left + 24 + i * (pw - 48) / (len(ps) - 1)
-    for v, col, dash in (("shim_generic", B0, ""), ("moodycamel_cq_sp", B1, ""), ("onetbb_cq_sp", B1, "6 4")):
+    for v, col, dash in (("shim_generic", B0, ""), ("moodycamel_cq_sp", B1, ""), (lib2, B1, "6 4")):
         pts = [(x(i), y(m(v, p, p))) for i, p in enumerate(ps)]
         f.polyline(pts, col, 3, dash)
         for a, b in pts:
             f.dot(a, b, col, r=4)
     for i, p in enumerate(ps):
         f.add(f.text(x(i), bottom + 20, f"{p}:{p}", 13, INK))
-    f.legend([("as written (B0)", B0, "line"), ("moodycamel CQ", B1, "line"), ("oneTBB", B1, "dash")], left, 400, 12)
+    f.legend([("as written (B0)", B0, "line"), ("moodycamel CQ", B1, "line"), (lib2_name, B1, "dash")], left, 400, 12)
     # right: one side single, the general queue, the compiler's substitute, the best library
     l2, pw2 = 500, W - 500 - 28
     f.add(f.text(l2, 100, "one side single: the compiler's mpsc and spmc", 13, MUTED, "start"))
     shapes = [("2", "1"), ("4", "1"), ("8", "1"), ("1", "2"), ("1", "4"), ("1", "8")]
     bars = lambda c: (("shim_generic", B0), ("shim_mpsc" if c == "1" else "shim_spmc", SPSC),
-                      ("moodycamel_cq_sp", B1), ("onetbb_cq_sp", TBB))
+                      ("moodycamel_cq_sp", B1), (lib2, TBB))
     hi2 = math.ceil(max(m(v, p, c) for p, c in shapes for v, _ in bars(c)))
     y2 = lambda v: bottom - (bottom - top) * v / (hi2 + 0.5)
-    for v in range(hi2 + 1):
+    for v in range(0, hi2 + 1, tick_step(hi2)):
         f.line(l2, y2(v), l2 + pw2, y2(v), B0 if v == 0 else GRID, 2 if v == 0 else 1.5)
         f.add(f.text(l2 - 8, y2(v) + 5, v, 13, MUTED, "end"))
     gw = pw2 / len(shapes)
@@ -413,7 +427,7 @@ def w9(leg):
             f.rect(xc - 27 + j * 14, y2(val), 12, bottom - y2(val), col)
         f.add(f.text(xc, bottom + 20, f"{p}:{c}", 13, INK))
     f.legend([("as written", B0, "box"), ("compiler", SPSC, "box"), ("moodycamel CQ", B1, "box"),
-              ("oneTBB", TBB, "box")], l2, 400, 12)
+              (lib2_name, TBB, "box")], l2, 400, 12)
     return f
 
 
