@@ -35,6 +35,12 @@ add_executable(spsc_ring_test spsc_ring_test.cpp)
 target_link_libraries(spsc_ring_test PRIVATE wtc_rt_flags)
 add_test(NAME spsc_ring_test COMMAND spsc_ring_test)
 
+# The ring's consumer decides whether to wait with a stream gate, tested
+# here with tick sequences of its own.
+add_executable(stream_gate_test stream_gate_test.cpp)
+target_link_libraries(stream_gate_test PRIVATE wtc_rt_flags)
+add_test(NAME stream_gate_test COMMAND stream_gate_test)
+
 add_executable(spsc_ring_stress spsc_ring_stress.cpp)
 target_link_libraries(spsc_ring_stress PRIVATE wtc_rt_flags)
 add_test(NAME spsc_ring_stress COMMAND spsc_ring_stress 2000000)
