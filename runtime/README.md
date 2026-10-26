@@ -20,7 +20,7 @@ Every implementation carries, in its header comment:
 | `spsc_ring.hpp` | `wtc::queue<T>` | exactly one thread ever pushes, exactly one ever pops, and the destructor runs after both are done |
 | `segment_queue.hpp` | nothing: it is `wtc::queue<T>`'s general-purpose implementation | none: any number of producers and consumers |
 | `segment_queue.hpp`, single-consumer form | `wtc::queue<T>` | exactly one thread ever pops, any number push, and the destructor runs after all are done |
-| `spmc_ring.hpp` | `wtc::queue<T>` | exactly one thread ever pushes, any number pop, and the destructor runs after all are done |
+| `spmc_queue.hpp` | `wtc::queue<T>` | exactly one thread ever pushes, any number pop, and the destructor runs after all are done |
 
 `spsc_ring<Slot, kSlots>` is an unbounded wait-free ring of blocks of 128 KiB
 each. It keeps the generic queue's semantics exactly: FIFO, `push` never
@@ -80,7 +80,7 @@ cmake -S runtime/test -B build-rt-check -DCMAKE_CXX_COMPILER=clang++-18 -DWTC_CH
 
 The suite includes tests that must fail: a two-producer run of the ring, a
 two-consumer run of the segmented queue's single-consumer form and a
-two-producer run of the spmc ring, which TSan has to report and
+two-producer run of the spmc queue, which TSan has to report and
 `WTC_CHECK` has to abort. A suite that cannot fail proves nothing, which is
 a lesson this project has already paid for once.
 

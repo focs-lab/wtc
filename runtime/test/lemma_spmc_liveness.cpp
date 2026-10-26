@@ -1,22 +1,23 @@
 // Section 7 of docs/correctness.md claims that a substitution never
-// introduces a wait the general-purpose queue would not also have had.
-// For spmc it does: the consumers take turns under a spin lock, and the
-// shim moves the element out (or builds the shared_ptr it returns) inside
-// that turn, so the element type's move constructor runs while every other
-// consumer waits. A program whose element's move takes a lock that another
-// consumer holds while it pops then deadlocks under spmc and not under the
-// general-purpose queue, whose consumers never wait for each other.
+// introduces a wait the general-purpose queue would not also have had. The
+// spmc queue once broke it: its consumers took turns under a spin lock, and
+// the shim moved the element out (or built the shared_ptr it returns)
+// inside that turn, so the element type's move constructor ran while every
+// other consumer waited. A program whose element's move takes a lock that
+// another consumer holds while it pops then deadlocked under spmc and not
+// under the general-purpose queue, whose consumers never wait for each
+// other. The spmc queue now claims its cell first and moves the element
+// out holding nothing another consumer waits on.
 //
 // The program: elements whose move constructor takes a mutex m. Consumer
 // B holds m and pops; consumer A is already inside its pop, moving its
-// element, and waits for m. Under the general-purpose queue B's pop takes
-// the next cell without waiting for A, returns, and B lets m go. Under
-// spmc B waits for A's turn, A waits for m: a deadlock. The test breaks it
-// with a timed wait on m and counts the timeouts.
+// element, and waits for m. B's pop must take the next cell without
+// waiting for A, return, and let m go. Were B to wait for A, A would wait
+// for m: a deadlock, which the test breaks with a timed wait on m and
+// reports as a timeout.
 //
-// Run with the tag as its argument: "generic" must report no timeout;
-// "spmc" reports one, and is registered as expected to fail until the shim
-// or the substitution changes (see the note in docs/correctness.md).
+// Run with the tag as its argument: "generic" and "spmc" must both report
+// no timeout.
 #include <atomic>
 #include <chrono>
 #include <cstdio>

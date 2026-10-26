@@ -40,16 +40,19 @@ first. Its pop can report empty while a push that started earlier is
 between its two steps, even when later pushes have finished; a consumer
 that spins on the pop sees them once it finishes.
 
-The ring substituted for one producer and many consumers
-(`runtime/spmc_ring.hpp`, added later still) is the SPSC ring with its
-consumers taking turns under a spin lock: FIFO in the producer's order and
-linearisable, and a pop that reports empty does so when every published
-element has been popped.
+The queue substituted for one producer and many consumers
+(`runtime/spmc_queue.hpp`, added later still) is a list of segments the
+producer fills and publishes alone, whose cells the consumers claim with a
+compare-and-swap against the published count: FIFO in the producer's order
+and linearisable, and a pop that reports empty does so when every published
+element has been popped. Until 26 Oct 2026 it was the SPSC ring with its
+consumers taking turns under a spin lock, which serialised every pop's
+transfers and ran a pool at half the general queue's rate.
 
 **Progress.** The shim queue blocked on a mutex; what each substitute
 guarantees is in `decisions/0004` (the rings wait-free, the segmented
-queue lock-free with a pop that waits for a reserved cell, the spmc ring's
-consumers under a spin lock), and every one allocates a block or a segment
+queue lock-free with a pop that waits for a reserved cell, the spmc
+queue's pop lock-free), and every one allocates a block or a segment
 when it grows. The element itself lives in the cell, on every
 implementation (since 23 Oct 2026): a push copies or moves it there, and a
 pop moves it out, lends it in place, or allocates the `shared_ptr` the

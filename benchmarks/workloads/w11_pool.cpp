@@ -17,14 +17,14 @@
 //               submitter and freed by whichever worker ran it; at 16
 //               bytes the capture stays inline, and the row isolates the
 //               indirect call from the allocation.
-//   heap_spmc   the same tasks through the ring for one producer and many
+//   heap_spmc   the same tasks through the queue for one producer and many
 //               consumers, which is what a pool's topology allows.
 //   cell_mpmc   the task by value in the queue's cell, a function pointer
 //               and the capture, moved out by the worker: no allocation per
 //               task, only the queue's own storage (a segment of 1024 cells
-//               for the segmented queue, a block of the ring), amortised
-//               over the tasks it holds; what a compiler that proved the
-//               worker only runs and drops the task could choose.
+//               for either queue), amortised over the tasks it holds; what
+//               a compiler that proved the worker only runs and drops the
+//               task could choose.
 //   cell_spmc   both.
 //
 // Every word of the capture is folded into the task's arithmetic, a few
@@ -45,7 +45,7 @@
 
 #include "harness.hpp"
 #include "segment_queue.hpp"   // runtime, via -I runtime
-#include "spmc_ring.hpp"
+#include "spmc_queue.hpp"
 
 #include <array>
 #include <functional>
@@ -110,7 +110,7 @@ template <std::size_t Cap> struct cell_task {
 };
 
 template <class T> using via_mpmc = wtc::rt::segment_queue<T, true>;
-template <class T> using via_spmc = wtc::rt::spmc_ring<T>;
+template <class T> using via_spmc = wtc::rt::spmc_queue<T>;
 
 const char* const kVariants[] = {"heap_mpmc", "heap_spmc", "cell_mpmc", "cell_spmc"};
 

@@ -39,8 +39,8 @@ many: started in a loop, under recursion, or from a function nothing in the
 file calls (`why-many.cpp`). A queue with many producers and one consumer
 gets the shim's segmented queue with its consumer's side unshared, whose
 push is one fetch-and-add (`test/Integration/mpsc_fan_in.cpp`); one with one producer and many
-consumers, the SPSC ring with its consumers taking turns under a spin lock
-(`spmc_fan_out.cpp`). `q1` goes one step further than the
+consumers, the queue whose consumers claim the producer's cells with a
+compare-and-swap (`spmc_fan_out.cpp`). `q1` goes one step further than the
 gate did: its consumer only tests whether a pop returned anything, so it
 borrows, and the next section is what that buys.
 

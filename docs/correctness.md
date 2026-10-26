@@ -120,17 +120,46 @@ the copy would have held. The difference that remains, when the element's
 destructor runs, is unobservable because `T` is trivially destructible.
 Under O-transfer the element is moved out, as with any implementation.
 
-**Lemma 3 (spmc ring).** `spmc_ring<T>` is a contract queue whenever
+**Lemma 3 (spmc queue).** `spmc_queue<T>` is a contract queue whenever
 exactly one thread ever pushes.
 
-*Sketch.* The producer's side is Lemma 1's. Consumers take the ring's
-`try_pop` one at a time under a spin lock (`runtime/spmc_ring.hpp`): the
-lock's acquire/release makes the consumer side sequential, so Lemma 1's
-argument applies to the sequence of pops in lock order, with each pop's
-linearisation point inside its critical section; the slot is moved out and
-released before the lock is let go, so the ring's reuse rule sees one
-consumer. The element is never lent (the shim does not choose
-`spsc_inline` here), so there is no Lemma 2 obligation.
+*Sketch.* The producer alone constructs elements in the tail segment's
+cells, in order, and publishes a prefix of them with a release store of the
+segment's count `enq`; a full segment is published whole before the next
+is linked (`runtime/spmc_queue.hpp`). A pop reads `enq` (or the consumers'
+copy `seen`, stored with a release by a consumer that read `enq` with an
+acquire) with an acquire and claims the cell at `deq` by a compare-and-swap
+from `d` to `d + 1` only when `d` is below what it read, so `deq` never
+passes `enq`, every claimed cell is published, and no cell is claimed
+twice. C4: the element's construction happens-before the release of `enq`,
+which happens-before the claiming pop's acquire. C2: linearise a push at
+the publish that covers it and a pop at its successful compare-and-swap;
+cells are claimed in index order per segment and segments in list order,
+which is the push order. An empty answer is linearised at the read of
+`enq` (or of `next`, for a drained full segment) that found nothing beyond
+`deq`: then `deq` equalled `enq` and no later segment existed.
+
+Segments are freed through hazard pointers, as in Lemma 4, with one
+shortcut: a consumer's pop slot (`hazard::kPopSlot`) keeps the head segment
+from one pop to the next, and a pop that finds the slot already holding the
+segment `head_` names uses it without publishing again. That is sound
+because a segment is retired only after `head_` has moved past it, and a
+retired segment is freed only by a scan that finds no slot holding it: a
+segment the slot has held continuously since it was protected (published,
+then found still the head) cannot have been freed, so it cannot have been
+reused at the same address and become the head again, and finding it the
+head now means it is still the head and still protected. The slot is held
+continuously only if nothing else writes it between the two pops and
+during the taker. Pushes use the other slot (`hazard::kPushSlot`) on every
+queue, so a push from the taker (the element's move, or the destructor of
+the object it is moved over) leaves the pop's slot alone; a pop from the
+taker would overwrite it, and the element type's move, copy and destructor
+must therefore not pop from a queue, the rule the general-purpose queue
+already needs for the same reason. When another pop on the same thread
+has written the slot in between, it no longer equals the head and the pop
+publishes again. The element is never lent
+(the shim does not choose `spsc_inline` here), so there is no Lemma 2
+obligation.
 
 **Lemma 4 (segmented queue, both forms).** `segment_queue<T, many>` is a
 contract queue with no precondition beyond the destructor's ordering;
@@ -320,17 +349,16 @@ A reviewer should see each soundness obligation and the lemma it serves.
 - **Progress.** The substitution does not preserve progress properties in
   the strict sense and does not claim to: every implementation allocates
   when it grows, the general-purpose pop waits for a reserved cell, the
-  spmc pop waits for another consumer's. `decisions/0004` answers, per
-  operation, what each implementation can wait for, and the lock-free check
-  reports it. A substitution can introduce a wait the general-purpose queue
-  does not have: the spmc consumers take turns, and a turn includes the move
-  of the element out of its slot (and, for the pop that returns a
-  `shared_ptr`, its allocation), so one consumer waits for another's move.
-  If that move waits for something the other consumer holds while it pops,
-  the substituted program deadlocks where the program as written does not
-  (`runtime/test/lemma_spmc_liveness.cpp`). Theorem 1 is a safety statement
-  and is not affected: every prefix of the deadlocked execution is one the
-  program as written has. The ring's slip is a further, bounded wait.
+  spmc pop retries when another consumer claimed its cell.
+  `decisions/0004` answers, per operation, what each implementation can
+  wait for, and the lock-free check reports it. What is claimed is that a
+  substitution never introduces a wait the general-purpose queue would not
+  also have had: no consumer of the spmc queue waits for another, since the
+  move of the element out of its cell (and, for the pop that returns a
+  `shared_ptr`, its allocation) runs after the claim, holding nothing
+  another consumer waits on (`runtime/test/lemma_spmc_liveness.cpp`). The
+  ring's slip is a further wait, but bounded: it ends after a fixed number
+  of pauses whatever the producer does.
 - **The element's destructor** runs at a different time under
   `spsc_inline`; the shim restricts that tag to trivially destructible
   elements, so the difference is unobservable.

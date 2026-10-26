@@ -127,11 +127,6 @@ namespace wtc::rt {
 // None of this matters for the shim's spsc queue, whose slots are shared
 // pointers: there the allocator dominates and every block size measures the
 // same, 3.2 to 3.4 million a second. It matters for elements held inline.
-//
-// kOneConsumer false is for spmc_ring, which lets consumers into try_pop
-// one at a time under its own lock: the ring's consumer side is then still
-// single-threaded, and only the contract check must not count them, and
-// the consumer must not slip, since it would wait while holding that lock.
 inline constexpr unsigned kBlockBytes = 128 * 1024;
 
 template <class Slot>
@@ -140,8 +135,7 @@ constexpr unsigned default_slots() {
   return n < 2 ? 2 : n;
 }
 
-template <class Slot, unsigned kSlots = default_slots<Slot>(), unsigned kLine = 64,
-          bool kOneConsumer = true>
+template <class Slot, unsigned kSlots = default_slots<Slot>(), unsigned kLine = 64>
 class spsc_ring {
   static_assert(kSlots >= 2, "a block needs at least two slots");
   static_assert((kLine & (kLine - 1)) == 0, "kLine must be a power of two");
@@ -231,7 +225,7 @@ class spsc_ring {
     std::fprintf(stderr,
                  "wtc: %s contract violated: a second %s thread on queue %p "
                  "(first %#lx, now %#lx)\n",
-                 kOneConsumer ? "SPSC" : "SPMC", role, static_cast<void*>(this),
+                 "SPSC", role, static_cast<void*>(this),
                  static_cast<unsigned long>(seen),
                  static_cast<unsigned long>(me));
     std::abort();
@@ -307,7 +301,7 @@ class spsc_ring {
     if (c_.count == c_.cached_push) {
       c_.cached_push = push_pub_.load(std::memory_order_acquire);
       if (c_.count == c_.cached_push) return nullptr;
-      if constexpr (kOneConsumer) slip();
+      slip();
     }
     if (c_.off == kSlots) {
       // Element c_.count lives in the next block. Leave this one, then tell
@@ -410,7 +404,7 @@ public:
                   "the taker runs with the element still in its slot, which is released after it "
                   "returns; it must not throw");
 #ifdef WTC_CHECK
-    if constexpr (kOneConsumer) claim(owner_c_, "consumer");
+    claim(owner_c_, "consumer");
 #endif
     release_lent();
     Slot* e = advance();
@@ -429,7 +423,6 @@ public:
   // The previously lent element is destroyed first, so it must not be
   // referenced any more when this is called.
   Slot* try_pop_borrow() {
-    static_assert(kOneConsumer, "a borrowed element dies at the next pop of any consumer");
 #ifdef WTC_CHECK
     claim(owner_c_, "consumer");
 #endif

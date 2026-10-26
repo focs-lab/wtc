@@ -9,7 +9,7 @@
 
 #include "topology.hpp"
 #include "../runtime/segment_queue.hpp"
-#include "../runtime/spmc_ring.hpp"
+#include "../runtime/spmc_queue.hpp"
 #include "../runtime/spsc_ring.hpp"
 
 #ifndef WTC_BATCH_K
@@ -24,8 +24,9 @@ namespace wtc {
 // each (runtime/segment_queue.hpp), and the one for many producers and one
 // consumer (mpsc) the same queue with its consumer's side unshared; the
 // single-producer single-consumer one is a wait-free ring from runtime/,
-// and the one for one producer and many consumers the same ring with its
-// consumers taking turns (spmc). The tag is the whole substitution
+// and the one for one producer and many consumers (spmc) a list of segments
+// the producer fills alone and the consumers claim cells of with a
+// compare-and-swap (runtime/spmc_queue.hpp). The tag is the whole substitution
 // mechanism: the compiler rewrites the constant at one constructor call and
 // every operation on that object follows it through one predictable branch.
 //
@@ -51,6 +52,11 @@ namespace wtc {
 //     per-queue guard instead, and a try_pop that finds it still referenced
 //     aborts.
 //
+// A pop runs the element's move (and, for try_pop(T&), the destructor of
+// the object it moves into) while the queue still holds the cell, so the
+// element type's move, copy and destructor may push to a wtc::queue but
+// must not pop from one (runtime/hazard.hpp, kPopSlot).
+//
 // A run of pushes from one producer can be batched: batch_begin, then
 // push_deferred for each element, then batch_end. The elements become
 // visible to consumers together, in order, at batch_end or every
@@ -68,7 +74,7 @@ private:
     using generic_impl = rt::segment_queue<T, true>;
     using mpsc_impl = rt::segment_queue<T, false>;
     using ring_impl = rt::spsc_ring<T>;  // spsc and spsc_inline
-    using spmc_impl = rt::spmc_ring<T>;
+    using spmc_impl = rt::spmc_queue<T>;
 
     // Lending needs the element's end to be invisible: it is destroyed in
     // place at the next pop, not when the last shared_ptr to it goes.
