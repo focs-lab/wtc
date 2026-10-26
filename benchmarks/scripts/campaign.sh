@@ -191,6 +191,10 @@ control() { # tag [placement arguments]
 # Whether this build has the oneTBB baseline: a machine without oneTBB
 # builds everything else, and a leg must not die on the one variant missing.
 have_tbb() { grep -qiE '^tbb=(1|true|on)' "$CONTROL_BUILD/build-info.txt" 2>/dev/null; }
+# The oneTBB variant's name where the build has it, nothing otherwise. Never
+# `$(have_tbb && echo ...)` in an assignment: under `set -e` the failed test
+# is the assignment's status and ends the leg on a host without oneTBB.
+tbb_variant() { if have_tbb; then echo onetbb_cq_sp; fi; }
 
 # A run that explains rather than times: allocator calls through the
 # counting preload and user-space hardware counters, every line marked
@@ -459,7 +463,7 @@ case "$LEG" in
     "$HERE/check_env.sh" 4 || exit 1
     meta
     for rep in $(seq 0 $((REPS-1))); do
-      for v in orig_generic shim_generic std_mutex moodycamel_cq_sp boost_ms_queue $(have_tbb && echo onetbb_cq_sp); do
+      for v in orig_generic shim_generic std_mutex moodycamel_cq_sp boost_ms_queue $(tbb_variant); do
         lock "$BUILD/w5_mpmc_control" --variant "$v" --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt"
       done
     done
@@ -472,7 +476,7 @@ case "$LEG" in
     # at a size that keeps it short. Needs a 2-core reservation.
     "$HERE/check_env.sh" 2 || exit 1
     meta
-    EVAL_W1="shim_generic orig_generic $(have_tbb && echo onetbb_cq_sp) moodycamel_cq_sp boost_ms_queue std_mutex rigtorp_sp rigtorp_inline moodycamel_rw_sp moodycamel_rw_inline boost_spsc_sp shim_spsc shim_spsc_inline shim_generic_move shim_spsc_move shim_inline_move ring_sp ring_borrowed ring_inline"
+    EVAL_W1="shim_generic orig_generic $(tbb_variant) moodycamel_cq_sp boost_ms_queue std_mutex rigtorp_sp rigtorp_inline moodycamel_rw_sp moodycamel_rw_inline boost_spsc_sp shim_spsc shim_spsc_inline shim_generic_move shim_spsc_move shim_inline_move ring_sp ring_borrowed ring_inline"
     ALLOCS=$(allocs_for glibc jemalloc tcmalloc mimalloc snmalloc)
     warmup; control 900
     for rep in $(seq 0 $((REPS-1))); do
@@ -502,7 +506,7 @@ case "$LEG" in
     for rep in $(seq 0 $((REPS-1))); do
       for alloc in $ALLOCS; do
         use_alloc "$alloc"
-        for v in shim_generic $(have_tbb && echo onetbb_cq_sp) rigtorp_inline moodycamel_rw_sp shim_spsc shim_spsc_inline; do
+        for v in shim_generic $(tbb_variant) rigtorp_inline moodycamel_rw_sp shim_spsc shim_spsc_inline; do
           WTC_PLACEMENT=smt lock "$BUILD/w1_throughput" --variant "$v" --elem 64 --wait spin --rep "$rep" \
                --n "$(elems_for "$v")" --smt-siblings --json "$RUNS" 2>>"$OUT/log.txt"
         done
@@ -522,7 +526,7 @@ case "$LEG" in
       for alloc in $ALLOCS; do
         use_alloc "$alloc"
         for interval in 100 200 300 500 700 1000 2000 5000 10000; do
-          for v in shim_generic $(have_tbb && echo onetbb_cq_sp) moodycamel_cq_sp rigtorp_inline moodycamel_rw_inline shim_spsc shim_spsc_inline ring_borrowed; do
+          for v in shim_generic $(tbb_variant) moodycamel_cq_sp rigtorp_inline moodycamel_rw_inline shim_spsc shim_spsc_inline ring_borrowed; do
             run_w2 "$rep" "$v" 64 "$interval"
           done
         done
@@ -545,7 +549,7 @@ case "$LEG" in
         use_alloc "$alloc"
         for rate in 0 500000 1000000 2000000 3000000 4000000; do
           n=$([ "$rate" = 0 ] && echo 10000000 || echo 4000000)
-          for v in shim_generic $(have_tbb && echo onetbb_cq_sp) moodycamel_cq_sp moodycamel_rw_sp moodycamel_rw_inline rigtorp_inline shim_spsc shim_spsc_inline; do
+          for v in shim_generic $(tbb_variant) moodycamel_cq_sp moodycamel_rw_sp moodycamel_rw_inline rigtorp_inline shim_spsc shim_spsc_inline; do
             lock "$BUILD/w3_pipeline" --variant "$v" --rate "$rate" --n "$n" --rep "$rep" --json "$RUNS" \
               2>>"$OUT/log.txt" >>"$OUT/checksums-$n.txt"
           done
@@ -577,7 +581,7 @@ case "$LEG" in
     # libraries. Needs a 16-core reservation.
     "$HERE/check_env.sh" 16 || exit 1
     meta
-    MPMC="shim_generic orig_generic std_mutex moodycamel_cq_sp boost_ms_queue $(have_tbb && echo onetbb_cq_sp) lcrq lprq lscq faaarray"
+    MPMC="shim_generic orig_generic std_mutex moodycamel_cq_sp boost_ms_queue $(tbb_variant) lcrq lprq lscq faaarray"
     ALLOCS=$(allocs_for glibc jemalloc mimalloc)
     warmup; control 900
     for rep in $(seq 0 $((REPS-1))); do
@@ -686,7 +690,7 @@ case "$LEG" in
       use_alloc "$alloc"
       for work in 0 4 16 64 256 1024 4096 16384; do
         n=$(grain_n "$work")
-        for v in shim_generic $(have_tbb && echo onetbb_cq_sp) moodycamel_rw_inline rigtorp_inline shim_spsc shim_spsc_inline; do
+        for v in shim_generic $(tbb_variant) moodycamel_rw_inline rigtorp_inline shim_spsc shim_spsc_inline; do
           lock "$BUILD/w3_pipeline" --variant "$v" --work "$work" --n "$n" --rep "$rep" --json "$RUNS" \
             2>>"$OUT/log.txt" >>"$OUT/checksums-w$work.txt"
         done
