@@ -809,7 +809,7 @@ case "$LEG" in
       for alloc in $ALLOCS; do
         use_alloc "$alloc"
         for elem in 8 64 256; do
-          for v in mpmc_xsp mpmc_share mpmc_cell spsc_xsp spsc_share spsc_cell; do
+          for v in mpmc_xsp mpmc_share mpmc_cell spsc_xsp spsc_share spsc_cell mc_xsp mc_cell; do
             lock "$BUILD/w10_ablation" --variant "$v" --elem "$elem" --wait spin --rep "$rep" \
               --n "$(w10_n "$v")" --json "$RUNS" 2>>"$OUT/log.txt"
             WTC_PLACEMENT=smt lock "$BUILD/w10_ablation" --variant "$v" --elem "$elem" --wait spin --rep "$rep" \
