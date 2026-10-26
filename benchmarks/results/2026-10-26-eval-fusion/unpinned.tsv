@@ -1,0 +1,100 @@
+run	first	last	user_ghz	ref_ratio	cycles_u	task_clock_ms	outside_busy	alloc	cmd
+1	-	-	4.084	nan	10748186212	2631.98	0.157	glibc	$BUILD/w1_throughput --variant shim_generic --elem 64 --wait spin --n 20000000 --json ''
+2	-	-	4.084	nan	10400410145	2546.68	0.157	glibc	$BUILD/w1_throughput --variant shim_generic --elem 64 --wait spin --n 20000000 --json ''
+3	-	-	4.047	nan	202531311	50.04	0.158	glibc	$BUILD/w12_fusion --calibrate
+4	1	1	4.069	nan	10541252798	2590.50	0.157	glibc	$BUILD/w1_throughput --variant shim_generic --elem 64 --wait spin --rep 900 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+5	2	2	4.082	nan	10477822098	2566.59	0.160	glibc	$BUILD/w1_throughput --variant shim_generic --elem 64 --wait spin --rep 900 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+6	3	3	4.062	nan	10451406957	2572.87	0.158	glibc	$BUILD/w1_throughput --variant shim_generic --elem 64 --wait spin --rep 900 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+7	4	4	4.065	nan	1517825141	373.36	0.157	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 0 --rounds 0 --rep 0 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+8	5	5	4.098	nan	7196219258	1755.82	0.157	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 0 --rounds 0 --rep 0 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+9	6	6	4.026	nan	1021751634	253.78	0.157	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 2 --rounds 2 --rep 0 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+10	7	7	4.072	nan	7720410561	1896.04	0.157	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 2 --rounds 2 --rep 0 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+11	8	8	4.100	nan	1125746613	274.54	0.156	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 5 --rounds 5 --rep 0 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+12	9	9	4.093	nan	7908546363	1932.06	0.156	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 5 --rounds 5 --rep 0 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+13	10	10	4.094	nan	1494539459	365.09	0.157	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 10 --rounds 10 --rep 0 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+14	11	11	4.104	nan	8001690745	1949.84	0.157	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 10 --rounds 10 --rep 0 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+15	12	12	4.077	nan	2261626868	554.76	0.156	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 20 --rounds 21 --rep 0 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+16	13	13	4.114	nan	9024349412	2193.61	0.158	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 20 --rounds 21 --rep 0 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+17	14	14	4.106	nan	2937396466	715.44	0.157	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 40 --rounds 41 --rep 0 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+18	15	15	4.115	nan	10009132549	2432.56	0.128	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 40 --rounds 41 --rep 0 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+19	16	16	4.115	nan	3366856265	818.12	0.126	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 60 --rounds 62 --rep 0 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+20	17	17	4.116	nan	10655933381	2589.03	0.126	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 60 --rounds 62 --rep 0 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+21	18	18	4.078	nan	3656560157	896.66	0.127	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 100 --rounds 103 --rep 0 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+22	19	19	4.111	nan	11203971348	2725.41	0.014	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 100 --rounds 103 --rep 0 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+23	20	20	4.116	nan	4700435691	1141.98	0.003	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 200 --rounds 206 --rep 0 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+24	21	21	4.102	nan	11728181400	2859.11	0.000	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 200 --rounds 206 --rep 0 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+25	22	22	4.102	nan	1459256045	355.73	0.014	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 0 --rounds 0 --rep 1 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+26	23	23	4.113	nan	7280671011	1770.30	0.027	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 0 --rounds 0 --rep 1 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+27	24	24	3.984	nan	1020662469	256.17	0.018	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 2 --rounds 2 --rep 1 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+28	25	25	4.057	nan	7840338198	1932.41	0.021	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 2 --rounds 2 --rep 1 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+29	26	26	4.099	nan	1127872330	275.19	0.103	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 5 --rounds 5 --rep 1 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+30	27	27	4.109	nan	7999319836	1946.66	0.319	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 5 --rounds 5 --rep 1 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+31	28	28	4.101	nan	1496423407	364.87	0.347	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 10 --rounds 10 --rep 1 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+32	29	29	4.092	nan	8115344146	1983.38	0.377	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 10 --rounds 10 --rep 1 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+33	30	30	4.079	nan	2220495761	544.42	0.382	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 20 --rounds 21 --rep 1 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+34	31	31	4.084	nan	9033606844	2212.08	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 20 --rounds 21 --rep 1 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+35	32	32	4.069	nan	2936997836	721.74	0.380	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 40 --rounds 41 --rep 1 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+36	33	33	4.112	nan	10011253260	2434.49	0.399	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 40 --rounds 41 --rep 1 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+37	34	34	4.090	nan	3357997328	820.95	0.380	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 60 --rounds 62 --rep 1 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+38	35	35	4.095	nan	10656678787	2602.21	0.382	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 60 --rounds 62 --rep 1 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+39	36	36	4.099	nan	3656319226	892.06	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 100 --rounds 103 --rep 1 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+40	37	37	4.115	nan	11204658942	2722.62	0.382	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 100 --rounds 103 --rep 1 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+41	38	38	4.116	nan	4721598451	1147.13	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 200 --rounds 206 --rep 1 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+42	39	39	4.114	nan	11730580415	2851.34	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 200 --rounds 206 --rep 1 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+43	40	40	4.102	nan	1458799886	355.67	0.382	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 0 --rounds 0 --rep 2 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+44	41	41	4.081	nan	7141685954	1749.79	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 0 --rounds 0 --rep 2 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+45	42	42	4.070	nan	1020493779	250.76	0.382	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 2 --rounds 2 --rep 2 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+46	43	43	4.054	nan	7798136068	1923.55	0.380	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 2 --rounds 2 --rep 2 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+47	44	44	4.094	nan	1127377800	275.39	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 5 --rounds 5 --rep 2 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+48	45	45	4.099	nan	7953131567	1940.07	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 5 --rounds 5 --rep 2 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+49	46	46	4.059	nan	1519295950	374.27	0.382	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 10 --rounds 10 --rep 2 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+50	47	47	4.077	nan	8016177286	1966.11	0.380	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 10 --rounds 10 --rep 2 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+51	48	48	4.110	nan	2220461496	540.31	0.380	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 20 --rounds 21 --rep 2 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+52	49	49	4.111	nan	9253904579	2250.97	0.384	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 20 --rounds 21 --rep 2 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+53	50	50	4.107	nan	2937054470	715.20	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 40 --rounds 41 --rep 2 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+54	51	51	4.094	nan	10009756290	2444.98	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 40 --rounds 41 --rep 2 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+55	52	52	4.088	nan	3355941991	820.83	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 60 --rounds 62 --rep 2 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+56	53	53	4.111	nan	10656882751	2592.17	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 60 --rounds 62 --rep 2 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+57	54	54	4.113	nan	3657576690	889.17	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 100 --rounds 103 --rep 2 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+58	55	55	4.106	nan	11207859479	2729.40	0.382	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 100 --rounds 103 --rep 2 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+59	56	56	4.112	nan	4699625123	1142.81	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 200 --rounds 206 --rep 2 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+60	57	57	4.103	nan	11758240924	2866.11	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 200 --rounds 206 --rep 2 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+61	58	58	4.106	nan	1458640731	355.24	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 0 --rounds 0 --rep 3 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+62	59	59	4.088	nan	7340447739	1795.74	0.380	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 0 --rounds 0 --rep 3 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+63	60	60	4.037	nan	1022034846	253.17	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 2 --rounds 2 --rep 3 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+64	61	61	4.082	nan	7597035672	1861.19	0.380	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 2 --rounds 2 --rep 3 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+65	62	62	4.095	nan	1127136271	275.23	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 5 --rounds 5 --rep 3 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+66	63	63	4.102	nan	8040012952	1959.82	0.382	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 5 --rounds 5 --rep 3 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+67	64	64	4.095	nan	1505383911	367.63	0.380	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 10 --rounds 10 --rep 3 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+68	65	65	4.111	nan	8054416004	1959.04	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 10 --rounds 10 --rep 3 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+69	66	66	4.110	nan	2216140424	539.17	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 20 --rounds 21 --rep 3 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+70	67	67	4.090	nan	9107192003	2226.73	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 20 --rounds 21 --rep 3 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+71	68	68	4.093	nan	2938012822	717.77	0.380	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 40 --rounds 41 --rep 3 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+72	69	69	4.112	nan	10009132927	2433.90	0.386	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 40 --rounds 41 --rep 3 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+73	70	70	4.114	nan	3357762553	816.14	0.380	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 60 --rounds 62 --rep 3 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+74	71	71	4.096	nan	10655077147	2601.52	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 60 --rounds 62 --rep 3 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+75	72	72	4.113	nan	3657823256	889.35	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 100 --rounds 103 --rep 3 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+76	73	73	4.108	nan	11205211733	2727.85	0.382	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 100 --rounds 103 --rep 3 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+77	74	74	4.115	nan	4702958742	1142.86	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 200 --rounds 206 --rep 3 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+78	75	75	4.113	nan	11737540507	2853.98	0.406	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 200 --rounds 206 --rep 3 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+79	76	76	4.106	nan	1458321326	355.16	0.380	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 0 --rounds 0 --rep 4 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+80	77	77	4.110	nan	7307787779	1778.20	0.379	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 0 --rounds 0 --rep 4 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+81	78	78	3.919	nan	1020782524	260.50	0.379	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 2 --rounds 2 --rep 4 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+82	79	79	4.112	nan	7829038043	1903.92	0.386	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 2 --rounds 2 --rep 4 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+83	80	80	4.099	nan	1128131954	275.21	0.379	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 5 --rounds 5 --rep 4 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+84	81	81	4.094	nan	8005647443	1955.25	0.403	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 5 --rounds 5 --rep 4 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+85	82	82	4.059	nan	1501550186	369.93	0.380	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 10 --rounds 10 --rep 4 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+86	83	83	4.087	nan	8117325268	1986.00	0.380	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 10 --rounds 10 --rep 4 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+87	84	84	4.072	nan	2276722114	559.16	0.388	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 20 --rounds 21 --rep 4 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+88	85	85	4.114	nan	9031800968	2195.60	0.381	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 20 --rounds 21 --rep 4 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+89	86	86	4.111	nan	2938200486	714.75	0.393	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 40 --rounds 41 --rep 4 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+90	87	87	4.104	nan	10010283316	2439.32	0.393	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 40 --rounds 41 --rep 4 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+91	88	88	4.090	nan	3358812424	821.16	0.382	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 60 --rounds 62 --rep 4 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+92	89	89	4.097	nan	10656184026	2601.20	0.383	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 60 --rounds 62 --rep 4 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+93	90	90	4.113	nan	3656204331	889.00	0.401	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 100 --rounds 103 --rep 4 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+94	91	91	4.088	nan	11205140720	2741.11	0.384	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 100 --rounds 103 --rep 4 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+95	92	92	4.114	nan	4700107378	1142.48	0.386	glibc	timeout 120 $BUILD/w12_fusion --variant fused --work 200 --rounds 206 --rep 4 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+96	93	93	4.112	nan	11731459814	2853.17	0.254	glibc	timeout 120 $BUILD/w12_fusion --variant pipeline --work 200 --rounds 206 --rep 4 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+97	94	94	4.075	nan	10513799511	2580.36	0.214	glibc	$BUILD/w1_throughput --variant shim_generic --elem 64 --wait spin --rep 901 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+98	95	95	4.079	nan	10225431223	2507.12	0.220	glibc	$BUILD/w1_throughput --variant shim_generic --elem 64 --wait spin --rep 901 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl
+99	96	96	4.067	nan	10468201870	2573.84	0.244	glibc	$BUILD/w1_throughput --variant shim_generic --elem 64 --wait spin --rep 901 --json benchmarks/results/2026-10-26-eval-fusion/runs.jsonl

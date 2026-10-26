@@ -1,0 +1,108 @@
+W1 shim_generic           E64   spin     15.20 Mops/s
+W1 shim_generic           E64   spin     15.72 Mops/s
+work calibration (w12_fusion): 1.029248 rounds/ns
+W1 shim_generic           E64   spin     15.46 Mops/s
+W1 shim_generic           E64   spin     15.57 Mops/s
+W1 shim_generic           E64   spin     15.64 Mops/s
+W12 fused    work    0 ns    2752.32 Mrec/s
+W12 pipeline work    0 ns      85.83 Mrec/s
+W12 fused    work    2 ns     577.25 Mrec/s
+W12 pipeline work    2 ns      72.67 Mrec/s
+W12 fused    work    5 ns     229.27 Mrec/s
+W12 pipeline work    5 ns      62.42 Mrec/s
+W12 fused    work   10 ns      89.22 Mrec/s
+W12 pipeline work   10 ns      51.50 Mrec/s
+W12 fused    work   20 ns      29.84 Mrec/s
+W12 pipeline work   20 ns      34.23 Mrec/s
+W12 fused    work   40 ns      11.60 Mrec/s
+W12 pipeline work   40 ns      20.58 Mrec/s
+W12 fused    work   60 ns       6.77 Mrec/s
+W12 pipeline work   60 ns      14.50 Mrec/s
+W12 fused    work  100 ns       3.74 Mrec/s
+W12 pipeline work  100 ns       9.20 Mrec/s
+W12 fused    work  200 ns       1.76 Mrec/s
+W12 pipeline work  200 ns       4.79 Mrec/s
+W12 fused    work    0 ns    2828.57 Mrec/s
+W12 pipeline work    0 ns      84.75 Mrec/s
+W12 fused    work    2 ns     577.66 Mrec/s
+W12 pipeline work    2 ns      71.44 Mrec/s
+W12 fused    work    5 ns     228.48 Mrec/s
+W12 pipeline work    5 ns      61.60 Mrec/s
+W12 fused    work   10 ns      88.86 Mrec/s
+W12 pipeline work   10 ns      50.62 Mrec/s
+W12 fused    work   20 ns      30.47 Mrec/s
+W12 pipeline work   20 ns      34.17 Mrec/s
+W12 fused    work   40 ns      11.60 Mrec/s
+W12 pipeline work   40 ns      20.56 Mrec/s
+W12 fused    work   60 ns       6.78 Mrec/s
+W12 pipeline work   60 ns      14.49 Mrec/s
+W12 fused    work  100 ns       3.75 Mrec/s
+W12 pipeline work  100 ns       9.19 Mrec/s
+W12 fused    work  200 ns       1.74 Mrec/s
+W12 pipeline work  200 ns       4.79 Mrec/s
+W12 fused    work    0 ns    2826.64 Mrec/s
+W12 pipeline work    0 ns      86.76 Mrec/s
+W12 fused    work    2 ns     577.92 Mrec/s
+W12 pipeline work    2 ns      72.45 Mrec/s
+W12 fused    work    5 ns     228.79 Mrec/s
+W12 pipeline work    5 ns      62.13 Mrec/s
+W12 fused    work   10 ns      87.60 Mrec/s
+W12 pipeline work   10 ns      51.41 Mrec/s
+W12 fused    work   20 ns      30.48 Mrec/s
+W12 pipeline work   20 ns      34.01 Mrec/s
+W12 fused    work   40 ns      11.60 Mrec/s
+W12 pipeline work   40 ns      20.57 Mrec/s
+W12 fused    work   60 ns       6.79 Mrec/s
+W12 pipeline work   60 ns      14.49 Mrec/s
+W12 fused    work  100 ns       3.75 Mrec/s
+W12 pipeline work  100 ns       9.19 Mrec/s
+W12 fused    work  200 ns       1.75 Mrec/s
+W12 pipeline work  200 ns       4.77 Mrec/s
+W12 fused    work    0 ns    2826.78 Mrec/s
+W12 pipeline work    0 ns      83.90 Mrec/s
+W12 fused    work    2 ns     577.02 Mrec/s
+W12 pipeline work    2 ns      73.79 Mrec/s
+W12 fused    work    5 ns     228.74 Mrec/s
+W12 pipeline work    5 ns      61.52 Mrec/s
+W12 fused    work   10 ns      88.47 Mrec/s
+W12 pipeline work   10 ns      51.11 Mrec/s
+W12 fused    work   20 ns      30.52 Mrec/s
+W12 pipeline work   20 ns      33.92 Mrec/s
+W12 fused    work   40 ns      11.60 Mrec/s
+W12 pipeline work   40 ns      20.57 Mrec/s
+W12 fused    work   60 ns       6.79 Mrec/s
+W12 pipeline work   60 ns      14.49 Mrec/s
+W12 fused    work  100 ns       3.74 Mrec/s
+W12 pipeline work  100 ns       9.19 Mrec/s
+W12 fused    work  200 ns       1.75 Mrec/s
+W12 pipeline work  200 ns       4.78 Mrec/s
+W12 fused    work    0 ns    2828.30 Mrec/s
+W12 pipeline work    0 ns      84.38 Mrec/s
+W12 fused    work    2 ns     575.54 Mrec/s
+W12 pipeline work    2 ns      71.73 Mrec/s
+W12 fused    work    5 ns     228.58 Mrec/s
+W12 pipeline work    5 ns      61.68 Mrec/s
+W12 fused    work   10 ns      88.62 Mrec/s
+W12 pipeline work   10 ns      50.63 Mrec/s
+W12 fused    work   20 ns      29.61 Mrec/s
+W12 pipeline work   20 ns      34.19 Mrec/s
+W12 fused    work   40 ns      11.59 Mrec/s
+W12 pipeline work   40 ns      20.56 Mrec/s
+W12 fused    work   60 ns       6.78 Mrec/s
+W12 pipeline work   60 ns      14.49 Mrec/s
+W12 fused    work  100 ns       3.75 Mrec/s
+W12 pipeline work  100 ns       9.19 Mrec/s
+W12 fused    work  200 ns       1.75 Mrec/s
+W12 pipeline work  200 ns       4.78 Mrec/s
+W1 shim_generic           E64   spin     15.55 Mops/s
+W1 shim_generic           E64   spin     15.90 Mops/s
+W1 shim_generic           E64   spin     15.65 Mops/s
+work 0 (0 rounds): 1 distinct checksum(s), fused present, pipeline present: ok
+work 2 (2 rounds): 1 distinct checksum(s), fused present, pipeline present: ok
+work 5 (5 rounds): 1 distinct checksum(s), fused present, pipeline present: ok
+work 10 (10 rounds): 1 distinct checksum(s), fused present, pipeline present: ok
+work 20 (21 rounds): 1 distinct checksum(s), fused present, pipeline present: ok
+work 40 (41 rounds): 1 distinct checksum(s), fused present, pipeline present: ok
+work 60 (62 rounds): 1 distinct checksum(s), fused present, pipeline present: ok
+work 100 (103 rounds): 1 distinct checksum(s), fused present, pipeline present: ok
+work 200 (206 rounds): 1 distinct checksum(s), fused present, pipeline present: ok
