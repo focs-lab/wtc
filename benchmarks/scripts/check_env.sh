@@ -9,6 +9,11 @@
 # Checks: the governor is "performance" on every allowed CPU, turbo is off,
 # and the allowed CPU set has the size the leg expects. Reports the current
 # frequency of the first allowed CPU so a campaign can compare before/after.
+# WTC_UNPINNED=1 accepts a host whose frequency cannot be fixed (no root,
+# or pinning would cost every other lane): the governor and turbo are then
+# reported, not required, and campaign.sh records each run's effective
+# frequency instead. Such a leg is marked unpinned in meta.json; compare
+# its variants within a repetition, not its absolute numbers across hosts.
 set -uo pipefail
 
 EXPECT=${1:-}
@@ -29,18 +34,23 @@ if [[ -n $EXPECT && ${#CPUS[@]} -lt $EXPECT ]]; then say "need at least" "$EXPEC
 
 govs=$(for c in "${CPUS[@]}"; do cat "/sys/devices/system/cpu/cpu$c/cpufreq/scaling_governor" 2>/dev/null; done | sort -u | tr '\n' ' ')
 say "governor" "${govs:-unknown}"
-[[ $govs == "performance " ]] || { say "governor" "must be performance on every allowed cpu"; fail=1; }
+ffail=0
+[[ $govs == "performance " ]] || { say "governor" "must be performance on every allowed cpu"; ffail=1; }
 
 if [[ -r /sys/devices/system/cpu/intel_pstate/no_turbo ]]; then
   nt=$(cat /sys/devices/system/cpu/intel_pstate/no_turbo)
   say "intel_pstate/no_turbo" "$nt"
-  [[ $nt == 1 ]] || { say "turbo" "must be off"; fail=1; }
+  [[ $nt == 1 ]] || { say "turbo" "must be off"; ffail=1; }
 elif [[ -r /sys/devices/system/cpu/cpufreq/boost ]]; then
   b=$(cat /sys/devices/system/cpu/cpufreq/boost)
   say "cpufreq/boost" "$b"
-  [[ $b == 0 ]] || { say "boost" "must be off"; fail=1; }
+  [[ $b == 0 ]] || { say "boost" "must be off"; ffail=1; }
 else
-  say "turbo" "no control file found; cannot verify"; fail=1
+  say "turbo" "no control file found; cannot verify"; ffail=1
+fi
+if (( ffail )); then
+  if [[ ${WTC_UNPINNED:-0} == 1 ]]; then say "frequency" "NOT fixed: unpinned leg, each run records its own"
+  else fail=1; fi
 fi
 
 f=$(cat "/sys/devices/system/cpu/cpu${CPUS[0]}/cpufreq/scaling_cur_freq" 2>/dev/null || echo unknown)

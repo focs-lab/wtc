@@ -198,6 +198,24 @@ bench -c 2 -m 4G -e
 benchmarks/scripts/campaign.sh w1 build-bench 10
 ```
 
+A host where the frequency cannot be fixed (no reservation tool, no root,
+or pinning would slow every other lane on it) runs a leg with
+`WTC_UNPINNED=1` and the leg's processors given by `taskset`:
+
+```sh
+WTC_UNPINNED=1 taskset -c 16-31,48-63 benchmarks/scripts/campaign.sh eval-w1 build-bench 5
+```
+
+The environment check then reports the governor and turbo instead of
+requiring them, `meta.json` says `"unpinned": true`, and every run's
+effective frequency (user cycles over task-clock) and the busy share of
+the processors outside the set are written to `unpinned.tsv` beside
+`runs.jsonl`, keyed by the lines each run wrote there. Such a leg answers
+how variants compare within a repetition, which is what the legs report;
+its absolute numbers are not comparable with another host's. On the
+two-socket host the paired ratio of two spdlog builds, 1.08, came out
+with a 95% interval of +-1 to 3% this way.
+
 Legs: `w1`, `w2`, `w2pp`, `w3`, `w3wtc`, `w5`, `w6`, `smt`, `far`, `tbb`,
 `w1check`, and `smoke`, which runs everything once, tiny, unreserved. The
 evaluation's legs are `eval-w1`, `eval-w1smt`, `eval-w2`, `eval-w3`,
