@@ -13,7 +13,7 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
-set(WTC_RT_SANITIZE "" CACHE STRING "Sanitizer to enable (thread or empty)")
+set(WTC_RT_SANITIZE "" CACHE STRING "Sanitizer to enable (thread, address or empty)")
 option(WTC_CHECK "Build the runtime with its contract checks" OFF)
 
 add_library(wtc_rt_flags INTERFACE)
@@ -97,6 +97,36 @@ elseif(WTC_RT_SANITIZE STREQUAL "thread")
   add_test(NAME spmc_ring_two_producers_is_caught
            COMMAND sh -c "$<TARGET_FILE:spmc_ring_two_producers> 200000 2>&1 | grep -qE 'ThreadSanitizer: (data race|heap-use-after-free)'")
   set_tests_properties(spmc_ring_two_producers_is_caught PROPERTIES
+                       ENVIRONMENT "TSAN_OPTIONS=halt_on_error=1:symbolize=0")
+endif()
+
+# The queue for one producer and many consumers that replaces the ring, with
+# one, two and eight consumers, and its test that must fail: a second
+# producer.
+add_executable(spmc_queue_stress spmc_queue_stress.cpp)
+target_link_libraries(spmc_queue_stress PRIVATE wtc_rt_flags)
+foreach(consumers 1 2 8)
+  add_test(NAME spmc_queue_stress_${consumers} COMMAND spmc_queue_stress 1000000 ${consumers})
+endforeach()
+
+# The element's destructor pushes to a general-purpose queue from inside the
+# pop's taker; run it under AddressSanitizer (-DWTC_RT_SANITIZE=address) as
+# well as ThreadSanitizer.
+add_executable(spmc_queue_dtor_push spmc_queue_stress.cpp)
+target_link_libraries(spmc_queue_dtor_push PRIVATE wtc_rt_flags)
+target_compile_definitions(spmc_queue_dtor_push PRIVATE WTC_STRESS_DTOR_PUSH=1)
+add_test(NAME spmc_queue_dtor_push COMMAND spmc_queue_dtor_push 1000000 8)
+
+add_executable(spmc_queue_two_producers spmc_queue_stress.cpp)
+target_link_libraries(spmc_queue_two_producers PRIVATE wtc_rt_flags)
+target_compile_definitions(spmc_queue_two_producers PRIVATE WTC_STRESS_TWO_PRODUCERS=1)
+if(WTC_CHECK)
+  add_test(NAME spmc_queue_two_producers_is_caught
+           COMMAND sh -c "$<TARGET_FILE:spmc_queue_two_producers> 200000 2>&1 | grep -q 'SPMC contract violated'")
+elseif(WTC_RT_SANITIZE STREQUAL "thread")
+  add_test(NAME spmc_queue_two_producers_is_caught
+           COMMAND sh -c "$<TARGET_FILE:spmc_queue_two_producers> 200000 2>&1 | grep -qE 'ThreadSanitizer: (data race|heap-use-after-free)'")
+  set_tests_properties(spmc_queue_two_producers_is_caught PROPERTIES
                        ENVIRONMENT "TSAN_OPTIONS=halt_on_error=1:symbolize=0")
 endif()
 
