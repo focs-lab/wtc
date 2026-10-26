@@ -249,6 +249,76 @@ other thirteen need their framework to compile at all (Qt, JUCE, ROS, SDL
 and OpenAL, MFC, PipeWire), and each starts at least one side from a
 callback that framework calls.
 
+## Part 4: wrong declarations, made on purpose
+
+Part 3 found no broken declaration, so it says nothing about what the check
+does with one. On 26 October 2026 the same code was mutated so that one
+declaration at a time is wrong, and checked again
+(`benchmarks/scripts/declared_recall.sh`; every mutant, outcome and line in
+`benchmarks/results/2026-10-26-declared-recall/`). There were 22 mutants,
+each one substitution, over 9 programs and 13 queues (11 of part 3's 14
+DPDK rows):
+
+- a flag or an `sp`/`sc` call that declares single a side that has many
+  threads (6);
+- a second thread on a side declared single (13). It is either launched
+  on an lcore nothing else runs on, or an existing thread is given a
+  second role: distributor's rx lcore in the comment-invited swap,
+  distributor's first worker, and qos_sched's lcore that no flow names;
+- a second thread on supercollider's queues (3).
+
+A further 18 programs use `rigtorp::SPSCQueue`,
+`moodycamel::ReaderWriterQueue` and `boost::lockfree::spsc_queue` through
+their real headers, with a second thread started in six ways.
+
+| set | wrong declarations | caught (the build stops) | warned (cannot verify) | unresolved (remarks only) | verified |
+|---|---|---|---|---|---|
+| DPDK and supercollider, mutated | 22 | 6 | 12 | 4 | 0 |
+| three libraries' queues, second thread | 18 | 18 | 0 | 0 | 0 |
+
+- **A misreport found and fixed.** The first run found the check reporting
+  a ring flagged `RING_F_SP_ENQ | RING_F_SC_DEQ` as "declared mpsc" where
+  no producer access was seen: distributor's `dist_tx_ring`, and
+  efd_server's and client_server_mp's `rx_q`. The report now gives the
+  flags as written (part 3). Every warning counted names the declaration
+  as written.
+- **Verdict changes.** 13 of the 22 mutants change the check's verdict:
+  - 6 errors, all of them in packet_ordering;
+  - 7 verified-to-warned. Six are on efd_server's, client_server_mp's and
+    dma's per-node or per-port rings: one allocation site in a loop makes
+    the verdict a union over all of them, and two threads on one ring
+    cannot be told from one on each. The seventh is distributor's
+    `rx_dist_ring`, whose added thread is a conditional function pointer.
+- **Arrays, struct copies and exclusive arms.** With these followed
+  (PR #38), three rings verify that part 3 could not: packet_ordering's
+  `workers_to_tx`, dma's ring, and distributor's `rx_dist_ring`. Their
+  mutants are caught or warned, so three misses became verdict changes;
+  none became an error.
+- **No false verdict.** No wrong declaration is verified, and no control
+  fails.
+- **What "cannot verify" was in part 3.** For qos_sched and bbdev_app,
+  part 3's "cannot verify" or "no verdict" is, in the tool's output, a
+  remark at each unresolved access, not a line naming the ring.
+- **Every miss stops at a cause part 3 names.**
+- **The same library programs under ThreadSanitizer.** It reports a race
+  in 59 of 90 runs (14 of 18 programs; up to 62 and 17 in other runs) with
+  the libraries' assertions, and in 85 of 90 (17 of 18) with `-DNDEBUG`.
+  It never reports a second consumer of `boost::lockfree::spsc_queue`, an
+  atomicity violation that loses elements in every run.
+- **History.** Two searches of DPDK's commit messages give 49 candidates.
+  Three fix a wrong single-side declaration, and the check models none of
+  them:
+  - af_xdp's `buf_ring` (5b2baff902): a driver, whose threads are the
+    application's and not in its translation unit;
+  - dumpcap's and vhost's mempools (27a26d65f8, 46d3f57537): mempools,
+    which are not modelled.
+
+So the check never verified a wrong declaration here, and it stopped
+every one whose threads were in sight in the library programs. On the
+audited applications it stops 6 of 22 and changes its verdict on 13.
+Recall is per audited ring, not per real bug: it has not yet met a real
+wrong declaration.
+
 ## What a compiler check needs
 
 - **Multi-file reach.** Every DPDK verdict crosses files: the ring is
@@ -281,15 +351,16 @@ callback that framework calls.
 
 ## Verdict on thesis C
 
-The plan's criterion was three real findings, broken or over-cautious with
-evidence. Over the 33 rows read (14 of DPDK, 19 of library users) the
-audit found one over-cautious queue (plugdata), no broken declaration, two
-latent two-producer traps that a change of one line would spring
-(distributor's commented swap, EPSILON's spinner), and ten declarations
-that hold only by convention (one of DPDK, nine of the library users).
-That is fewer than
-three; thesis C stays a section, the checking of declared topologies, and
-not the paper's claim. The strongest argument the audit gives that section
-is the ten conventions: declarations hold because people read, and a
-compiler that proves the same two facts the declaration asserts is what
-lets them stop.
+The plan's criterion was three real findings, broken or over-cautious
+with evidence. Over the 33 rows read (14 of DPDK, 19 of library users)
+the audit found one over-cautious queue (plugdata), no broken
+declaration, two latent two-producer traps that a change of one line
+would spring (distributor's commented swap, EPSILON's spinner), and ten
+declarations that hold only by convention (one of DPDK, nine of the
+library users). That is fewer than three, and part 4 adds that the three
+wrong declarations DPDK has fixed in its history are of forms the check
+does not model; thesis C stays a section, the checking of declared
+topologies, and not the paper's claim. The strongest argument the audit
+gives that section is the ten conventions: declarations hold because
+people read, and a compiler that proves the same two facts the
+declaration asserts is what lets them stop.

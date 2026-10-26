@@ -1,0 +1,63 @@
+# Candidates from DPDK's history (the audit's checkout, 6bbb7b3) for a fix
+# of a wrong single-producer or single-consumer declaration. Two searches
+# of commit messages, run in that checkout (a blobless clone: messages and
+# trees are local; reading a diff fetches its blobs; a search of the diffs
+# themselves, git log -G, needs a full clone and was not run):
+#
+#   q1: git log -i -E --grep='single.?(producer|consumer)|(sp|sc)_(enqueue|dequeue)|SP_ENQ|SC_DEQ|SP_PUT|SC_GET|ring_(mp|sp)_(mc|sc)|RING_F_|MEMPOOL_F_S[PC]' HEAD
+#   q2: git log -i -E --all-match --grep=fix --grep='(multiple|multi.?|two|several) (producer|consumer)s?|ring type|mempool ops|ring_(mp|sp)_(mc|sc)' HEAD
+#
+# 34 + 19 commits, 49 distinct. Each was read (subject, message, and the
+# diff where the message leaves it open) and kept only if it fixes a
+# declaration of one producer or one consumer that two threads broke.
+#
+# commit	query	verdict	what it is
+5b2baff902	q1	kept	net/af_xdp: buf_ring created RING_F_SP_ENQ | RING_F_SC_DEQ, used from the rx and tx paths on different threads; reverts 489e0b5b33
+46d3f57537	q1	kept	vhost: IOTLB mempool MEMPOOL_F_SC_GET, taken from by the control and the forwarding threads
+27a26d65f8	q2	kept	app/dumpcap: mbuf pool on the ring_mp_sc mempool driver, taken from by several queues
+489e0b5b33	q1	rejected	net/af_xdp: introduces the wrong flags that 5b2baff902 fixes
+28a2568f46	q1,q2	rejected	examples/ntb: the pool took the ops at index 0, which is whichever mempool driver registers first in the link (bucket, stack, a hardware pool); the ring driver registers ring_mp_mc first among its four, so nothing shows that a single-side ops was taken; the fix is about registration order
+668958f3c1	q1,q2	rejected	eal: a data race on the multi-process socket descriptor; not a queue
+dec7a1e8ea	q1	rejected	ring: a new peek API
+69e07f43a2	q1	rejected	vdpa/mlx5: a new task ring
+436e82b78c	q1	rejected	ring: documentation
+c9902a15bd	q1	rejected	common/cpt: a pending-queue rework
+572f2a9089	q1	rejected	hash: a compiler warning
+2f706027c8	q1	rejected	vhost: interrupt suppression for the split virtqueue
+77de7c781c	q1	rejected	vhost: interrupt support
+2d645858a9	q1	rejected	test/mempool: a static handle not reset between runs
+7684fcf1f4	q1	rejected	event/octeontx: a new single-producer variant
+d56f632075	q1	rejected	examples/vhost_scsi: drops a feature
+a103a97e71	q1	rejected	eal: a mempool driver option
+effd92b96a	q1	rejected	test/ring: result masking in a test
+077d248889	q1	rejected	ring: a return value
+21d0b0433c	q1	rejected	crypto/scheduler: return-value handling
+89665ec20c	q1	rejected	test/mempool_perf: default mempool support
+cbee51be40	q1	rejected	test/mempool: default mempool support
+c6b3570f9e	q1,q2	rejected	mk: links the ring mempool by default
+9a8e9b57f5	q1	rejected	mempool: moves the ring handler to a driver
+ecaed092b6	q1	rejected	ring: an API change (remaining entries)
+14fbffb0aa	q1	rejected	ring: an API change (free space)
+454a0a7009	q1	rejected	mempool: cache use in single-side mode, performance
+edabd7fef5	q1	rejected	examples/qos_sched: dequeue bulk to burst, latency
+eb9dce6c3e	q1	rejected	net/virtio: a feature
+e15922d75a	q1	rejected	mempool: an invalid handler index
+c3acd92746	q1	rejected	ring: single-consumer dequeue performance
+656f2d3ede	q1	rejected	mempool: deprecates functions
+d097964616	q1,q2	rejected	ring: a deadlock on zero-object multi-producer enqueue, in the ring itself
+bf6931b242	q1	rejected	port: a new ring port
+d15808aa1e	q1	rejected	mem: mempool cache lookup
+5ee53c4cdb	q2	rejected	common/cnxk: static-analysis findings
+381f39ebb7	q2	rejected	net/virtio: packed-ring descriptor setup
+01996a034a	q2	rejected	net/virtio: a crash on reconnection
+fa00525b9a	q2	rejected	doc: a figure
+da5fa4d4d6	q2	rejected	mempool/octeontx2: an icc build
+1f91ae9857	q2	rejected	net/bnxt: a macro name
+49594a6314	q2	rejected	ring/c11: memory ordering inside the ring
+33b3181791	q2	rejected	eal: parsing a mempool ops name
+028e4b1dbc	q2	rejected	mbuf: the user mempool ops API
+0c5fd10dec	q2	rejected	bus/dpaa: mempool ops registration
+285c5616e6	q2	rejected	bus/fslmc: mempool ops registration
+fe06cb6c54	q2	rejected	eal: the default mempool ops
+e60340c4f7	q2	rejected	net/virtio: a typo
+b4a0af7ed0	q2	rejected	app/testpmd: command-line variable types
