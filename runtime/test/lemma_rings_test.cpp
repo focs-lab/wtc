@@ -20,11 +20,16 @@
 //                              of a block, stays intact while the producer
 //                              laps the ring many times, and is destroyed
 //                              at the next pop, once.
-// Lemma 3, spmc_ring:
-//   spmc_waits_for_consumer    a consumer held inside its pop holds every
-//                              other consumer (the progress answer says
-//                              so), and the pops take the elements in the
-//                              order they get the lock.
+// Lemma 3, spmc_queue (segments of four cells):
+//   spmc_no_wait_for_consumer  a consumer held inside its pop's taker holds
+//                              no other consumer: another pop takes the
+//                              next element and returns meanwhile, and the
+//                              elements go in the order of the claims.
+//   spmc_taker_holds_segment   a consumer held in its taker on the last
+//                              cell of a segment while another consumer
+//                              drains several segments past it, retiring
+//                              that one: the segment is not freed under
+//                              the taker, and the element is intact.
 //   stress (spmc)              one producer, four consumers held at random
 //                              inside pops; every element once, in order
 //                              at each consumer, every empty answer
@@ -36,14 +41,14 @@
 #include <vector>
 
 #include "lemma_util.hpp"
-#include "spmc_ring.hpp"
+#include "spmc_queue.hpp"
 #include "spsc_ring.hpp"
 
 namespace {
 
 using lemma::item;
 using ring = wtc::rt::spsc_ring<item, 4>;
-using spmc = wtc::rt::spmc_ring<item, 4>;
+using spmc = wtc::rt::spmc_queue<item, 4>;
 
 void deferred_push_reads_empty() {
   {
@@ -129,7 +134,16 @@ void borrow_survives_laps() {
   EXPECT(lemma::live.load() == 0);
 }
 
-void spmc_waits_for_consumer() {
+// Waits up to five seconds for done; true if it was set.
+bool finishes(const std::atomic<bool>& done) {
+  for (int i = 0; i < 500; ++i) {
+    if (done.load(std::memory_order_acquire)) return true;
+    lemma::sleep_ms(10);
+  }
+  return false;
+}
+
+void spmc_no_wait_for_consumer() {
   {
     spmc q;
     q.push(item(0, 1, 0));
@@ -149,11 +163,42 @@ void spmc_waits_for_consumer() {
       EXPECT(q.try_pop(b_out));
       b_done.store(true, std::memory_order_release);
     });
-    EXPECT(lemma::still_running(b_done));  // waits for the other consumer
+    EXPECT(finishes(b_done));  // does not wait for the other consumer
     in_taker.release();
     a.join();
     b.join();
     EXPECT(a_seq == 0 && b_out.seq == 1);
+  }
+  EXPECT(lemma::live.load() == 0);
+}
+
+void spmc_taker_holds_segment() {
+  {
+    spmc q;
+    for (long i = 0; i < 40; ++i) q.push(item(0, 1, i));
+    item v;
+    for (long i = 0; i < 3; ++i) EXPECT(q.try_pop(v) && v.seq == i);
+    lemma::gate in_taker;
+    long a_seq = -1;
+    std::thread a([&] {
+      q.consume([&](item&& e) noexcept {
+        in_taker.stop_here();
+        a_seq = e.seq;  // read after the others have moved on
+      });
+    });
+    in_taker.wait_arrival();
+    std::atomic<bool> b_done{false};
+    std::thread b([&] {
+      item w;
+      for (long i = 4; i < 40; ++i) EXPECT(q.try_pop(w) && w.seq == i);
+      EXPECT(!q.try_pop(w));
+      b_done.store(true, std::memory_order_release);
+    });
+    EXPECT(finishes(b_done));
+    in_taker.release();
+    a.join();
+    b.join();
+    EXPECT(a_seq == 3);
   }
   EXPECT(lemma::live.load() == 0);
 }
@@ -272,7 +317,8 @@ int main(int argc, char** argv) {
   taker_holds_slot();
   destroyed_with_elements();
   borrow_survives_laps();
-  spmc_waits_for_consumer();
+  spmc_no_wait_for_consumer();
+  spmc_taker_holds_segment();
   ring_stress(n);
   spmc_stress(n);
   if (lemma::failures.load()) {

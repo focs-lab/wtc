@@ -26,8 +26,8 @@ namespace wtc {
 // mpsc is for any number of producers and one consumer: the same segmented
 // queue with the consumer's side unshared, so that its pop takes no atomic
 // read-modify-write and never skips a cell. spmc is for one producer and
-// any number of consumers: the spsc ring, whose consumers take turns under
-// a spin lock (runtime/spmc_ring.hpp).
+// any number of consumers: segments the producer fills alone, whose cells
+// the consumers claim with a compare-and-swap (runtime/spmc_queue.hpp).
 enum class topology : int {
     generic = 0,
     spsc = 1,

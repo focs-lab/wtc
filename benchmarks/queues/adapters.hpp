@@ -102,8 +102,8 @@ template <class T> struct shim_mpsc {
     bool try_pop(T& out) { auto p = q.try_pop(); if (!p) return false; out = *p; return true; }
 };
 
-// And for one producer and many consumers: the ring whose consumers take
-// turns (runtime/spmc_ring.hpp).
+// And for one producer and many consumers: the segments whose cells the
+// consumers claim with a compare-and-swap (runtime/spmc_queue.hpp).
 template <class T> struct shim_spmc {
     wtc::queue<T> q{wtc::topology::spmc};
     void push(const T& v) { q.push(v); }

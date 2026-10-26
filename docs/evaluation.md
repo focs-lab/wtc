@@ -279,7 +279,7 @@ result directories hold only the new runs.
   public disc image checked against the archive's signed checksum.
 - **Many on both sides keeps the general queue.** A queue with one
   producer or one consumer has a substitute (the ring, the list for many
-  producers, or the ring whose consumers take turns); one with several of
+  producers, or the queue whose consumers claim cells); one with several of
   each keeps the general-purpose queue
   whatever the analysis proves, so a pipeline whose middle stages each
   have several threads gains only at its ends. In the legs recorded

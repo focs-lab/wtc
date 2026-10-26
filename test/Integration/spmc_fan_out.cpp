@@ -1,9 +1,9 @@
 // One producer and four consumers: the analysis proves one producer and
-// many consumers, and the queue becomes the ring whose consumers take
-// turns. Every element arrives once, and each consumer sees its own in the
-// order they were pushed; half of them are pushed in runs (batch_begin,
-// push_deferred, batch_end), each published with one store. WTC_CHECK
-// aborts if a second thread ever pushes.
+// many consumers, and the queue becomes the one whose consumers claim the
+// producer's cells. Every element arrives once, and each consumer sees its
+// own in the order they were pushed; half of them are pushed in runs
+// (batch_begin, push_deferred, batch_end), each published with one store.
+// WTC_CHECK aborts if a second thread ever pushes.
 //
 // RUN: %wtc_cc -DWTC_CHECK %s -o %t.exe 2>&1 | FileCheck %s
 // RUN: %t.exe | FileCheck %s --check-prefix=OUT

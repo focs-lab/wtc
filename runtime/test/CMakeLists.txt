@@ -81,28 +81,8 @@ elseif(WTC_RT_SANITIZE STREQUAL "thread")
                        ENVIRONMENT "TSAN_OPTIONS=halt_on_error=1:symbolize=0")
 endif()
 
-# The ring for one producer and many consumers, and its test that must
-# fail: a second producer.
-add_executable(spmc_ring_stress spmc_ring_stress.cpp)
-target_link_libraries(spmc_ring_stress PRIVATE wtc_rt_flags)
-add_test(NAME spmc_ring_stress COMMAND spmc_ring_stress 1000000)
-
-add_executable(spmc_ring_two_producers spmc_ring_stress.cpp)
-target_link_libraries(spmc_ring_two_producers PRIVATE wtc_rt_flags)
-target_compile_definitions(spmc_ring_two_producers PRIVATE WTC_STRESS_TWO_PRODUCERS=1)
-if(WTC_CHECK)
-  add_test(NAME spmc_ring_two_producers_is_caught
-           COMMAND sh -c "$<TARGET_FILE:spmc_ring_two_producers> 200000 2>&1 | grep -q 'SPMC contract violated'")
-elseif(WTC_RT_SANITIZE STREQUAL "thread")
-  add_test(NAME spmc_ring_two_producers_is_caught
-           COMMAND sh -c "$<TARGET_FILE:spmc_ring_two_producers> 200000 2>&1 | grep -qE 'ThreadSanitizer: (data race|heap-use-after-free)'")
-  set_tests_properties(spmc_ring_two_producers_is_caught PROPERTIES
-                       ENVIRONMENT "TSAN_OPTIONS=halt_on_error=1:symbolize=0")
-endif()
-
-# The queue for one producer and many consumers that replaces the ring, with
-# one, two and eight consumers, and its test that must fail: a second
-# producer.
+# The queue for one producer and many consumers, with one, two and eight
+# consumers, and its test that must fail: a second producer.
 add_executable(spmc_queue_stress spmc_queue_stress.cpp)
 target_link_libraries(spmc_queue_stress PRIVATE wtc_rt_flags)
 foreach(consumers 1 2 8)
@@ -183,17 +163,17 @@ add_executable(lemma_segment_test lemma_segment_test.cpp)
 target_link_libraries(lemma_segment_test PRIVATE wtc_rt_flags)
 add_test(NAME lemma_segment_test COMMAND lemma_segment_test 100000)
 
-# Section 7's claim that a substitution adds no wait: holds for the general
-# queue, and does not for spmc, whose consumers wait for each other's move
-# of the element. The spmc run passes only on that exact report, so that a
-# race report or a wrong element is not mistaken for the known wait.
+# Section 7's claim that a substitution adds no wait, for the general
+# queue and for spmc, whose consumers move the element out after their
+# claim, holding nothing another consumer waits on. The spmc run must pass
+# outright; the report of a consumer that waited fails it whatever the
+# exit status.
 add_executable(lemma_spmc_liveness lemma_spmc_liveness.cpp)
 target_link_libraries(lemma_spmc_liveness PRIVATE wtc_rt_flags)
 add_test(NAME lemma_spmc_liveness_generic COMMAND lemma_spmc_liveness generic)
 add_test(NAME lemma_spmc_liveness_spmc COMMAND lemma_spmc_liveness spmc)
 set_tests_properties(lemma_spmc_liveness_spmc PROPERTIES
-                     PASS_REGULAR_EXPRESSION "\\(spmc\\): a consumer waited"
-                     FAIL_REGULAR_EXPRESSION "ThreadSanitizer|wrong element")
+                     FAIL_REGULAR_EXPRESSION "\\(spmc\\): a consumer waited|ThreadSanitizer|wrong element")
 # A held thread that is never let go would hang the run.
 set_tests_properties(lemma_rings_test lemma_segment_test lemma_spmc_liveness_generic
                      lemma_spmc_liveness_spmc PROPERTIES TIMEOUT 300)

@@ -26,8 +26,8 @@ blocking. The answers, by the implementation recorded on the operation
 
 | operation | generic | spsc | spsc_inline | mpsc | spmc |
 |---|---|---|---|---|---|
-| push | lock-free; allocates a new segment when one fills | wait-free; allocates a new block when one fills | wait-free; allocates a new block when one fills | lock-free; allocates a new segment when one fills | wait-free; allocates a new block when one fills |
-| pop | blocks: waits for a push that has taken its cell; frees drained segments | wait-free | wait-free; lends the element, allocates nothing | wait-free: past a cell a push has taken and not filled, O(h²) in the h cells it has passed and not taken, otherwise O(1) amortised; frees the segments it moves past, and allocates when it has passed more than 64 such cells | blocks: the consumers' spin lock |
+| push | lock-free; allocates a new segment when one fills | wait-free; allocates a new block when one fills | wait-free; allocates a new block when one fills | lock-free; allocates a new segment when one fills | wait-free; allocates a new segment when one fills |
+| pop | blocks: waits for a push that has taken its cell; frees drained segments | wait-free | wait-free; lends the element, allocates nothing | wait-free: past a cell a push has taken and not filled, O(h²) in the h cells it has passed and not taken, otherwise O(1) amortised; frees the segments it moves past, and allocates when it has passed more than 64 such cells | lock-free: its claim fails only to another consumer's; frees the segments it moves past |
 | lock, unlock | blocks | | | | |
 
 The generic and mpsc columns are as of 22 Oct 2026, when both became the

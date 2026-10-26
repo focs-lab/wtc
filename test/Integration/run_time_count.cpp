@@ -1,6 +1,6 @@
 // One producer and a number of consumers read from the command line: with
-// one consumer the queue is the inline SPSC ring, with three the ring whose
-// consumers take turns, chosen when the queue is built. Every element
+// one consumer the queue is the inline SPSC ring, with three the queue whose
+// consumers claim cells, chosen when the queue is built. Every element
 // arrives once either way. WTC_CHECK aborts if a second thread ever pops
 // from the SPSC ring.
 //

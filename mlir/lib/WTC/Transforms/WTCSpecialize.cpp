@@ -167,7 +167,7 @@ public:
             // the shim can hold inline, which its constructor says by calling
             // a marker; without either, plain spsc. Many producers and one
             // consumer is the list without locks, one producer and many
-            // consumers the ring whose consumers take turns, whatever the
+            // consumers the queue whose consumers claim cells, whatever the
             // pops do.
             const bool manySide = (verdict == Topology::mpsc || verdict == Topology::spmc) &&
                                   !forced && !forcedInline;

@@ -24,7 +24,7 @@
 //
 // The single-producer queues run only at one producer and one consumer,
 // the shim's list for many producers (shim_mpsc) only with one consumer,
-// and its ring for many consumers (shim_spmc) only with one producer, in
+// and its queue for many consumers (shim_spmc) only with one producer, in
 // split mode.
 
 #include "adapters.hpp"
