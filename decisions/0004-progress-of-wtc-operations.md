@@ -4,7 +4,8 @@ Taken 2026-10-19.
 
 Revised 2026-10-26: one chain per blocking site instead of one per
 function, and inline assembly that cannot wait is cleared (both under
-"What the check establishes").
+"What the check establishes"); the table follows the elements held by
+value in every implementation since 24 Oct.
 
 ## Context
 
@@ -24,8 +25,8 @@ blocking. The answers, by the implementation recorded on the operation
 
 | operation | generic | spsc | spsc_inline | mpsc | spmc |
 |---|---|---|---|---|---|
-| push | lock-free; allocates the element and new segments | wait-free; allocates the element and new blocks | wait-free; allocates a new block when one fills | lock-free; allocates the element and new segments | wait-free; allocates the element and new blocks |
-| pop | blocks: waits for a push that has taken its cell; frees drained segments | wait-free | wait-free | wait-free; frees the segments it moves past | blocks: the consumers' spin lock |
+| push | lock-free; allocates a new segment when one fills | wait-free; allocates a new block when one fills | wait-free; allocates a new block when one fills | lock-free; allocates a new segment when one fills | wait-free; allocates a new block when one fills |
+| pop | blocks: waits for a push that has taken its cell; frees drained segments | wait-free | wait-free; lends the element, allocates nothing | wait-free; frees the segments it moves past | blocks: the consumers' spin lock |
 | lock, unlock | blocks | | | | |
 
 The generic and mpsc columns are as of 22 Oct 2026, when both became the
@@ -33,6 +34,12 @@ segmented queue (`runtime/segment_queue.hpp`); until then the general-purpose
 queue blocked on its mutexes on both sides and the mpsc list's push was one
 exchange. A push to either retries when a pop skipped its cell or another
 push is linking the next segment, hence lock-free rather than wait-free.
+
+Every implementation holds the element itself in its cell, so a push
+allocates only when the queue grows. A pop in the shared_ptr form
+(`try_pop()`) allocates the shared_ptr it returns, on the consumer's side,
+on every implementation but spsc_inline; a pop that moves the element out
+(`try_pop(T&)`) allocates nothing.
 
 A push to any of these queues can allocate, because they are unbounded; no
 producer passes the check. That is the honest answer, not a defect of the
