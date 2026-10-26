@@ -16,8 +16,10 @@
 // Semantics preserved from the generic queue: FIFO in the order of the
 // pushes; push never blocks and never fails; no capacity; try_pop returns
 // false only when every element published so far has been popped. try_pop
-// may wait, as the generic queue's does, but only for another consumer's
-// pop: a few loads and stores, never an allocation or a call.
+// may wait for another consumer's pop, which the generic queue's never
+// does: for its turn, which includes the taker it was given, so the move of
+// the element out of its slot and, through the shim's shared_ptr pop, an
+// allocation (docs/correctness.md, section 7).
 //
 // Design: spsc_ring with its consumer side behind a spin lock. The
 // producer's side is the ring's, unchanged: a store into a slot and one
@@ -32,8 +34,8 @@
 // side, which the generic queue's consumers also take to compare the head
 // with the tail, and no node allocated per element.
 //
-// The shim instantiates it with Slot = std::shared_ptr<T>. Elements cannot
-// be held inline: a borrowed element would die at the next pop of any
+// The shim instantiates it with Slot = T, the element by value. Elements
+// are never lent: a borrowed element would die at the next pop of any
 // consumer, which no consumer can see coming.
 #pragma once
 
