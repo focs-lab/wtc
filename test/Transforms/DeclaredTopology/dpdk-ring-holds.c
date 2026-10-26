@@ -8,7 +8,7 @@
    RUN: wtc-opt %t.cir --lift-cir-to-wtc --queue-ownership-analysis -o /dev/null 2>&1 | FileCheck %s
 
    CHECK: remark: wtc: queue *@ring: spsc (producers: 1, consumers: 1)
-   CHECK: remark: wtc: queue *@ring: declared spsc (by its flags), verified in this translation unit{{$}}
+   CHECK: remark: wtc: queue *@ring: declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ), verified in this translation unit{{$}}
    CHECK-NOT: error
 */
 

@@ -28,7 +28,7 @@
    RUN: wtc-opt %t.memalign.cir --lift-cir-to-wtc --queue-ownership-analysis -o /dev/null 2>&1 | FileCheck %s --check-prefix=VIEW
 
    CHECK: queue {{.*}}: spsc (producers: 1, consumers: 1)
-   CHECK: declared spsc (by its flags), verified in this translation unit
+   CHECK: declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ), verified in this translation unit
    CHECK-NOT: unresolvable
    VIEW-NOT: verified
 */

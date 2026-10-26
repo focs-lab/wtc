@@ -5,7 +5,7 @@
    RUN: %clang -std=gnu11 -I%S/Inputs -fclangir -emit-cir %s -o %t.cir
    RUN: not wtc-opt %t.cir --lift-cir-to-wtc --queue-ownership-analysis -o /dev/null 2>&1 | FileCheck %s
 
-   CHECK: error: wtc: queue {{.*}} is declared spmc (by its flags) but 2 threads push to it
+   CHECK: error: wtc: queue {{.*}} is declared spmc (by its flags RING_F_SP_ENQ) but 2 threads push to it
    CHECK-DAG: note: push on a thread that starts in rx_a at {{.*}}dpdk-ring-two-producers.c:35
    CHECK-DAG: note: push on a thread that starts in rx_b at {{.*}}dpdk-ring-two-producers.c:36
 */

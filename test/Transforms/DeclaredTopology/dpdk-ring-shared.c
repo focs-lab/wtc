@@ -23,18 +23,18 @@
    RUN: %clang -std=gnu11 -I%S/Inputs -fclangir -emit-cir %s -DCONF_VOID -o %t.confvoid.cir
    RUN: wtc-opt %t.confvoid.cir --lift-cir-to-wtc --queue-ownership-analysis -o /dev/null 2>&1 | FileCheck %s --check-prefix=CONF_VOID
 
-   LOOKUP: remark: wtc: queue *@ring: declared spsc (by its flags), verified in this translation unit; rte_ring_lookup hands rings to code that finds them by name
+   LOOKUP: remark: wtc: queue *@ring: declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ), verified in this translation unit; rte_ring_lookup hands rings to code that finds them by name
    LOOKUP-NOT: is declared mpmc
-   HANDED: remark: wtc: queue *@ring: declared spsc (by its flags), verified in this translation unit; it is handed to rte_eth_from_rings, whose body is not here
+   HANDED: remark: wtc: queue *@ring: declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ), verified in this translation unit; it is handed to rte_eth_from_rings, whose body is not here
    HANDED-NOT: is declared mpmc
-   PARAMS: remark: wtc: queue *@ring: declared spsc (by its flags), verified in this translation unit; it is handed to rte_port_ring_writer_create, whose body is not here
+   PARAMS: remark: wtc: queue *@ring: declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ), verified in this translation unit; it is handed to rte_port_ring_writer_create, whose body is not here
    PARAMS-NOT: is declared mpmc
-   TYPED: remark: wtc: queue *@ring: declared spsc (by its flags), verified in this translation unit; it is handed to port_writer_from_params, whose body is not here
+   TYPED: remark: wtc: queue *@ring: declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ), verified in this translation unit; it is handed to port_writer_from_params, whose body is not here
    TYPED-NOT: is declared mpmc
-   VOIDCAST: remark: wtc: queue *@ring: declared spsc (by its flags), verified in this translation unit; it is handed to set_context, whose body is not here
-   CONF_TYPED: remark: wtc: queue *@ring: declared spsc (by its flags), verified in this translation unit; it is handed to apply_conf, whose body is not here
+   VOIDCAST: remark: wtc: queue *@ring: declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ), verified in this translation unit; it is handed to set_context, whose body is not here
+   CONF_TYPED: remark: wtc: queue *@ring: declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ), verified in this translation unit; it is handed to apply_conf, whose body is not here
    CONF_TYPED-NOT: is declared mpmc
-   CONF_VOID: remark: wtc: queue *@ring: declared spsc (by its flags), verified in this translation unit; it is kept in a structure, and set_context, whose body is not here, takes a void * that may hold one
+   CONF_VOID: remark: wtc: queue *@ring: declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ), verified in this translation unit; it is kept in a structure, and set_context, whose body is not here, takes a void * that may hold one
    CONF_VOID-NOT: is declared mpmc
 */
 

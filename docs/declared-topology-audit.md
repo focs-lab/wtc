@@ -131,9 +131,11 @@ The analysis reads these declarations since 26 October 2026 (`Utils.h`,
 every `rte_ring_*enqueue*` is a push and every `*dequeue*` a pop, except
 inside the ring library's own functions. A side is declared single by an
 `rte_ring_sp_*` or `rte_ring_sc_*` call on it, and by the ring's flags
-(`RING_F_SP_ENQ`, `RING_F_SC_DEQ`) only when some call on that side follows
-the flags: a side reached only by `rte_ring_mp_*` or `rte_ring_mc_*` calls
-is many whatever the flags say. Flags computed at run time, given
+(`RING_F_SP_ENQ`, `RING_F_SC_DEQ`) when some call on that side follows the
+flags or no call on that side is seen at all: a side reached only by
+`rte_ring_mp_*` or `rte_ring_mc_*` calls is many whatever the flags say.
+The report gives the flags as written and what qualifies them on a side
+("no producer access seen"). Flags computed at run time, given
 differently by two creations, or not seen because the ring is created
 elsewhere leave a side unknown, and a side unknown with more than one thread
 on it is reported as not checkable. The four single-producer single-consumer

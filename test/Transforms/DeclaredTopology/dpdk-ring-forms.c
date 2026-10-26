@@ -8,11 +8,11 @@
    RUN: %clang -std=gnu11 -I%S/Inputs -fclangir -emit-cir %s -o %t.cir
    RUN: not wtc-opt %t.cir --lift-cir-to-wtc --queue-ownership-analysis -o /dev/null 2>&1 | FileCheck %s
 
-   CHECK-DAG: remark: wtc: queue *@elem: declared spsc (by its flags), verified in this translation unit
-   CHECK-DAG: error: wtc: queue @init_ring is declared mpsc (by its flags) but 2 threads pop from it
-   CHECK-DAG: remark: wtc: queue *@local_flags: declared spsc (by its flags), verified in this translation unit
+   CHECK-DAG: remark: wtc: queue *@elem: declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ), verified in this translation unit
+   CHECK-DAG: error: wtc: queue @init_ring is declared mpsc (by its flags RING_F_SC_DEQ) but 2 threads pop from it
+   CHECK-DAG: remark: wtc: queue *@local_flags: declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ), verified in this translation unit
    CHECK-DAG: error: wtc: queue *@sc_calls is declared mpsc (by rte_ring_sc_dequeue at dpdk-ring-forms.c:{{[0-9]+}}:{{[0-9]+}}) but 2 threads pop from it
-   CHECK-DAG: remark: wtc: queue *@mp_calls: declared mpsc (by its flags), verified in this translation unit
+   CHECK-DAG: remark: wtc: queue *@mp_calls: declared mpsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ; its producers call the explicit multi-thread form, which the flag does not bind), verified in this translation unit
    CHECK-NOT: queue *@mp_calls is declared spsc
 */
 
