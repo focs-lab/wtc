@@ -448,6 +448,8 @@ std::string QueueOwnershipAnalysisPass::whyThreadMany(const Instance &inst, bool
         const Mult m = walk->siteMult(site.getOperation(), q->parent->func, known);
         if (!known) return "";
         if (m == Mult::Many) {
+            if (cir::FuncOp c = lookupCallee(site); c && c.getSymName() == "rte_eal_mp_remote_launch")
+                return "started on every worker lcore at " + whereOf(site.getLoc(), /*fileOnly=*/true);
             const bool spawn = getSemanticKind(lookupCallee(site)) == SemanticOpKind::ThreadSpawn;
             return std::string(spawn ? "started" : "reached by a call") + " in a loop at " +
                    whereOf(site.getLoc(), /*fileOnly=*/true);

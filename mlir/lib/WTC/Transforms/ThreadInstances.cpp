@@ -489,6 +489,11 @@ bool ThreadInstanceWalk::isUnstructured(cir::FuncOp f) {
 
 Mult ThreadInstanceWalk::siteMult(Operation *op, cir::FuncOp f, bool &known) {
     known = true;
+    // DPDK's rte_eal_mp_remote_launch starts its function on every worker
+    // lcore: one site, many threads.
+    if (auto call = dyn_cast<cir::CallOp>(op))
+        if (cir::FuncOp callee = lookupCallee(call); callee && callee.getSymName() == "rte_eal_mp_remote_launch")
+            return Mult::Many;
     // A loop is a loop whatever else the function does: an operation inside
     // one repeats, goto or no goto.
     for (Operation *p = op->getParentOp(); p && p != f.getOperation(); p = p->getParentOp())
@@ -1987,6 +1992,16 @@ void ThreadInstanceWalk::expand(Instance &inst) {
                                              inst.speculative, false})) {
                 child->execUnknown = !certainlyMany && (!known || inst.execUnknown);
                 child->countLoop = countingLoop(call.getOperation(), inst, &child->countLoopInst);
+            }
+            // rte_eal_mp_remote_launch(f, arg, CALL_MAIN) also runs f on the
+            // calling lcore once the workers are started; SKIP_MAIN (0) does
+            // not, and a flag that is not a constant is read as CALL_MAIN.
+            if (callee.getSymName() == "rte_eal_mp_remote_launch") {
+                const unsigned c = firstRealOperand(call) + 2;
+                auto k = c < call.getNumOperands() ? call.getOperand(c).getDefiningOp<cir::ConstantOp>()
+                                                   : cir::ConstantOp();
+                auto v = k ? dyn_cast<cir::IntAttr>(k.getValue()) : cir::IntAttr();
+                if (!v || v.getSInt() != 0) addCallee(call, entry);
             }
             return;
         }

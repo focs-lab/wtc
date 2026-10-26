@@ -59,6 +59,9 @@ static SemanticOpKind kindByName(StringRef name) {
     // DPDK's EAL starts a worker on another lcore: rte_eal_remote_launch(f, arg,
     // worker_id), entry first and its argument next, as the shim's spawn.
     if (name == "rte_eal_remote_launch") return SemanticOpKind::ThreadSpawn;
+    // rte_eal_mp_remote_launch(f, arg, call_main): f on every worker lcore,
+    // which ThreadInstanceWalk::siteMult counts as many.
+    if (name == "rte_eal_mp_remote_launch") return SemanticOpKind::ThreadSpawn;
     if (name.contains("6thread15_M_start_thread")) return SemanticOpKind::ThreadSpawn;
     return SemanticOpKind::Unknown;
 }
