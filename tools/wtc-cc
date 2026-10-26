@@ -25,6 +25,11 @@
 #   -c                 stop at an object file, for a program whose other files
 #                      are built without wtc-cc and linked with it
 #   --wtc-opt-arg ARG  pass ARG to wtc-opt (repeatable), e.g. --mlir-timing
+#   --census           call wtc_rc_note at the entry of shared_ptr's reference
+#                      counts (--wtc-census), for the thread census in
+#                      tools/census; the symbol is weak and left for the
+#                      loader, so the program runs with that library
+#                      preloaded (or defines wtc_rc_note itself)
 #
 # Object files, archives and -l/-L/-Wl, arguments go to the final link only.
 # With WTC_CC_TIMES=FILE in the environment, each step's wall time is
@@ -48,7 +53,7 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)
 
-KEEP=""; SPECIALIZE=1; TSAN=0; COMPILE_ONLY=0; FORCE=""; FORCE_INLINE=""; TOOLCHAIN=""; OUT="a.out"; SRC=""
+KEEP=""; SPECIALIZE=1; TSAN=0; CENSUS=0; COMPILE_ONLY=0; FORCE=""; FORCE_INLINE=""; TOOLCHAIN=""; OUT="a.out"; SRC=""
 PASSTHRU=(); LINKARGS=(); OPTARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -58,6 +63,7 @@ while [ $# -gt 0 ]; do
     --force-inline) FORCE_INLINE=$2; shift 2 ;;
     --toolchain) TOOLCHAIN=$2; shift 2 ;;
     --tsan) TSAN=1; shift ;;
+    --census) CENSUS=1; shift ;;
     -c) COMPILE_ONLY=1; shift ;;
     --wtc-opt-arg) OPTARGS+=("$2"); shift 2 ;;
     -o) OUT=$2; shift 2 ;;
@@ -109,7 +115,9 @@ if (( SPECIALIZE )); then
 else
   PASSES+=(--wtc-specialize=rewrite=false)
 fi
-PASSES+=(--wtc-check-progress --lower-wtc-to-cir --reconcile-unrealized-casts)
+PASSES+=(--wtc-check-progress --lower-wtc-to-cir)
+if (( CENSUS )); then PASSES+=(--wtc-census); fi
+PASSES+=(--reconcile-unrealized-casts)
 # Diagnostics name their place; printing the whole operation after each one
 # repeats a queue's type, hundreds of characters, on every line.
 step wtc-opt "$WTCOPT" --mlir-print-op-on-diagnostic=false "${OPTARGS[@]}" "$WORK/$base.cir" "${PASSES[@]}" -o "$WORK/$base.wtc.cir"

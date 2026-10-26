@@ -1,5 +1,4 @@
 add_mlir_library(MLIRWTCTransforms
-  Blocking.cpp
   LiftCIRToWTC.cpp
   LowerWTCToCIR.cpp
   QueueOwnershipAnalysis.cpp
@@ -7,6 +6,7 @@ add_mlir_library(MLIRWTCTransforms
   WTCAlignByOwner.cpp
   WTCBatchPushes.cpp
   WTCBorrowAnalysis.cpp
+  WTCCensus.cpp
   WTCCheckProgress.cpp
   WTCFalseSharingDiagnose.cpp
   WTCSpecialize.cpp

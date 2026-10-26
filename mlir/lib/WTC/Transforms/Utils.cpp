@@ -254,16 +254,11 @@ llvm::SmallVector<cir::FuncOp, 4> indirectCallees(cir::CallOp call) {
         return out;
     }
     // A parameter of the enclosing function: the actuals at every call of
-    // it, each a function's address, or nothing is known. Only a function
-    // no other translation unit can call has all its calls here: one with
-    // internal linkage (static, or in an anonymous namespace). An external
-    // function, an inline one or a template instance (linkonce_odr) may be
-    // called from elsewhere with any other pointer.
+    // it, each a function's address, or nothing is known.
     auto arg = mlir::dyn_cast<BlockArgument>(fnv);
     if (!arg) return out;
     auto owner = mlir::dyn_cast_or_null<cir::FuncOp>(arg.getOwner()->getParentOp());
     if (!owner || owner.getBody().empty() || arg.getOwner() != &owner.getBody().front()) return out;
-    if (!cir::isLocalLinkage(owner.getLinkage())) return out;
     const unsigned idx = arg.getArgNumber();
     auto module = owner->getParentOfType<ModuleOp>();
     auto uses = mlir::SymbolTable::getSymbolUses(owner, module);

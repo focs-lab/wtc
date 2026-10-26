@@ -27,6 +27,7 @@ int main(int argc, char **argv) {
   mlir::wtc::registerWTCBatchLocksPass();
   mlir::wtc::registerWTCFalseSharingDiagnosePass();
   mlir::wtc::registerWTCAlignByOwnerPass();
+  mlir::wtc::registerWTCCensusPass();
 
   return mlir::asMainReturnCode(
       mlir::MlirOptMain(argc, argv, "wtc-opt: the Well-tempered Compiler optimizer driver\n", registry));
