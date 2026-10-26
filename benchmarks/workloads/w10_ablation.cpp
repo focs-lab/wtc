@@ -18,6 +18,10 @@
 //          what spsc_inline lends in place
 //
 // giving mpmc_xsp, mpmc_share, mpmc_cell, spsc_xsp, spsc_share, spsc_cell.
+// The same two forms over moodycamel's ConcurrentQueue, the strongest
+// general-purpose queue in W9, give mc_xsp and mc_cell: a library queue
+// holding the element by value, so that the cell rows are compared with a
+// strong queue and not only with the runtime's own.
 // Two rows that differ in one factor isolate it: mpmc_xsp against
 // spsc_xsp is the strength of synchronisation with the allocator held
 // constant, mpmc_xsp against mpmc_cell the allocator with the
@@ -37,6 +41,7 @@
 #include "harness.hpp"
 #include "segment_queue.hpp"   // runtime, via -I runtime
 #include "spsc_ring.hpp"
+#include "concurrentqueue.h"
 
 #include <memory>
 #include <thread>
@@ -68,14 +73,25 @@ template <class T, class Q> struct cell {
     bool try_pop(T& out) { return q.try_pop(out); }
 };
 
+// moodycamel's queue spelled as the runtime's: push, and try_pop into.
+template <class T> struct mc_queue {
+    moodycamel::ConcurrentQueue<T> q;
+    void push(const T& v) { q.enqueue(v); }
+    void push(T&& v) { q.enqueue(std::move(v)); }
+    bool try_pop(T& out) { return q.try_dequeue(out); }
+};
+
 template <class T> using mpmc_xsp   = xsp<T, wtc::rt::segment_queue<std::shared_ptr<T>>>;
 template <class T> using mpmc_share = share<T, wtc::rt::segment_queue<T>>;
 template <class T> using mpmc_cell  = cell<T, wtc::rt::segment_queue<T>>;
 template <class T> using spsc_xsp   = xsp<T, wtc::rt::spsc_ring<std::shared_ptr<T>>>;
 template <class T> using spsc_share = share<T, wtc::rt::spsc_ring<T>>;
 template <class T> using spsc_cell  = cell<T, wtc::rt::spsc_ring<T>>;
+template <class T> using mc_xsp     = xsp<T, mc_queue<std::shared_ptr<T>>>;
+template <class T> using mc_cell    = cell<T, mc_queue<T>>;
 
-const char* const kVariants[] = {"mpmc_xsp", "mpmc_share", "mpmc_cell", "spsc_xsp", "spsc_share", "spsc_cell"};
+const char* const kVariants[] = {"mpmc_xsp", "mpmc_share", "mpmc_cell", "spsc_xsp", "spsc_share", "spsc_cell",
+                                 "mc_xsp", "mc_cell"};
 
 struct config {
     std::string variant, elem, wait, json;
@@ -158,6 +174,8 @@ bool with_variant(const std::string& name, F&& f) {
     if (name == "spsc_xsp")   { f.template run<spsc_xsp<E>>(); return true; }
     if (name == "spsc_share") { f.template run<spsc_share<E>>(); return true; }
     if (name == "spsc_cell")  { f.template run<spsc_cell<E>>(); return true; }
+    if (name == "mc_xsp")     { f.template run<mc_xsp<E>>(); return true; }
+    if (name == "mc_cell")    { f.template run<mc_cell<E>>(); return true; }
     return false;
 }
 
