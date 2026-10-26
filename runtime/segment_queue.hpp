@@ -41,8 +41,9 @@
 // past the segment's push counter) marks it skipped, and the push that later
 // takes that index finds it skipped and takes the next one: this keeps a pop
 // from waiting on an empty queue. A pop that reaches a cell a push has
-// reserved waits for it, so that a batch reserved in one step is never torn
-// by a skip in its middle. With one consumer nothing is ever skipped: at a
+// reserved waits for it, so that a skip never lands inside a batch that has
+// already taken its cells; a pop that skipped a cell before a batch took it
+// splits the batch, as described below. With one consumer nothing is ever skipped: at a
 // cell no push has taken the consumer answers empty and comes back to the
 // same cell; at one a push has taken and not filled it looks past it.
 //

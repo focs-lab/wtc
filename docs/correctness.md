@@ -147,9 +147,36 @@ cells are consumed in index order per segment and segments in list order.
 A pop that finds its cell unreserved waits briefly and then marks it
 skipped, and the push that later takes that index moves on, so an element
 never lands in a cell that has been passed; a pop that finds its cell
-reserved waits for its mark, so a batch is never torn (C3 for batches).
-C2 is the linearisability of the fetch-and-add array queue this form
-follows.
+reserved waits for its mark, so a batch keeps its order (C3 for
+batches), though not always its contiguity: a pop may skip a cell inside
+the range a batch is about to take, before the batch takes it, and the
+batch then keeps the cells before the skipped one, gives up the rest and
+pushes them again, after cells other pushes may have taken. C3 allows
+such a split and does not require one. C2 is the linearisability of the
+fetch-and-add array queue this form follows, with these points: a push at
+the fetch-and-add on `enq` that took the cell its element ends in, not at
+its mark (a push that took an earlier cell and fills it after a later
+push filled its own still comes first, and the pop that waits for it
+returns it), or, for elements a push places in a segment it links itself,
+at the compare-exchange that links it; a pop that returns an element at
+the later of its fetch-and-add on `deq` and the fetch-and-add on `enq`
+that took its cell (a pop can take a cell before any push has, wait, and
+return the element of a push that takes the cell meanwhile, while a
+concurrent pop answers empty); and an empty answer at its load of `enq`
+that found every taken cell already claimed by a pop.
+
+*Tests.* The sketches of this section are exercised on the interleavings
+they rely on, with a thread held at a named point (the queues' `Hooks`, a
+move of the element, a pop's taker): `runtime/test/lemma_rings_test.cpp`
+for Lemmas 1 to 3 (a push not yet published, a consumer held inside its
+pop while the producer laps the ring, a borrowed element across laps,
+consumers waiting for each other's turn) and `lemma_segment_test.cpp` for
+the multi-consumer form (a held push is waited for, pushes ordered by the
+cell they take, a pop that returns a push which took its cell after it
+did, a segment kept for a held reader, a batch split by a skip), each with
+a stress run in which every empty answer is checked against the pushes
+that had finished before the pop began, the single-consumer form's
+included.
 
 *Single-consumer form.* The pop takes no fetch-and-add: it takes full
 cells in index order, and at a cell that is not full it walks on among the
@@ -295,8 +322,15 @@ A reviewer should see each soundness obligation and the lemma it serves.
   when it grows, the general-purpose pop waits for a reserved cell, the
   spmc pop waits for another consumer's. `decisions/0004` answers, per
   operation, what each implementation can wait for, and the lock-free check
-  reports it; what is claimed is that a substitution never introduces a
-  wait the general-purpose queue would not also have had.
+  reports it. A substitution can introduce a wait the general-purpose queue
+  does not have: the spmc consumers take turns, and a turn includes the move
+  of the element out of its slot (and, for the pop that returns a
+  `shared_ptr`, its allocation), so one consumer waits for another's move.
+  If that move waits for something the other consumer holds while it pops,
+  the substituted program deadlocks where the program as written does not
+  (`runtime/test/lemma_spmc_liveness.cpp`). Theorem 1 is a safety statement
+  and is not affected: every prefix of the deadlocked execution is one the
+  program as written has. The ring's slip is a further, bounded wait.
 - **The element's destructor** runs at a different time under
   `spsc_inline`; the shim restricts that tag to trivially destructible
   elements, so the difference is unobservable.
