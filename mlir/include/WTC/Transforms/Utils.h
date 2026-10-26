@@ -200,10 +200,8 @@ bool addressEscapes(cir::AllocaOp slot);
 
 // The functions an indirect call may reach: the one a function's address
 // names, or every function handed in for the parameter the call goes
-// through, at every direct call of the enclosing function when that
-// function has internal linkage. Empty when any of that is unknown, when
-// the enclosing function can be called from another translation unit, or
-// when its own address is taken.
+// through, at every direct call of the enclosing function. Empty when any
+// of that is unknown, or the enclosing function's own address is taken.
 llvm::SmallVector<cir::FuncOp, 4> indirectCallees(cir::CallOp call);
 
 // Every call to a shim queue constructor, keyed by the object it constructs:

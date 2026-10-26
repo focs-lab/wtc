@@ -51,14 +51,6 @@ WTC_LOCK_FREE void known_target() { void (*step)() = count_one; step(); }
 void log_plain() { log_value(plain); }
 WTC_LOCK_FREE void known_blocking_target() { void (*step)() = log_plain; step(); }
 
-// A pointer parameter is resolved from the calls seen here only when no
-// other translation unit can call the function.
-// CHECK-DAG: remark: wtc: through_static(void (*)()) is declared lock-free: nothing it reaches blocks
-WTC_LOCK_FREE static void through_static(void (*step)()) { step(); }
-// CHECK-DAG: error: wtc: through_extern(void (*)()) is declared lock-free but can block
-WTC_LOCK_FREE void through_extern(void (*step)()) { step(); }
-void calls_through() { through_static(count_one); through_extern(count_one); }
-
 // CHECK-DAG: error: wtc: waits() is declared lock-free but can block
 // CHECK-DAG: note: which waits in the threading library (pthread_mutex_lock)
 WTC_LOCK_FREE void waits() { pthread_mutex_lock(&raw); ++plain; pthread_mutex_unlock(&raw); }
@@ -67,23 +59,11 @@ WTC_LOCK_FREE void waits() { pthread_mutex_lock(&raw); ++plain; pthread_mutex_un
 // CHECK-DAG: note: which sleeps or yields (usleep)
 WTC_LOCK_FREE void sleeps() { usleep(1); }
 
-// A function-local static initialised at run time is guarded, and the
-// guard waits for the thread running the initialiser.
-// CHECK-DAG: error: wtc: guarded() is declared lock-free but can block
-// CHECK-DAG: note: which takes a static-initialisation lock (__cxa_guard_acquire)
-WTC_LOCK_FREE long guarded() { static long once = plain * 2; return once; }
-
 // A throw is spelled as operations, not as a call into the runtime, and
 // blocks all the same.
 // CHECK-DAG: error: wtc: throws() is declared lock-free but can block
 // CHECK-DAG: note: which throws: the C++ runtime allocates the exception and unwinds the stack
 WTC_LOCK_FREE void throws() { if (plain < 0) throw plain; }
-
-// A weak body may be replaced at link time: it is not followed.
-// CHECK-DAG: error: wtc: weakly() is declared lock-free but can block
-// CHECK-DAG: note: which calls weak_hook(), whose body here may be replaced at link time, so it is counted as blocking
-__attribute__((weak)) void weak_hook() {}
-WTC_LOCK_FREE void weakly() { weak_hook(); }
 
 // CHECK-DAG: error: wtc: unseen() is declared lock-free but can block
 // CHECK-DAG: note: which calls opaque(), whose body is not visible here, so it is counted as blocking

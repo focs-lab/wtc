@@ -12,6 +12,7 @@ namespace mlir::wtc {
     void registerWTCBatchLocksPass();
     void registerWTCFalseSharingDiagnosePass();
     void registerWTCAlignByOwnerPass();
+    void registerWTCCensusPass();
 }
 
 #endif
