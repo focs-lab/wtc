@@ -124,6 +124,25 @@ struct RootInfo {
 // the constructor call that builds that member (see AbstractQueue).
 using Key = std::pair<Operation *, uint64_t>;
 constexpr uint64_t kAbstractOffset = ~uint64_t(0);
+// With this offset, every element of an array of queues: a global, a slot
+// or a heap block whose elements some access or constructor reaches with an
+// index the walk cannot read (`&qs[qid]`, qid computed by the thread). The
+// elements are one queue to the analysis, as the objects of one allocation
+// site are: each element's threads are among the threads of all, so a
+// verdict over the union holds for each, and the one constructor call that
+// builds the elements, run once per element, carries it to all of them.
+// What is lost is precision: two elements with one producer each count two.
+constexpr uint64_t kElementsOffset = ~uint64_t(0) - 1;
+
+// Whether `t` is an array, of arrays at any depth, of `elem`.
+static bool arrayOf(Type t, Type elem) {
+    bool array = false;
+    while (auto a = dyn_cast_or_null<cir::ArrayType>(t)) {
+        t = a.getElementType();
+        array = true;
+    }
+    return array && elem && t == elem;
+}
 
 // A queue the walk cannot place but can name by type: a member at a known
 // offset of a record, reached through a pointer the walk cannot follow --
@@ -177,6 +196,8 @@ private:
     // member of the record, and the abstract keys in use.
     llvm::DenseMap<std::pair<Type, uint64_t>, llvm::SmallVector<Operation *, 2>> memberCtors;
     llvm::DenseMap<Key, AbstractQueue> abstractKeys;
+    // The arrays of queues counted as one (kElementsOffset), by their keys.
+    llvm::DenseSet<Key> elementKeys;
     std::optional<DataLayout> layout;
     // The instance whose run built each placed queue: the instance of the
     // function holding its constructor call. kAmbiguous when two runs
@@ -280,8 +301,23 @@ private:
     // The queue type at a key: what its constructor builds, or the root's
     // own type for the whole of a global or a slot.
     Type queueTypeOf(const Key &k) const {
+        // An array's elements: the type its constructors build -- none when
+        // they build queues of different types -- or the array's own.
+        if (k.second == kElementsOffset) {
+            if (auto it = keyType.find(k); it != keyType.end()) return it->second;
+            Type t = queueObjectType(k.first);
+            bool array = false;
+            while (auto a = dyn_cast_or_null<cir::ArrayType>(t)) { t = a.getElementType(); array = true; }
+            return array ? t : Type();
+        }
         if (Type t = keyType.lookup(k)) return t;
         return k.second == 0 ? queueObjectType(k.first) : Type();
+    }
+    // Whether the elements of the array at the root of `ek` are queues of
+    // type `queueTy`: a constructor call builds them, or the root is a
+    // global or a slot of an array of them.
+    bool elementsHold(const Key &ek, Type queueTy) const {
+        return (queueTy && keyType.lookup(ek) == queueTy) || arrayOf(queueObjectType(ek.first), queueTy);
     }
     // The one constructor call that builds this queue and nothing else, or
     // null with the reason.
@@ -359,7 +395,7 @@ private:
     // stands for every object one allocation site makes, and threads on two
     // of them are no proof against either.
     bool checkDeclared(Operation *root, const RootInfo &info, Topology verdict, const std::string &label,
-                       llvm::ArrayRef<cir::CallOp> ctors, bool capExceeded, bool summary, bool library,
+                       llvm::ArrayRef<cir::CallOp> ctors, bool capExceeded, const char *summary, bool library,
                        Type objTy);
     // What a library queue declares on each side: many threads, one, or
     // not known before the run, with what says so.
@@ -384,6 +420,12 @@ private:
     static Access accessOf(Operation *op, const Instance &inst);
     // Why one side of a queue counts many, in the program's own terms.
     std::string whyMany(const SideInfo &side);
+    // The arrays whose elements a constructor call builds one per run of a
+    // loop that walks a pointer through them -- the front end's code for
+    // `T qs[n];`, `new T[n]` and an array member: a slot holding the first
+    // element's address, then that address stepped by a constant, and the
+    // call handed what the slot holds. The roots of those arrays, or none.
+    llvm::SmallVector<Operation *, 2> arrayCtorRoots(Value object, Instance *inst);
     std::string whyThreadMany(const Instance &inst, bool &spawned);
 };
 
@@ -456,6 +498,43 @@ std::string QueueOwnershipAnalysisPass::whyThreadMany(const Instance &inst, bool
         }
     }
     return "";
+}
+
+llvm::SmallVector<Operation *, 2> QueueOwnershipAnalysisPass::arrayCtorRoots(Value object, Instance *inst) {
+    llvm::SmallVector<Operation *, 2> out;
+    auto load = object.getDefiningOp<cir::LoadOp>();
+    auto slot = load ? load.getAddr().getDefiningOp<cir::AllocaOp>() : cir::AllocaOp();
+    if (!slot) return out;
+    // The call runs in a loop, and the loop steps the slot: without both,
+    // the slot is a parameter or a pointer set once, and the call builds
+    // one object, as any other.
+    auto loop = load->getParentOfType<cir::LoopOpInterface>();
+    if (!loop) return out;
+    Value first;
+    bool stepped = false;
+    for (Operation *u : slot.getResult().getUsers()) {
+        if (isa<cir::LoadOp>(u)) continue;
+        auto st = dyn_cast<cir::StoreOp>(u);
+        if (!st || st.getAddr() != slot.getResult()) return {};   // the address escapes
+        const bool inLoop = loop.getOperation()->isProperAncestor(st);
+        // A step: the slot's own value moved by a constant. One in the loop
+        // is needed; others walk the same array (the cleanup's loop back).
+        if (auto ps = st.getValue().getDefiningOp<cir::PtrStrideOp>()) {
+            auto from = ps.getBase().getDefiningOp<cir::LoadOp>();
+            auto by = traceToLocalRoot(ps.getStride()).getDefiningOp<cir::ConstantOp>();
+            if (from && from.getAddr() == slot.getResult() && by) { stepped |= inLoop; continue; }
+        }
+        // The start, before the loop.
+        if (first || inLoop) return {};
+        first = st.getValue();
+    }
+    if (!first || !stepped) return out;
+    // The start is the first element of an array the walk can place: a
+    // global or a slot of an array of the type, or a heap block.
+    for (const Place &pl : walk->resolvePlaces(first, inst))
+        if (pl.root && !llvm::is_contained(out, pl.root)) out.push_back(pl.root);
+        else if (!pl.root) return {};
+    return out;
 }
 
 // Two threads that each touch the side, or one that stands for many and
@@ -661,6 +740,8 @@ std::string QueueOwnershipAnalysisPass::labelOf(const Key &k, bool whole) const 
         base = "the heap object made at " + whereOf(at, /*fileOnly=*/true);
     }
     if (whole) return base;
+    // Every element of an array, written as the array indexed by any index.
+    if (k.second == kElementsOffset) return base + "[*]";
     // The member's name, from the address its constructor is handed.
     std::string member;
     if (auto it = keyCtors.find(k); it != keyCtors.end())
@@ -892,7 +973,7 @@ void QueueOwnershipAnalysisPass::poisonAddressTakenLibraryOps() {
 bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &info, Topology verdict,
                                                const std::string &label,
                                                llvm::ArrayRef<cir::CallOp> ctors, bool capExceeded,
-                                               bool summary, bool library, Type objTy) {
+                                               const char *summary, bool library, Type objTy) {
     std::string how, open;
     std::optional<int64_t> tag;
     // Where a library queue's diagnostics go: its constructor, or with none
@@ -1013,7 +1094,7 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
     if (capExceeded) w << "the program has too many function instances";
     else if (globalPoison) w << "an access to some queue could not be attributed";
     else if (auto it = poisonWhy.find(objTy); it != poisonWhy.end()) w << it->second;
-    else if (summary) w << "it is one of the objects one allocation site makes, and the threads may each have their own";
+    else if (summary) w << summary;
     else if (llvm::any_of(info.producers.accesses, [](const Access &a) { return a.oneOf; }) ||
              llvm::any_of(info.consumers.accesses, [](const Access &a) { return a.oneOf; }))
         w << "an operation may act on it or on another queue";
@@ -1034,7 +1115,10 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
         Topology t;
         const unsigned p = info.producers.count(), c = info.consumers.count();
         const Type objTy = queueTypeOf(key);
-        if (globalPoison || capExceeded || (objTy && poisonedTypes.count(objTy)))
+        // An array whose constructors build queues of different types has
+        // no type to check the poisoned ones against.
+        if (globalPoison || capExceeded || (objTy && poisonedTypes.count(objTy)) ||
+            (key.second == kElementsOffset && !objTy))
             t = Topology::unknown;
         else if (p <= 1 && c <= 1)
             t = Topology::spsc;   // one side empty is still safe for an SPSC ring
@@ -1103,7 +1187,13 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
         // A library queue declares through its calls too, so it is checked
         // even when its constructor is out of sight.
         if (!ctors.empty() || library) {
-            const bool summary = isa<cir::CallOp>(root) && !walk->siteRunsOnce(root);
+            const char *summary =
+                key.second == kElementsOffset
+                    ? "it stands for every element of an array, counted together, and each element may have "
+                      "threads of its own"
+                : isa<cir::CallOp>(root) && !walk->siteRunsOnce(root)
+                    ? "it is one of the objects one allocation site makes, and the threads may each have their own"
+                    : nullptr;
             contractsHold &= checkDeclared(root, info, t, label, ctors, capExceeded, summary, library,
                                            library ? objTy : Type());
         }
@@ -1145,7 +1235,7 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
     module = getOperation();
     roots.clear(); poisonedTypes.clear(); poisonWhy.clear(); opRoots.clear();
     ctorKeys.clear(); keyCtors.clear(); ctorUnplaced.clear(); keyType.clear();
-    memberCtors.clear(); abstractKeys.clear(); layout.reset();
+    memberCtors.clear(); abstractKeys.clear(); elementKeys.clear(); layout.reset();
     keyCtorInst.clear(); captureStores.clear(); libraryKeys.clear(); openWhyCache.clear();
     libraryFunctions.clear();
     globalPoison = false; remarks = 0;
@@ -1213,7 +1303,35 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
         // declaration unread wherever its pushes and pops land: every
         // queue of its type is unknown, rather than undeclared.
         const bool library = static_cast<bool>(libraryCall(call));
+        // An array of queues the front end builds element by element.
+        if (built) {
+            llvm::SmallVector<Operation *, 2> arrays = arrayCtorRoots(call.getOperand(0), inst);
+            for (Operation *root : arrays) {
+                const Key k{root, kElementsOffset};
+                elementKeys.insert(k);
+                ctorKeys[op].insert(k);
+                keyCtors[k].insert(op);
+                auto [it, fresh] = keyType.try_emplace(k, built.getPointee());
+                if (!fresh && it->second != built.getPointee()) it->second = Type();
+                auto [ci, first] = keyCtorInst.try_emplace(k, inst);
+                if (!first && ci->second != inst) ci->second = kAmbiguous;
+            }
+            if (!arrays.empty()) continue;
+        }
         for (const Place &pl : walk.resolvePlaces(call.getOperand(0), inst)) {
+            // An element of an array, built with an index the walk cannot
+            // read -- `new (&qs[i]) queue` in a loop: every element.
+            if (built && pl.root && (pl.unknownIndex || pl.loop)) {
+                const Key k{pl.root, kElementsOffset};
+                elementKeys.insert(k);
+                ctorKeys[op].insert(k);
+                keyCtors[k].insert(op);
+                auto [it, fresh] = keyType.try_emplace(k, built.getPointee());
+                if (!fresh && it->second != built.getPointee()) it->second = Type();
+                auto [ci, first] = keyCtorInst.try_emplace(k, inst);
+                if (!first && ci->second != inst) ci->second = kAmbiguous;
+                continue;
+            }
             if (!built || !pl.root || pl.unknownIndex || pl.loop) {
                 ctorUnplaced.insert(op);
                 if (library && built && poisonedTypes.insert(built.getPointee()).second) {
@@ -1248,7 +1366,23 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
     };
     llvm::SmallVector<Resolved, 32> resolved;
     llvm::SmallSetVector<Operation *, 4> abstractUsed;   // constructor calls some access fell back to
+    // The places each access may name, once: an array is counted as one
+    // queue only when some access or constructor reaches it with an index
+    // the walk cannot read, or one constructor call builds every element;
+    // read only with constant indices, and built element by element, each
+    // element stays a queue of its own.
+    llvm::SmallVector<llvm::SmallVector<Place, 4>, 32> placesOf;
+    placesOf.reserve(visits.size());
     for (auto [op, inst] : visits) {
+        placesOf.push_back(walk.resolvePlaces(queueOf(op), inst));
+        for (const Place &pl : placesOf.back())
+            if (pl.root && (pl.unknownIndex || pl.loop) &&
+                elementsHold({pl.root, kElementsOffset}, queueObjectTypeOfOp(op)))
+                elementKeys.insert({pl.root, kElementsOffset});
+    }
+    for (auto [vi, visit] : llvm::enumerate(visits)) {
+        Operation *op = visit.first;
+        Instance *inst = visit.second;
         // A handle may name one of several queues -- loaded from a field or
         // a slot written in more than one place -- and then the access is
         // counted on each of them: a thread too many on a queue it does not
@@ -1269,11 +1403,17 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
             }
             why = "the queue object could not be identified";
         };
-        for (const Place &pl : walk.resolvePlaces(queueOf(op), inst)) {
+        for (const Place &pl : placesOf[vi]) {
             if (!pl.root) { unidentified(); if (why) break; continue; }
-            // One element of an array of queues: which one is the thread's,
-            // and every element is built by one constructor call.
-            if (pl.unknownIndex || pl.loop) { why = "the queue is an element of an array"; break; }
+            // An element of an array of queues: every element, counted
+            // together, whichever index this access uses -- `&qs[2]` is one
+            // of the elements the others may name.
+            const Key ek{pl.root, kElementsOffset};
+            if (elementKeys.contains(ek) && elementsHold(ek, queueTy)) {
+                if (!llvm::is_contained(rs, ek)) rs.push_back(ek);
+                continue;
+            }
+            if (pl.unknownIndex || pl.loop) { why = "the queue is an element of an array of unknown queues"; break; }
             // A queue is the whole of a global or a slot, or what some
             // constructor call builds; anything else at that place -- a
             // struct whose first member is not the queue, a heap object
@@ -1288,6 +1428,58 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
         }
         if (why) { poison(op, why); continue; }
         resolved.push_back({op, inst, std::move(rs)});
+    }
+
+    // An array whose elements are counted together takes along every place
+    // in it the walk did name: a constructor of `qs[2]` builds one of the
+    // elements the others stand for.
+    if (!elementKeys.empty()) {
+        // Only a queue of the elements' type: another member of the same
+        // root -- `struct { queue<int> in; queue<item> st[3]; }` -- is a
+        // queue of its own. Decided once, before anything moves, so that
+        // the constructors and the accesses of a key go to the same place.
+        llvm::DenseMap<Key, Key> moveTo;
+        auto decide = [&](const Key &k) {
+            if (k.second == kElementsOffset || k.second == kAbstractOffset || moveTo.count(k)) return;
+            const Key ek{k.first, kElementsOffset};
+            if (!elementKeys.contains(ek)) return;
+            const Type t = queueTypeOf(k), et = queueTypeOf(ek);
+            if (t && t == et) moveTo[k] = ek;
+        };
+        for (auto &kv : keyCtors) decide(kv.first);
+        for (auto &kv : keyType) decide(kv.first);
+        for (const Resolved &r : resolved)
+            for (const Key &k : r.rs) decide(k);
+        auto into = [&](const Key &k) -> Key {
+            auto it = moveTo.find(k);
+            return it == moveTo.end() ? k : it->second;
+        };
+        for (auto &[ctor, ks] : ctorKeys) {
+            llvm::SmallSetVector<Key, 2> moved;
+            for (const Key &k : ks) moved.insert(into(k));
+            ks = std::move(moved);
+        }
+        for (auto &[k, ek] : moveTo) {
+            if (auto it = keyCtors.find(k); it != keyCtors.end()) {
+                llvm::SmallVector<Operation *, 2> cs(it->second.begin(), it->second.end());
+                keyCtors.erase(k);
+                for (Operation *c : cs) keyCtors[ek].insert(c);
+            }
+            keyType.erase(k);   // of the elements' type, by the choice above
+            if (const Instance *ci = keyCtorInst.lookup(k)) {
+                auto [it, fresh] = keyCtorInst.try_emplace(ek, ci);
+                if (!fresh && it->second != ci) it->second = kAmbiguous;
+            }
+            keyCtorInst.erase(k);
+        }
+        for (Resolved &r : resolved) {
+            llvm::SmallVector<Key, 4> moved;
+            for (const Key &k : r.rs) {
+                const Key c = into(k);
+                if (!llvm::is_contained(moved, c)) moved.push_back(c);
+            }
+            r.rs = std::move(moved);
+        }
     }
 
     // Every object a constructor call builds is among those its abstract
