@@ -5,6 +5,9 @@
 #
 #   spdlog-orig       spdlog as released, header-only: the mutex and
 #                     condition-variable queue (what a program gets today)
+#   spdlog-orig-spin  the same queue waiting by spinning, then yielding,
+#                     as the port does (spin_original.py): the control that
+#                     separates the queue from the way it waits
 #   spdlog-generic    the port, wtc-cc --no-specialize: the shim's
 #                     general-purpose queue (B0)
 #   spdlog-compiler   the port, wtc-cc: the compiler's choice, made when
@@ -29,6 +32,8 @@ python3 "$HERE/port.py" "$S" "$W/include"
 
 INC="-I$WTC/benchmarks/harness -I$WTC/benchmarks/queues"
 clang++-18 -O2 -std=c++17 -I"$S/include" $INC "$HERE/bench.cpp" -lpthread -o bin/spdlog-orig
+python3 "$HERE/spin_original.py" "$S" "$W/include-spin"
+clang++-18 -O2 -std=c++17 -I"$W/include-spin" $INC "$HERE/bench.cpp" -lpthread -o bin/spdlog-orig-spin
 
 build() { # name, wtc-cc flags...
   local name=$1; shift
