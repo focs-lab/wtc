@@ -1479,6 +1479,22 @@ void ThreadInstanceWalk::computeFieldStores() const {
             // constant, whose members are the values its fields take.
             if (auto c = constantCopied(src, traceToLocalRoot(dst)))
                 if (listConstant(c->first, c->second)) return;
+            // A record copied whole out of another object of its own type
+            // -- `*p = (struct params){.ring = r, ...}`, the compound
+            // literal built field by field in a slot of its own -- moves
+            // values the field listing already holds: whatever wrote the
+            // source's fields is a store into those fields, or is itself
+            // seen here and gives the record up. Only an exact copy of an
+            // object that really is of the type: memcpy may copy part of
+            // one, and a view of another type holds that type's bytes.
+            if (auto cp = dyn_cast<cir::CopyOp>(op)) {
+                Type rec = recordBehind(dst.getType());
+                Value from = traceToLocalRoot(src);
+                auto fromTy = dyn_cast<cir::PointerType>(from.getType());
+                if (rec && src.getType() == dst.getType() && fromTy && fromTy.getPointee() == rec &&
+                    from.getDefiningOp<cir::AllocaOp>())
+                    return;
+            }
             if (Type rec = recordBehind(traceToLocalRoot(dst).getType())) whole.insert(rec);
             return;
         }
