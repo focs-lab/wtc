@@ -14,7 +14,7 @@ numbers live in `benchmarks/results/`, one directory per leg with its own
 | RQ3 | Allocation: what does an element cost in allocations and resident memory with each implementation? | the mechanism runs of `eval-w1` (allocation counter, `perf` counters, peak RSS) |
 | RQ4 | Batching: throughput against latency as the batch grows, for a producer's pushes and for a mutex's sections, and fairness between threads | legs `eval-w7`, `eval-w8` |
 | RQ5 | Cost: compile time by pass, code size, and nothing lost where nothing is proved | `benchmarks/scripts/compile_cost.sh`; the general and compiler builds of every leg |
-| RQ6 | Safety: does the compiler's output run clean under ThreadSanitizer, and does the build refuse a program that breaks a declared topology? | the lit suite (`%if tsan` runs on every positive integration test, `WTC_CHECK`, the mutation tests) |
+| RQ6 | Safety: does the compiler's output run clean under ThreadSanitizer, and does the build refuse a program that breaks a declared topology? | the lit suite (`%if tsan` runs on every positive integration test, `WTC_CHECK`, the planted violations under `runtime/test` and `test/Integration`) |
 
 ## Baselines
 

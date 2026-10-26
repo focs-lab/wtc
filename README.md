@@ -324,7 +324,7 @@ compiler. The gain belongs to programs whose stages take microseconds.
 | Tests | 258 lit tests, passing at every commit; the runtime's own tests in CI, plain, under ThreadSanitizer and with the contract checks |
 | Races | ThreadSanitizer on the compiler's own output, every positive test, the W3 and W7 builds, ferret at one and two threads a stage and dedup at one, two and four: no report; planted races are reported |
 | Output | ferret and dedup as PARSEC's own build computes them, at 1, 2 and 4 threads a stage |
-| Contracts | a second producer on the ring, a second consumer on the single-consumer queue, the spmc ring without its lock: each caught |
+| Contracts | eight planted violations, each caught: a second producer on the spsc ring and on the spmc ring, a second consumer on the single-consumer queue (each under `WTC_CHECK` and ThreadSanitizer), spsc forced on a queue with two producers and two consumers, a plain race, and a borrowed element kept past the next pop |
 
 ## What is there
 
