@@ -1,52 +1,124 @@
-threadcensus: 568 mutexes, 964 acquisitions (0 on mutexes the table could not hold)
-single-thread mutexes: 282 of 568; their acquisitions: 282 of 964 (29.3%)
+threadcensus: 568 mutexes, 1004 acquisitions (0 on mutexes the table could not hold; table of 1048576)
+single-thread mutexes: 282 of 568; their acquisitions: 282 of 1004 (28.1%)
 
-top 20 by acquisitions (address, acquisitions, threads, first acquisition's stack):
+top 20 by acquisitions (address, acquisitions, threads, first event's stack):
 
-0x56475e3fe530  38  8
-dedup/bin/dedup-orig(+0x965c)[0x5647564f465c]
-dedup/bin/dedup-orig(+0x66a5)[0x5647564f16a5]
-/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f2cd3fa0b84]
-/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f2cd402dcc4]
+0x5628455455e0  55  8
+dedup-orig: queue_dequeue
+dedup-orig: Deduplicate
+libc.so.6(+0x9cb84)[0x7fdae1e16b84]
+libc.so.6(__clone+0x44)[0x7fdae1ea3cc4]
 
-0x56475e3fe740  38  8
-dedup/bin/dedup-orig(+0x965c)[0x5647564f465c]
-dedup/bin/dedup-orig(+0x6223)[0x5647564f1223]
-/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f2cd3fa0b84]
-/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f2cd402dcc4]
+0x562845545740  50  5
+dedup-orig: queue_dequeue
+dedup-orig: Reorder
+libc.so.6(+0x9cb84)[0x7fdae1e16b84]
+libc.so.6(__clone+0x44)[0x7fdae1ea3cc4]
 
-0x56475e3fe690  35  5
-dedup/bin/dedup-orig(+0x965c)[0x5647564f465c]
-dedup/bin/dedup-orig(+0x7e70)[0x5647564f2e70]
-/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f2cd3fa0b84]
-/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f2cd402dcc4]
+0x5628455457f0  42  8
+dedup-orig: queue_dequeue
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7fdae1e16b84]
+libc.so.6(__clone+0x44)[0x7fdae1ea3cc4]
 
-0x56475e3fe5e0  7  5
-dedup/bin/dedup-orig(+0x965c)[0x5647564f465c]
-dedup/bin/dedup-orig(+0x6b67)[0x5647564f1b67]
-/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f2cd3fa0b84]
-/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f2cd402dcc4]
+0x562845545690  11  5
+dedup-orig: queue_dequeue
+dedup-orig: FragmentRefine
+libc.so.6(+0x9cb84)[0x7fdae1e16b84]
+libc.so.6(__clone+0x44)[0x7fdae1ea3cc4]
 
-0x7f2ccc023f18  2  2
-dedup/bin/dedup-orig(+0x5f91)[0x5647564f0f91]
-dedup/bin/dedup-orig(+0x6268)[0x5647564f1268]
-/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f2cd3fa0b84]
-/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f2cd402dcc4]
+0x7fdaa801eea8  2  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7fdae1e16b84]
+libc.so.6(__clone+0x44)[0x7fdae1ea3cc4]
 
-0x7f2ccc022788  2  2
-dedup/bin/dedup-orig(+0x5f91)[0x5647564f0f91]
-dedup/bin/dedup-orig(+0x6268)[0x5647564f1268]
-/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f2cd3fa0b84]
-/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f2cd402dcc4]
+0x7fdaa801d718  2  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7fdae1e16b84]
+libc.so.6(__clone+0x44)[0x7fdae1ea3cc4]
 
-0x7f2ccc020ff8  2  2
-dedup/bin/dedup-orig(+0x5f91)[0x5647564f0f91]
-dedup/bin/dedup-orig(+0x6268)[0x5647564f1268]
-/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f2cd3fa0b84]
-/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f2cd402dcc4]
+0x7fdaa801bf88  2  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7fdae1e16b84]
+libc.so.6(__clone+0x44)[0x7fdae1ea3cc4]
 
-0x7f2ccc01f868  2  2
-dedup/bin/dedup-orig(+0x5f91)[0x5647564f0f91]
-dedup/bin/dedup-orig(+0x6268)[0x5647564f1268]
-/lib/x86_64-linux-gnu/libc.so.6(+0x9cb84)[0x7f2cd3fa0b84]
-/lib/x86_64-linux-gnu/libc.so.6(__clone+0x44)[0x7f2cd402dcc4]
+0x7fdaa801a7f8  2  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7fdae1e16b84]
+libc.so.6(__clone+0x44)[0x7fdae1ea3cc4]
+
+0x7fdaa8019068  2  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7fdae1e16b84]
+libc.so.6(__clone+0x44)[0x7fdae1ea3cc4]
+
+0x7fdaa80178d8  2  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7fdae1e16b84]
+libc.so.6(__clone+0x44)[0x7fdae1ea3cc4]
+
+0x7fdaa8016148  2  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7fdae1e16b84]
+libc.so.6(__clone+0x44)[0x7fdae1ea3cc4]
+
+0x7fdaa8021e98  2  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7fdae1e16b84]
+libc.so.6(__clone+0x44)[0x7fdae1ea3cc4]
+
+0x7fdaa8020708  2  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7fdae1e16b84]
+libc.so.6(__clone+0x44)[0x7fdae1ea3cc4]
+
+0x7fdaa801ef78  2  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7fdae1e16b84]
+libc.so.6(__clone+0x44)[0x7fdae1ea3cc4]
+
+0x7fdaa801d7e8  2  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7fdae1e16b84]
+libc.so.6(__clone+0x44)[0x7fdae1ea3cc4]
+
+0x7fdaa801c058  2  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7fdae1e16b84]
+libc.so.6(__clone+0x44)[0x7fdae1ea3cc4]
+
+0x7fdaa801a8c8  2  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7fdae1e16b84]
+libc.so.6(__clone+0x44)[0x7fdae1ea3cc4]
+
+0x7fdaa8019138  2  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7fdae1e16b84]
+libc.so.6(__clone+0x44)[0x7fdae1ea3cc4]
+
+0x7fdaa80179a8  2  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7fdae1e16b84]
+libc.so.6(__clone+0x44)[0x7fdae1ea3cc4]
+
+0x7fdaa8016218  2  2
+dedup-orig: sub_Compress
+dedup-orig: Compress
+libc.so.6(+0x9cb84)[0x7fdae1e16b84]
+libc.so.6(__clone+0x44)[0x7fdae1ea3cc4]

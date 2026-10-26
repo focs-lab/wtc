@@ -1,0 +1,161 @@
+threadcensus: 5404 mutexes, 7639184 acquisitions (0 on mutexes the table could not hold; table of 1048576)
+single-thread mutexes: 2886 of 5404; their acquisitions: 803112 of 7639184 (10.5%)
+acquisitions on mutexes with more than 8 threads (count not kept): 1320133
+
+top 20 by acquisitions (address, acquisitions, threads, first event's stack):
+
+0x55985419ebc8  500101  2
+memcached: try_read_network (memcached.c:2474)
+libevent-2.1.so.7(+0x20ae8)[0x7fe0a1ebeae8]
+libevent-2.1.so.7(event_base_loop+0x4af)[0x7fe0a1ec046f]
+memcached: worker_libevent (thread.c:525)
+libc.so.6(+0x9cb84)[0x7fe0a1d27b84]
+libc.so.6(__clone+0x44)[0x7fe0a1db4cc4]
+
+0x5598541a0718  500101  2
+memcached: try_read_network (memcached.c:2474)
+libevent-2.1.so.7(+0x20ae8)[0x7fe0a1ebeae8]
+libevent-2.1.so.7(event_base_loop+0x4af)[0x7fe0a1ec046f]
+memcached: worker_libevent (thread.c:525)
+libc.so.6(+0x9cb84)[0x7fe0a1d27b84]
+libc.so.6(__clone+0x44)[0x7fe0a1db4cc4]
+
+0x5598541a3db8  500101  2
+memcached: threadlocal_stats_aggregate (thread.c:1014)
+memcached: server_stats (memcached.c:1752)
+memcached: process_stat (proto_text.c:526)
+memcached: try_read_command_ascii (proto_text.c:401)
+memcached: drive_machine (memcached.c:3099)
+libevent-2.1.so.7(+0x20ae8)[0x7fe0a1ebeae8]
+libevent-2.1.so.7(event_base_loop+0x4af)[0x7fe0a1ec046f]
+memcached: worker_libevent (thread.c:525)
+libc.so.6(+0x9cb84)[0x7fe0a1d27b84]
+libc.so.6(__clone+0x44)[0x7fe0a1db4cc4]
+
+0x5598541a5908  500101  2
+memcached: threadlocal_stats_aggregate (thread.c:1014)
+memcached: server_stats (memcached.c:1752)
+memcached: process_stat (proto_text.c:526)
+memcached: try_read_command_ascii (proto_text.c:401)
+memcached: drive_machine (memcached.c:3099)
+libevent-2.1.so.7(+0x20ae8)[0x7fe0a1ebeae8]
+libevent-2.1.so.7(event_base_loop+0x4af)[0x7fe0a1ec046f]
+memcached: worker_libevent (thread.c:525)
+libc.so.6(+0x9cb84)[0x7fe0a1d27b84]
+libc.so.6(__clone+0x44)[0x7fe0a1db4cc4]
+
+0x5598541a7458  500101  2
+memcached: threadlocal_stats_aggregate (thread.c:1014)
+memcached: server_stats (memcached.c:1752)
+memcached: process_stat (proto_text.c:526)
+memcached: try_read_command_ascii (proto_text.c:401)
+memcached: drive_machine (memcached.c:3099)
+libevent-2.1.so.7(+0x20ae8)[0x7fe0a1ebeae8]
+libevent-2.1.so.7(event_base_loop+0x4af)[0x7fe0a1ec046f]
+memcached: worker_libevent (thread.c:525)
+libc.so.6(+0x9cb84)[0x7fe0a1d27b84]
+libc.so.6(__clone+0x44)[0x7fe0a1db4cc4]
+
+0x5598541a8fa8  500101  2
+memcached: threadlocal_stats_aggregate (thread.c:1014)
+memcached: server_stats (memcached.c:1752)
+memcached: process_stat (proto_text.c:526)
+memcached: try_read_command_ascii (proto_text.c:401)
+memcached: drive_machine (memcached.c:3099)
+libevent-2.1.so.7(+0x20ae8)[0x7fe0a1ebeae8]
+libevent-2.1.so.7(event_base_loop+0x4af)[0x7fe0a1ec046f]
+memcached: worker_libevent (thread.c:525)
+libc.so.6(+0x9cb84)[0x7fe0a1d27b84]
+libc.so.6(__clone+0x44)[0x7fe0a1db4cc4]
+
+0x5598541aaaf8  500101  2
+memcached: threadlocal_stats_aggregate (thread.c:1014)
+memcached: server_stats (memcached.c:1752)
+memcached: process_stat (proto_text.c:526)
+memcached: try_read_command_ascii (proto_text.c:401)
+memcached: drive_machine (memcached.c:3099)
+libevent-2.1.so.7(+0x20ae8)[0x7fe0a1ebeae8]
+libevent-2.1.so.7(event_base_loop+0x4af)[0x7fe0a1ec046f]
+memcached: worker_libevent (thread.c:525)
+libc.so.6(+0x9cb84)[0x7fe0a1d27b84]
+libc.so.6(__clone+0x44)[0x7fe0a1db4cc4]
+
+0x5598541a2268  500001  1
+memcached: try_read_network (memcached.c:2474)
+libevent-2.1.so.7(+0x20ae8)[0x7fe0a1ebeae8]
+libevent-2.1.so.7(event_base_loop+0x4af)[0x7fe0a1ec046f]
+memcached: worker_libevent (thread.c:525)
+libc.so.6(+0x9cb84)[0x7fe0a1d27b84]
+libc.so.6(__clone+0x44)[0x7fe0a1db4cc4]
+
+0x55981c2f8918  405725  >8
+memcached: fill_item_stats_automove (items.c:707)
+memcached: slab_automove_init (slab_automove.c:49)
+memcached: start_slab_maintenance_thread (slabs_mover.c:785)
+memcached: main (memcached.c:6083)
+libc.so.6(+0x2a1ca)[0x7fe0a1cb51ca]
+libc.so.6(__libc_start_main+0x8b)[0x7fe0a1cb528b]
+memcached: _start
+
+0x55981c2f7518  330539  >8
+memcached: fill_item_stats_automove (items.c:701)
+memcached: slab_automove_init (slab_automove.c:49)
+memcached: start_slab_maintenance_thread (slabs_mover.c:785)
+memcached: main (memcached.c:6083)
+libc.so.6(+0x2a1ca)[0x7fe0a1cb51ca]
+libc.so.6(__libc_start_main+0x8b)[0x7fe0a1cb528b]
+memcached: _start
+
+0x55981c2e9c60  253756  >8
+memcached: slabs_available_chunks (slabs.c:704)
+memcached: lru_maintainer_juggle (items.c:1378)
+libc.so.6(+0x9cb84)[0x7fe0a1d27b84]
+libc.so.6(__clone+0x44)[0x7fe0a1db4cc4]
+
+0x55981c2f9d80  244588  >8
+memcached: assoc_init (assoc.c:64)
+memcached: main (memcached.c:5986)
+libc.so.6(+0x2a1ca)[0x7fe0a1cb51ca]
+libc.so.6(__libc_start_main+0x8b)[0x7fe0a1cb528b]
+memcached: _start
+
+0x55981c2f7f18  170763  3
+memcached: lru_maintainer_juggle (items.c:1412)
+libc.so.6(+0x9cb84)[0x7fe0a1d27b84]
+libc.so.6(__clone+0x44)[0x7fe0a1db4cc4]
+
+0x55981c2eaee0  85462  >8
+memcached: lru_bump_buf_link_q (items.c:1256)
+memcached: worker_libevent (thread.c:514)
+libc.so.6(+0x9cb84)[0x7fe0a1d27b84]
+libc.so.6(__clone+0x44)[0x7fe0a1db4cc4]
+
+0x7fe070010c10  85454  2
+memcached: lru_maintainer_bumps (items.c:1323)
+libc.so.6(+0x9cb84)[0x7fe0a1d27b84]
+libc.so.6(__clone+0x44)[0x7fe0a1db4cc4]
+
+0x7fe068010c10  85454  2
+memcached: lru_maintainer_bumps (items.c:1323)
+libc.so.6(+0x9cb84)[0x7fe0a1d27b84]
+libc.so.6(__clone+0x44)[0x7fe0a1db4cc4]
+
+0x7fe07c010c10  85454  2
+memcached: lru_maintainer_bumps (items.c:1323)
+libc.so.6(+0x9cb84)[0x7fe0a1d27b84]
+libc.so.6(__clone+0x44)[0x7fe0a1db4cc4]
+
+0x7fe074010c10  85454  2
+memcached: lru_maintainer_bumps (items.c:1323)
+libc.so.6(+0x9cb84)[0x7fe0a1d27b84]
+libc.so.6(__clone+0x44)[0x7fe0a1db4cc4]
+
+0x7fe06c010c10  85454  2
+memcached: lru_maintainer_bumps (items.c:1323)
+libc.so.6(+0x9cb84)[0x7fe0a1d27b84]
+libc.so.6(__clone+0x44)[0x7fe0a1db4cc4]
+
+0x7fe064010c10  85454  2
+memcached: lru_maintainer_bumps (items.c:1323)
+libc.so.6(+0x9cb84)[0x7fe0a1d27b84]
+libc.so.6(__clone+0x44)[0x7fe0a1db4cc4]

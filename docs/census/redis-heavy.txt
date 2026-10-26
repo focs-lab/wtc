@@ -1,0 +1,92 @@
+threadcensus: 12 mutexes, 5102 acquisitions (0 on mutexes the table could not hold; table of 1048576)
+single-thread mutexes: 5 of 12; their acquisitions: 505 of 5102 (9.9%)
+
+top 12 by acquisitions (address, acquisitions, threads, first event's stack):
+
+0x562d63851170  693  2
+redis-server *:6399(initThreadedIO+0xaf)[0x562d6368b5ef]
+redis-server *:6399(InitServerLast+0x12)[0x562d6366a3e2]
+redis-server *:6399(main+0x295)[0x562d6365be05]
+libc.so.6(+0x2a1ca)[0x7f1c569f11ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f1c569f128b]
+redis-server *:6399(_start+0x25)[0x562d6365c645]
+
+0x562d638510d0  681  2
+redis-server *:6399(initThreadedIO+0xaf)[0x562d6368b5ef]
+redis-server *:6399(InitServerLast+0x12)[0x562d6366a3e2]
+redis-server *:6399(main+0x295)[0x562d6365be05]
+libc.so.6(+0x2a1ca)[0x7f1c569f11ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f1c569f128b]
+redis-server *:6399(_start+0x25)[0x562d6365c645]
+
+0x562d638510a8  673  2
+redis-server *:6399(initThreadedIO+0xaf)[0x562d6368b5ef]
+redis-server *:6399(InitServerLast+0x12)[0x562d6366a3e2]
+redis-server *:6399(main+0x295)[0x562d6365be05]
+libc.so.6(+0x2a1ca)[0x7f1c569f11ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f1c569f128b]
+redis-server *:6399(_start+0x25)[0x562d6365c645]
+
+0x562d638510f8  671  2
+redis-server *:6399(initThreadedIO+0xaf)[0x562d6368b5ef]
+redis-server *:6399(InitServerLast+0x12)[0x562d6366a3e2]
+redis-server *:6399(main+0x295)[0x562d6365be05]
+libc.so.6(+0x2a1ca)[0x7f1c569f11ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f1c569f128b]
+redis-server *:6399(_start+0x25)[0x562d6365c645]
+
+0x562d63851148  644  2
+redis-server *:6399(initThreadedIO+0xaf)[0x562d6368b5ef]
+redis-server *:6399(InitServerLast+0x12)[0x562d6366a3e2]
+redis-server *:6399(main+0x295)[0x562d6365be05]
+libc.so.6(+0x2a1ca)[0x7f1c569f11ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f1c569f128b]
+redis-server *:6399(_start+0x25)[0x562d6365c645]
+
+0x562d63851198  644  2
+redis-server *:6399(initThreadedIO+0xaf)[0x562d6368b5ef]
+redis-server *:6399(InitServerLast+0x12)[0x562d6366a3e2]
+redis-server *:6399(main+0x295)[0x562d6365be05]
+libc.so.6(+0x2a1ca)[0x7f1c569f11ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f1c569f128b]
+redis-server *:6399(_start+0x25)[0x562d6365c645]
+
+0x562d63851120  591  2
+redis-server *:6399(initThreadedIO+0xaf)[0x562d6368b5ef]
+redis-server *:6399(InitServerLast+0x12)[0x562d6366a3e2]
+redis-server *:6399(main+0x295)[0x562d6365be05]
+libc.so.6(+0x2a1ca)[0x7f1c569f11ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f1c569f128b]
+redis-server *:6399(_start+0x25)[0x562d6365c645]
+
+0x562d638528a0  501  1
+redis-server *:6399(freeClientAsync+0x36)[0x562d63681e86]
+redis-server *:6399(readQueryFromClient+0x179)[0x562d6368b9e9]
+redis-server: callHandler (connhelpers.h:79)
+redis-server: aeProcessEvents (ae.c:436)
+redis-server *:6399(aeMain+0x2d)[0x562d63660a9d]
+redis-server *:6399(main+0x36f)[0x562d6365bedf]
+libc.so.6(+0x2a1ca)[0x7f1c569f11ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f1c569f128b]
+redis-server *:6399(_start+0x25)[0x562d6365c645]
+
+0x562d63853028  1  1
+redis-server *:6399(bioProcessBackgroundJobs+0x98)[0x562d636f46d8]
+libc.so.6(+0x9cb84)[0x7f1c56a63b84]
+libc.so.6(__clone+0x44)[0x7f1c56af0cc4]
+
+0x562d63853000  1  1
+redis-server *:6399(bioProcessBackgroundJobs+0x98)[0x562d636f46d8]
+libc.so.6(+0x9cb84)[0x7f1c56a63b84]
+libc.so.6(__clone+0x44)[0x7f1c56af0cc4]
+
+0x562d638584c0  1  1
+redis-server *:6399(main+0x112)[0x562d6365bc82]
+libc.so.6(+0x2a1ca)[0x7f1c569f11ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f1c569f128b]
+redis-server *:6399(_start+0x25)[0x562d6365c645]
+
+0x562d63853050  1  1
+redis-server *:6399(bioProcessBackgroundJobs+0x98)[0x562d636f46d8]
+libc.so.6(+0x9cb84)[0x7f1c56a63b84]
+libc.so.6(__clone+0x44)[0x7f1c56af0cc4]

@@ -1,0 +1,209 @@
+threadcensus: 4 mutexes, 2722155 acquisitions (0 on mutexes the table could not hold; table of 1048576)
+single-thread mutexes: 3 of 4; their acquisitions: 7 of 2722155 (0.0%)
+
+top 4 by acquisitions (address, acquisitions, threads, first event's stack):
+
+0x55b830fdfb80  2722148  7
+spdlog-orig-census: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::dequeue(spdlog::details::async_msg&)
+spdlog-orig-census: spdlog::details::thread_pool::process_next_msg_()
+spdlog-orig-census: std::thread::_State_impl<std::thread::_Invoker<std::tuple<spdlog::details::thread_pool::thread_pool(unsigned long, unsigned long, std::fu...
+libstdc++.so.6(+0xecdb4)[0x7f4e57aabdb4]
+libc.so.6(+0x9cb84)[0x7f4e57731b84]
+libc.so.6(__clone+0x44)[0x7f4e577becc4]
+
+0x55b82753e4d8  4  1
+spdlog-orig-census: spdlog::init_thread_pool(unsigned long, unsigned long, std::function<void ()>, std::function<void ()>)
+spdlog-orig-census: main
+libc.so.6(+0x2a1ca)[0x7f4e576bf1ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f4e576bf28b]
+spdlog-orig-census: _start
+
+0x55b82753e488  2  1
+spdlog-orig-census: spdlog::details::registry::initialize_logger(std::shared_ptr<spdlog::logger>)
+spdlog-orig-census: std::shared_ptr<spdlog::async_logger> spdlog::async_factory_impl<(spdlog::async_overflow_policy)0>::create<spdlog::sinks::null_sink<spdlo...
+spdlog-orig-census: main
+libc.so.6(+0x2a1ca)[0x7f4e576bf1ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f4e576bf28b]
+spdlog-orig-census: _start
+
+0x55b82753e4b0  1  1
+spdlog-orig-census: spdlog::details::registry::shutdown()
+spdlog-orig-census: main
+libc.so.6(+0x2a1ca)[0x7f4e576bf1ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f4e576bf28b]
+spdlog-orig-census: _start
+
+reference counts: 2408204 control blocks made, 6 copies, 4808212 releases, 2400002 weak_ptr locks, 2 weak copies, 2 weak releases, 2408204 control blocks destroyed
+threadcensus: 2408204 control blocks, 9616428 count operations (0 on control blocks the table could not hold; table of 1048576)
+single-thread control blocks: 1200006 of 2408204; their count operations: 2400018 of 9616428 (25.0%)
+
+top 20 by count operations (address, count operations, threads, first event's stack):
+
+0x55b830fdfb70  2400008  5
+spdlog-orig-census: main
+libc.so.6(+0x2a1ca)[0x7f4e576bf1ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f4e576bf28b]
+spdlog-orig-census: _start
+
+0x55b8310a1570  2400008  7
+spdlog-orig-census: std::shared_ptr<spdlog::async_logger> spdlog::async_factory_impl<(spdlog::async_overflow_policy)0>::create<spdlog::sinks::null_sink<spdlo...
+spdlog-orig-census: main
+libc.so.6(+0x2a1ca)[0x7f4e576bf1ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f4e576bf28b]
+spdlog-orig-census: _start
+
+0x55b831090e00  4  2
+spdlog-orig-census: spdlog::details::thread_pool::post_flush(std::shared_ptr<spdlog::async_logger>&&, spdlog::async_overflow_policy)
+spdlog-orig-census: spdlog::async_logger::flush_()
+spdlog-orig-census: main
+libc.so.6(+0x2a1ca)[0x7f4e576bf1ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f4e576bf28b]
+spdlog-orig-census: _start
+
+0x55b8310a0bf0  4  1
+spdlog-orig-census: spdlog::init_thread_pool(unsigned long, unsigned long, std::function<void ()>, std::function<void ()>)
+spdlog-orig-census: main
+libc.so.6(+0x2a1ca)[0x7f4e576bf1ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f4e576bf28b]
+spdlog-orig-census: _start
+
+0x55b8310a1140  4  1
+spdlog-orig-census: spdlog::init_thread_pool(unsigned long, unsigned long, std::function<void ()>, std::function<void ()>)
+spdlog-orig-census: main
+libc.so.6(+0x2a1ca)[0x7f4e576bf1ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f4e576bf28b]
+spdlog-orig-census: _start
+
+0x55b8310a12c0  4  1
+spdlog-orig-census: std::shared_ptr<spdlog::async_logger> spdlog::async_factory_impl<(spdlog::async_overflow_policy)0>::create<spdlog::sinks::null_sink<spdlo...
+spdlog-orig-census: main
+libc.so.6(+0x2a1ca)[0x7f4e576bf1ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f4e576bf28b]
+spdlog-orig-census: _start
+
+0x7f4e20000b70  2  2
+spdlog-orig-census: spdlog::details::thread_pool::post_log(std::shared_ptr<spdlog::async_logger>&&, spdlog::details::log_msg const&, spdlog::async_overflow_p...
+spdlog-orig-census: spdlog::async_logger::sink_it_(spdlog::details::log_msg const&)
+spdlog-orig-census: void spdlog::logger::log_<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spd...
+spdlog-orig-census: std::thread::_State_impl<std::thread::_Invoker<std::tuple<main::$_1> > >::_M_run() (bench.cpp:?)
+libstdc++.so.6(+0xecdb4)[0x7f4e57aabdb4]
+libc.so.6(+0x9cb84)[0x7f4e57731b84]
+libc.so.6(__clone+0x44)[0x7f4e577becc4]
+
+0x55b830fe06a0  2  2
+spdlog-orig-census: spdlog::details::async_msg* std::__uninitialized_default_n_1<false>::__uninit_default_n<spdlog::details::async_msg*, unsigned long>(spdlo...
+spdlog-orig-census: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::mpmc_blocking_queue(unsigned long)
+spdlog-orig-census: spdlog::details::thread_pool::thread_pool(unsigned long, unsigned long, std::function<void ()>, std::function<void ()>)
+spdlog-orig-census: spdlog::init_thread_pool(unsigned long, unsigned long, std::function<void ()>, std::function<void ()>)
+spdlog-orig-census: main
+libc.so.6(+0x2a1ca)[0x7f4e576bf1ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f4e576bf28b]
+spdlog-orig-census: _start
+
+0x55b830fe0700  2  2
+spdlog-orig-census: spdlog::details::async_msg* std::__uninitialized_default_n_1<false>::__uninit_default_n<spdlog::details::async_msg*, unsigned long>(spdlo...
+spdlog-orig-census: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::mpmc_blocking_queue(unsigned long)
+spdlog-orig-census: spdlog::details::thread_pool::thread_pool(unsigned long, unsigned long, std::function<void ()>, std::function<void ()>)
+spdlog-orig-census: spdlog::init_thread_pool(unsigned long, unsigned long, std::function<void ()>, std::function<void ()>)
+spdlog-orig-census: main
+libc.so.6(+0x2a1ca)[0x7f4e576bf1ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f4e576bf28b]
+spdlog-orig-census: _start
+
+0x55b830fe0760  2  2
+spdlog-orig-census: spdlog::details::async_msg* std::__uninitialized_default_n_1<false>::__uninit_default_n<spdlog::details::async_msg*, unsigned long>(spdlo...
+spdlog-orig-census: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::mpmc_blocking_queue(unsigned long)
+spdlog-orig-census: spdlog::details::thread_pool::thread_pool(unsigned long, unsigned long, std::function<void ()>, std::function<void ()>)
+spdlog-orig-census: spdlog::init_thread_pool(unsigned long, unsigned long, std::function<void ()>, std::function<void ()>)
+spdlog-orig-census: main
+libc.so.6(+0x2a1ca)[0x7f4e576bf1ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f4e576bf28b]
+spdlog-orig-census: _start
+
+0x55b830fe07c0  2  2
+spdlog-orig-census: spdlog::details::async_msg* std::__uninitialized_default_n_1<false>::__uninit_default_n<spdlog::details::async_msg*, unsigned long>(spdlo...
+spdlog-orig-census: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::mpmc_blocking_queue(unsigned long)
+spdlog-orig-census: spdlog::details::thread_pool::thread_pool(unsigned long, unsigned long, std::function<void ()>, std::function<void ()>)
+spdlog-orig-census: spdlog::init_thread_pool(unsigned long, unsigned long, std::function<void ()>, std::function<void ()>)
+spdlog-orig-census: main
+libc.so.6(+0x2a1ca)[0x7f4e576bf1ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f4e576bf28b]
+spdlog-orig-census: _start
+
+0x7f4e20000b70  2  1
+spdlog-orig-census: spdlog::details::thread_pool::process_next_msg_()
+spdlog-orig-census: std::thread::_State_impl<std::thread::_Invoker<std::tuple<spdlog::details::thread_pool::thread_pool(unsigned long, unsigned long, std::fu...
+libstdc++.so.6(+0xecdb4)[0x7f4e57aabdb4]
+libc.so.6(+0x9cb84)[0x7f4e57731b84]
+libc.so.6(__clone+0x44)[0x7f4e577becc4]
+
+0x55b830fe0820  2  2
+spdlog-orig-census: spdlog::details::async_msg* std::__uninitialized_default_n_1<false>::__uninit_default_n<spdlog::details::async_msg*, unsigned long>(spdlo...
+spdlog-orig-census: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::mpmc_blocking_queue(unsigned long)
+spdlog-orig-census: spdlog::details::thread_pool::thread_pool(unsigned long, unsigned long, std::function<void ()>, std::function<void ()>)
+spdlog-orig-census: spdlog::init_thread_pool(unsigned long, unsigned long, std::function<void ()>, std::function<void ()>)
+spdlog-orig-census: main
+libc.so.6(+0x2a1ca)[0x7f4e576bf1ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f4e576bf28b]
+spdlog-orig-census: _start
+
+0x55b830fe0600  2  2
+spdlog-orig-census: spdlog::details::thread_pool::post_log(std::shared_ptr<spdlog::async_logger>&&, spdlog::details::log_msg const&, spdlog::async_overflow_p...
+spdlog-orig-census: spdlog::async_logger::sink_it_(spdlog::details::log_msg const&)
+spdlog-orig-census: void spdlog::logger::log_<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spd...
+spdlog-orig-census: std::thread::_State_impl<std::thread::_Invoker<std::tuple<main::$_1> > >::_M_run() (bench.cpp:?)
+libstdc++.so.6(+0xecdb4)[0x7f4e57aabdb4]
+libc.so.6(+0x9cb84)[0x7f4e57731b84]
+libc.so.6(__clone+0x44)[0x7f4e577becc4]
+
+0x55b830fe0880  2  2
+spdlog-orig-census: spdlog::details::async_msg* std::__uninitialized_default_n_1<false>::__uninit_default_n<spdlog::details::async_msg*, unsigned long>(spdlo...
+spdlog-orig-census: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::mpmc_blocking_queue(unsigned long)
+spdlog-orig-census: spdlog::details::thread_pool::thread_pool(unsigned long, unsigned long, std::function<void ()>, std::function<void ()>)
+spdlog-orig-census: spdlog::init_thread_pool(unsigned long, unsigned long, std::function<void ()>, std::function<void ()>)
+spdlog-orig-census: main
+libc.so.6(+0x2a1ca)[0x7f4e576bf1ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f4e576bf28b]
+spdlog-orig-census: _start
+
+0x55b830fe08e0  2  2
+spdlog-orig-census: spdlog::details::async_msg* std::__uninitialized_default_n_1<false>::__uninit_default_n<spdlog::details::async_msg*, unsigned long>(spdlo...
+spdlog-orig-census: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::mpmc_blocking_queue(unsigned long)
+spdlog-orig-census: spdlog::details::thread_pool::thread_pool(unsigned long, unsigned long, std::function<void ()>, std::function<void ()>)
+spdlog-orig-census: spdlog::init_thread_pool(unsigned long, unsigned long, std::function<void ()>, std::function<void ()>)
+spdlog-orig-census: main
+libc.so.6(+0x2a1ca)[0x7f4e576bf1ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f4e576bf28b]
+spdlog-orig-census: _start
+
+0x55b830fe0600  2  1
+spdlog-orig-census: spdlog::details::thread_pool::process_next_msg_()
+spdlog-orig-census: std::thread::_State_impl<std::thread::_Invoker<std::tuple<spdlog::details::thread_pool::thread_pool(unsigned long, unsigned long, std::fu...
+libstdc++.so.6(+0xecdb4)[0x7f4e57aabdb4]
+libc.so.6(+0x9cb84)[0x7f4e57731b84]
+libc.so.6(__clone+0x44)[0x7f4e577becc4]
+
+0x55b830fe05c0  2  1
+spdlog-orig-census: spdlog::details::thread_pool::process_next_msg_()
+spdlog-orig-census: std::thread::_State_impl<std::thread::_Invoker<std::tuple<spdlog::details::thread_pool::thread_pool(unsigned long, unsigned long, std::fu...
+libstdc++.so.6(+0xecdb4)[0x7f4e57aabdb4]
+libc.so.6(+0x9cb84)[0x7f4e57731b84]
+libc.so.6(__clone+0x44)[0x7f4e577becc4]
+
+0x55b830fe06a0  2  2
+spdlog-orig-census: spdlog::details::thread_pool::post_log(std::shared_ptr<spdlog::async_logger>&&, spdlog::details::log_msg const&, spdlog::async_overflow_p...
+spdlog-orig-census: spdlog::async_logger::sink_it_(spdlog::details::log_msg const&)
+spdlog-orig-census: void spdlog::logger::log_<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spd...
+spdlog-orig-census: std::thread::_State_impl<std::thread::_Invoker<std::tuple<main::$_1> > >::_M_run() (bench.cpp:?)
+libstdc++.so.6(+0xecdb4)[0x7f4e57aabdb4]
+libc.so.6(+0x9cb84)[0x7f4e57731b84]
+libc.so.6(__clone+0x44)[0x7f4e577becc4]
+
+0x55b830fe0640  2  2
+spdlog-orig-census: spdlog::details::thread_pool::post_log(std::shared_ptr<spdlog::async_logger>&&, spdlog::details::log_msg const&, spdlog::async_overflow_p...
+spdlog-orig-census: spdlog::async_logger::sink_it_(spdlog::details::log_msg const&)
+spdlog-orig-census: void spdlog::logger::log_<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spd...
+spdlog-orig-census: std::thread::_State_impl<std::thread::_Invoker<std::tuple<main::$_1> > >::_M_run() (bench.cpp:?)
+libstdc++.so.6(+0xecdb4)[0x7f4e57aabdb4]
+libc.so.6(+0x9cb84)[0x7f4e57731b84]
+libc.so.6(__clone+0x44)[0x7f4e577becc4]

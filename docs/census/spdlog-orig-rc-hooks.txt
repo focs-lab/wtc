@@ -1,0 +1,259 @@
+threadcensus: 4 mutexes, 3233774 acquisitions (0 on mutexes the table could not hold; table of 1048576)
+single-thread mutexes: 3 of 4; their acquisitions: 7 of 3233774 (0.0%)
+
+top 4 by acquisitions (address, acquisitions, threads, first event's stack):
+
+0x560142bd9ae0  3233767  6
+spdlog-orig-hooks: __gthread_mutex_lock(pthread_mutex_t*) (gthr-default.h:749)
+spdlog-orig-hooks: spdlog::details::thread_pool::process_next_msg_() (thread_pool-inl.h:106)
+spdlog-orig-hooks: spdlog::details::thread_pool::worker_loop_() (thread_pool-inl.h:97)
+libstdc++.so.6(+0xecdb4)[0x7f68fc76ddb4]
+libc.so.6(+0x9cb84)[0x7f68fc3f3b84]
+libc.so.6(__clone+0x44)[0x7f68fc480cc4]
+
+0x56011426c510  4  1
+spdlog-orig-hooks: __gthread_mutex_lock(pthread_mutex_t*) (gthr-default.h:749)
+spdlog-orig-hooks: spdlog::init_thread_pool(unsigned long, unsigned long, std::function<void ()>) (async.h:88)
+spdlog-orig-hooks: main (bench.cpp:62)
+libc.so.6(+0x2a1ca)[0x7f68fc3811ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f68fc38128b]
+spdlog-orig-hooks: _start
+
+0x56011426c4c0  2  1
+spdlog-orig-hooks: __gthread_mutex_lock(pthread_mutex_t*) (gthr-default.h:749)
+spdlog-orig-hooks: std::shared_ptr<spdlog::async_logger> spdlog::async_factory_impl<(spdlog::async_overflow_policy)0>::create<spdlog::sinks::null_sink<spdlog...
+spdlog-orig-hooks: main (async.h:64)
+libc.so.6(+0x2a1ca)[0x7f68fc3811ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f68fc38128b]
+spdlog-orig-hooks: _start
+
+0x56011426c4e8  1  1
+spdlog-orig-hooks: __gthread_mutex_lock(pthread_mutex_t*) (gthr-default.h:749)
+spdlog-orig-hooks: main (spdlog-inl.h:70)
+libc.so.6(+0x2a1ca)[0x7f68fc3811ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f68fc38128b]
+spdlog-orig-hooks: _start
+
+reference counts: 0 control blocks made, 0 copies, 4808210 releases, 0 weak_ptr locks, 0 weak copies, 0 weak releases, 2408202 control blocks destroyed
+threadcensus: 2408202 control blocks, 4808210 count operations (0 on control blocks the table could not hold; table of 1048576)
+single-thread control blocks: 2408199 of 2408202; their count operations: 2408202 of 4808210 (50.1%)
+
+top 20 by count operations (address, count operations, threads, first event's stack):
+
+0x560142bd9ad0  1200003  5
+spdlog-orig-hooks: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_count() (shared_ptr_base.h:1071)
+spdlog-orig-hooks: main (async.h:64)
+libc.so.6(+0x2a1ca)[0x7f68fc3811ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f68fc38128b]
+spdlog-orig-hooks: _start
+
+0x560142c9b310  1200003  2
+spdlog-orig-hooks: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_count() (shared_ptr_base.h:1071)
+spdlog-orig-hooks: spdlog::details::thread_pool::worker_loop_() (thread_pool-inl.h:97)
+libstdc++.so.6(+0xecdb4)[0x7f68fc76ddb4]
+libc.so.6(+0x9cb84)[0x7f68fc3f3b84]
+libc.so.6(__clone+0x44)[0x7f68fc480cc4]
+
+0x560142c81950  2  2
+spdlog-orig-hooks: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_count() (shared_ptr_base.h:1071)
+spdlog-orig-hooks: spdlog::details::async_msg::~async_msg() (thread_pool.h:34)
+spdlog-orig-hooks: spdlog::details::thread_pool::worker_loop_() (thread_pool-inl.h:97)
+libstdc++.so.6(+0xecdb4)[0x7f68fc76ddb4]
+libc.so.6(+0x9cb84)[0x7f68fc3f3b84]
+libc.so.6(__clone+0x44)[0x7f68fc480cc4]
+
+0x560142c9a590  2  1
+spdlog-orig-hooks: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_count() (shared_ptr_base.h:1071)
+spdlog-orig-hooks: spdlog::details::registry::shutdown() (registry-inl.h:205)
+spdlog-orig-hooks: main (spdlog-inl.h:70)
+libc.so.6(+0x2a1ca)[0x7f68fc3811ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f68fc38128b]
+spdlog-orig-hooks: _start
+
+0x560142c9a040  2  1
+spdlog-orig-hooks: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_count() (shared_ptr_base.h:1071)
+spdlog-orig-hooks: void std::_Construct<spdlog::logger, char const*&, std::shared_ptr<spdlog::sinks::ansicolor_stdout_sink<spdlog::details::console_mutex> > ...
+spdlog-orig-hooks: void std::allocator_traits<std::allocator<void> >::construct<spdlog::logger, char const*&, std::shared_ptr<spdlog::sinks::ansicolor_stdout...
+spdlog-orig-hooks: spdlog::init_thread_pool(unsigned long, unsigned long, std::function<void ()>, std::function<void ()>) (registry-inl.h:237)
+spdlog-orig-hooks: spdlog::init_thread_pool(unsigned long, unsigned long, std::function<void ()>) (async.h:88)
+spdlog-orig-hooks: main (bench.cpp:62)
+libc.so.6(+0x2a1ca)[0x7f68fc3811ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f68fc38128b]
+spdlog-orig-hooks: _start
+
+0x560142c9b080  2  1
+spdlog-orig-hooks: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_count() (shared_ptr_base.h:1071)
+spdlog-orig-hooks: void std::_Construct<spdlog::async_logger, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::shared_pt...
+spdlog-orig-hooks: void std::allocator_traits<std::allocator<void> >::construct<spdlog::async_logger, std::__cxx11::basic_string<char, std::char_traits<char>...
+spdlog-orig-hooks: main (async.h:64)
+libc.so.6(+0x2a1ca)[0x7f68fc3811ca]
+libc.so.6(__libc_start_main+0x8b)[0x7f68fc38128b]
+spdlog-orig-hooks: _start
+
+0x560142bd9dd0  1  1
+spdlog-orig-hooks: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_count() (shared_ptr_base.h:1071)
+spdlog-orig-hooks: std::promise<void>::operator=(std::promise<void>&&) (future:1353)
+spdlog-orig-hooks: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::enqueue(spdlog::details::async_msg&&) (mpmc_blocking_q.h:35)
+spdlog-orig-hooks: spdlog::details::thread_pool::post_log(std::shared_ptr<spdlog::async_logger>&&, spdlog::details::log_msg const&, spdlog::async_overflow_po...
+spdlog-orig-hooks: spdlog::async_logger::sink_it_(spdlog::details::log_msg const&) (async_logger-inl.h:36)
+spdlog-orig-hooks: void spdlog::logger::log_<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdl...
+spdlog-orig-hooks: void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlo...
+libstdc++.so.6(+0xecdb4)[0x7f68fc76ddb4]
+libc.so.6(+0x9cb84)[0x7f68fc3f3b84]
+libc.so.6(__clone+0x44)[0x7f68fc480cc4]
+
+0x560142bd9e30  1  1
+spdlog-orig-hooks: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_count() (shared_ptr_base.h:1071)
+spdlog-orig-hooks: std::promise<void>::operator=(std::promise<void>&&) (future:1353)
+spdlog-orig-hooks: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::enqueue(spdlog::details::async_msg&&) (mpmc_blocking_q.h:35)
+spdlog-orig-hooks: spdlog::details::thread_pool::post_log(std::shared_ptr<spdlog::async_logger>&&, spdlog::details::log_msg const&, spdlog::async_overflow_po...
+spdlog-orig-hooks: spdlog::async_logger::sink_it_(spdlog::details::log_msg const&) (async_logger-inl.h:36)
+spdlog-orig-hooks: void spdlog::logger::log_<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdl...
+spdlog-orig-hooks: void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlo...
+libstdc++.so.6(+0xecdb4)[0x7f68fc76ddb4]
+libc.so.6(+0x9cb84)[0x7f68fc3f3b84]
+libc.so.6(__clone+0x44)[0x7f68fc480cc4]
+
+0x560142bd9e90  1  1
+spdlog-orig-hooks: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_count() (shared_ptr_base.h:1071)
+spdlog-orig-hooks: std::promise<void>::operator=(std::promise<void>&&) (future:1353)
+spdlog-orig-hooks: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::enqueue(spdlog::details::async_msg&&) (mpmc_blocking_q.h:35)
+spdlog-orig-hooks: spdlog::details::thread_pool::post_log(std::shared_ptr<spdlog::async_logger>&&, spdlog::details::log_msg const&, spdlog::async_overflow_po...
+spdlog-orig-hooks: spdlog::async_logger::sink_it_(spdlog::details::log_msg const&) (async_logger-inl.h:36)
+spdlog-orig-hooks: void spdlog::logger::log_<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdl...
+spdlog-orig-hooks: void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlo...
+libstdc++.so.6(+0xecdb4)[0x7f68fc76ddb4]
+libc.so.6(+0x9cb84)[0x7f68fc3f3b84]
+libc.so.6(__clone+0x44)[0x7f68fc480cc4]
+
+0x560142bd9ef0  1  1
+spdlog-orig-hooks: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_count() (shared_ptr_base.h:1071)
+spdlog-orig-hooks: std::promise<void>::operator=(std::promise<void>&&) (future:1353)
+spdlog-orig-hooks: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::enqueue(spdlog::details::async_msg&&) (mpmc_blocking_q.h:35)
+spdlog-orig-hooks: spdlog::details::thread_pool::post_log(std::shared_ptr<spdlog::async_logger>&&, spdlog::details::log_msg const&, spdlog::async_overflow_po...
+spdlog-orig-hooks: spdlog::async_logger::sink_it_(spdlog::details::log_msg const&) (async_logger-inl.h:36)
+spdlog-orig-hooks: void spdlog::logger::log_<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdl...
+spdlog-orig-hooks: void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlo...
+libstdc++.so.6(+0xecdb4)[0x7f68fc76ddb4]
+libc.so.6(+0x9cb84)[0x7f68fc3f3b84]
+libc.so.6(__clone+0x44)[0x7f68fc480cc4]
+
+0x560142bd9f50  1  1
+spdlog-orig-hooks: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_count() (shared_ptr_base.h:1071)
+spdlog-orig-hooks: std::promise<void>::operator=(std::promise<void>&&) (future:1353)
+spdlog-orig-hooks: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::enqueue(spdlog::details::async_msg&&) (mpmc_blocking_q.h:35)
+spdlog-orig-hooks: spdlog::details::thread_pool::post_log(std::shared_ptr<spdlog::async_logger>&&, spdlog::details::log_msg const&, spdlog::async_overflow_po...
+spdlog-orig-hooks: spdlog::async_logger::sink_it_(spdlog::details::log_msg const&) (async_logger-inl.h:36)
+spdlog-orig-hooks: void spdlog::logger::log_<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdl...
+spdlog-orig-hooks: void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlo...
+libstdc++.so.6(+0xecdb4)[0x7f68fc76ddb4]
+libc.so.6(+0x9cb84)[0x7f68fc3f3b84]
+libc.so.6(__clone+0x44)[0x7f68fc480cc4]
+
+0x560142bd9fb0  1  1
+spdlog-orig-hooks: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_count() (shared_ptr_base.h:1071)
+spdlog-orig-hooks: std::promise<void>::operator=(std::promise<void>&&) (future:1353)
+spdlog-orig-hooks: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::enqueue(spdlog::details::async_msg&&) (mpmc_blocking_q.h:35)
+spdlog-orig-hooks: spdlog::details::thread_pool::post_log(std::shared_ptr<spdlog::async_logger>&&, spdlog::details::log_msg const&, spdlog::async_overflow_po...
+spdlog-orig-hooks: spdlog::async_logger::sink_it_(spdlog::details::log_msg const&) (async_logger-inl.h:36)
+spdlog-orig-hooks: void spdlog::logger::log_<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdl...
+spdlog-orig-hooks: void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlo...
+libstdc++.so.6(+0xecdb4)[0x7f68fc76ddb4]
+libc.so.6(+0x9cb84)[0x7f68fc3f3b84]
+libc.so.6(__clone+0x44)[0x7f68fc480cc4]
+
+0x560142bda010  1  1
+spdlog-orig-hooks: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_count() (shared_ptr_base.h:1071)
+spdlog-orig-hooks: std::promise<void>::operator=(std::promise<void>&&) (future:1353)
+spdlog-orig-hooks: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::enqueue(spdlog::details::async_msg&&) (mpmc_blocking_q.h:35)
+spdlog-orig-hooks: spdlog::details::thread_pool::post_log(std::shared_ptr<spdlog::async_logger>&&, spdlog::details::log_msg const&, spdlog::async_overflow_po...
+spdlog-orig-hooks: spdlog::async_logger::sink_it_(spdlog::details::log_msg const&) (async_logger-inl.h:36)
+spdlog-orig-hooks: void spdlog::logger::log_<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdl...
+spdlog-orig-hooks: void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlo...
+libstdc++.so.6(+0xecdb4)[0x7f68fc76ddb4]
+libc.so.6(+0x9cb84)[0x7f68fc3f3b84]
+libc.so.6(__clone+0x44)[0x7f68fc480cc4]
+
+0x560142bda070  1  1
+spdlog-orig-hooks: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_count() (shared_ptr_base.h:1071)
+spdlog-orig-hooks: std::promise<void>::operator=(std::promise<void>&&) (future:1353)
+spdlog-orig-hooks: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::enqueue(spdlog::details::async_msg&&) (mpmc_blocking_q.h:35)
+spdlog-orig-hooks: spdlog::details::thread_pool::post_log(std::shared_ptr<spdlog::async_logger>&&, spdlog::details::log_msg const&, spdlog::async_overflow_po...
+spdlog-orig-hooks: spdlog::async_logger::sink_it_(spdlog::details::log_msg const&) (async_logger-inl.h:36)
+spdlog-orig-hooks: void spdlog::logger::log_<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdl...
+spdlog-orig-hooks: void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlo...
+libstdc++.so.6(+0xecdb4)[0x7f68fc76ddb4]
+libc.so.6(+0x9cb84)[0x7f68fc3f3b84]
+libc.so.6(__clone+0x44)[0x7f68fc480cc4]
+
+0x560142bda0d0  1  1
+spdlog-orig-hooks: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_count() (shared_ptr_base.h:1071)
+spdlog-orig-hooks: std::promise<void>::operator=(std::promise<void>&&) (future:1353)
+spdlog-orig-hooks: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::enqueue(spdlog::details::async_msg&&) (mpmc_blocking_q.h:35)
+spdlog-orig-hooks: spdlog::details::thread_pool::post_log(std::shared_ptr<spdlog::async_logger>&&, spdlog::details::log_msg const&, spdlog::async_overflow_po...
+spdlog-orig-hooks: spdlog::async_logger::sink_it_(spdlog::details::log_msg const&) (async_logger-inl.h:36)
+spdlog-orig-hooks: void spdlog::logger::log_<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdl...
+spdlog-orig-hooks: void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlo...
+libstdc++.so.6(+0xecdb4)[0x7f68fc76ddb4]
+libc.so.6(+0x9cb84)[0x7f68fc3f3b84]
+libc.so.6(__clone+0x44)[0x7f68fc480cc4]
+
+0x560142bda130  1  1
+spdlog-orig-hooks: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_count() (shared_ptr_base.h:1071)
+spdlog-orig-hooks: std::promise<void>::operator=(std::promise<void>&&) (future:1353)
+spdlog-orig-hooks: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::enqueue(spdlog::details::async_msg&&) (mpmc_blocking_q.h:35)
+spdlog-orig-hooks: spdlog::details::thread_pool::post_log(std::shared_ptr<spdlog::async_logger>&&, spdlog::details::log_msg const&, spdlog::async_overflow_po...
+spdlog-orig-hooks: spdlog::async_logger::sink_it_(spdlog::details::log_msg const&) (async_logger-inl.h:36)
+spdlog-orig-hooks: void spdlog::logger::log_<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdl...
+spdlog-orig-hooks: void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlo...
+libstdc++.so.6(+0xecdb4)[0x7f68fc76ddb4]
+libc.so.6(+0x9cb84)[0x7f68fc3f3b84]
+libc.so.6(__clone+0x44)[0x7f68fc480cc4]
+
+0x560142bda190  1  1
+spdlog-orig-hooks: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_count() (shared_ptr_base.h:1071)
+spdlog-orig-hooks: std::promise<void>::operator=(std::promise<void>&&) (future:1353)
+spdlog-orig-hooks: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::enqueue(spdlog::details::async_msg&&) (mpmc_blocking_q.h:35)
+spdlog-orig-hooks: spdlog::details::thread_pool::post_log(std::shared_ptr<spdlog::async_logger>&&, spdlog::details::log_msg const&, spdlog::async_overflow_po...
+spdlog-orig-hooks: spdlog::async_logger::sink_it_(spdlog::details::log_msg const&) (async_logger-inl.h:36)
+spdlog-orig-hooks: void spdlog::logger::log_<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdl...
+spdlog-orig-hooks: void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlo...
+libstdc++.so.6(+0xecdb4)[0x7f68fc76ddb4]
+libc.so.6(+0x9cb84)[0x7f68fc3f3b84]
+libc.so.6(__clone+0x44)[0x7f68fc480cc4]
+
+0x560142bda1f0  1  1
+spdlog-orig-hooks: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_count() (shared_ptr_base.h:1071)
+spdlog-orig-hooks: std::promise<void>::operator=(std::promise<void>&&) (future:1353)
+spdlog-orig-hooks: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::enqueue(spdlog::details::async_msg&&) (mpmc_blocking_q.h:35)
+spdlog-orig-hooks: spdlog::details::thread_pool::post_log(std::shared_ptr<spdlog::async_logger>&&, spdlog::details::log_msg const&, spdlog::async_overflow_po...
+spdlog-orig-hooks: spdlog::async_logger::sink_it_(spdlog::details::log_msg const&) (async_logger-inl.h:36)
+spdlog-orig-hooks: void spdlog::logger::log_<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdl...
+spdlog-orig-hooks: void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlo...
+libstdc++.so.6(+0xecdb4)[0x7f68fc76ddb4]
+libc.so.6(+0x9cb84)[0x7f68fc3f3b84]
+libc.so.6(__clone+0x44)[0x7f68fc480cc4]
+
+0x560142bda250  1  1
+spdlog-orig-hooks: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_count() (shared_ptr_base.h:1071)
+spdlog-orig-hooks: std::promise<void>::operator=(std::promise<void>&&) (future:1353)
+spdlog-orig-hooks: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::enqueue(spdlog::details::async_msg&&) (mpmc_blocking_q.h:35)
+spdlog-orig-hooks: spdlog::details::thread_pool::post_log(std::shared_ptr<spdlog::async_logger>&&, spdlog::details::log_msg const&, spdlog::async_overflow_po...
+spdlog-orig-hooks: spdlog::async_logger::sink_it_(spdlog::details::log_msg const&) (async_logger-inl.h:36)
+spdlog-orig-hooks: void spdlog::logger::log_<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdl...
+spdlog-orig-hooks: void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlo...
+libstdc++.so.6(+0xecdb4)[0x7f68fc76ddb4]
+libc.so.6(+0x9cb84)[0x7f68fc3f3b84]
+libc.so.6(__clone+0x44)[0x7f68fc480cc4]
+
+0x560142bda2b0  1  1
+spdlog-orig-hooks: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::~__shared_count() (shared_ptr_base.h:1071)
+spdlog-orig-hooks: std::promise<void>::operator=(std::promise<void>&&) (future:1353)
+spdlog-orig-hooks: spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>::enqueue(spdlog::details::async_msg&&) (mpmc_blocking_q.h:35)
+spdlog-orig-hooks: spdlog::details::thread_pool::post_log(std::shared_ptr<spdlog::async_logger>&&, spdlog::details::log_msg const&, spdlog::async_overflow_po...
+spdlog-orig-hooks: spdlog::async_logger::sink_it_(spdlog::details::log_msg const&) (async_logger-inl.h:36)
+spdlog-orig-hooks: void spdlog::logger::log_<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdl...
+spdlog-orig-hooks: void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlo...
+libstdc++.so.6(+0xecdb4)[0x7f68fc76ddb4]
+libc.so.6(+0x9cb84)[0x7f68fc3f3b84]
+libc.so.6(__clone+0x44)[0x7f68fc480cc4]

@@ -263,11 +263,10 @@ The plan's criterion was three real findings, broken or over-cautious with
 evidence. Over the 33 rows read (14 of DPDK, 19 of library users) the
 audit found one over-cautious queue (plugdata), no broken declaration, two
 latent two-producer traps that a change of one line would spring
-(distributor's commented swap, EPSILON's spinner), and ten declarations
-that hold only by convention (one of DPDK, nine of the library users).
-That is fewer than
+(distributor's commented swap, EPSILON's spinner), and nine declarations
+that hold only by convention. That is fewer than
 three; thesis C stays a section, the checking of declared topologies, and
 not the paper's claim. The strongest argument the audit gives that section
-is the ten conventions: declarations hold because people read, and a
+is the nine conventions: declarations hold because people read, and a
 compiler that proves the same two facts the declaration asserts is what
 lets them stop.
