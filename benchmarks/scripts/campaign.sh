@@ -732,7 +732,7 @@ case "$LEG" in
         use_alloc "$alloc"
         for threads in 1 2 4 8; do
           for payload in 8 64 256; do
-            for v in orig generic compiler hand; do
+            for v in orig orig-spin generic compiler hand; do
               lock "$BUILD/spdlog-$v" --variant "$v" --threads "$threads" --n 1000000 --payload "$payload" \
                    --sink null --rep "$rep" --json "$RUNS" 2>>"$OUT/log.txt"
             done

@@ -28,8 +28,11 @@ minus the pops, checked by a producer once per 64 of its pushes, so it
 holds to within that, and a producer the bound stops spins where the
 original sleeps on a condition variable; a worker spins, then yields,
 where the original sleeps on one too. These are the three ways the port is
-not the original; all are stated here, and none favours a side under load,
-which is what the leg measures. The sampling state of the bound is per
+not the original; all are stated here. Waiting by spinning favours
+whoever does it while there are free cores, so the leg also runs
+`spdlog-orig-spin`: spdlog's own queue, mutex and ring unchanged, waiting
+the way the port does (`spin_original.py`). Against it the port's gain is
+the queue's alone. The sampling state of the bound is per
 thread, not per pool, so the port assumes one pool per process, which is
 what spdlog's registry builds. The queue is a member of the pool, not of a
 queue class of its own, so that one constructor builds it and starts the
