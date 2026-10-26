@@ -311,7 +311,9 @@ public:
 
     // Whether two accounted-for threads cannot both exist: each was started
     // from a different arm of one `if` (or ternary) in the function that
-    // started them both, directly or through calls. `if (c) spawn(w) else
+    // started them both, directly or through calls, and neither that
+    // function nor any caller above it has control flow its regions do not
+    // show (a goto, a setjmp). `if (c) spawn(w) else
     // spawn(w)` is one thread, and the walk, which numbers every spawn
     // instance, used to hand it two numbers and then report the fields it
     // touches as shared between them.
@@ -336,7 +338,7 @@ public:
     static constexpr unsigned kInstanceCap = 250000;
 
 private:
-    bool isUnstructured(cir::FuncOp f);
+    bool isUnstructured(cir::FuncOp f) const;
     bool hasIndirectCall(cir::FuncOp f);
     bool isRecursive(cir::FuncOp f);
     bool canSpawn(cir::FuncOp f);
@@ -405,7 +407,7 @@ private:
     unsigned nextThread_ = 0;
     std::deque<Instance> instances_;   // stable addresses: Instance::parent points into it
     llvm::DenseSet<Operation *> reachedFuncs_;
-    llvm::DenseMap<Operation *, bool> unstructuredCache_;
+    mutable llvm::DenseMap<Operation *, bool> unstructuredCache_;
     llvm::DenseMap<Operation *, bool> recursiveCache_;
     bool recursiveComputed_ = false;
     llvm::DenseMap<unsigned, const Instance *> threadRoot_;   // the instance that began each thread

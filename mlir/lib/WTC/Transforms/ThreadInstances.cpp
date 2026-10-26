@@ -107,6 +107,12 @@ bool ThreadInstanceWalk::exclusive(unsigned threadA, unsigned threadB) const {
     // An ancestor that runs more than once runs both arms, one per run.
     if (common->execMult == Mult::Many || common->threadMult == Mult::Many || common->execUnknown)
         return false;
+    // So may a function whose control flow its regions do not show: a goto
+    // back to before the branch, or a setjmp that a longjmp returns to,
+    // runs the branch again -- in the function itself or in any caller
+    // above it, which calls it again.
+    for (const Instance *i = common; i; i = i->parent)
+        if (isUnstructured(i->func)) return false;
     const Instance *childA = childOnA.lookup(common);
     cir::CallOp siteA = childA->site, siteB = childB->site;
     Operation *ca = siteA.getOperation(), *cb = siteB.getOperation();
@@ -474,7 +480,20 @@ bool ThreadInstanceWalk::hasIndirectCall(cir::FuncOp f) {
     return found;
 }
 
-bool ThreadInstanceWalk::isUnstructured(cir::FuncOp f) {
+// A call that may return more than once: setjmp and its kind, vfork.
+// Whatever follows it in the function may run again after a longjmp, so the
+// function's control flow is not what its regions show.
+static bool returnsTwice(cir::CallOp call) {
+    if (call->hasAttr("returns_twice")) return true;
+    cir::FuncOp f = lookupCallee(call);
+    if (!f) return false;
+    if (f->hasAttr("returns_twice")) return true;
+    const StringRef n = f.getSymName();
+    return n == "setjmp" || n == "_setjmp" || n == "__setjmp" || n == "sigsetjmp" || n == "__sigsetjmp" ||
+           n == "savectx" || n == "vfork" || n == "getcontext" || n == "qsetjmp";
+}
+
+bool ThreadInstanceWalk::isUnstructured(cir::FuncOp f) const {
     auto it = unstructuredCache_.find(f.getOperation());
     if (it != unstructuredCache_.end()) return it->second;
     bool found = false;
@@ -482,6 +501,8 @@ bool ThreadInstanceWalk::isUnstructured(cir::FuncOp f) {
         if (isa<cir::GotoOp, cir::LabelOp, cir::BrOp, cir::BrCondOp,
                 cir::IndirectBrOp, cir::SwitchFlatOp>(op))
             found = true;
+        if (isa<cir::EhSetjmpOp>(op)) found = true;   // __builtin_setjmp
+        if (auto call = dyn_cast<cir::CallOp>(op); call && returnsTwice(call)) found = true;
     });
     unstructuredCache_[f.getOperation()] = found;
     return found;
