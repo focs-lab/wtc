@@ -39,6 +39,7 @@ workloads/
                       strength and element ownership, alone and together
   w11_pool            a thread pool's tasks on the heap or in the cell,
                       through the general queue or the ring for one producer
+  w12_fusion          three stages on three threads, or fused on one
 apps/ferret/          PARSEC ferret ported onto the shim (GPL, see there)
 apps/dedup/           PARSEC dedup ported onto the shim (BSD-3, see there)
 apps/spdlog/          spdlog's asynchronous logger on the shim (MIT, see there)
@@ -187,6 +188,13 @@ variants are the ceiling.
   tasks are queued. The work is an exact count of rounds of arithmetic
   (`--rounds`; `--calibrate` prints rounds per ns), so runs given the same
   count do the same work whichever process calibrated it.
+- **W12** `w12_fusion`: three stages of `--work` each, on three threads
+  joined by the SPSC ring (`pipeline`) or one after another on one thread
+  (`fused`): the grain below which passing a record between cores costs more
+  than its work. Throughput only, and the pipeline spends three cores where
+  the fused loop spends one. The work is given as W11's is, and both
+  variants print the same checksum of the first million records for the same
+  count of rounds, so runs of the two can be checked against each other.
 
 Every results line also records the process's peak resident set
 (`peak_rss_kib`). The latency workloads record the whole distribution as
