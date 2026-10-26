@@ -142,7 +142,7 @@ eight producers and eight consumers. Both findings led to the segmented
 queue (`runtime/segment_queue.hpp`), since 22 October the general-purpose
 implementation and, in its single-consumer form, the one for many
 producers; the legs whose B0 it changes were run again on 26 October
-(below), except the latency leg, still running.
+(below).
 
 **RQ2, re-measured on 26 October** against the current general-purpose
 queue (`benchmarks/results/2026-10-26-*`; paired runs on a second host
@@ -172,11 +172,26 @@ list; these supersede its ratios.
 - The grain (`2026-10-26-eval-w3grain`): the constant is about 0.04 µs a
   record, so the gain is above 10% only for stages under about 0.5 µs
   (1.97× at no work, 1.04× at 1.1 µs, 1.00× from about 5 µs).
-- spdlog (`2026-10-26-eval-spdlog`): 2.52× over spdlog as released
-  (1.21–6.09), of which the topology's share is 1.06× (1.01–1.17); the
-  rest is the general-purpose queue the program gets without proof. Its
-  waiting control re-took the queue's mutex; a rerun with the fixed control
-  is in progress.
+- spdlog (`2026-10-26-eval-spdlog-rerun`, with the waiting control
+  spinning outside the queue's mutex): 2.52× over spdlog as released
+  (1.21–6.35), faster in all 36 configurations, of which the topology's
+  share is 1.05× (1.01–1.13); the rest is the general-purpose queue the
+  program gets without proof, 2.51× the spinning control, while spinning
+  instead of blocking is level with the original (0.96×). The p99 of a
+  call is 3.5× shorter on the geometric mean but longer in 3 of 36
+  configurations, all at 256 bytes under glibc. The first leg of the day
+  (`2026-10-26-eval-spdlog`), whose control re-took the mutex, gave the
+  same 2.52× and 1.06×.
+- Latency under load (`2026-10-26-eval-w2`, on the runtime before the
+  slip's gate of PR #37): every queue keeps up to 10 M/s except
+  moodycamel's ConcurrentQueue; at or below 0.5 M/s the compiler's queue has
+  the shortest median and p99 measured (0.81× and 0.69× as written, 0.72×
+  and 0.81× rigtorp's ring); from 1.4 to 10 M/s the runtime's ring waits,
+  a median 5.1× as written and a p99 2.8× rigtorp's, the same regression
+  as the pipeline's tail. The bare ring shows it too, so the cause is in
+  the ring, most likely the 23 October consumer slip; a gate is proposed
+  in PR #37 (open; its untimed A/B covers W2 at 1 µs and 300 ns and W3 at
+  1–2 M/s; a paired rerun on the second host is in progress).
 - Many threads (`2026-10-26-eval-w9`): the general queue, kept where both
   sides are many, is 7.9× the two-lock list (2:2 to 8:8), 1.7× moodycamel's
   ConcurrentQueue and 1.6× LCRQ with producers and consumers split
