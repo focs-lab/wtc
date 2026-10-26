@@ -37,6 +37,8 @@ workloads/
   w9_mpmc_scaling     the general-purpose queues as threads are added
   w10_ablation        the runtime's queues used directly: synchronisation
                       strength and element ownership, alone and together
+  w11_pool            a thread pool's tasks on the heap or in the cell,
+                      through the general queue or the ring for one producer
 apps/ferret/          PARSEC ferret ported onto the shim (GPL, see there)
 apps/dedup/           PARSEC dedup ported onto the shim (BSD-3, see there)
 apps/spdlog/          spdlog's asynchronous logger on the shim (MIT, see there)
@@ -166,6 +168,25 @@ variants are the ceiling.
   strong library queue holding the element by value. Run under every
   allocator, since the `xsp` and `share` rows depend on it and the `cell`
   rows must not.
+- **W11** `w11_pool`: one submitter and 1 to 8 workers (`--consumers`). A
+  task is a `std::function` (`heap_*`) or a function pointer and its capture
+  held by value in the queue's cell (`cell_*`), through the general queue
+  (`*_mpmc`) or the ring for one producer and many consumers that a pool's
+  topology allows (`*_spmc`). The capture is `--elem` 16, 64 or 256 bytes,
+  and every word of it is folded into the task's arithmetic, a few
+  operations on top of its `--work`, so each variant reads all of it. At 16
+  bytes libstdc++ keeps a trivially copyable capture inside the
+  `std::function`, so that row separates the indirect call from the
+  allocation; above it the submitter allocates and a worker frees. The cell
+  rows allocate only the queues' own segments and blocks, amortised over the
+  tasks they hold; a run under the allocation counter
+  (`libwtc_alloccount.so`) counts them per task. Each worker sums the ids it
+  ran and a hash of each, checked against every id submitted once. A run
+  lasts `--seconds` after a tenth of that as warm-up and counts the tasks
+  still unfinished when its window opens; at most 9215 + 256 per worker
+  tasks are queued. The work is an exact count of rounds of arithmetic
+  (`--rounds`; `--calibrate` prints rounds per ns), so runs given the same
+  count do the same work whichever process calibrated it.
 
 Every results line also records the process's peak resident set
 (`peak_rss_kib`). The latency workloads record the whole distribution as

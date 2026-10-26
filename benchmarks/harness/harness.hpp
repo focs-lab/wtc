@@ -64,6 +64,28 @@ inline double calibrate_tsc_hz(int ms = 200) {
     return static_cast<double>(c1 - c0) / (static_cast<double>(t1 - t0) / 1e9);
 }
 
+// ---- calibrated work ---------------------------------------------------
+
+// Dependent arithmetic that a workload spends as its "work": a fixed number
+// of rounds is the same work in every process, so a leg calibrates once and
+// passes the count to every run, and work_rounds_per_ns() says how many
+// rounds make a nanosecond on this processor at this moment.
+inline std::uint64_t work_rounds(std::uint64_t x, std::uint64_t rounds) {
+    for (std::uint64_t i = 0; i < rounds; ++i) {
+        x = x * 6364136223846793005ULL + 1442695040888963407ULL;
+        asm volatile("" : "+r"(x));
+    }
+    return x;
+}
+
+inline double work_rounds_per_ns() {
+    const std::uint64_t k = 50'000'000;
+    const auto t0 = now_ns();
+    volatile std::uint64_t r = work_rounds(1, k);
+    (void)r;
+    return static_cast<double>(k) / static_cast<double>(now_ns() - t0);
+}
+
 // ---- CPUs ------------------------------------------------------------
 
 inline std::vector<int> allowed_cpus() {

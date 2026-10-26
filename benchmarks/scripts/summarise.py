@@ -25,7 +25,8 @@ from pathlib import Path
 # workload has: the adapter legs call it shim_generic, the compiler-selected
 # leg calls its untouched build generic. Naming one and leaving the columns
 # empty when it is absent is how a table comes out with no ratios at all.
-BASELINE_CANDIDATES = ("shim_generic", "orig", "generic", "orig_generic", "plain")
+# W11 compares with the pool as written.
+BASELINE_CANDIDATES = ("shim_generic", "orig", "generic", "orig_generic", "plain", "heap_mpmc")
 CEILING_CANDIDATES = ("ring_inline", "rigtorp_inline")
 
 
