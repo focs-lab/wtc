@@ -1,0 +1,48 @@
+job                                  n     median   CV%   GHz outside
+lr_orig_O0                          20    163.479   3.5  4.09   0.005
+lr_orig_O2                          20     12.329  14.7  3.53   0.009
+lr_pad_O0                           20     42.052   8.2  3.82   0.005
+lr_pad_O2                           20     12.292  16.9  3.56   0.008
+w2_main_rigtorp_inline              20    132.507   2.5  4.07   0.020
+w2_main_shim_spsc_inline            20    249.220   3.1  4.08   0.019
+w2_pre_rigtorp_inline               20    129.810   1.3  4.09   0.019
+w2_pre_shim_spsc_inline             20    283.118   2.0  4.08   0.020
+w3_main_rigtorp_inline              20     12.832   0.5  4.06   0.022
+w3_main_shim_generic                20      6.912   1.0  4.04   0.021
+w3_main_shim_spsc_inline            20     15.418   0.9  4.03   0.023
+w3_pre_rigtorp_inline               20     12.855   0.3  4.06   0.023
+w3_pre_shim_generic                 20      6.921   0.8  4.04   0.021
+w3_pre_shim_spsc_inline             20     15.575   0.5  4.04   0.023
+w7_fix_generic_e64                  20     23.377   0.2  3.79   0.019
+w7_fix_generic_e8                   20     23.500   0.1  3.99   0.018
+w7_fix_inline_e64                   20     41.965   0.5  3.46   0.019
+w7_fix_inline_e8                    20     45.732   0.1  3.89   0.018
+w7_pre_generic_e64                  20     23.511   0.3  3.80   0.019
+w7_pre_generic_e8                   20     23.497   0.3  4.00   0.018
+w7_pre_inline_e64                   20     43.793   0.2  3.42   0.019
+w7_pre_inline_e8                    20     45.739   0.1  3.89   0.018
+w7_prealign_generic_e64             20     23.753   0.8  3.83   0.020
+w7_prealign_generic_e8              20     23.491   0.2  3.98   0.019
+w7_prealign_inline_e64              20     44.262   0.1  3.44   0.019
+w7_prealign_inline_e8               20     45.727   0.2  3.90   0.020
+
+ratios within a round (>1 = the first is better)
+w7_fix_inline_e8               vs w7_pre_inline_e8                1.000  [1.000, 1.000]  n=20
+w7_prealign_inline_e8          vs w7_pre_inline_e8                1.000  [1.000, 1.001]  n=20
+w7_prealign_inline_e8          vs w7_fix_inline_e8                1.000  [1.000, 1.000]  n=20
+w7_fix_inline_e64              vs w7_pre_inline_e64               0.958  [0.958, 0.959]  n=20
+w7_prealign_inline_e64         vs w7_pre_inline_e64               1.011  [1.011, 1.012]  n=20
+w7_prealign_inline_e64         vs w7_fix_inline_e64               1.055  [1.055, 1.056]  n=20
+w7_fix_generic_e8              vs w7_pre_generic_e8               1.000  [0.999, 1.001]  n=20
+w7_prealign_generic_e8         vs w7_pre_generic_e8               1.000  [0.998, 1.000]  n=20
+w7_prealign_generic_e8         vs w7_fix_generic_e8               0.999  [0.999, 1.001]  n=20
+w7_fix_generic_e64             vs w7_pre_generic_e64              0.993  [0.992, 0.995]  n=20
+w7_prealign_generic_e64        vs w7_pre_generic_e64              1.011  [1.008, 1.012]  n=20
+w7_prealign_generic_e64        vs w7_fix_generic_e64              1.016  [1.015, 1.018]  n=20
+w3_main_rigtorp_inline         vs w3_pre_rigtorp_inline           0.997  [0.995, 1.000]  n=20
+w3_main_shim_spsc_inline       vs w3_pre_shim_spsc_inline         0.990  [0.987, 0.991]  n=20
+w3_main_shim_generic           vs w3_pre_shim_generic             0.996  [0.991, 1.010]  n=20
+w2_main_shim_spsc_inline       vs w2_pre_shim_spsc_inline         1.136  [1.119, 1.170]  n=20
+w2_main_rigtorp_inline         vs w2_pre_rigtorp_inline           0.977  [0.960, 1.003]  n=20
+lr_pad_O2                      vs lr_orig_O2                      0.993  [0.977, 1.041]  n=20
+lr_pad_O0                      vs lr_orig_O0                      3.772  [3.468, 3.935]  n=20

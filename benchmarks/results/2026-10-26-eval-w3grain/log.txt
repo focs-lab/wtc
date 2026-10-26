@@ -1,0 +1,736 @@
+W1 shim_generic           E64   spin     17.02 Mops/s
+W1 shim_generic           E64   spin     15.45 Mops/s
+W1 shim_generic           E64   spin     15.33 Mops/s
+W1 shim_generic           E64   spin     15.18 Mops/s
+W1 shim_generic           E64   spin     15.24 Mops/s
+W3 closed  shim_generic             13.06 Mrec/s  p50 329545  p99  387722  p99.9  394762 ns
+W3 closed  moodycamel_rw_inline     20.94 Mrec/s  p50    240  p99     991  p99.9  111958 ns
+W3 closed  rigtorp_inline           22.33 Mrec/s  p50    341  p99    1562  p99.9  170676 ns
+W3 closed  shim_spsc                25.40 Mrec/s  p50   1973  p99   96475  p99.9  169705 ns
+W3 closed  shim_spsc_inline         25.09 Mrec/s  p50   1482  p99   35704  p99.9  201763 ns
+W3wtc generic     12.89 Mrec/s  p50 325048  p99  358378  p99.9  364607 ns
+W3wtc hand        25.46 Mrec/s  p50   1923  p99  112519  p99.9  183415 ns
+W3wtc hand-inline   25.48 Mrec/s  p50   1442  p99    3125  p99.9  142524 ns
+W3wtc compiler    25.49 Mrec/s  p50   1432  p99    5568  p99.9  172669 ns
+W3 closed  shim_generic              7.33 Mrec/s  p50 600391  p99  662034  p99.9  675704 ns
+W3 closed  moodycamel_rw_inline     11.34 Mrec/s  p50 386099  p99  411708  p99.9  455033 ns
+W3 closed  rigtorp_inline           14.05 Mrec/s  p50 308483  p99  326650  p99.9  462995 ns
+W3 closed  shim_spsc                11.76 Mrec/s  p50 372429  p99  421793  p99.9  453050 ns
+W3 closed  shim_spsc_inline         12.39 Mrec/s  p50 351818  p99  380151  p99.9  606009 ns
+W3wtc generic      8.64 Mrec/s  p50 502254  p99  554021  p99.9  583816 ns
+W3wtc hand        13.79 Mrec/s  p50 314873  p99  333571  p99.9  391477 ns
+W3wtc hand-inline   16.45 Mrec/s  p50 260681  p99  272839  p99.9  382644 ns
+W3wtc compiler    16.31 Mrec/s  p50 261092  p99  338288  p99.9  496465 ns
+W3 closed  shim_generic              2.89 Mrec/s  p50 1565590  p99 1722996  p99.9 1951879 ns
+W3 closed  moodycamel_rw_inline      3.32 Mrec/s  p50 1366040  p99 1497287  p99.9 1502735 ns
+W3 closed  rigtorp_inline            3.46 Mrec/s  p50 1311418  p99 1437327  p99.9 1771058 ns
+W3 closed  shim_spsc                 3.36 Mrec/s  p50 1349576  p99 1479250  p99.9 1668013 ns
+W3 closed  shim_spsc_inline          3.40 Mrec/s  p50 1334102  p99 1463907  p99.9 1488344 ns
+W3wtc generic      3.09 Mrec/s  p50 1463336  p99 1619851  p99.9 1683587 ns
+W3wtc hand         3.50 Mrec/s  p50 1294883  p99 1418459  p99.9 1466140 ns
+W3wtc hand-inline    3.66 Mrec/s  p50 1236525  p99 1353721  p99.9 1606421 ns
+W3wtc compiler     3.65 Mrec/s  p50 1240332  p99 1391308  p99.9 1493111 ns
+W3 closed  shim_generic              0.83 Mrec/s  p50 5495438  p99 6087256  p99.9 6259255 ns
+W3 closed  moodycamel_rw_inline      0.87 Mrec/s  p50 5286604  p99 5845914  p99.9 5867075 ns
+W3 closed  rigtorp_inline            0.88 Mrec/s  p50 5215578  p99 5765984  p99.9 5913725 ns
+W3 closed  shim_spsc                 0.87 Mrec/s  p50 5266694  p99 5822468  p99.9 5833775 ns
+W3 closed  shim_spsc_inline          0.87 Mrec/s  p50 5253465  p99 5807657  p99.9 5820056 ns
+W3wtc generic      0.85 Mrec/s  p50 5377740  p99 5938691  p99.9 5960204 ns
+W3wtc hand         0.88 Mrec/s  p50 5216169  p99 5766505  p99.9 5778493 ns
+W3wtc hand-inline    0.89 Mrec/s  p50 5163840  p99 5708538  p99.9 5875358 ns
+W3wtc compiler     0.89 Mrec/s  p50 5156709  p99 5700275  p99.9 5711372 ns
+W3 closed  shim_generic              0.21 Mrec/s  p50 21180847  p99 23464304  p99.9 23511585 ns
+W3 closed  moodycamel_rw_inline      0.22 Mrec/s  p50 20977426  p99 23243958  p99.9 23304219 ns
+W3 closed  rigtorp_inline            0.22 Mrec/s  p50 20925053  p99 23185696  p99.9 23244905 ns
+W3 closed  shim_spsc                 0.22 Mrec/s  p50 20956771  p99 23220959  p99.9 23266427 ns
+W3 closed  shim_spsc_inline          0.22 Mrec/s  p50 20947118  p99 23210054  p99.9 23453179 ns
+W3wtc generic      0.22 Mrec/s  p50 21119446  p99 23397796  p99.9 23482122 ns
+W3wtc hand         0.22 Mrec/s  p50 20942777  p99 23205783  p99.9 23553785 ns
+W3wtc hand-inline    0.22 Mrec/s  p50 20871995  p99 23127149  p99.9 23310154 ns
+W3wtc compiler     0.19 Mrec/s  p50 24158440  p99 27027225  p99.9 27383569 ns
+W3 closed  shim_generic              0.05 Mrec/s  p50 96738075  p99 107457364  p99.9 108236223 ns
+W3 closed  moodycamel_rw_inline      0.05 Mrec/s  p50 93194879  p99 106354807  p99.9 107060426 ns
+W3 closed  rigtorp_inline            0.05 Mrec/s  p50 95871811  p99 106793490  p99.9 107750886 ns
+W3 closed  shim_spsc                 0.05 Mrec/s  p50 89833227  p99 108567004  p99.9 110457421 ns
+W3 closed  shim_spsc_inline          0.05 Mrec/s  p50 90584260  p99 104068968  p99.9 105288949 ns
+W3wtc generic      0.05 Mrec/s  p50 92540105  p99 106488088  p99.9 107924734 ns
+W3wtc hand         0.05 Mrec/s  p50 90653073  p99 104758272  p99.9 105792905 ns
+W3wtc hand-inline    0.05 Mrec/s  p50 94255757  p99 105634450  p99.9 106996824 ns
+W3wtc compiler     0.05 Mrec/s  p50 90150235  p99 103732287  p99.9 105334261 ns
+W3 closed  shim_generic              0.01 Mrec/s  p50 368933531  p99 423207226  p99.9 433874888 ns
+W3 closed  moodycamel_rw_inline      0.01 Mrec/s  p50 362364941  p99 408564864  p99.9 411795903 ns
+W3 closed  rigtorp_inline            0.01 Mrec/s  p50 366721217  p99 413296740  p99.9 417065557 ns
+W3 closed  shim_spsc                 0.01 Mrec/s  p50 374307633  p99 421420630  p99.9 426623969 ns
+W3 closed  shim_spsc_inline          0.01 Mrec/s  p50 374505966  p99 426163817  p99.9 428928816 ns
+W3wtc generic      0.01 Mrec/s  p50 357567722  p99 408015632  p99.9 413928995 ns
+W3wtc hand         0.01 Mrec/s  p50 373114824  p99 420096654  p99.9 422916827 ns
+W3wtc hand-inline    0.01 Mrec/s  p50 344956326  p99 398186972  p99.9 401488326 ns
+W3wtc compiler     0.01 Mrec/s  p50 334583186  p99 371170337  p99.9 372000432 ns
+W3 closed  shim_generic              0.00 Mrec/s  p50 1258413423  p99 1482630979  p99.9 1487289520 ns
+W3 closed  moodycamel_rw_inline      0.00 Mrec/s  p50 1258283712  p99 1482544224  p99.9 1490264161 ns
+W3 closed  rigtorp_inline            0.00 Mrec/s  p50 1258610506  p99 1483064766  p99.9 1489155096 ns
+W3 closed  shim_spsc                 0.00 Mrec/s  p50 1259999256  p99 1484209812  p99.9 1490162475 ns
+W3 closed  shim_spsc_inline          0.00 Mrec/s  p50 1257078890  p99 1481089098  p99.9 1485765276 ns
+W3wtc generic      0.00 Mrec/s  p50 1257982390  p99 1482197534  p99.9 1486894834 ns
+W3wtc hand         0.00 Mrec/s  p50 1257784878  p99 1481925952  p99.9 1487440289 ns
+W3wtc hand-inline    0.00 Mrec/s  p50 1257490866  p99 1481545129  p99.9 1486227396 ns
+W3wtc compiler     0.00 Mrec/s  p50 1257102608  p99 1481114296  p99.9 1485844025 ns
+W3 closed  shim_generic             12.79 Mrec/s  p50 340922  p99  363445  p99.9  563996 ns
+W3 closed  moodycamel_rw_inline     21.22 Mrec/s  p50    240  p99    1022  p99.9   27061 ns
+W3 closed  rigtorp_inline           19.99 Mrec/s  p50    260  p99    1592  p99.9  268413 ns
+W3 closed  shim_spsc                25.32 Mrec/s  p50   2053  p99  163025  p99.9  247301 ns
+W3 closed  shim_spsc_inline         25.08 Mrec/s  p50   1502  p99   36094  p99.9  222554 ns
+W3wtc generic     11.97 Mrec/s  p50 365038  p99  386210  p99.9  452820 ns
+W3wtc hand        25.46 Mrec/s  p50   1913  p99  108773  p99.9  406400 ns
+W3wtc hand-inline   25.47 Mrec/s  p50   1432  p99   33290  p99.9  207471 ns
+W3wtc compiler    25.49 Mrec/s  p50   1402  p99   26069  p99.9  222344 ns
+W3 closed  shim_generic              7.56 Mrec/s  p50 579089  p99  683105  p99.9  855564 ns
+W3 closed  moodycamel_rw_inline     11.32 Mrec/s  p50 386540  p99  414512  p99.9  619299 ns
+W3 closed  rigtorp_inline           14.15 Mrec/s  p50 306069  p99  324086  p99.9  601843 ns
+W3 closed  shim_spsc                11.92 Mrec/s  p50 367331  p99  392139  p99.9  521022 ns
+W3 closed  shim_spsc_inline         12.36 Mrec/s  p50 352890  p99  385649  p99.9  544467 ns
+W3wtc generic      9.21 Mrec/s  p50 469525  p99  526089  p99.9  669064 ns
+W3wtc hand        13.71 Mrec/s  p50 316785  p99  335744  p99.9  544577 ns
+W3wtc hand-inline   16.40 Mrec/s  p50 261182  p99  278959  p99.9  359319 ns
+W3wtc compiler    16.42 Mrec/s  p50 261062  p99  273781  p99.9  341022 ns
+W3 closed  shim_generic              2.92 Mrec/s  p50 1549275  p99 1700282  p99.9 1770237 ns
+W3 closed  moodycamel_rw_inline      3.32 Mrec/s  p50 1367562  p99 1500462  p99.9 1593602 ns
+W3 closed  rigtorp_inline            3.46 Mrec/s  p50 1309245  p99 1435094  p99.9 1518048 ns
+W3 closed  shim_spsc                 3.36 Mrec/s  p50 1348945  p99 1479831  p99.9 1616666 ns
+W3 closed  shim_spsc_inline          3.40 Mrec/s  p50 1332690  p99 1460071  p99.9 1483046 ns
+W3wtc generic      3.15 Mrec/s  p50 1429906  p99 1679200  p99.9 1759060 ns
+W3wtc hand         3.48 Mrec/s  p50 1304748  p99 1429215  p99.9 1446020 ns
+W3wtc hand-inline    3.66 Mrec/s  p50 1237798  p99 1357107  p99.9 1548083 ns
+W3wtc compiler     3.63 Mrec/s  p50 1248294  p99 1437157  p99.9 1523326 ns
+W3 closed  shim_generic              0.84 Mrec/s  p50 5465352  p99 6035358  p99.9 6106024 ns
+W3 closed  moodycamel_rw_inline      0.87 Mrec/s  p50 5287114  p99 5847605  p99.9 5970430 ns
+W3 closed  rigtorp_inline            0.88 Mrec/s  p50 5210690  p99 5760526  p99.9 5772774 ns
+W3 closed  shim_spsc                 0.87 Mrec/s  p50 5264901  p99 5820435  p99.9 5921807 ns
+W3 closed  shim_spsc_inline          0.87 Mrec/s  p50 5250240  p99 5803891  p99.9 5814967 ns
+W3wtc generic      0.85 Mrec/s  p50 5351261  p99 5909820  p99.9 5966074 ns
+W3wtc hand         0.88 Mrec/s  p50 5224802  p99 5776039  p99.9 5791492 ns
+W3wtc hand-inline    0.89 Mrec/s  p50 5158201  p99 5702087  p99.9 5762638 ns
+W3wtc compiler     0.89 Mrec/s  p50 5157751  p99 5701717  p99.9 5721687 ns
+W3 closed  shim_generic              0.22 Mrec/s  p50 21164161  p99 23445535  p99.9 23491915 ns
+W3 closed  moodycamel_rw_inline      0.22 Mrec/s  p50 20987736  p99 23255939  p99.9 23587557 ns
+W3 closed  rigtorp_inline            0.22 Mrec/s  p50 20927347  p99 23189041  p99.9 23307719 ns
+W3 closed  shim_spsc                 0.22 Mrec/s  p50 20947376  p99 23210632  p99.9 23254819 ns
+W3 closed  shim_spsc_inline          0.22 Mrec/s  p50 20928137  p99 23189180  p99.9 23243361 ns
+W3wtc generic      0.22 Mrec/s  p50 21081926  p99 23358342  p99.9 23762658 ns
+W3wtc hand         0.22 Mrec/s  p50 20934204  p99 23195678  p99.9 23362037 ns
+W3wtc hand-inline    0.22 Mrec/s  p50 20859731  p99 23113563  p99.9 23225441 ns
+W3wtc compiler     0.22 Mrec/s  p50 20873729  p99 23129244  p99.9 23460811 ns
+W3 closed  shim_generic              0.05 Mrec/s  p50 83913894  p99 93038488  p99.9 93327933 ns
+W3 closed  moodycamel_rw_inline      0.05 Mrec/s  p50 83668250  p99 92768969  p99.9 92973886 ns
+W3 closed  rigtorp_inline            0.05 Mrec/s  p50 83664365  p99 92759164  p99.9 93403872 ns
+W3 closed  shim_spsc                 0.05 Mrec/s  p50 83708671  p99 92813946  p99.9 93006205 ns
+W3 closed  shim_spsc_inline          0.05 Mrec/s  p50 83655645  p99 92752799  p99.9 92931377 ns
+W3wtc generic      0.05 Mrec/s  p50 83950393  p99 93076249  p99.9 93766515 ns
+W3wtc hand         0.05 Mrec/s  p50 83671194  p99 92773255  p99.9 93001948 ns
+W3wtc hand-inline    0.05 Mrec/s  p50 83550113  p99 92639455  p99.9 92811883 ns
+W3wtc compiler     0.05 Mrec/s  p50 83633968  p99 92730350  p99.9 93334287 ns
+W3 closed  shim_generic              0.01 Mrec/s  p50 334690523  p99 371276978  p99.9 371966783 ns
+W3 closed  moodycamel_rw_inline      0.01 Mrec/s  p50 334434873  p99 370993451  p99.9 373232301 ns
+W3 closed  rigtorp_inline            0.01 Mrec/s  p50 334477884  p99 371026348  p99.9 372616425 ns
+W3 closed  shim_spsc                 0.01 Mrec/s  p50 334672447  p99 371240309  p99.9 376528274 ns
+W3 closed  shim_spsc_inline          0.01 Mrec/s  p50 334385286  p99 370943915  p99.9 371618267 ns
+W3wtc generic      0.01 Mrec/s  p50 334612338  p99 371189298  p99.9 371885823 ns
+W3wtc hand         0.01 Mrec/s  p50 334510743  p99 371082527  p99.9 371836128 ns
+W3wtc hand-inline    0.01 Mrec/s  p50 334407682  p99 370977306  p99.9 371773902 ns
+W3wtc compiler     0.01 Mrec/s  p50 334364250  p99 370917017  p99.9 372324039 ns
+W3 closed  shim_generic              0.00 Mrec/s  p50 1257949949  p99 1482110530  p99.9 1486877494 ns
+W3 closed  moodycamel_rw_inline      0.00 Mrec/s  p50 1258020241  p99 1482156384  p99.9 1486799913 ns
+W3 closed  rigtorp_inline            0.00 Mrec/s  p50 1257945426  p99 1482101101  p99.9 1486770909 ns
+W3 closed  shim_spsc                 0.00 Mrec/s  p50 1258605950  p99 1482960815  p99.9 1490795283 ns
+W3 closed  shim_spsc_inline          0.00 Mrec/s  p50 1257489204  p99 1481559101  p99.9 1486282870 ns
+W3wtc generic      0.00 Mrec/s  p50 1258529843  p99 1482836455  p99.9 1490090892 ns
+W3wtc hand         0.00 Mrec/s  p50 1258252965  p99 1482427466  p99.9 1487652047 ns
+W3wtc hand-inline    0.00 Mrec/s  p50 1257161545  p99 1481383794  p99.9 1486033882 ns
+W3wtc compiler     0.00 Mrec/s  p50 1257857413  p99 1481974880  p99.9 1487954164 ns
+W3 closed  shim_generic             12.21 Mrec/s  p50 351558  p99  394322  p99.9  580702 ns
+W3 closed  moodycamel_rw_inline     20.95 Mrec/s  p50    240  p99    1162  p99.9  165408 ns
+W3 closed  rigtorp_inline           22.19 Mrec/s  p50    300  p99    1012  p99.9   63565 ns
+W3 closed  shim_spsc                25.40 Mrec/s  p50   1973  p99   39379  p99.9   75583 ns
+W3 closed  shim_spsc_inline         25.08 Mrec/s  p50   1532  p99    3445  p99.9  196785 ns
+W3wtc generic     13.30 Mrec/s  p50 321292  p99  362494  p99.9  408343 ns
+W3wtc hand        25.47 Mrec/s  p50   1943  p99   38778  p99.9   81773 ns
+W3wtc hand-inline   25.48 Mrec/s  p50   1452  p99    2464  p99.9   70886 ns
+W3wtc compiler    25.49 Mrec/s  p50   1432  p99    2444  p99.9   59069 ns
+W3 closed  shim_generic              7.32 Mrec/s  p50 599770  p99  661523  p99.9  831618 ns
+W3 closed  moodycamel_rw_inline     11.32 Mrec/s  p50 386961  p99  413130  p99.9  430216 ns
+W3 closed  rigtorp_inline           13.90 Mrec/s  p50 311728  p99  329995  p99.9  348884 ns
+W3 closed  shim_spsc                11.84 Mrec/s  p50 369985  p99  393891  p99.9  428163 ns
+W3 closed  shim_spsc_inline         12.37 Mrec/s  p50 352930  p99  382915  p99.9  392840 ns
+W3wtc generic      8.70 Mrec/s  p50 497867  p99  550216  p99.9  767712 ns
+W3wtc hand        13.78 Mrec/s  p50 315023  p99  334762  p99.9  530997 ns
+W3wtc hand-inline   16.45 Mrec/s  p50 260691  p99  272619  p99.9  358278 ns
+W3wtc compiler    16.44 Mrec/s  p50 260731  p99  304857  p99.9  485939 ns
+W3 closed  shim_generic              2.87 Mrec/s  p50 1575064  p99 1761073  p99.9 1940913 ns
+W3 closed  moodycamel_rw_inline      3.32 Mrec/s  p50 1367212  p99 1498659  p99.9 1599360 ns
+W3 closed  rigtorp_inline            3.45 Mrec/s  p50 1314543  p99 1440612  p99.9 1781313 ns
+W3 closed  shim_spsc                 3.36 Mrec/s  p50 1350156  p99 1479781  p99.9 1506391 ns
+W3 closed  shim_spsc_inline          3.41 Mrec/s  p50 1331688  p99 1458949  p99.9 1489155 ns
+W3wtc generic      3.09 Mrec/s  p50 1462785  p99 1618258  p99.9 1706381 ns
+W3wtc hand         3.50 Mrec/s  p50 1295264  p99 1418629  p99.9 1422956 ns
+W3wtc hand-inline    3.66 Mrec/s  p50 1237137  p99 1354463  p99.9 1709415 ns
+W3wtc compiler     3.66 Mrec/s  p50 1236916  p99 1353892  p99.9 1357868 ns
+W3 closed  shim_generic              0.83 Mrec/s  p50 5484942  p99 6059053  p99.9 6087666 ns
+W3 closed  moodycamel_rw_inline      0.87 Mrec/s  p50 5287396  p99 5847907  p99.9 5871803 ns
+W3 closed  rigtorp_inline            0.88 Mrec/s  p50 5219604  p99 5770891  p99.9 5890000 ns
+W3 closed  shim_spsc                 0.87 Mrec/s  p50 5265122  p99 5820686  p99.9 5832454 ns
+W3 closed  shim_spsc_inline          0.87 Mrec/s  p50 5251631  p99 5805502  p99.9 5818842 ns
+W3wtc generic      0.85 Mrec/s  p50 5379063  p99 5941418  p99.9 5970752 ns
+W3wtc hand         0.88 Mrec/s  p50 5217039  p99 5767375  p99.9 5778892 ns
+W3wtc hand-inline    0.89 Mrec/s  p50 5157730  p99 5701476  p99.9 5712703 ns
+W3wtc compiler     0.89 Mrec/s  p50 5156018  p99 5699884  p99.9 5711532 ns
+W3 closed  shim_generic              0.21 Mrec/s  p50 21198895  p99 23483314  p99.9 23635963 ns
+W3 closed  moodycamel_rw_inline      0.22 Mrec/s  p50 20976711  p99 23243032  p99.9 23334339 ns
+W3 closed  rigtorp_inline            0.22 Mrec/s  p50 20913679  p99 23173271  p99.9 23225670 ns
+W3 closed  shim_spsc                 0.22 Mrec/s  p50 20976553  p99 23243585  p99.9 23488293 ns
+W3 closed  shim_spsc_inline          0.22 Mrec/s  p50 20934506  p99 23195709  p99.9 23286094 ns
+W3wtc generic      0.22 Mrec/s  p50 21101658  p99 23375480  p99.9 23447899 ns
+W3wtc hand         0.22 Mrec/s  p50 20916810  p99 23176932  p99.9 23219546 ns
+W3wtc hand-inline    0.22 Mrec/s  p50 20878614  p99 23134810  p99.9 23461260 ns
+W3wtc compiler     0.22 Mrec/s  p50 20889049  p99 23146027  p99.9 23359287 ns
+W3 closed  shim_generic              0.05 Mrec/s  p50 83922280  p99 93046094  p99.9 93275027 ns
+W3 closed  moodycamel_rw_inline      0.05 Mrec/s  p50 83641862  p99 92739626  p99.9 92906596 ns
+W3 closed  rigtorp_inline            0.05 Mrec/s  p50 83622071  p99 92714447  p99.9 92937612 ns
+W3 closed  shim_spsc                 0.05 Mrec/s  p50 83680085  p99 92785049  p99.9 93013181 ns
+W3 closed  shim_spsc_inline          0.05 Mrec/s  p50 83639569  p99 92737772  p99.9 92909730 ns
+W3wtc generic      0.05 Mrec/s  p50 83804815  p99 92915058  p99.9 93085594 ns
+W3wtc hand         0.05 Mrec/s  p50 83689237  p99 92793100  p99.9 93523947 ns
+W3wtc hand-inline    0.05 Mrec/s  p50 83568328  p99 92658138  p99.9 92841904 ns
+W3wtc compiler     0.05 Mrec/s  p50 83618235  p99 92716249  p99.9 92886945 ns
+W3 closed  shim_generic              0.01 Mrec/s  p50 334714617  p99 371310705  p99.9 372027941 ns
+W3 closed  moodycamel_rw_inline      0.01 Mrec/s  p50 334809091  p99 371413704  p99.9 373924112 ns
+W3 closed  rigtorp_inline            0.01 Mrec/s  p50 334466147  p99 371022056  p99.9 371933684 ns
+W3 closed  shim_spsc                 0.01 Mrec/s  p50 334449266  p99 371013691  p99.9 371697487 ns
+W3 closed  shim_spsc_inline          0.01 Mrec/s  p50 334476296  p99 371031673  p99.9 373745986 ns
+W3wtc generic      0.01 Mrec/s  p50 334846217  p99 371439422  p99.9 372980275 ns
+W3wtc hand         0.01 Mrec/s  p50 334719894  p99 371294559  p99.9 375256885 ns
+W3wtc hand-inline    0.01 Mrec/s  p50 334300902  p99 370838403  p99.9 372587949 ns
+W3wtc compiler     0.01 Mrec/s  p50 334330397  p99 370889065  p99.9 371557308 ns
+W3 closed  shim_generic              0.00 Mrec/s  p50 1258856659  p99 1483213955  p99.9 1489317655 ns
+W3 closed  moodycamel_rw_inline      0.00 Mrec/s  p50 1258277752  p99 1482437706  p99.9 1487400885 ns
+W3 closed  rigtorp_inline            0.00 Mrec/s  p50 1256820139  p99 1480809815  p99.9 1485516149 ns
+W3 closed  shim_spsc                 0.00 Mrec/s  p50 1257850960  p99 1481952772  p99.9 1486778383 ns
+W3 closed  shim_spsc_inline          0.00 Mrec/s  p50 1258885012  p99 1483369144  p99.9 1491492373 ns
+W3wtc generic      0.00 Mrec/s  p50 1258543166  p99 1482911166  p99.9 1489135426 ns
+W3wtc hand         0.00 Mrec/s  p50 1257439251  p99 1481500967  p99.9 1486146770 ns
+W3wtc hand-inline    0.00 Mrec/s  p50 1258560225  p99 1482914687  p99.9 1487577935 ns
+W3wtc compiler     0.00 Mrec/s  p50 1258385278  p99 1482662111  p99.9 1489296988 ns
+W3 closed  shim_generic             13.99 Mrec/s  p50 305248  p99  323876  p99.9  338718 ns
+W3 closed  moodycamel_rw_inline     21.03 Mrec/s  p50    240  p99     851  p99.9   24657 ns
+W3 closed  rigtorp_inline           22.21 Mrec/s  p50    280  p99     931  p99.9   36935 ns
+W3 closed  shim_spsc                25.40 Mrec/s  p50   2053  p99   18107  p99.9   57126 ns
+W3 closed  shim_spsc_inline         25.10 Mrec/s  p50   1492  p99    2484  p99.9   44777 ns
+W3wtc generic     12.82 Mrec/s  p50 336084  p99  357146  p99.9  368193 ns
+W3wtc hand        25.47 Mrec/s  p50   1893  p99   16004  p99.9   56284 ns
+W3wtc hand-inline   25.49 Mrec/s  p50   1482  p99    2424  p99.9   46340 ns
+W3wtc compiler    25.50 Mrec/s  p50   1402  p99    2273  p99.9   34492 ns
+W3 closed  shim_generic              7.44 Mrec/s  p50 590957  p99  646731  p99.9  660762 ns
+W3 closed  moodycamel_rw_inline     11.36 Mrec/s  p50 385248  p99  410085  p99.9  412289 ns
+W3 closed  rigtorp_inline           14.11 Mrec/s  p50 306760  p99  324166  p99.9  331207 ns
+W3 closed  shim_spsc                11.92 Mrec/s  p50 367492  p99  390847  p99.9  396245 ns
+W3 closed  shim_spsc_inline         12.42 Mrec/s  p50 351317  p99  372419  p99.9  465689 ns
+W3wtc generic      9.21 Mrec/s  p50 470516  p99  526690  p99.9  588022 ns
+W3wtc hand        13.71 Mrec/s  p50 316625  p99  335343  p99.9  516886 ns
+W3wtc hand-inline   16.42 Mrec/s  p50 260811  p99  281893  p99.9  505078 ns
+W3wtc compiler    16.44 Mrec/s  p50 260771  p99  273711  p99.9  470496 ns
+W3 closed  shim_generic              2.92 Mrec/s  p50 1548363  p99 1761483  p99.9 1924828 ns
+W3 closed  moodycamel_rw_inline      3.32 Mrec/s  p50 1365680  p99 1496816  p99.9 1500672 ns
+W3 closed  rigtorp_inline            3.45 Mrec/s  p50 1315865  p99 1442034  p99.9 1605029 ns
+W3 closed  shim_spsc                 3.37 Mrec/s  p50 1346471  p99 1475825  p99.9 1503807 ns
+W3 closed  shim_spsc_inline          3.41 Mrec/s  p50 1331168  p99 1458369  p99.9 1469666 ns
+W3wtc generic      3.14 Mrec/s  p50 1435965  p99 1615444  p99.9 1778930 ns
+W3wtc hand         3.47 Mrec/s  p50 1305108  p99 1429756  p99.9 1518028 ns
+W3wtc hand-inline    3.66 Mrec/s  p50 1238138  p99 1355925  p99.9 1468504 ns
+W3wtc compiler     3.66 Mrec/s  p50 1237467  p99 1354833  p99.9 1481493 ns
+W3 closed  shim_generic              0.84 Mrec/s  p50 5465553  p99 6036139  p99.9 6147827 ns
+W3 closed  moodycamel_rw_inline      0.87 Mrec/s  p50 5282858  p99 5843269  p99.9 5866243 ns
+W3 closed  rigtorp_inline            0.88 Mrec/s  p50 5215136  p99 5765522  p99.9 5859523 ns
+W3 closed  shim_spsc                 0.87 Mrec/s  p50 5261887  p99 5817021  p99.9 5828558 ns
+W3 closed  shim_spsc_inline          0.87 Mrec/s  p50 5249959  p99 5803600  p99.9 5814837 ns
+W3wtc generic      0.86 Mrec/s  p50 5347495  p99 5905572  p99.9 5965512 ns
+W3wtc hand         0.88 Mrec/s  p50 5223369  p99 5774376  p99.9 5785523 ns
+W3wtc hand-inline    0.89 Mrec/s  p50 5161115  p99 5705352  p99.9 5842798 ns
+W3wtc compiler     0.89 Mrec/s  p50 5156959  p99 5700665  p99.9 5745372 ns
+W3 closed  shim_generic              0.22 Mrec/s  p50 21163450  p99 23444564  p99.9 23545134 ns
+W3 closed  moodycamel_rw_inline      0.22 Mrec/s  p50 20980457  p99 23247409  p99.9 23353478 ns
+W3 closed  rigtorp_inline            0.22 Mrec/s  p50 20936162  p99 23198628  p99.9 23468453 ns
+W3 closed  shim_spsc                 0.22 Mrec/s  p50 20946487  p99 23209784  p99.9 23252748 ns
+W3 closed  shim_spsc_inline          0.22 Mrec/s  p50 20928667  p99 23189910  p99.9 23232264 ns
+W3wtc generic      0.22 Mrec/s  p50 21072604  p99 23343392  p99.9 23421509 ns
+W3wtc hand         0.22 Mrec/s  p50 20948450  p99 23211796  p99.9 23282813 ns
+W3wtc hand-inline    0.22 Mrec/s  p50 20881649  p99 23138426  p99.9 23447590 ns
+W3wtc compiler     0.22 Mrec/s  p50 20872754  p99 23127898  p99.9 23173246 ns
+W3 closed  shim_generic              0.05 Mrec/s  p50 83885425  p99 93004239  p99.9 93177258 ns
+W3 closed  moodycamel_rw_inline      0.05 Mrec/s  p50 83654814  p99 92754862  p99.9 92922003 ns
+W3 closed  rigtorp_inline            0.05 Mrec/s  p50 83606638  p99 92698543  p99.9 92871633 ns
+W3 closed  shim_spsc                 0.05 Mrec/s  p50 83702111  p99 92807436  p99.9 93083080 ns
+W3 closed  shim_spsc_inline          0.05 Mrec/s  p50 83649592  p99 92747576  p99.9 92947396 ns
+W3wtc generic      0.05 Mrec/s  p50 83849522  p99 92963120  p99.9 93131743 ns
+W3wtc hand         0.05 Mrec/s  p50 83629800  p99 92726932  p99.9 92897918 ns
+W3wtc hand-inline    0.05 Mrec/s  p50 83544490  p99 92630846  p99.9 92800130 ns
+W3wtc compiler     0.05 Mrec/s  p50 83572496  p99 92662188  p99.9 92901537 ns
+W3 closed  shim_generic              0.01 Mrec/s  p50 334987185  p99 371578209  p99.9 375133595 ns
+W3 closed  moodycamel_rw_inline      0.01 Mrec/s  p50 334400959  p99 370957546  p99.9 371639159 ns
+W3 closed  rigtorp_inline            0.01 Mrec/s  p50 334587011  p99 371168112  p99.9 372422425 ns
+W3 closed  shim_spsc                 0.01 Mrec/s  p50 334553464  p99 371132731  p99.9 371804759 ns
+W3 closed  shim_spsc_inline          0.01 Mrec/s  p50 334443133  p99 371010445  p99.9 371717607 ns
+W3wtc generic      0.01 Mrec/s  p50 334800565  p99 371381945  p99.9 372243228 ns
+W3wtc hand         0.01 Mrec/s  p50 334323425  p99 370873409  p99.9 371562994 ns
+W3wtc hand-inline    0.01 Mrec/s  p50 334334318  p99 370891846  p99.9 371568261 ns
+W3wtc compiler     0.01 Mrec/s  p50 334367675  p99 370908859  p99.9 372282931 ns
+W3 closed  shim_generic              0.00 Mrec/s  p50 1257466338  p99 1481534101  p99.9 1486181065 ns
+W3 closed  moodycamel_rw_inline      0.00 Mrec/s  p50 1257293100  p99 1481349092  p99.9 1486056186 ns
+W3 closed  rigtorp_inline            0.00 Mrec/s  p50 1256816729  p99 1480794563  p99.9 1485459563 ns
+W3 closed  shim_spsc                 0.00 Mrec/s  p50 1257446466  p99 1481502731  p99.9 1486208123 ns
+W3 closed  shim_spsc_inline          0.00 Mrec/s  p50 1257897078  p99 1482180042  p99.9 1487155278 ns
+W3wtc generic      0.00 Mrec/s  p50 1257382754  p99 1481431470  p99.9 1486119776 ns
+W3wtc hand         0.00 Mrec/s  p50 1257380587  p99 1481371574  p99.9 1486142064 ns
+W3wtc hand-inline    0.00 Mrec/s  p50 1257482350  p99 1481588938  p99.9 1486235982 ns
+W3wtc compiler     0.00 Mrec/s  p50 1258043813  p99 1482286419  p99.9 1490069550 ns
+W3 closed  shim_generic             12.60 Mrec/s  p50 349595  p99  394422  p99.9  401813 ns
+W3 closed  moodycamel_rw_inline     20.98 Mrec/s  p50    240  p99     951  p99.9   72929 ns
+W3 closed  rigtorp_inline           22.34 Mrec/s  p50    330  p99    1022  p99.9   49855 ns
+W3 closed  shim_spsc                25.16 Mrec/s  p50   1993  p99  426530  p99.9  494402 ns
+W3 closed  shim_spsc_inline         25.08 Mrec/s  p50   1552  p99    2814  p99.9   77106 ns
+W3wtc generic     12.99 Mrec/s  p50 331938  p99  395073  p99.9  573080 ns
+W3wtc hand        25.36 Mrec/s  p50   1933  p99  142584  p99.9  268934 ns
+W3wtc hand-inline   25.39 Mrec/s  p50   1442  p99   29044  p99.9  249895 ns
+W3wtc compiler    25.50 Mrec/s  p50   1392  p99    2273  p99.9   40711 ns
+W3 closed  shim_generic              7.35 Mrec/s  p50 596716  p99  657337  p99.9  876085 ns
+W3 closed  moodycamel_rw_inline     11.33 Mrec/s  p50 386530  p99  412689  p99.9  525919 ns
+W3 closed  rigtorp_inline           13.90 Mrec/s  p50 311768  p99  329675  p99.9  346620 ns
+W3 closed  shim_spsc                11.82 Mrec/s  p50 370656  p99  394672  p99.9  450126 ns
+W3 closed  shim_spsc_inline         12.42 Mrec/s  p50 351467  p99  372609  p99.9  375714 ns
+W3wtc generic      8.68 Mrec/s  p50 500301  p99  550817  p99.9  568203 ns
+W3wtc hand        13.79 Mrec/s  p50 314983  p99  333310  p99.9  357697 ns
+W3wtc hand-inline   16.45 Mrec/s  p50 260751  p99  272689  p99.9  311177 ns
+W3wtc compiler    16.44 Mrec/s  p50 260701  p99  273150  p99.9  438568 ns
+W3 closed  shim_generic              2.89 Mrec/s  p50 1564818  p99 1727773  p99.9 1916937 ns
+W3 closed  moodycamel_rw_inline      3.32 Mrec/s  p50 1366511  p99 1498279  p99.9 1635455 ns
+W3 closed  rigtorp_inline            3.45 Mrec/s  p50 1315424  p99 1441804  p99.9 1548724 ns
+W3 closed  shim_spsc                 3.36 Mrec/s  p50 1350407  p99 1480141  p99.9 1515985 ns
+W3 closed  shim_spsc_inline          3.41 Mrec/s  p50 1331268  p99 1458579  p99.9 1535745 ns
+W3wtc generic      3.09 Mrec/s  p50 1461123  p99 1623767  p99.9 1814193 ns
+W3wtc hand         3.50 Mrec/s  p50 1295474  p99 1419070  p99.9 1475014 ns
+W3wtc hand-inline    3.66 Mrec/s  p50 1236596  p99 1353762  p99.9 1364107 ns
+W3wtc compiler     3.66 Mrec/s  p50 1236966  p99 1354112  p99.9 1445279 ns
+W3 closed  shim_generic              0.83 Mrec/s  p50 5491621  p99 6071932  p99.9 6219092 ns
+W3 closed  moodycamel_rw_inline      0.87 Mrec/s  p50 5288286  p99 5847224  p99.9 5869288 ns
+W3 closed  rigtorp_inline            0.88 Mrec/s  p50 5213654  p99 5763800  p99.9 5787375 ns
+W3 closed  shim_spsc                 0.87 Mrec/s  p50 5266073  p99 5821757  p99.9 5843590 ns
+W3 closed  shim_spsc_inline          0.87 Mrec/s  p50 5253835  p99 5807916  p99.9 5881917 ns
+W3wtc generic      0.85 Mrec/s  p50 5379463  p99 5942428  p99.9 5989809 ns
+W3wtc hand         0.88 Mrec/s  p50 5215237  p99 5765292  p99.9 5776780 ns
+W3wtc hand-inline    0.89 Mrec/s  p50 5155738  p99 5699334  p99.9 5710351 ns
+W3wtc compiler     0.89 Mrec/s  p50 5157030  p99 5701006  p99.9 5739394 ns
+W3 closed  shim_generic              0.21 Mrec/s  p50 21194561  p99 23479791  p99.9 23753131 ns
+W3 closed  moodycamel_rw_inline      0.22 Mrec/s  p50 20979484  p99 23246516  p99.9 23367438 ns
+W3 closed  rigtorp_inline            0.22 Mrec/s  p50 20888930  p99 23146058  p99.9 23240359 ns
+W3 closed  shim_spsc                 0.22 Mrec/s  p50 20953860  p99 23217638  p99.9 23269175 ns
+W3 closed  shim_spsc_inline          0.22 Mrec/s  p50 20956051  p99 23219518  p99.9 23445838 ns
+W3wtc generic      0.22 Mrec/s  p50 21109672  p99 23383584  p99.9 23468892 ns
+W3wtc hand         0.22 Mrec/s  p50 20934193  p99 23196337  p99.9 23242507 ns
+W3wtc hand-inline    0.22 Mrec/s  p50 20884145  p99 23140662  p99.9 23199090 ns
+W3wtc compiler     0.22 Mrec/s  p50 20861658  p99 23115631  p99.9 23167178 ns
+W3 closed  shim_generic              0.05 Mrec/s  p50 83954762  p99 93083551  p99.9 93594178 ns
+W3 closed  moodycamel_rw_inline      0.05 Mrec/s  p50 83661985  p99 92762513  p99.9 92935203 ns
+W3 closed  rigtorp_inline            0.05 Mrec/s  p50 83627635  p99 92722324  p99.9 93078939 ns
+W3 closed  shim_spsc                 0.05 Mrec/s  p50 83635447  p99 92733200  p99.9 92900381 ns
+W3 closed  shim_spsc_inline          0.05 Mrec/s  p50 83598308  p99 92691704  p99.9 92858314 ns
+W3wtc generic      0.05 Mrec/s  p50 83804157  p99 92914638  p99.9 93082921 ns
+W3wtc hand         0.05 Mrec/s  p50 83635287  p99 92734642  p99.9 92941533 ns
+W3wtc hand-inline    0.05 Mrec/s  p50 83534049  p99 92621047  p99.9 92791012 ns
+W3wtc compiler     0.05 Mrec/s  p50 83628652  p99 92723441  p99.9 93039675 ns
+W3 closed  shim_generic              0.01 Mrec/s  p50 334565582  p99 371136922  p99.9 371815911 ns
+W3 closed  moodycamel_rw_inline      0.01 Mrec/s  p50 334398841  p99 370954923  p99.9 371635514 ns
+W3 closed  rigtorp_inline            0.01 Mrec/s  p50 334398539  p99 370977027  p99.9 371850548 ns
+W3 closed  shim_spsc                 0.01 Mrec/s  p50 334522569  p99 371086388  p99.9 372587400 ns
+W3 closed  shim_spsc_inline          0.01 Mrec/s  p50 334263536  p99 370814637  p99.9 371493136 ns
+W3wtc generic      0.01 Mrec/s  p50 334581537  p99 371149336  p99.9 371838050 ns
+W3wtc hand         0.01 Mrec/s  p50 334435300  p99 370997409  p99.9 371753704 ns
+W3wtc hand-inline    0.01 Mrec/s  p50 334380384  p99 370914787  p99.9 376816584 ns
+W3wtc compiler     0.01 Mrec/s  p50 334196752  p99 370736618  p99.9 371432823 ns
+W3 closed  shim_generic              0.00 Mrec/s  p50 1259180694  p99 1483794287  p99.9 1488544165 ns
+W3 closed  moodycamel_rw_inline      0.00 Mrec/s  p50 1257422974  p99 1481420912  p99.9 1486292252 ns
+W3 closed  rigtorp_inline            0.00 Mrec/s  p50 1259847398  p99 1484408871  p99.9 1498404235 ns
+W3 closed  shim_spsc                 0.00 Mrec/s  p50 1257782570  p99 1481868313  p99.9 1486540866 ns
+W3 closed  shim_spsc_inline          0.00 Mrec/s  p50 1257964844  p99 1482114239  p99.9 1486847633 ns
+W3wtc generic      0.00 Mrec/s  p50 1258003202  p99 1482179528  p99.9 1486859802 ns
+W3wtc hand         0.00 Mrec/s  p50 1257504051  p99 1481593035  p99.9 1486240069 ns
+W3wtc hand-inline    0.00 Mrec/s  p50 1257152152  p99 1481190960  p99.9 1485836753 ns
+W3wtc compiler     0.00 Mrec/s  p50 1258577371  p99 1482976396  p99.9 1489152554 ns
+W3 closed  shim_generic             14.35 Mrec/s  p50 300892  p99  327231  p99.9  658829 ns
+W3 closed  moodycamel_rw_inline     20.96 Mrec/s  p50    230  p99    7521  p99.9  303586 ns
+W3 closed  rigtorp_inline           22.31 Mrec/s  p50    300  p99  176885  p99.9  378959 ns
+W3 closed  shim_spsc                25.37 Mrec/s  p50   2103  p99  270306  p99.9  402704 ns
+W3 closed  shim_spsc_inline         25.09 Mrec/s  p50   1562  p99  120551  p99.9  362434 ns
+W3wtc generic     12.89 Mrec/s  p50 337787  p99  382154  p99.9  685399 ns
+W3wtc hand        25.45 Mrec/s  p50   1883  p99  278208  p99.9  406220 ns
+W3wtc hand-inline   25.45 Mrec/s  p50   1462  p99  195654  p99.9  417096 ns
+W3wtc compiler    25.48 Mrec/s  p50   1472  p99   74051  p99.9  341723 ns
+W3 closed  shim_generic              7.49 Mrec/s  p50 585539  p99  644718  p99.9  933561 ns
+W3 closed  moodycamel_rw_inline     11.36 Mrec/s  p50 385529  p99  410797  p99.9  644177 ns
+W3 closed  rigtorp_inline           14.08 Mrec/s  p50 307722  p99  326039  p99.9  617126 ns
+W3 closed  shim_spsc                11.94 Mrec/s  p50 366710  p99  392018  p99.9  709805 ns
+W3 closed  shim_spsc_inline         12.42 Mrec/s  p50 351468  p99  373160  p99.9  640982 ns
+W3wtc generic      9.26 Mrec/s  p50 468113  p99  519740  p99.9  889875 ns
+W3wtc hand        13.72 Mrec/s  p50 316615  p99  335894  p99.9  597557 ns
+W3wtc hand-inline   16.43 Mrec/s  p50 260761  p99  273540  p99.9  585849 ns
+W3wtc compiler    16.45 Mrec/s  p50 260561  p99  272869  p99.9  535674 ns
+W3 closed  shim_generic              2.92 Mrec/s  p50 1547933  p99 1695755  p99.9 1807202 ns
+W3 closed  moodycamel_rw_inline      3.32 Mrec/s  p50 1366641  p99 1498218  p99.9 1590557 ns
+W3 closed  rigtorp_inline            3.47 Mrec/s  p50 1308794  p99 1434323  p99.9 1485039 ns
+W3 closed  shim_spsc                 3.37 Mrec/s  p50 1347012  p99 1476776  p99.9 1519100 ns
+W3 closed  shim_spsc_inline          3.41 Mrec/s  p50 1330987  p99 1458058  p99.9 1686831 ns
+W3wtc generic      3.11 Mrec/s  p50 1449215  p99 1604177  p99.9 1686151 ns
+W3wtc hand         3.47 Mrec/s  p50 1305249  p99 1430306  p99.9 1594042 ns
+W3wtc hand-inline    3.66 Mrec/s  p50 1237557  p99 1354843  p99.9 1581333 ns
+W3wtc compiler     3.66 Mrec/s  p50 1237678  p99 1354783  p99.9 1382725 ns
+W3 closed  shim_generic              0.84 Mrec/s  p50 5461126  p99 6032163  p99.9 6045643 ns
+W3 closed  moodycamel_rw_inline      0.87 Mrec/s  p50 5285783  p99 5845973  p99.9 5866684 ns
+W3 closed  rigtorp_inline            0.88 Mrec/s  p50 5209849  p99 5759634  p99.9 5771472 ns
+W3 closed  shim_spsc                 0.87 Mrec/s  p50 5260895  p99 5815888  p99.9 5826975 ns
+W3 closed  shim_spsc_inline          0.87 Mrec/s  p50 5250079  p99 5803620  p99.9 5883990 ns
+W3wtc generic      0.85 Mrec/s  p50 5356949  p99 5916319  p99.9 6085693 ns
+W3wtc hand         0.88 Mrec/s  p50 5222538  p99 5773415  p99.9 5785423 ns
+W3wtc hand-inline    0.89 Mrec/s  p50 5155927  p99 5699613  p99.9 5711151 ns
+W3wtc compiler     0.89 Mrec/s  p50 5156319  p99 5700045  p99.9 5753154 ns
+W3 closed  shim_generic              0.22 Mrec/s  p50 21152345  p99 23433138  p99.9 23477314 ns
+W3 closed  moodycamel_rw_inline      0.22 Mrec/s  p50 20960486  p99 23225054  p99.9 23268559 ns
+W3 closed  rigtorp_inline            0.22 Mrec/s  p50 20881721  p99 23137797  p99.9 23192278 ns
+W3 closed  shim_spsc                 0.22 Mrec/s  p50 20945646  p99 23208382  p99.9 23320661 ns
+W3 closed  shim_spsc_inline          0.22 Mrec/s  p50 20930811  p99 23192085  p99.9 23234839 ns
+W3wtc generic      0.22 Mrec/s  p50 21095010  p99 23366779  p99.9 23412007 ns
+W3wtc hand         0.22 Mrec/s  p50 20944273  p99 23207230  p99.9 23250384 ns
+W3wtc hand-inline    0.22 Mrec/s  p50 20859645  p99 23113458  p99.9 23155931 ns
+W3wtc compiler     0.22 Mrec/s  p50 20851124  p99 23103945  p99.9 23146448 ns
+W3 closed  shim_generic              0.05 Mrec/s  p50 83886808  p99 93002579  p99.9 93299034 ns
+W3 closed  moodycamel_rw_inline      0.05 Mrec/s  p50 83642195  p99 92741442  p99.9 92916154 ns
+W3 closed  rigtorp_inline            0.05 Mrec/s  p50 83612362  p99 92704467  p99.9 92884127 ns
+W3 closed  shim_spsc                 0.05 Mrec/s  p50 83635791  p99 92732534  p99.9 92901197 ns
+W3 closed  shim_spsc_inline          0.05 Mrec/s  p50 83632099  p99 92729981  p99.9 93050512 ns
+W3wtc generic      0.05 Mrec/s  p50 83876534  p99 92992305  p99.9 93460667 ns
+W3wtc hand         0.05 Mrec/s  p50 83639131  p99 92737356  p99.9 92905759 ns
+W3wtc hand-inline    0.05 Mrec/s  p50 83538621  p99 92624907  p99.9 92796405 ns
+W3wtc compiler     0.05 Mrec/s  p50 83554349  p99 92644041  p99.9 92817952 ns
+W3 closed  shim_generic              0.01 Mrec/s  p50 334694648  p99 371284148  p99.9 372041805 ns
+W3 closed  moodycamel_rw_inline      0.01 Mrec/s  p50 334327356  p99 370863318  p99.9 373825103 ns
+W3 closed  rigtorp_inline            0.01 Mrec/s  p50 334210215  p99 370747185  p99.9 371422168 ns
+W3 closed  shim_spsc                 0.01 Mrec/s  p50 334406505  p99 370958210  p99.9 373097090 ns
+W3 closed  shim_spsc_inline          0.01 Mrec/s  p50 334277697  p99 370825498  p99.9 371510496 ns
+W3wtc generic      0.01 Mrec/s  p50 334599513  p99 371165930  p99.9 373604089 ns
+W3wtc hand         0.01 Mrec/s  p50 334439614  p99 370979331  p99.9 376637342 ns
+W3wtc hand-inline    0.01 Mrec/s  p50 334316031  p99 370883448  p99.9 372130620 ns
+W3wtc compiler     0.01 Mrec/s  p50 334428854  p99 370985679  p99.9 372164158 ns
+W3 closed  shim_generic              0.00 Mrec/s  p50 1257431963  p99 1481509401  p99.9 1486165840 ns
+W3 closed  moodycamel_rw_inline      0.00 Mrec/s  p50 1258250089  p99 1482476339  p99.9 1489730226 ns
+W3 closed  rigtorp_inline            0.00 Mrec/s  p50 1258435046  p99 1482653372  p99.9 1489842450 ns
+W3 closed  shim_spsc                 0.00 Mrec/s  p50 1257439564  p99 1481563580  p99.9 1486282191 ns
+W3 closed  shim_spsc_inline          0.00 Mrec/s  p50 1257948072  p99 1482119451  p99.9 1486814287 ns
+W3wtc generic      0.00 Mrec/s  p50 1258291084  p99 1482591076  p99.9 1487858431 ns
+W3wtc hand         0.00 Mrec/s  p50 1257816337  p99 1481866442  p99.9 1487427959 ns
+W3wtc hand-inline    0.00 Mrec/s  p50 1256855432  p99 1480803726  p99.9 1485450821 ns
+W3wtc compiler     0.00 Mrec/s  p50 1257049252  p99 1481001522  p99.9 1485768957 ns
+W3 closed  shim_generic             14.22 Mrec/s  p50 301132  p99  372379  p99.9  434592 ns
+W3 closed  moodycamel_rw_inline     21.09 Mrec/s  p50    260  p99   58027  p99.9  301723 ns
+W3 closed  rigtorp_inline           22.12 Mrec/s  p50    310  p99  144787  p99.9  386460 ns
+W3 closed  shim_spsc                25.33 Mrec/s  p50   2003  p99  284136  p99.9  497206 ns
+W3 closed  shim_spsc_inline         25.10 Mrec/s  p50   1522  p99   18147  p99.9  220992 ns
+W3wtc generic     12.96 Mrec/s  p50 324287  p99  419800  p99.9  584287 ns
+W3wtc hand        25.44 Mrec/s  p50   1963  p99  177817  p99.9  267091 ns
+W3wtc hand-inline   25.47 Mrec/s  p50   1412  p99   25789  p99.9  263976 ns
+W3wtc compiler    25.49 Mrec/s  p50   1452  p99  105118  p99.9  371828 ns
+W3 closed  shim_generic              7.35 Mrec/s  p50 596054  p99  657827  p99.9  757006 ns
+W3 closed  moodycamel_rw_inline     11.36 Mrec/s  p50 385639  p99  412579  p99.9  707211 ns
+W3 closed  rigtorp_inline           14.00 Mrec/s  p50 309715  p99  327932  p99.9  567602 ns
+W3 closed  shim_spsc                11.81 Mrec/s  p50 370796  p99  397126  p99.9  670286 ns
+W3 closed  shim_spsc_inline         12.42 Mrec/s  p50 351437  p99  373070  p99.9  629054 ns
+W3wtc generic      8.75 Mrec/s  p50 496175  p99  552239  p99.9  571578 ns
+W3wtc hand        13.78 Mrec/s  p50 315103  p99  334432  p99.9  645158 ns
+W3wtc hand-inline   16.40 Mrec/s  p50 260801  p99  423796  p99.9  600852 ns
+W3wtc compiler    16.43 Mrec/s  p50 260701  p99  273831  p99.9  626060 ns
+W3 closed  shim_generic              2.89 Mrec/s  p50 1562766  p99 1721754  p99.9 1878810 ns
+W3 closed  moodycamel_rw_inline      3.32 Mrec/s  p50 1366401  p99 1497848  p99.9 1565439 ns
+W3 closed  rigtorp_inline            3.45 Mrec/s  p50 1315815  p99 1442144  p99.9 1463196 ns
+W3 closed  shim_spsc                 3.36 Mrec/s  p50 1349475  p99 1479260  p99.9 1600312 ns
+W3 closed  shim_spsc_inline          3.41 Mrec/s  p50 1331088  p99 1458088  p99.9 1468474 ns
+W3wtc generic      3.09 Mrec/s  p50 1461183  p99 1618389  p99.9 2057939 ns
+W3wtc hand         3.50 Mrec/s  p50 1295524  p99 1419020  p99.9 1504147 ns
+W3wtc hand-inline    3.67 Mrec/s  p50 1236306  p99 1353281  p99.9 1379420 ns
+W3wtc compiler     3.67 Mrec/s  p50 1236305  p99 1353652  p99.9 1638038 ns
+W3 closed  shim_generic              0.83 Mrec/s  p50 5480786  p99 6053375  p99.9 6081888 ns
+W3 closed  moodycamel_rw_inline      0.87 Mrec/s  p50 5284662  p99 5844462  p99.9 5865293 ns
+W3 closed  rigtorp_inline            0.88 Mrec/s  p50 5201967  p99 5750491  p99.9 5782709 ns
+W3 closed  shim_spsc                 0.87 Mrec/s  p50 5264331  p99 5819804  p99.9 5830771 ns
+W3 closed  shim_spsc_inline          0.87 Mrec/s  p50 5253374  p99 5807296  p99.9 5951903 ns
+W3wtc generic      0.85 Mrec/s  p50 5379664  p99 5943890  p99.9 6088017 ns
+W3wtc hand         0.88 Mrec/s  p50 5216408  p99 5766414  p99.9 5806294 ns
+W3wtc hand-inline    0.89 Mrec/s  p50 5156570  p99 5700256  p99.9 5712023 ns
+W3wtc compiler     0.89 Mrec/s  p50 5155647  p99 5699002  p99.9 5710008 ns
+W3 closed  shim_generic              0.21 Mrec/s  p50 21184473  p99 23467840  p99.9 23638726 ns
+W3 closed  moodycamel_rw_inline      0.22 Mrec/s  p50 20975751  p99 23241922  p99.9 23345888 ns
+W3 closed  rigtorp_inline            0.22 Mrec/s  p50 20906214  p99 23165234  p99.9 23214849 ns
+W3 closed  shim_spsc                 0.22 Mrec/s  p50 20958674  p99 23223453  p99.9 23405376 ns
+W3 closed  shim_spsc_inline          0.22 Mrec/s  p50 20927449  p99 23188583  p99.9 23263135 ns
+W3wtc generic      0.22 Mrec/s  p50 21109511  p99 23383504  p99.9 23432598 ns
+W3wtc hand         0.22 Mrec/s  p50 20926165  p99 23187098  p99.9 23259888 ns
+W3wtc hand-inline    0.22 Mrec/s  p50 20858555  p99 23112137  p99.9 23183624 ns
+W3wtc compiler     0.22 Mrec/s  p50 20853419  p99 23106270  p99.9 23154393 ns
+W3 closed  shim_generic              0.05 Mrec/s  p50 83880217  p99 92999504  p99.9 93172594 ns
+W3 closed  moodycamel_rw_inline      0.05 Mrec/s  p50 83667850  p99 92767296  p99.9 93005624 ns
+W3 closed  rigtorp_inline            0.05 Mrec/s  p50 83605997  p99 92697632  p99.9 93015649 ns
+W3 closed  shim_spsc                 0.05 Mrec/s  p50 83683034  p99 92783291  p99.9 92958984 ns
+W3 closed  shim_spsc_inline          0.05 Mrec/s  p50 83675141  p99 92778453  p99.9 93010051 ns
+W3wtc generic      0.05 Mrec/s  p50 83771221  p99 92878889  p99.9 93047783 ns
+W3wtc hand         0.05 Mrec/s  p50 83626024  p99 92722435  p99.9 92894603 ns
+W3wtc hand-inline    0.05 Mrec/s  p50 83530755  p99 92615990  p99.9 92784573 ns
+W3wtc compiler     0.05 Mrec/s  p50 83532747  p99 92618112  p99.9 92786354 ns
+W3 closed  shim_generic              0.01 Mrec/s  p50 334663987  p99 371256385  p99.9 371940632 ns
+W3 closed  moodycamel_rw_inline      0.01 Mrec/s  p50 334391888  p99 370940826  p99.9 373128289 ns
+W3 closed  rigtorp_inline            0.01 Mrec/s  p50 334457597  p99 371019850  p99.9 371936446 ns
+W3 closed  shim_spsc                 0.01 Mrec/s  p50 334410113  p99 370972041  p99.9 372228327 ns
+W3 closed  shim_spsc_inline          0.01 Mrec/s  p50 334453736  p99 371019568  p99.9 371690525 ns
+W3wtc generic      0.01 Mrec/s  p50 334532340  p99 371111578  p99.9 371790347 ns
+W3wtc hand         0.01 Mrec/s  p50 334366977  p99 370920763  p99.9 371633593 ns
+W3wtc hand-inline    0.01 Mrec/s  p50 334356408  p99 370891122  p99.9 374223363 ns
+W3wtc compiler     0.01 Mrec/s  p50 334274522  p99 370816765  p99.9 371514943 ns
+W3 closed  shim_generic              0.00 Mrec/s  p50 1258165515  p99 1482459407  p99.9 1487392550 ns
+W3 closed  moodycamel_rw_inline      0.00 Mrec/s  p50 1257407430  p99 1481456793  p99.9 1486125940 ns
+W3 closed  rigtorp_inline            0.00 Mrec/s  p50 1256820847  p99 1480850131  p99.9 1485514611 ns
+W3 closed  shim_spsc                 0.00 Mrec/s  p50 1256963086  p99 1480989418  p99.9 1485635010 ns
+W3 closed  shim_spsc_inline          0.00 Mrec/s  p50 1257772177  p99 1481896897  p99.9 1487987638 ns
+W3wtc generic      0.00 Mrec/s  p50 1258302212  p99 1482546847  p99.9 1488659961 ns
+W3wtc hand         0.00 Mrec/s  p50 1257563541  p99 1481778714  p99.9 1486429053 ns
+W3wtc hand-inline    0.00 Mrec/s  p50 1257087342  p99 1481102955  p99.9 1485764180 ns
+W3wtc compiler     0.00 Mrec/s  p50 1257449120  p99 1481504914  p99.9 1486191367 ns
+W3 closed  shim_generic             12.50 Mrec/s  p50 344036  p99  363045  p99.9  544868 ns
+W3 closed  moodycamel_rw_inline     21.04 Mrec/s  p50    240  p99     991  p99.9   77076 ns
+W3 closed  rigtorp_inline           22.33 Mrec/s  p50    290  p99    1252  p99.9  171107 ns
+W3 closed  shim_spsc                25.39 Mrec/s  p50   2183  p99  144116  p99.9  274792 ns
+W3 closed  shim_spsc_inline         25.10 Mrec/s  p50   1512  p99   47712  p99.9  255523 ns
+W3wtc generic     14.67 Mrec/s  p50 289715  p99  418638  p99.9  616315 ns
+W3wtc hand        25.42 Mrec/s  p50   1933  p99  200090  p99.9  337326 ns
+W3wtc hand-inline   25.18 Mrec/s  p50   1442  p99  125168  p99.9  303235 ns
+W3wtc compiler    25.48 Mrec/s  p50   1422  p99   29825  p99.9  306680 ns
+W3 closed  shim_generic              7.55 Mrec/s  p50 581032  p99  641663  p99.9  834162 ns
+W3 closed  moodycamel_rw_inline     11.32 Mrec/s  p50 386780  p99  412980  p99.9  561302 ns
+W3 closed  rigtorp_inline           14.09 Mrec/s  p50 307391  p99  325208  p99.9  541843 ns
+W3 closed  shim_spsc                11.92 Mrec/s  p50 367411  p99  391487  p99.9  573631 ns
+W3 closed  shim_spsc_inline         12.43 Mrec/s  p50 351307  p99  372579  p99.9  507682 ns
+W3wtc generic      9.28 Mrec/s  p50 466530  p99  528693  p99.9  985279 ns
+W3wtc hand        13.71 Mrec/s  p50 316775  p99  335213  p99.9  480651 ns
+W3wtc hand-inline   16.46 Mrec/s  p50 260581  p99  272669  p99.9  411107 ns
+W3wtc compiler    16.44 Mrec/s  p50 260831  p99  273661  p99.9  478889 ns
+W3 closed  shim_generic              2.92 Mrec/s  p50 1547002  p99 1695024  p99.9 1711709 ns
+W3 closed  moodycamel_rw_inline      3.32 Mrec/s  p50 1365459  p99 1496646  p99.9 1587512 ns
+W3 closed  rigtorp_inline            3.45 Mrec/s  p50 1315965  p99 1442225  p99.9 1461994 ns
+W3 closed  shim_spsc                 3.08 Mrec/s  p50 1464778  p99 1780031  p99.9 1931238 ns
+W3 closed  shim_spsc_inline          3.12 Mrec/s  p50 1445319  p99 1770627  p99.9 2302085 ns
+W3wtc generic      2.55 Mrec/s  p50 1770697  p99 2161143  p99.9 2270738 ns
+W3wtc hand         3.02 Mrec/s  p50 1492820  p99 1880262  p99.9 2108084 ns
+W3wtc hand-inline    3.41 Mrec/s  p50 1321603  p99 1628183  p99.9 1792650 ns
+W3wtc compiler     3.22 Mrec/s  p50 1396225  p99 1751909  p99.9 1862235 ns
+W3 closed  shim_generic              0.74 Mrec/s  p50 6208245  p99 7159432  p99.9 7381446 ns
+W3 closed  moodycamel_rw_inline      0.79 Mrec/s  p50 5762509  p99 6749771  p99.9 6950472 ns
+W3 closed  rigtorp_inline            0.82 Mrec/s  p50 5581426  p99 6470531  p99.9 6667546 ns
+W3 closed  shim_spsc                 0.77 Mrec/s  p50 5915548  p99 6836049  p99.9 7101137 ns
+W3 closed  shim_spsc_inline          0.83 Mrec/s  p50 5541847  p99 6483951  p99.9 6805353 ns
+W3wtc generic      0.75 Mrec/s  p50 6109448  p99 7044761  p99.9 7251111 ns
+W3wtc hand         0.77 Mrec/s  p50 5969709  p99 6822759  p99.9 6989990 ns
+W3wtc hand-inline    0.80 Mrec/s  p50 5745572  p99 6642308  p99.9 6771111 ns
+W3wtc compiler     0.83 Mrec/s  p50 5517591  p99 6551993  p99.9 6808338 ns
+W3 closed  shim_generic              0.19 Mrec/s  p50 23639621  p99 27037079  p99.9 27494976 ns
+W3 closed  moodycamel_rw_inline      0.20 Mrec/s  p50 22599421  p99 26380444  p99.9 26737390 ns
+W3 closed  rigtorp_inline            0.22 Mrec/s  p50 20982791  p99 23752899  p99.9 24746340 ns
+W3 closed  shim_spsc                 0.22 Mrec/s  p50 20953256  p99 23217253  p99.9 23259867 ns
+W3 closed  shim_spsc_inline          0.22 Mrec/s  p50 20925993  p99 23187026  p99.9 23229379 ns
+W3wtc generic      0.22 Mrec/s  p50 21049688  p99 23316039  p99.9 23360967 ns
+W3wtc hand         0.22 Mrec/s  p50 20955460  p99 23220159  p99.9 23405788 ns
+W3wtc hand-inline    0.22 Mrec/s  p50 20861720  p99 23115543  p99.9 23263916 ns
+W3wtc compiler     0.22 Mrec/s  p50 20856271  p99 23109413  p99.9 23174230 ns
+W3 closed  shim_generic              0.05 Mrec/s  p50 84115763  p99 93371293  p99.9 95394780 ns
+W3 closed  moodycamel_rw_inline      0.05 Mrec/s  p50 83619281  p99 92712799  p99.9 92882654 ns
+W3 closed  rigtorp_inline            0.05 Mrec/s  p50 83562930  p99 92647863  p99.9 92825700 ns
+W3 closed  shim_spsc                 0.05 Mrec/s  p50 83649822  p99 92751663  p99.9 92919875 ns
+W3 closed  shim_spsc_inline          0.05 Mrec/s  p50 83621496  p99 92715214  p99.9 92882985 ns
+W3wtc generic      0.05 Mrec/s  p50 83772678  p99 92879845  p99.9 93094988 ns
+W3wtc hand         0.05 Mrec/s  p50 83666049  p99 92765614  p99.9 92960076 ns
+W3wtc hand-inline    0.05 Mrec/s  p50 83542557  p99 92628884  p99.9 92811628 ns
+W3wtc compiler     0.05 Mrec/s  p50 83567429  p99 92656841  p99.9 92945083 ns
+W3 closed  shim_generic              0.01 Mrec/s  p50 335741366  p99 372736842  p99.9 376557015 ns
+W3 closed  moodycamel_rw_inline      0.01 Mrec/s  p50 334582737  p99 371140376  p99.9 376513498 ns
+W3 closed  rigtorp_inline            0.01 Mrec/s  p50 334587720  p99 371141016  p99.9 375208780 ns
+W3 closed  shim_spsc                 0.01 Mrec/s  p50 334563297  p99 371122846  p99.9 375488939 ns
+W3 closed  shim_spsc_inline          0.01 Mrec/s  p50 335375115  p99 372435014  p99.9 375454085 ns
+W3wtc generic      0.01 Mrec/s  p50 334617822  p99 371202857  p99.9 371961045 ns
+W3wtc hand         0.01 Mrec/s  p50 334311845  p99 370856644  p99.9 371548001 ns
+W3wtc hand-inline    0.01 Mrec/s  p50 334207555  p99 370751028  p99.9 371446972 ns
+W3wtc compiler     0.01 Mrec/s  p50 334304731  p99 370859341  p99.9 371638691 ns
+W3 closed  shim_generic              0.00 Mrec/s  p50 1257669889  p99 1481749709  p99.9 1486415120 ns
+W3 closed  moodycamel_rw_inline      0.00 Mrec/s  p50 1256899966  p99 1480819696  p99.9 1485478948 ns
+W3 closed  rigtorp_inline            0.00 Mrec/s  p50 1257031651  p99 1481064771  p99.9 1485713548 ns
+W3 closed  shim_spsc                 0.00 Mrec/s  p50 1258440338  p99 1482663764  p99.9 1487392120 ns
+W3 closed  shim_spsc_inline          0.00 Mrec/s  p50 1256651223  p99 1480559313  p99.9 1485724524 ns
+W3wtc generic      0.00 Mrec/s  p50 1259440088  p99 1483923001  p99.9 1490081904 ns
+W3wtc hand         0.00 Mrec/s  p50 1256935383  p99 1480909923  p99.9 1485609075 ns
+W3wtc hand-inline    0.00 Mrec/s  p50 1256660613  p99 1480604307  p99.9 1485251320 ns
+W3wtc compiler     0.00 Mrec/s  p50 1256353487  p99 1480220770  p99.9 1484882115 ns
+W3 closed  shim_generic             12.78 Mrec/s  p50 339089  p99  387962  p99.9  504067 ns
+W3 closed  moodycamel_rw_inline     21.01 Mrec/s  p50    260  p99   13630  p99.9  253220 ns
+W3 closed  rigtorp_inline           22.21 Mrec/s  p50    300  p99  105008  p99.9  335554 ns
+W3 closed  shim_spsc                25.39 Mrec/s  p50   2083  p99  230165  p99.9  353711 ns
+W3 closed  shim_spsc_inline         25.09 Mrec/s  p50   1512  p99   92439  p99.9  344337 ns
+W3wtc generic     12.65 Mrec/s  p50 336074  p99  407442  p99.9  565228 ns
+W3wtc hand        25.36 Mrec/s  p50   1993  p99  204527  p99.9  417507 ns
+W3wtc hand-inline   25.39 Mrec/s  p50   1442  p99  131788  p99.9  387341 ns
+W3wtc compiler    25.41 Mrec/s  p50   1472  p99  121843  p99.9  368633 ns
+W3 closed  shim_generic              7.29 Mrec/s  p50 601863  p99  744097  p99.9 1033791 ns
+W3 closed  moodycamel_rw_inline     11.30 Mrec/s  p50 386911  p99  463906  p99.9  632669 ns
+W3 closed  rigtorp_inline           14.15 Mrec/s  p50 306310  p99  325238  p99.9  540371 ns
+W3 closed  shim_spsc                11.84 Mrec/s  p50 369985  p99  430366  p99.9  624517 ns
+W3 closed  shim_spsc_inline         12.42 Mrec/s  p50 351588  p99  417026  p99.9  595564 ns
+W3wtc generic      8.67 Mrec/s  p50 498959  p99  574502  p99.9  788403 ns
+W3wtc hand        13.78 Mrec/s  p50 314903  p99  433440  p99.9  619269 ns
+W3wtc hand-inline   16.37 Mrec/s  p50 260711  p99  434262  p99.9  665339 ns
+W3wtc compiler    16.45 Mrec/s  p50 260591  p99  273130  p99.9  442634 ns
+W3 closed  shim_generic              2.87 Mrec/s  p50 1575024  p99 1786311  p99.9 1964268 ns
+W3 closed  moodycamel_rw_inline      3.32 Mrec/s  p50 1365870  p99 1497097  p99.9 1502335 ns
+W3 closed  rigtorp_inline            3.45 Mrec/s  p50 1314312  p99 1440492  p99.9 1975324 ns
+W3 closed  shim_spsc                 3.36 Mrec/s  p50 1350096  p99 1479641  p99.9 1483967 ns
+W3 closed  shim_spsc_inline          3.41 Mrec/s  p50 1331038  p99 1458289  p99.9 1466611 ns
+W3wtc generic      3.09 Mrec/s  p50 1459120  p99 1610087  p99.9 1963006 ns
+W3wtc hand         3.50 Mrec/s  p50 1294953  p99 1418509  p99.9 1444828 ns
+W3wtc hand-inline    3.67 Mrec/s  p50 1236726  p99 1353892  p99.9 1498109 ns
+W3wtc compiler     3.64 Mrec/s  p50 1243486  p99 1413261  p99.9 1724418 ns
+W3 closed  shim_generic              0.83 Mrec/s  p50 5489007  p99 6067465  p99.9 6213945 ns
+W3 closed  moodycamel_rw_inline      0.87 Mrec/s  p50 5284150  p99 5843690  p99.9 5864922 ns
+W3 closed  rigtorp_inline            0.88 Mrec/s  p50 5209168  p99 5758793  p99.9 5779414 ns
+W3 closed  shim_spsc                 0.87 Mrec/s  p50 5263919  p99 5819523  p99.9 5830650 ns
+W3 closed  shim_spsc_inline          0.87 Mrec/s  p50 5247655  p99 5801226  p99.9 5811792 ns
+W3wtc generic      0.85 Mrec/s  p50 5377119  p99 5938762  p99.9 5997611 ns
+W3wtc hand         0.88 Mrec/s  p50 5213585  p99 5763470  p99.9 5775147 ns
+W3wtc hand-inline    0.89 Mrec/s  p50 5158883  p99 5702889  p99.9 5811072 ns
+W3wtc compiler     0.89 Mrec/s  p50 5157530  p99 5701236  p99.9 5790359 ns
+W3 closed  shim_generic              0.21 Mrec/s  p50 21194157  p99 23479637  p99.9 23686758 ns
+W3 closed  moodycamel_rw_inline      0.22 Mrec/s  p50 20967440  p99 23232971  p99.9 23336095 ns
+W3 closed  rigtorp_inline            0.22 Mrec/s  p50 20980640  p99 23452550  p99.9 23943086 ns
+W3 closed  shim_spsc                 0.22 Mrec/s  p50 20988139  p99 23255452  p99.9 23457245 ns
+W3 closed  shim_spsc_inline          0.22 Mrec/s  p50 21065521  p99 24894276  p99.9 28118084 ns
+W3wtc generic      0.21 Mrec/s  p50 21386487  p99 25337347  p99.9 26882916 ns
+W3wtc hand         0.22 Mrec/s  p50 20928874  p99 23190129  p99.9 23331681 ns
+W3wtc hand-inline    0.22 Mrec/s  p50 20877523  p99 23132918  p99.9 23327240 ns
+W3wtc compiler     0.22 Mrec/s  p50 20939527  p99 23259920  p99.9 23596555 ns
+W3 closed  shim_generic              0.05 Mrec/s  p50 84107138  p99 93273936  p99.9 94121658 ns
+W3 closed  moodycamel_rw_inline      0.05 Mrec/s  p50 83709140  p99 92812483  p99.9 93089118 ns
+W3 closed  rigtorp_inline            0.05 Mrec/s  p50 84288921  p99 97359969  p99.9 101735796 ns
+W3 closed  shim_spsc                 0.05 Mrec/s  p50 84179782  p99 97267184  p99.9 102003082 ns
+W3 closed  shim_spsc_inline          0.05 Mrec/s  p50 83663702  p99 92763560  p99.9 92950551 ns
+W3wtc generic      0.05 Mrec/s  p50 83921098  p99 93043660  p99.9 93765283 ns
+W3wtc hand         0.05 Mrec/s  p50 84886164  p99 100277983  p99.9 103260719 ns
+W3wtc hand-inline    0.05 Mrec/s  p50 83605616  p99 92693616  p99.9 93172354 ns
+W3wtc compiler     0.05 Mrec/s  p50 83577274  p99 92669089  p99.9 92950301 ns
+W3 closed  shim_generic              0.01 Mrec/s  p50 334701397  p99 371293693  p99.9 372370710 ns
+W3 closed  moodycamel_rw_inline      0.01 Mrec/s  p50 334468744  p99 371032028  p99.9 372255425 ns
+W3 closed  rigtorp_inline            0.01 Mrec/s  p50 334398191  p99 370935960  p99.9 375115261 ns
+W3 closed  shim_spsc                 0.01 Mrec/s  p50 334321390  p99 370866219  p99.9 371612809 ns
+W3 closed  shim_spsc_inline          0.01 Mrec/s  p50 334701997  p99 371267077  p99.9 375267761 ns
+W3wtc generic      0.01 Mrec/s  p50 334728676  p99 371316545  p99.9 372225710 ns
+W3wtc hand         0.01 Mrec/s  p50 334653471  p99 371247171  p99.9 372176055 ns
+W3wtc hand-inline    0.01 Mrec/s  p50 334231404  p99 370772186  p99.9 371561751 ns
+W3wtc compiler     0.01 Mrec/s  p50 334329595  p99 370866515  p99.9 374663943 ns
+W3 closed  shim_generic              0.00 Mrec/s  p50 1257849770  p99 1482109179  p99.9 1488494572 ns
+W3 closed  moodycamel_rw_inline      0.00 Mrec/s  p50 1257715149  p99 1481928404  p99.9 1487678294 ns
+W3 closed  rigtorp_inline            0.00 Mrec/s  p50 1256805244  p99 1480738585  p99.9 1485483326 ns
+W3 closed  shim_spsc                 0.00 Mrec/s  p50 1257886855  p99 1482006133  p99.9 1486914940 ns
+W3 closed  shim_spsc_inline          0.00 Mrec/s  p50 1257013641  p99 1480954822  p99.9 1485830039 ns
+W3wtc generic      0.00 Mrec/s  p50 1258001849  p99 1482263392  p99.9 1487853251 ns
+W3wtc hand         0.00 Mrec/s  p50 1257948436  p99 1482184153  p99.9 1487117638 ns
+W3wtc hand-inline    0.00 Mrec/s  p50 1257305728  p99 1481411495  p99.9 1487616567 ns
+W3wtc compiler     0.00 Mrec/s  p50 1257972759  p99 1482203092  p99.9 1490088435 ns
+W3 closed  shim_generic             14.17 Mrec/s  p50 303455  p99  331638  p99.9  489024 ns
+W3 closed  moodycamel_rw_inline     21.16 Mrec/s  p50    240  p99    1402  p99.9  171588 ns
+W3 closed  rigtorp_inline           20.44 Mrec/s  p50    240  p99    1122  p99.9  155634 ns
+W3 closed  shim_spsc                25.39 Mrec/s  p50   2113  p99  132759  p99.9  192459 ns
+W3 closed  shim_spsc_inline         25.11 Mrec/s  p50   1502  p99    9925  p99.9  164737 ns
+W3wtc generic     13.09 Mrec/s  p50 333450  p99  366280  p99.9  523025 ns
+W3wtc hand        25.46 Mrec/s  p50   1883  p99  155604  p99.9  204757 ns
+W3wtc hand-inline   25.50 Mrec/s  p50   1452  p99   35664  p99.9  200691 ns
+W3wtc compiler    25.50 Mrec/s  p50   1462  p99   39079  p99.9  196144 ns
+W3 closed  shim_generic              7.54 Mrec/s  p50 580812  p99  694943  p99.9  999590 ns
+W3 closed  moodycamel_rw_inline     11.34 Mrec/s  p50 386320  p99  412068  p99.9  507652 ns
+W3 closed  rigtorp_inline           13.88 Mrec/s  p50 312769  p99  331437  p99.9  441122 ns
+W3 closed  shim_spsc                11.94 Mrec/s  p50 366881  p99  390746  p99.9  475303 ns
+W3 closed  shim_spsc_inline         12.44 Mrec/s  p50 351127  p99  372219  p99.9  479600 ns
+W3wtc generic      9.24 Mrec/s  p50 468323  p99  523155  p99.9  642845 ns
+W3wtc hand        13.72 Mrec/s  p50 316605  p99  336265  p99.9  431067 ns
+W3wtc hand-inline   16.46 Mrec/s  p50 260601  p99  272759  p99.9  402995 ns
+W3wtc compiler    16.46 Mrec/s  p50 260551  p99  272609  p99.9  383846 ns
+W3 closed  shim_generic              2.93 Mrec/s  p50 1543516  p99 1688604  p99.9 1702155 ns
+W3 closed  moodycamel_rw_inline      3.32 Mrec/s  p50 1366020  p99 1497407  p99.9 1679420 ns
+W3 closed  rigtorp_inline            3.45 Mrec/s  p50 1315845  p99 1442254  p99.9 1865289 ns
+W3 closed  shim_spsc                 3.37 Mrec/s  p50 1345700  p99 1474923  p99.9 1495224 ns
+W3 closed  shim_spsc_inline          3.41 Mrec/s  p50 1330887  p99 1458038  p99.9 1461724 ns
+W3wtc generic      3.16 Mrec/s  p50 1429175  p99 1577397  p99.9 1608424 ns
+W3wtc hand         3.48 Mrec/s  p50 1304227  p99 1428624  p99.9 1435995 ns
+W3wtc hand-inline    3.67 Mrec/s  p50 1236556  p99 1353682  p99.9 1378799 ns
+W3wtc compiler     3.67 Mrec/s  p50 1236015  p99 1353101  p99.9 1357938 ns
+W3 closed  shim_generic              0.84 Mrec/s  p50 5460135  p99 6028258  p99.9 6042649 ns
+W3 closed  moodycamel_rw_inline      0.87 Mrec/s  p50 5283359  p99 5843901  p99.9 5879063 ns
+W3 closed  rigtorp_inline            0.88 Mrec/s  p50 5207235  p99 5756649  p99.9 5769548 ns
+W3 closed  shim_spsc                 0.87 Mrec/s  p50 5261086  p99 5816199  p99.9 5870771 ns
+W3 closed  shim_spsc_inline          0.87 Mrec/s  p50 5248466  p99 5801977  p99.9 5812813 ns
+W3wtc generic      0.86 Mrec/s  p50 5343580  p99 5900766  p99.9 5975458 ns
+W3wtc hand         0.88 Mrec/s  p50 5222158  p99 5773075  p99.9 5788458 ns
+W3wtc hand-inline    0.89 Mrec/s  p50 5157240  p99 5701006  p99.9 5805703 ns
+W3wtc compiler     0.89 Mrec/s  p50 5153855  p99 5697370  p99.9 5720295 ns
+W3 closed  shim_generic              0.22 Mrec/s  p50 21144765  p99 23422684  p99.9 23466069 ns
+W3 closed  moodycamel_rw_inline      0.22 Mrec/s  p50 20951955  p99 23215772  p99.9 23258677 ns
+W3 closed  rigtorp_inline            0.22 Mrec/s  p50 20877943  p99 23133788  p99.9 23206297 ns
+W3 closed  shim_spsc                 0.22 Mrec/s  p50 20940467  p99 23203202  p99.9 23246427 ns
+W3 closed  shim_spsc_inline          0.22 Mrec/s  p50 20924114  p99 23184627  p99.9 23267411 ns
+W3wtc generic      0.22 Mrec/s  p50 21116572  p99 23391857  p99.9 23435582 ns
+W3wtc hand         0.22 Mrec/s  p50 20946427  p99 23209693  p99.9 23252858 ns
+W3wtc hand-inline    0.22 Mrec/s  p50 20847629  p99 23100160  p99.9 23142604 ns
+W3wtc compiler     0.22 Mrec/s  p50 20848008  p99 23100608  p99.9 23143212 ns
+W3 closed  shim_generic              0.05 Mrec/s  p50 83839833  p99 92954272  p99.9 93130006 ns
+W3 closed  moodycamel_rw_inline      0.05 Mrec/s  p50 83598405  p99 92691872  p99.9 92858392 ns
+W3 closed  rigtorp_inline            0.05 Mrec/s  p50 83574435  p99 92662754  p99.9 92871087 ns
+W3 closed  shim_spsc                 0.05 Mrec/s  p50 83605959  p99 92699405  p99.9 92871333 ns
+W3 closed  shim_spsc_inline          0.05 Mrec/s  p50 83600746  p99 92692329  p99.9 92866341 ns
+W3wtc generic      0.05 Mrec/s  p50 83719187  p99 92820346  p99.9 92991322 ns
+W3wtc hand         0.05 Mrec/s  p50 83609065  p99 92704626  p99.9 92873149 ns
+W3wtc hand-inline    0.05 Mrec/s  p50 83515190  p99 92598422  p99.9 92768698 ns
+W3wtc compiler     0.05 Mrec/s  p50 83528396  p99 92615103  p99.9 92799900 ns
+W3 closed  shim_generic              0.01 Mrec/s  p50 334602294  p99 371169184  p99.9 373407333 ns
+W3 closed  moodycamel_rw_inline      0.01 Mrec/s  p50 334315224  p99 370849515  p99.9 375184341 ns
+W3 closed  rigtorp_inline            0.01 Mrec/s  p50 334209143  p99 370730435  p99.9 371455483 ns
+W3 closed  shim_spsc                 0.01 Mrec/s  p50 334452431  p99 371003805  p99.9 376744228 ns
+W3 closed  shim_spsc_inline          0.01 Mrec/s  p50 334149776  p99 370687302  p99.9 371358439 ns
+W3wtc generic      0.01 Mrec/s  p50 334623750  p99 371180863  p99.9 376794959 ns
+W3wtc hand         0.01 Mrec/s  p50 334226571  p99 370774773  p99.9 371446731 ns
+W3wtc hand-inline    0.01 Mrec/s  p50 334076836  p99 370600010  p99.9 371268473 ns
+W3wtc compiler     0.01 Mrec/s  p50 334394729  p99 370939837  p99.9 374347621 ns
+W3 closed  shim_generic              0.00 Mrec/s  p50 1258112167  p99 1482364484  p99.9 1487597386 ns
+W3 closed  moodycamel_rw_inline      0.00 Mrec/s  p50 1257245358  p99 1481230113  p99.9 1485967222 ns
+W3 closed  rigtorp_inline            0.00 Mrec/s  p50 1256700865  p99 1480586193  p99.9 1485325646 ns
+W3 closed  shim_spsc                 0.00 Mrec/s  p50 1256963683  p99 1480988953  p99.9 1485733805 ns
+W3 closed  shim_spsc_inline          0.00 Mrec/s  p50 1257053433  p99 1481146326  p99.9 1485858338 ns
+W3wtc generic      0.00 Mrec/s  p50 1258096998  p99 1482216207  p99.9 1489758236 ns
+W3wtc hand         0.00 Mrec/s  p50 1256955324  p99 1480952912  p99.9 1485717383 ns
+W3wtc hand-inline    0.00 Mrec/s  p50 1256726431  p99 1480625288  p99.9 1485291150 ns
+W3wtc compiler     0.00 Mrec/s  p50 1256840398  p99 1480807310  p99.9 1485471770 ns
+W1 shim_generic           E64   spin     16.17 Mops/s
+W1 shim_generic           E64   spin     15.63 Mops/s
+W1 shim_generic           E64   spin     15.21 Mops/s
+checksums-w0.txt: 1 distinct checksum(s) (must be 1)
+checksums-w1024.txt: 1 distinct checksum(s) (must be 1)
+checksums-w16.txt: 1 distinct checksum(s) (must be 1)
+checksums-w16384.txt: 1 distinct checksum(s) (must be 1)
+checksums-w256.txt: 1 distinct checksum(s) (must be 1)
+checksums-w4.txt: 1 distinct checksum(s) (must be 1)
+checksums-w4096.txt: 1 distinct checksum(s) (must be 1)
+checksums-w64.txt: 1 distinct checksum(s) (must be 1)
