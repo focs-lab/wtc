@@ -4,7 +4,10 @@
    to rte_ring_sp_enqueue, set in a function or by a file-scope
    initialiser, which no call site shows. None is verified: the first and
    the last make every ring unknown, and the array of rings is a summary
-   whose union cannot be held against one element's declaration.
+   whose union cannot be held against one element's declaration. A ring
+   created with no flags (FLAGLESS) declares nothing by them, but the calls
+   not counted are rte_ring_sp_enqueue's, which declare one producer: it
+   is reported as not checkable.
 
    RUN: %clang -std=gnu11 -I%S/Inputs -fclangir -emit-cir %s -DARRAY -o %t.array.cir
    RUN: wtc-opt %t.array.cir --lift-cir-to-wtc --queue-ownership-analysis -o /dev/null 2>&1 | FileCheck %s --check-prefix=ARRAY
@@ -12,6 +15,8 @@
    RUN: wtc-opt %t.pointer.cir --lift-cir-to-wtc --queue-ownership-analysis -o /dev/null 2>&1 | FileCheck %s --check-prefix=POINTER
    RUN: %clang -std=gnu11 -I%S/Inputs -fclangir -emit-cir %s -DFILE_SCOPE -o %t.file.cir
    RUN: wtc-opt %t.file.cir --lift-cir-to-wtc --queue-ownership-analysis -o /dev/null 2>&1 | FileCheck %s --check-prefix=POINTER
+   RUN: %clang -std=gnu11 -I%S/Inputs -fclangir -emit-cir %s -DFLAGLESS -o %t.flagless.cir
+   RUN: wtc-opt %t.flagless.cir --lift-cir-to-wtc --queue-ownership-analysis -o /dev/null 2>&1 | FileCheck %s --check-prefix=FLAGLESS
    RUN: %clang -std=gnu11 -I%S/Inputs -fclangir -emit-cir %s -DINIT_ARRAY -o %t.init.cir
    RUN: wtc-opt %t.init.cir --lift-cir-to-wtc --queue-ownership-analysis -o /dev/null 2>&1 | FileCheck %s --check-prefix=INIT
 
@@ -20,6 +25,7 @@
    POINTER: remark: wtc: the address of rte_ring_sp_enqueue is taken, and calls through it are not counted; every queue of its type is now unknown
    POINTER: warning: wtc: queue *@ring is declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ; no producer access seen); cannot verify: the address of rte_ring_sp_enqueue is taken, and calls through it are not counted
    POINTER-NOT: verified
+   FLAGLESS: warning: wtc: queue *@ring cannot be checked: the address of rte_ring_sp_enqueue is taken, and calls through it are not counted
    INIT: remark: wtc: queue @storage[*]: mpsc (producers: many, consumers: 1)
    INIT: warning: wtc: queue @storage[*] is declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ); cannot verify: it stands for every element of an array, counted together, and each element may have threads of its own
    INIT-NOT: verified
@@ -71,7 +77,11 @@ static int producer(void *arg) { enq(ring, 0); return 0; }
 static int consumer(void *arg) { void *o; rte_ring_dequeue(ring, &o); return 0; }
 
 int main(void) {
+#ifdef FLAGLESS
+    ring = rte_ring_create("r", 1024, SOCKET_ID_ANY, 0);
+#else
     ring = rte_ring_create("r", 1024, SOCKET_ID_ANY, RING_F_SP_ENQ | RING_F_SC_DEQ);
+#endif
 #ifndef FILE_SCOPE
     enq = rte_ring_sp_enqueue;
 #endif

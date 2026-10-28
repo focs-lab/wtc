@@ -1244,7 +1244,11 @@ llvm::ArrayRef<Instance *> ThreadInstanceWalk::instancesOf(cir::FuncOp f) const 
 // id (writesOutParam).
 static bool harmlessCallee(cir::FuncOp f) {
     if (!f) return false;
-    if (isAllocator(f) || getSemanticKind(f) == SemanticOpKind::ThreadSpawn) return true;
+    // rte_mempool_create runs the program's mp_init and obj_init with the
+    // arguments it is handed, which may write through them.
+    if ((isAllocator(f) && f.getSymName() != "rte_mempool_create") ||
+        getSemanticKind(f) == SemanticOpKind::ThreadSpawn)
+        return true;
     const StringRef n = f.getSymName();
     if (n == "memcpy" || n == "memmove") return false;
     return touchesOnlyItsArguments(f) || n == "free" || n == "rte_free" || n == "puts" || n == "printf" || n == "fprintf";

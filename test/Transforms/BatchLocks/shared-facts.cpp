@@ -6,7 +6,7 @@
 // function no other translation unit can call, and every target counts.
 // The allocator is the C library's and the replaceable operator new and
 // delete, not a placement form of the program's, which may take a lock;
-// DPDK's ring constructor takes the EAL's tail-queue lock.
+// DPDK's ring and mempool constructors take the EAL's tail-queue lock.
 //
 // RUN: %clangxx -std=c++17 -I%shim -fclangir -emit-cir %s -o %t.cir
 // RUN: wtc-opt %t.cir --lift-cir-to-wtc --wtc-batch-locks -o /dev/null 2>&1 | FileCheck %s
@@ -30,6 +30,10 @@ extern Pool pool;
 struct Node { long v; };
 struct rte_ring;
 extern "C" rte_ring *rte_ring_create(const char *name, unsigned count, int socket, unsigned flags) noexcept;
+struct rte_mempool;
+extern "C" rte_mempool *rte_pktmbuf_pool_create(const char *name, unsigned n, unsigned cache_size,
+                                                unsigned short priv_size, unsigned short data_room_size,
+                                                int socket_id) noexcept;
 static void wait_ready(long) noexcept { pthread_mutex_lock(&raw); pthread_cond_wait(&ready, &raw); pthread_mutex_unlock(&raw); }
 
 // CHECK-DAG: [[@LINE+1]]:{{.*}} remark: wtc: critical sections in this loop batched
@@ -51,3 +55,5 @@ WTC_BATCH void grows(int n) { for (int i = 0; i < n; ++i) { m.lock(); buf = stat
 WTC_BATCH void pooled(int n) { for (int i = 0; i < n; ++i) { Node *x = new (pool) Node; m.lock(); total += x->v; m.unlock(); } }
 // CHECK-DAG: [[@LINE+1]]:{{.*}} remark: wtc: critical sections in this loop not batched: it calls rte_ring_create, which may wait for another thread
 WTC_BATCH void rings(int n) { for (int i = 0; i < n; ++i) { m.lock(); total += reinterpret_cast<long>(rte_ring_create("r", 64, 0, 0)); m.unlock(); } }
+// CHECK-DAG: [[@LINE+1]]:{{.*}} remark: wtc: critical sections in this loop not batched: it calls rte_pktmbuf_pool_create, which may wait for another thread
+WTC_BATCH void pools(int n) { for (int i = 0; i < n; ++i) { m.lock(); total += reinterpret_cast<long>(rte_pktmbuf_pool_create("p", 1023, 32, 0, 2048, 0)); m.unlock(); } }

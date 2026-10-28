@@ -45,38 +45,60 @@ bool isWTCAnnotatedCall(cir::CallOp op, StringRef annotation);
 SemanticOpKind getSemanticKind(cir::FuncOp funcOp);
 
 // Queues of libraries the analysis has a model of, read from the callee's
-// name: DPDK's rte_ring, and the single-producer single-consumer queues of
-// rigtorp (SPSCQueue), folly (ProducerConsumerQueue), boost
-// (lockfree::spsc_queue) and moodycamel (ReaderWriterQueue,
-// BlockingReaderWriterQueue). Their threads are counted like a shim
-// queue's and what they declare is checked; nothing about them is
-// rewritten. A model is a reading of the library's API, stated as such:
+// name: DPDK's rte_ring and rte_mempool, and the single-producer
+// single-consumer queues of rigtorp (SPSCQueue), folly
+// (ProducerConsumerQueue), boost (lockfree::spsc_queue) and moodycamel
+// (ReaderWriterQueue, BlockingReaderWriterQueue). Their threads are counted
+// like a shim queue's and what they declare is checked; nothing about them
+// is rewritten. A model is a reading of the library's API, stated as such:
 // the method names in Utils.cpp, and DPDK's naming, in which an
 // rte_ring_sp_* or rte_ring_sc_* call is the single-thread form of its
 // side whatever the ring's flags say, rte_ring_mp_* and rte_ring_mc_* the
-// multi-thread form, and the rest follow the flags.
+// multi-thread form, and the rest follow the flags. A mempool is a queue
+// of free objects: a put (rte_mempool_put*, an mbuf's free) pushes, a get
+// (rte_mempool_get*, an mbuf's allocation) pops, and its ops -- named, or
+// chosen by its flags -- declare the sides.
 enum class LibraryQueueRole {
     None,
-    Create,     // rte_ring_create: the result is the queue
-    Construct,  // a constructor, or rte_ring_init: an operand is the queue
+    Create,     // rte_ring_create, rte_mempool_create: the result is the queue
+    Construct,  // a constructor, rte_ring_init, rte_mempool_set_ops_byname: an operand is the queue
     Push,
     Pop,
 };
 // What decides how many threads a call may share its side with.
 enum class LibraryQueueSync {
     ByType,   // a single-producer single-consumer class: one each
-    ByFlags,  // rte_ring_enqueue and the like: the ring's flags
+    ByFlags,  // rte_ring_enqueue, rte_mempool_put and the like: the queue's flags or ops
     Single,   // rte_ring_sp_*, rte_ring_sc_*: one, whatever the flags
     Multi,    // rte_ring_mp_*, rte_ring_mc_*: any number
 };
+// Which library a function is of.
+enum class LibraryQueueKind { Class, Ring, Mempool };
+// How a free reaches the pool it puts into, when the pool is not an
+// operand but the `pool` field of the mbuf it is handed.
+enum class MbufFree {
+    None,      // the queue is the operand
+    Own,       // rte_mbuf_raw_free: the mbuf's own pool, one segment
+    Chain,     // rte_pktmbuf_free and the like: the pools of every segment
+               // of the chain, and of a buffer an indirect mbuf is attached to
+    Attached,  // rte_pktmbuf_detach: the pool of the buffer it is attached to
+};
 // A function as the model reads it. `member` is set for every function of
-// a modelled class or of DPDK's ring library, whatever its role: its body
-// is the library's, not the program's.
+// a modelled class or of DPDK's ring, mempool and mbuf libraries, whatever
+// its role: its body is the library's, not the program's.
 struct LibraryQueueFunction {
     LibraryQueueRole role = LibraryQueueRole::None;
     LibraryQueueSync sync = LibraryQueueSync::ByType;
+    LibraryQueueKind kind = LibraryQueueKind::Class;
     unsigned queueArg = 0;               // the queue, counted over the source's arguments
-    std::optional<unsigned> flagsArg;    // an rte_ring's flags, at its creation
+    std::optional<unsigned> flagsArg;    // a ring's or a mempool's flags, at its creation
+    std::optional<unsigned> opsArg;      // a mempool's ops, by name
+    MbufFree viaMbuf = MbufFree::None;   // the queue argument is an mbuf (or an array of them)
+    bool returnsMbuf = false;            // hands back an mbuf taken from the queue argument
+    // A function of DPDK's mempool or mbuf library that the model does not
+    // read and does not know to be inert: handed a pool or an mbuf, it may
+    // put or get, so every pool is unknown (QueueOwnershipAnalysis).
+    bool unmodelled = false;
     bool member = false;
     explicit operator bool() const { return role != LibraryQueueRole::None; }
 };
@@ -87,13 +109,22 @@ LibraryQueueFunction libraryQueueFunction(cir::FuncOp f);
 struct LibraryQueueCall {
     LibraryQueueRole role = LibraryQueueRole::None;
     LibraryQueueSync sync = LibraryQueueSync::ByType;
+    LibraryQueueKind kind = LibraryQueueKind::Class;
     unsigned queueOperand = 0;           // unused for Create
     std::optional<unsigned> flagsOperand;
+    std::optional<unsigned> opsOperand;
+    MbufFree viaMbuf = MbufFree::None;
+    bool returnsMbuf = false;
     explicit operator bool() const { return role != LibraryQueueRole::None; }
 };
 LibraryQueueCall libraryQueueCall(cir::CallOp call, const LibraryQueueFunction &callee);
 LibraryQueueCall libraryQueueCall(cir::CallOp call);
 bool isLibraryQueueFunction(cir::FuncOp f);
+// DPDK's mbuf calls that make one mbuf reach another's pool: a chain
+// (rte_pktmbuf_chain) or an indirect mbuf (rte_pktmbuf_attach,
+// rte_pktmbuf_attach_extbuf, rte_pktmbuf_clone). A free then puts into
+// more pools than the one the mbuf was taken from.
+bool isMbufLinkFunction(llvm::StringRef name);
 
 // Whether operand `idx` of the call is the hidden return slot the calling
 // convention inserts for a non-trivial return type. ClangIR marks it with
