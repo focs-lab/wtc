@@ -5,9 +5,13 @@
 // and no matter with one thread, which no other waits for. A count W8 did
 // not measure (three, more than eight), threads started in a loop of
 // unknown count, and a mutex that is not a global get the lowest threshold.
+// On the other class, cascade-lake, the same work is 184 ns: under its
+// 200 ns threshold for two threads and over its 70 ns one for four to
+// eight, where W8 found batching losing from about 50 ns (HOST).
 //
 // RUN: %clangxx -std=c++17 -I%shim -fclangir -emit-cir %s -o %t.cir
 // RUN: wtc-opt %t.cir --lift-cir-to-wtc --wtc-batch-locks -o /dev/null 2>&1 | FileCheck %s
+// RUN: wtc-opt %t.cir --lift-cir-to-wtc --wtc-batch-locks=host=cascade-lake -o /dev/null 2>&1 | FileCheck %s --check-prefix=HOST
 
 #include "mutex.hpp"
 #include "progress.hpp"
@@ -18,9 +22,11 @@ long a, b, c, d, e, f, g;
 
 // CHECK-DAG: [[@LINE+1]]:{{.*}} remark: wtc: critical sections in this loop batched: {{.*}}; work between sections estimated at 223 ns (1508 units), with one thread taking the mutex, which no other waits for
 WTC_BATCH void by_one() { long x = 1; for (int i = 0; i < 1000; ++i) { alone.lock(); a += x; alone.unlock(); for (int k = 0; k < 150; ++k) x = x * 31 + k; } }
-// CHECK-DAG: [[@LINE+1]]:{{.*}} remark: wtc: critical sections in this loop batched: {{.*}}; work between sections estimated at 223 ns (1508 units), under the 275 ns threshold for the 4 threads that take the mutex
+// CHECK-DAG: [[@LINE+2]]:{{.*}} remark: wtc: critical sections in this loop batched: {{.*}}; work between sections estimated at 223 ns (1508 units), under the 275 ns threshold for the 4 threads that take the mutex
+// HOST-DAG: [[@LINE+1]]:{{.*}} remark: wtc: critical sections in this loop not batched: work between sections estimated at 184 ns (1508 units), over the 70 ns threshold for the 4 threads that take the mutex
 WTC_BATCH void by_four() { long x = 1; for (int i = 0; i < 1000; ++i) { four.lock(); b += x; four.unlock(); for (int k = 0; k < 150; ++k) x = x * 31 + k; } }
-// CHECK-DAG: [[@LINE+1]]:{{.*}} remark: wtc: critical sections in this loop not batched: work between sections estimated at 223 ns (1508 units), over the 180 ns threshold for the 2 threads that take the mutex
+// CHECK-DAG: [[@LINE+2]]:{{.*}} remark: wtc: critical sections in this loop not batched: work between sections estimated at 223 ns (1508 units), over the 180 ns threshold for the 2 threads that take the mutex
+// HOST-DAG: [[@LINE+1]]:{{.*}} remark: wtc: critical sections in this loop batched: {{.*}}; work between sections estimated at 184 ns (1508 units), under the 200 ns threshold for the 2 threads that take the mutex
 WTC_BATCH void by_two() { long x = 1; for (int i = 0; i < 1000; ++i) { two.lock(); c += x; two.unlock(); for (int k = 0; k < 150; ++k) x = x * 31 + k; } }
 // CHECK-DAG: [[@LINE+1]]:{{.*}} remark: wtc: critical sections in this loop not batched: work between sections estimated at 223 ns (1508 units), over the 180 ns threshold that holds for any number of threads (3 threads take the mutex, a count not measured)
 WTC_BATCH void by_three() { long x = 1; for (int i = 0; i < 1000; ++i) { three.lock(); d += x; three.unlock(); for (int k = 0; k < 150; ++k) x = x * 31 + k; } }
