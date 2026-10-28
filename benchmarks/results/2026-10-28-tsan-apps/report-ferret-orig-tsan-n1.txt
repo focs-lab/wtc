@@ -1,0 +1,31 @@
+==================
+WARNING: ThreadSanitizer: data race (pid=9630)
+  Read of size 4 at 0x55cb2ac00618 by thread T6:
+    #0 t_out $FERRET_OUT/ferret-src/benchmark/ferret-pthreads.c:404:32 (ferret-orig-tsan+0xe4927) (BuildId: 55af233c30d44ac2f8162c4ac6da1c5c4e20373d)
+
+  Previous write of size 4 at 0x55cb2ac00618 by thread T1:
+    #0 file_helper $FERRET_OUT/ferret-src/benchmark/ferret-pthreads.c:166:13 (ferret-orig-tsan+0xe3f5f) (BuildId: 55af233c30d44ac2f8162c4ac6da1c5c4e20373d)
+    #1 scan_dir $FERRET_OUT/ferret-src/benchmark/ferret-pthreads.c:194:27 (ferret-orig-tsan+0xe3e37) (BuildId: 55af233c30d44ac2f8162c4ac6da1c5c4e20373d)
+    #2 dir_helper $FERRET_OUT/ferret-src/benchmark/ferret-pthreads.c:135:7 (ferret-orig-tsan+0xe3e9b) (BuildId: 55af233c30d44ac2f8162c4ac6da1c5c4e20373d)
+    #3 scan_dir $FERRET_OUT/ferret-src/benchmark/ferret-pthreads.c:198:3 (ferret-orig-tsan+0xe3e9b)
+    #4 t_load $FERRET_OUT/ferret-src/benchmark/ferret-pthreads.c:220:3 (ferret-orig-tsan+0xe4015) (BuildId: 55af233c30d44ac2f8162c4ac6da1c5c4e20373d)
+
+  Location is global 'cnt_enqueue' of size 4 at 0x55cb2ac00618 (ferret-orig-tsan+0x1539618)
+
+  Thread T6 (tid=9637, running) created by main thread at:
+    #0 pthread_create <null> (ferret-orig-tsan+0x6385f) (BuildId: 55af233c30d44ac2f8162c4ac6da1c5c4e20373d)
+    #1 tpool_create <null> (ferret-orig-tsan+0xee0c5) (BuildId: 55af233c30d44ac2f8162c4ac6da1c5c4e20373d)
+    #2 <null> <null> (libc.so.6+0x2a1c9) (BuildId: a4a7992a8e66555c8141ab2a08a8465ff6e0ea65)
+
+  Thread T1 (tid=9632, finished) created by main thread at:
+    #0 pthread_create <null> (ferret-orig-tsan+0x6385f) (BuildId: 55af233c30d44ac2f8162c4ac6da1c5c4e20373d)
+    #1 tpool_create <null> (ferret-orig-tsan+0xee0c5) (BuildId: 55af233c30d44ac2f8162c4ac6da1c5c4e20373d)
+    #2 <null> <null> (libc.so.6+0x2a1c9) (BuildId: a4a7992a8e66555c8141ab2a08a8465ff6e0ea65)
+
+SUMMARY: ThreadSanitizer: data race $FERRET_OUT/ferret-src/benchmark/ferret-pthreads.c:404:32 in t_out
+==================
+(4,1)
+(4,2)
+(4,3)
+(4,4)
+ThreadSanitizer: reported 1 warnings

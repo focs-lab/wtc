@@ -1,0 +1,870 @@
+dedup	hamlet.dat compiler-tsan t=1	run=1	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=1	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=1	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=1	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=1	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=1	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=1	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=2	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=2	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=2	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=2	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=2	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=2	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=2	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=3	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=3	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=3	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=3	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=3	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=3	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=3	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=4	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=4	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=4	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=4	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=4	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=4	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=4	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=5	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=5	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=5	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=5	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=5	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=5	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=5	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=6	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=6	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=6	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=6	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=6	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=6	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=6	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=7	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=7	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=7	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=7	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=7	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=7	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=7	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=8	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=8	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=8	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=8	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=8	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=8	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=8	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=9	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=9	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=9	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=9	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=9	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=9	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=9	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=10	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=10	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=10	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=10	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=10	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=10	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=10	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=11	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=11	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=11	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=11	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=11	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=11	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=11	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=12	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=12	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=12	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=12	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=12	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=12	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=12	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=13	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=13	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=13	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=13	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=13	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=13	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=13	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=14	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=14	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=14	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=14	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=14	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=14	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=14	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=15	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=15	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=15	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=15	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=15	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=15	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=15	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=16	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=16	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=16	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=16	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=16	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=16	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=16	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=17	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=17	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=17	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=17	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=17	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=17	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=17	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=18	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=18	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=18	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=18	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=18	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=18	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=18	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=19	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=19	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=19	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=19	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=19	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=19	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=19	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=20	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=20	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=20	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=20	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=20	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=20	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=20	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=21	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=21	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=21	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=21	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=21	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=21	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=21	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=22	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=22	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=22	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=22	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=22	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=22	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=22	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=23	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=23	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=23	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=23	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=23	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=23	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=23	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=24	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=24	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=24	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=24	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=24	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=24	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=24	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=25	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=25	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=25	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=25	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=25	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=25	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=25	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=26	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=26	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=26	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=26	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=26	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=26	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=26	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=27	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=27	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=27	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=27	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=27	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=27	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=27	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=28	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=28	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=28	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=28	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=28	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=28	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=28	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=29	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=29	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=29	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=29	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=29	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=29	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=29	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=1	run=30	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=2	run=30	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-tsan t=4	run=30	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-flat-one-unity-tsan t=1	run=30	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=1	run=30	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=2	run=30	rc=0	reports=0	output=same	
+dedup	hamlet.dat compiler-unity-tsan t=4	run=30	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=1	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=1	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=1	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=1	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=1	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=1	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=1	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=2	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=2	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=2	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=2	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=2	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=2	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=2	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=3	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=3	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=3	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=3	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=3	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=3	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=3	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=4	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=4	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=4	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=4	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=4	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=4	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=4	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=5	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=5	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=5	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=5	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=5	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=5	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=5	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=6	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=6	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=6	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=6	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=6	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=6	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=6	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=7	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=7	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=7	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=7	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=7	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=7	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=7	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=8	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=8	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=8	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=8	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=8	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=8	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=8	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=9	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=9	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=9	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=9	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=9	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=9	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=9	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=10	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=10	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=10	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=10	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=10	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=10	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=10	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=11	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=11	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=11	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=11	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=11	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=11	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=11	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=12	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=12	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=12	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=12	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=12	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=12	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=12	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=13	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=13	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=13	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=13	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=13	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=13	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=13	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=14	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=14	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=14	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=14	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=14	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=14	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=14	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=15	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=15	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=15	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=15	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=15	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=15	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=15	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=16	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=16	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=16	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=16	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=16	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=16	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=16	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=17	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=17	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=17	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=17	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=17	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=17	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=17	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=18	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=18	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=18	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=18	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=18	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=18	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=18	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=19	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=19	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=19	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=19	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=19	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=19	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=19	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=20	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=20	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=20	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=20	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=20	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=20	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=20	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=21	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=21	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=21	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=21	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=21	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=21	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=21	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=22	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=22	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=22	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=22	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=22	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=22	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=22	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=23	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=23	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=23	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=23	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=23	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=23	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=23	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=24	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=24	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=24	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=24	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=24	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=24	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=24	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=25	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=25	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=25	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=25	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=25	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=25	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=25	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=26	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=26	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=26	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=26	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=26	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=26	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=26	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=27	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=27	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=27	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=27	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=27	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=27	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=27	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=28	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=28	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=28	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=28	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=28	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=28	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=28	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=29	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=29	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=29	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=29	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=29	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=29	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=29	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=1	run=30	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=2	run=30	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-tsan t=4	run=30	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-flat-one-unity-tsan t=1	run=30	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=1	run=30	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=2	run=30	rc=0	reports=0	output=same	
+dedup	native-32M.iso compiler-unity-tsan t=4	run=30	rc=0	reports=0	output=same	
+ferret	simdev compiler-one-tsan n=1	run=1	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=1	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=1	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=1	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=1	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=1	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=1	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=1	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=1	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=1	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev compiler-one-tsan n=1	run=2	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=2	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=2	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=2	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=2	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=2	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=2	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=2	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=2	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=2	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev compiler-one-tsan n=1	run=3	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=3	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=3	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=3	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=3	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=3	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=3	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=3	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=3	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=3	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-one-tsan n=1	run=4	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=4	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=4	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=4	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=4	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=4	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=4	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=4	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=4	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=4	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-one-tsan n=1	run=5	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=5	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=5	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=5	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=5	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=5	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=5	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=5	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=5	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=5	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev compiler-one-tsan n=1	run=6	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=6	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=6	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=6	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=6	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=6	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=6	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=6	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=6	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=6	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-one-tsan n=1	run=7	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=7	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=7	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=7	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=7	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=7	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=7	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=7	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=7	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=7	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev compiler-one-tsan n=1	run=8	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=8	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=8	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=8	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=8	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=8	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=8	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=8	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=8	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=8	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-one-tsan n=1	run=9	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=9	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=9	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=9	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=9	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=9	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=9	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=9	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=9	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=9	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev compiler-one-tsan n=1	run=10	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=10	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=10	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=10	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=10	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=10	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=10	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=10	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=10	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=10	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev compiler-one-tsan n=1	run=11	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=11	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=11	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=11	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=11	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=11	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=4	run=11	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=11	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=11	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=11	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-one-tsan n=1	run=12	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=12	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=12	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=12	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=12	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=12	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=12	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=12	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=12	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=12	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-one-tsan n=1	run=13	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=13	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=13	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=13	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=13	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=13	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=13	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=13	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=13	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=13	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-one-tsan n=1	run=14	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=14	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=14	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=14	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=14	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=14	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=14	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=14	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=14	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=14	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev compiler-one-tsan n=1	run=15	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=15	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=15	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=15	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=15	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=15	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=15	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=15	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=15	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=15	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev compiler-one-tsan n=1	run=16	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=16	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=16	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=16	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=1	run=16	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=16	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=16	rc=66	reports=1	output=same lines	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev orig-tsan n=1	run=16	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=16	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=16	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev compiler-one-tsan n=1	run=17	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=17	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=17	rc=66	reports=1	output=same bytes	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev compiler-tsan n=4	run=17	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=17	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=17	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=17	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=17	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=17	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=17	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-one-tsan n=1	run=18	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=18	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=18	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=4	run=18	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=18	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=18	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=18	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=18	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=18	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=18	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev compiler-one-tsan n=1	run=19	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=19	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=19	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=19	rc=66	reports=1	output=same lines	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev generic-tsan n=1	run=19	rc=66	reports=1	output=same bytes	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev generic-tsan n=2	run=19	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=19	rc=66	reports=1	output=same lines	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev orig-tsan n=1	run=19	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=19	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=19	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev compiler-one-tsan n=1	run=20	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=20	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=20	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=20	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=20	rc=66	reports=1	output=same bytes	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev generic-tsan n=2	run=20	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=4	run=20	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=20	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=20	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=20	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev compiler-one-tsan n=1	run=21	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=21	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=21	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=21	rc=66	reports=1	output=same bytes	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev generic-tsan n=1	run=21	rc=66	reports=1	output=same bytes	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev generic-tsan n=2	run=21	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=21	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=21	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=21	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=21	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-one-tsan n=1	run=22	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=22	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=22	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=22	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=22	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=22	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=22	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=22	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=22	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=22	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-one-tsan n=1	run=23	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=23	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=23	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=23	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=23	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=23	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=23	rc=66	reports=1	output=same lines	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev orig-tsan n=1	run=23	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=23	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=23	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-one-tsan n=1	run=24	rc=66	reports=1	output=same bytes	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev compiler-tsan n=1	run=24	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=24	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=24	rc=66	reports=1	output=same lines	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev generic-tsan n=1	run=24	rc=66	reports=1	output=same bytes	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev generic-tsan n=2	run=24	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=24	rc=66	reports=1	output=same lines	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev orig-tsan n=1	run=24	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=24	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=24	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev compiler-one-tsan n=1	run=25	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=25	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=25	rc=66	reports=1	output=same lines	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev compiler-tsan n=4	run=25	rc=66	reports=1	output=same lines	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev generic-tsan n=1	run=25	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=25	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=25	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=25	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=25	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=25	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-one-tsan n=1	run=26	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=26	rc=66	reports=1	output=same bytes	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev compiler-tsan n=2	run=26	rc=66	reports=1	output=same bytes	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev compiler-tsan n=4	run=26	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=26	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=26	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=4	run=26	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=26	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=26	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=26	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-one-tsan n=1	run=27	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=27	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=27	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=27	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=27	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=27	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=27	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=27	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=27	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=27	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-one-tsan n=1	run=28	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=1	run=28	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=28	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=28	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=28	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=28	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=4	run=28	rc=66	reports=1	output=same lines	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev orig-tsan n=1	run=28	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=28	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=28	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-one-tsan n=1	run=29	rc=66	reports=1	output=same bytes	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev compiler-tsan n=1	run=29	rc=66	reports=1	output=same bytes	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev compiler-tsan n=2	run=29	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-tsan n=4	run=29	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=1	run=29	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=29	rc=0	reports=0	output=same lines	
+ferret	simdev generic-tsan n=4	run=29	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=29	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=29	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=29	rc=0	reports=0	output=same lines	
+ferret	simdev compiler-one-tsan n=1	run=30	rc=66	reports=1	output=same bytes	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev compiler-tsan n=1	run=30	rc=0	reports=0	output=same bytes	
+ferret	simdev compiler-tsan n=2	run=30	rc=66	reports=1	output=same bytes	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev compiler-tsan n=4	run=30	rc=66	reports=1	output=same lines	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev generic-tsan n=1	run=30	rc=0	reports=0	output=same bytes	
+ferret	simdev generic-tsan n=2	run=30	rc=66	reports=1	output=same lines	1x data race t_out(void*) file_helper(char 'cnt_enqueue'
+ferret	simdev generic-tsan n=4	run=30	rc=0	reports=0	output=same lines	
+ferret	simdev orig-tsan n=1	run=30	rc=66	reports=1	output=same bytes	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=2	run=30	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+ferret	simdev orig-tsan n=4	run=30	rc=66	reports=1	output=same lines	1x data race t_out file_helper 'cnt_enqueue'
+spdlog	compiler-tsan threads=1 workers=1	run=1	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=1	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=1	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=1	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=1	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=2	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=2	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=2	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=2	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=2	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=3	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=3	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=3	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=3	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=3	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=4	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=4	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=4	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=4	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=4	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=5	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=5	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=5	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=5	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=5	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=6	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=6	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=6	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=6	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=6	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=7	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=7	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=7	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=7	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=7	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=8	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=8	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=8	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=8	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=8	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=9	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=9	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=9	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=9	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=9	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=10	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=10	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=10	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=10	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=10	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=11	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=11	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=11	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=11	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=11	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=12	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=12	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=12	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=12	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=12	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=13	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=13	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=13	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=13	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=13	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=14	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=14	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=14	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=14	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=14	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=15	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=15	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=15	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=15	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=15	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=16	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=16	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=16	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=16	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=16	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=17	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=17	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=17	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=17	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=17	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=18	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=18	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=18	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=18	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=18	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=19	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=19	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=19	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=19	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=19	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=20	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=20	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=20	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=20	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=20	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=21	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=21	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=21	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=21	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=21	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=22	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=22	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=22	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=22	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=22	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=23	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=23	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=23	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=23	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=23	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=24	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=24	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=24	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=24	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=24	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=25	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=25	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=25	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=25	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=25	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=26	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=26	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=26	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=26	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=26	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=27	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=27	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=27	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=27	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=27	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=28	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=28	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=28	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=28	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=28	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=29	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=29	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=29	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=29	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=29	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=1 workers=1	run=30	rc=0	reports=0	output=all 20000 messages	
+spdlog	compiler-tsan threads=2 workers=1	run=30	rc=0	reports=0	output=all 40000 messages	
+spdlog	compiler-tsan threads=4 workers=1	run=30	rc=0	reports=0	output=all 80000 messages	
+spdlog	compiler-tsan threads=8 workers=1	run=30	rc=0	reports=0	output=all 160000 messages	
+spdlog	compiler-tsan threads=8 workers=2	run=30	rc=0	reports=0	output=all 160000 messages	
