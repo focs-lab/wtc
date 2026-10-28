@@ -78,6 +78,10 @@ struct Access {
     // the thread was started some other way, or by the loop of another
     // object's constructor.
     Operation *countLoop = nullptr;
+    // For a put into some pool the analysis does not name -- a free of an
+    // mbuf whose pool is its `pool` field, unresolved -- why; counted on
+    // every pool that may hold mbufs, as one of several (oneOf).
+    std::string poolWhy{};
 };
 
 struct SideInfo {
@@ -143,6 +147,42 @@ static bool arrayOf(Type t, Type elem) {
     }
     return array && elem && t == elem;
 }
+
+// A record of DPDK's of the given name.
+static bool isRecordNamed(Type t, llvm::StringRef name) {
+    auto rec = dyn_cast_or_null<cir::RecordType>(t);
+    return rec && rec.getName() && rec.getName().getValue() == name;
+}
+
+// The pool type an mbuf's `pool` field points to (struct rte_mempool), for
+// an operand that points to an mbuf or to an array of pointers to them;
+// null for anything else. The field is found by its type, at any depth of
+// the anonymous unions and structures DPDK nests in struct rte_mbuf.
+static Type poolMemberType(Type t, unsigned depth) {
+    auto rec = dyn_cast_or_null<cir::RecordType>(t);
+    if (!rec || rec.isIncomplete() || depth > 4) return Type();
+    for (Type m : rec.getMembers()) {
+        if (auto p = dyn_cast<cir::PointerType>(m); p && isRecordNamed(p.getPointee(), "rte_mempool"))
+            return p.getPointee();
+        if (Type inner = isa<cir::PointerType>(m) ? Type() : poolMemberType(m, depth + 1)) return inner;
+    }
+    return Type();
+}
+static Type mbufPoolType(Type operand) {
+    auto p = dyn_cast<cir::PointerType>(operand);
+    Type t = p ? p.getPointee() : Type();
+    if (auto pp = dyn_cast_or_null<cir::PointerType>(t)) t = pp.getPointee();
+    return isRecordNamed(t, "rte_mbuf") ? poolMemberType(t, 0) : Type();
+}
+static bool isMbufPointer(Type t) {
+    auto p = dyn_cast<cir::PointerType>(t);
+    Type e = p ? p.getPointee() : Type();
+    if (auto pp = dyn_cast_or_null<cir::PointerType>(e)) e = pp.getPointee();
+    return isRecordNamed(e, "rte_mbuf");
+}
+
+static bool isNullPointer(Value v);
+static bool firstArgIsSret(cir::FuncOp f);
 
 // A queue the walk cannot place but can name by type: a member at a known
 // offset of a record, reached through a pointer the walk cannot follow --
@@ -260,7 +300,12 @@ private:
         if (auto o = dyn_cast<QueueBatchBeginOp>(op)) return o.getQueue();
         if (auto o = dyn_cast<QueuePushDeferredOp>(op)) return o.getQueue();
         if (auto o = dyn_cast<QueueBatchEndOp>(op)) return o.getQueue();
-        return op->getOperand(libraryOp(op).queueOperand);
+        LibraryQueueCall l = libraryOp(op);
+        // A free's queue is the pool its mbuf was taken from, when the
+        // analysis can name it; else the mbuf, which no pool is.
+        if (l.viaMbuf != MbufFree::None)
+            if (Value pool = mbufPool(op)) return pool;
+        return op->getOperand(l.queueOperand);
     }
 
     static Type queueObjectType(Operation *root) {
@@ -270,6 +315,10 @@ private:
     }
 
     Type queueObjectTypeOfOp(Operation *op) {
+        // A free's queue is a pool, named or not: the type its mbuf's
+        // `pool` field points to.
+        if (LibraryQueueCall l = libraryOp(op); l.viaMbuf != MbufFree::None)
+            return mbufPoolType(op->getOperand(l.queueOperand).getType());
         Value q = queueOf(op);
         if (auto qt = dyn_cast<QueueType>(q.getType())) return qt.getElementType();
         if (auto pt = dyn_cast<cir::PointerType>(q.getType())) return pt.getPointee();
@@ -278,7 +327,7 @@ private:
 
     // A call of the shim's queue constructor, or of a modelled library
     // queue's, whose first operand is the object it builds; or
-    // rte_ring_create, whose result is.
+    // rte_ring_create and rte_mempool_create, whose result is.
     bool isQueueConstructor(Operation *op) {
         auto call = dyn_cast<cir::CallOp>(op);
         if (!call) return false;
@@ -288,7 +337,7 @@ private:
         return l.role == LibraryQueueRole::Create ||
                (l.role == LibraryQueueRole::Construct && l.queueOperand == 0);
     }
-    bool isRingCreate(Operation *op) {
+    bool isLibraryCreate(Operation *op) {
         auto call = dyn_cast<cir::CallOp>(op);
         return call && libraryCall(call).role == LibraryQueueRole::Create;
     }
@@ -418,6 +467,61 @@ private:
     // checked, never rewritten, so no constructor carries a verdict.
     llvm::DenseSet<Key> libraryKeys;
     static Access accessOf(Operation *op, const Instance &inst);
+    // The pool a free puts its mbuf into, when the mbuf is, in the function
+    // that frees it, what an allocation from a pool handed back, and no
+    // segment or buffer of another pool can be linked to it; else null,
+    // with why in `why`.
+    Value mbufPool(Operation *op, std::string *why = nullptr);
+    // Where the program links one mbuf to another -- a chain, an indirect
+    // mbuf -- so that a free reaches more than one pool; null if nowhere.
+    // Computed once per run.
+    Operation *mbufLinkSite();
+    std::optional<Operation *> mbufLink;
+    // Frees whose pool mbufPool cannot name: each puts into some pool that
+    // may hold mbufs, on its thread.
+    struct UnresolvedPut {
+        Operation *op;
+        Instance *inst;
+        std::string why;
+    };
+    llvm::SmallVector<UnresolvedPut, 4> unresolvedPuts;
+    // The pools made in this module that may hold mbufs, in the order the
+    // walk met their creations.
+    llvm::SmallSetVector<Key, 4> mbufPoolKeys;
+    // Pools made by rte_mempool_create with no initialiser, which hold
+    // mbufs only if one is handed to them later.
+    llvm::SmallSetVector<Key, 4> objectPools;
+    // Why a pool's put side may hold unresolved frees, or null.
+    static const Access *unresolvedPutOf(const SideInfo &side) {
+        for (const Access &a : side.accesses)
+            if (!a.poolWhy.empty()) return &a;
+        return nullptr;
+    }
+    // What a library queue's creation declares: a side single by bit (1:
+    // one producer, 2: one consumer), as the program writes it, or not
+    // known, with why.
+    struct WrittenDeclaration {
+        std::optional<int64_t> bits;
+        std::string text;
+        std::string unknown;
+    };
+    WrittenDeclaration writtenDeclaration(llvm::ArrayRef<cir::CallOp> ctors);
+    // A call of rte_mbuf_set_user_mempool_ops or
+    // rte_mbuf_set_platform_mempool_ops, which choose the ops a pool made
+    // with no ops of its own takes; null if none. Computed once per run.
+    Operation *defaultOpsSetter();
+    std::optional<Operation *> defaultOpsSet;
+    // Whether a single-thread form of a push or pop of this queue type is
+    // used anywhere in the module, directly or through its address: then a
+    // type whose queues are all unknown may hide a declaration.
+    bool hasSingleForm(Type objTy);
+    llvm::DenseMap<Type, bool> singleForm;
+    // Calls of functions of DPDK's mempool and mbuf libraries that the
+    // model does not read, handed a pool or an mbuf: every pool is unknown.
+    void poisonUnmodelledMempoolCalls();
+    // Pools that may hold mbufs although their creation suggests not: one
+    // rte_pktmbuf_pool_init or rte_mempool_obj_iter is handed later.
+    void addPoolsInitialisedLater(llvm::ArrayRef<Key> candidates);
     // Why one side of a queue counts many, in the program's own terms.
     std::string whyMany(const SideInfo &side);
     // The arrays whose elements a constructor call builds one per run of a
@@ -466,6 +570,153 @@ Access QueueOwnershipAnalysisPass::accessOf(Operation *op, const Instance &inst)
                   static_cast<bool>(site),
                   false,
                   &inst};
+}
+
+// An mbuf goes back to the pool its `pool` field names, the pool it was
+// taken from. That is read here only when the mbuf a free is handed is, in
+// the same function, the value an allocation from a pool handed back
+// (rte_pktmbuf_alloc, rte_mbuf_raw_alloc, rte_pktmbuf_copy,
+// rte_pktmbuf_clone), through a slot stored once. Anything else -- an mbuf
+// from a ring, a burst receive, a parameter, an array of them -- names a
+// pool the analysis does not follow. A free that walks a chain
+// (rte_pktmbuf_free, rte_pktmbuf_free_seg, rte_pktmbuf_free_bulk) puts each
+// segment, and the buffer an indirect mbuf is attached to, into its own
+// pool, so where the program links mbufs it is not followed either; nor is
+// rte_pktmbuf_detach, whose put is into the attached buffer's pool.
+Value QueueOwnershipAnalysisPass::mbufPool(Operation *op, std::string *why) {
+    auto call = cast<cir::CallOp>(op);
+    const LibraryQueueCall l = libraryCall(call);
+    const std::string at = whereOf(op->getLoc(), /*fileOnly=*/true);
+    auto unresolved = [&](const std::string &w) {
+        if (why) *why = w;
+        return Value();
+    };
+    if (l.viaMbuf == MbufFree::Attached)
+        return unresolved("an mbuf detached at " + at +
+                          " puts the buffer it was attached to into that buffer's pool, which the analysis "
+                          "does not name");
+    if (l.viaMbuf == MbufFree::Chain)
+        if (Operation *link = mbufLinkSite())
+            return unresolved("an mbuf freed at " + at + " may have segments or an attached buffer from other "
+                              "pools, since mbufs are linked at " + whereOf(link->getLoc(), /*fileOnly=*/true));
+    if (auto c = traceToRoot(call.getOperand(l.queueOperand)).getDefiningOp<cir::CallOp>())
+        if (LibraryQueueCall a = libraryCall(c); a.returnsMbuf && a.queueOperand < c.getNumOperands())
+            return c.getOperand(a.queueOperand);
+    return unresolved("an mbuf freed at " + at +
+                      " goes back to the pool its `pool` field names, which the analysis does not resolve");
+}
+
+Operation *QueueOwnershipAnalysisPass::mbufLinkSite() {
+    if (mbufLink) return *mbufLink;
+    Operation *site = nullptr;
+    module.walk([&](Operation *op) {
+        if (auto f = op->getParentOfType<cir::FuncOp>(); f && isLibraryFunction(f)) return WalkResult::advance();
+        // rte_pktmbuf_chain, rte_pktmbuf_attach and the like, or the
+        // program's own `m->next = other`.
+        bool links = false;
+        if (auto call = dyn_cast<cir::CallOp>(op)) {
+            cir::FuncOp callee = lookupCallee(call);
+            links = callee && isMbufLinkFunction(callee.getSymName());
+        } else if (auto st = dyn_cast<cir::StoreOp>(op)) {
+            auto gm = traceToLocalRoot(st.getAddr()).getDefiningOp<cir::GetMemberOp>();
+            auto pt = dyn_cast<cir::PointerType>(st.getValue().getType());
+            links = gm && gm.getName() == "next" && pt && isRecordNamed(pt.getPointee(), "rte_mbuf");
+        }
+        if (!links) return WalkResult::advance();
+        site = op;
+        return WalkResult::interrupt();
+    });
+    mbufLink = site;
+    return site;
+}
+
+Operation *QueueOwnershipAnalysisPass::defaultOpsSetter() {
+    if (defaultOpsSet) return *defaultOpsSet;
+    Operation *site = nullptr;
+    module.walk([&](cir::CallOp call) {
+        if (auto f = call->getParentOfType<cir::FuncOp>(); f && isLibraryFunction(f)) return WalkResult::advance();
+        cir::FuncOp callee = lookupCallee(call);
+        if (!callee || (callee.getSymName() != "rte_mbuf_set_user_mempool_ops" &&
+                        callee.getSymName() != "rte_mbuf_set_platform_mempool_ops"))
+            return WalkResult::advance();
+        site = call;
+        return WalkResult::interrupt();
+    });
+    defaultOpsSet = site;
+    return site;
+}
+
+bool QueueOwnershipAnalysisPass::hasSingleForm(Type objTy) {
+    auto [cached, fresh] = singleForm.try_emplace(objTy, false);
+    if (!fresh) return cached->second;
+    bool found = false;
+    module.walk([&](cir::FuncOp f) {
+        LibraryQueueFunction l = libraryFunction(f);
+        if (l.sync != LibraryQueueSync::Single) return WalkResult::advance();
+        const unsigned arg = (firstArgIsSret(f) ? 1 : 0) + l.queueArg;
+        auto inputs = f.getFunctionType().getInputs();
+        auto pt = arg < inputs.size() ? dyn_cast<cir::PointerType>(inputs[arg]) : cir::PointerType();
+        if (!pt || pt.getPointee() == objTy) {
+            found = true;
+            return WalkResult::interrupt();
+        }
+        return WalkResult::advance();
+    });
+    singleForm[objTy] = found;
+    return found;
+}
+
+void QueueOwnershipAnalysisPass::poisonUnmodelledMempoolCalls() {
+    module.walk([&](cir::CallOp call) {
+        if (auto f = call->getParentOfType<cir::FuncOp>(); f && isLibraryFunction(f)) return;
+        cir::FuncOp callee = lookupCallee(call);
+        if (!callee || !libraryFunction(callee).unmodelled) return;
+        for (Value v : call.getArgOperands()) {
+            auto pt = dyn_cast<cir::PointerType>(v.getType());
+            Type poolTy = pt && isRecordNamed(pt.getPointee(), "rte_mempool") ? pt.getPointee()
+                                                                               : mbufPoolType(v.getType());
+            if (!poolTy) continue;
+            const std::string why =
+                (callee.getSymName() + " is handed " + (pt && pt.getPointee() == poolTy ? "a pool" : "an mbuf") +
+                 ", and the model does not read what it puts or gets")
+                    .str();
+            if (poisonedTypes.insert(poolTy).second) poisonWhy[poolTy] = why;
+            call.emitRemark() << "wtc: " << why << "; every queue of its type is now unknown";
+            ++remarks;
+            return;
+        }
+    });
+}
+
+void QueueOwnershipAnalysisPass::addPoolsInitialisedLater(llvm::ArrayRef<Key> candidates) {
+    if (candidates.empty()) return;
+    bool all = false;
+    llvm::SmallSetVector<Key, 4> found;
+    module.walk([&](cir::CallOp call) {
+        if (all) return WalkResult::interrupt();
+        if (auto f = call->getParentOfType<cir::FuncOp>(); f && isLibraryFunction(f)) return WalkResult::advance();
+        cir::FuncOp callee = lookupCallee(call);
+        if (!callee || (callee.getSymName() != "rte_pktmbuf_pool_init" &&
+                        callee.getSymName() != "rte_mempool_obj_iter"))
+            return WalkResult::advance();
+        // rte_mempool_obj_iter(mp, cb, arg) with a null callback sets
+        // nothing up; any other may set up mbufs.
+        const unsigned k = firstRealOperand(call);
+        if (callee.getSymName() == "rte_mempool_obj_iter" && k + 1 < call.getNumOperands() &&
+            isNullPointer(call.getOperand(k + 1)))
+            return WalkResult::advance();
+        auto in = call->getParentOfType<cir::FuncOp>();
+        llvm::ArrayRef<Instance *> insts = in ? walk->instancesOf(in) : llvm::ArrayRef<Instance *>();
+        if (k >= call.getNumOperands() || insts.empty()) { all = true; return WalkResult::interrupt(); }
+        for (Instance *inst : insts)
+            for (const Place &pl : walk->resolvePlaces(call.getOperand(k), inst)) {
+                if (!pl.root) { all = true; return WalkResult::interrupt(); }
+                found.insert({pl.root, pl.offset});
+            }
+        return WalkResult::advance();
+    });
+    for (const Key &c : candidates)
+        if (all || found.contains(c)) mbufPoolKeys.insert(c);
 }
 
 // Why one thread the walk saw stands for many: the nearest cause above the
@@ -783,6 +1034,61 @@ static std::optional<int64_t> constantInteger(Value v, unsigned depth = 0) {
     return std::nullopt;
 }
 
+// A null pointer the program writes: `NULL`, `0`.
+static bool isNullPointer(Value v) {
+    if (!v) return false;
+    v = traceToRoot(v);
+    if (auto c = v.getDefiningOp<cir::ConstantOp>()) {
+        if (auto p = dyn_cast<cir::ConstPtrAttr>(c.getValue())) return p.isNullValue();
+        if (auto i = dyn_cast<cir::IntAttr>(c.getValue())) return i.isNullValue();
+    }
+    if (auto c = v.getDefiningOp<cir::CastOp>()) return isNullPointer(c.getSrc());
+    return false;
+}
+
+// A string the program fixes before it runs: a literal, through the
+// array's decay and a slot stored once.
+static std::optional<std::string> constantString(Value v) {
+    if (!v) return std::nullopt;
+    v = traceToRoot(v);
+    auto gg = v.getDefiningOp<cir::GetGlobalOp>();
+    auto g = gg ? SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr()) : cir::GlobalOp();
+    if (!g || !g.getConstant() || !g.getInitialValue()) return std::nullopt;
+    auto arr = dyn_cast<cir::ConstArrayAttr>(*g.getInitialValue());
+    auto str = arr ? dyn_cast<StringAttr>(arr.getElts()) : StringAttr();
+    if (!str) return std::nullopt;
+    return str.getValue().split('\0').first.str();
+}
+
+// The sides a mempool's ops name single (1: one producer, 2: one
+// consumer): DPDK's ring driver registers the four ring_{sp,mp}_{sc,mc};
+// every other ops it ships -- ring_mt_rts, ring_mt_hts, stack, lf_stack,
+// bucket, the hardware pools -- takes any number on both sides.
+static int64_t opsBits(llvm::StringRef ops) {
+    if (ops == "ring_sp_sc") return 3;
+    if (ops == "ring_sp_mc") return 1;
+    if (ops == "ring_mp_sc") return 2;
+    return 0;
+}
+
+// Whether a pool may hold mbufs, so that a free whose pool is not named
+// may put into it: one made by rte_pktmbuf_pool_create and its forms, or
+// by rte_mempool_create_empty, whose objects the program sets up later;
+// one made by rte_mempool_create only when it is handed an initialiser
+// (rte_pktmbuf_pool_init, rte_pktmbuf_init, or any of the program's,
+// which may call them). A pool made with neither holds what the program
+// puts there.
+static bool mayHoldMbufs(cir::CallOp create) {
+    cir::FuncOp f = lookupCallee(create);
+    if (!f || f.getSymName() != "rte_mempool_create") return true;
+    // rte_mempool_create(name, n, elt_size, cache_size, private_data_size,
+    //   mp_init, mp_init_arg, obj_init, obj_init_arg, socket_id, flags)
+    const unsigned k = firstRealOperand(create);
+    for (unsigned i : {5u, 7u})
+        if (k + i >= create.getNumOperands() || !isNullPointer(create.getOperand(k + i))) return true;
+    return false;
+}
+
 // Whether a function's first argument is the hidden return slot.
 static bool firstArgIsSret(cir::FuncOp f) {
     auto attrs = f.getArgAttrsAttr();
@@ -791,17 +1097,104 @@ static bool firstArgIsSret(cir::FuncOp f) {
     return d && d.get("llvm.sret");
 }
 
+// What a modelled library queue's creation declares, as written. An
+// rte_ring's flags (RING_F_SP_ENQ 0x1, RING_F_SC_DEQ 0x2, rte_ring_core.h)
+// at rte_ring_create, rte_ring_create_elem or rte_ring_init. A mempool's
+// ops: named by rte_mempool_set_ops_byname, which replaces whatever its
+// creation chose, or by rte_pktmbuf_pool_create_by_ops; else picked from
+// its flags (RTE_MEMPOOL_F_SP_PUT 0x4, RTE_MEMPOOL_F_SC_GET 0x8,
+// rte_mempool.h; MEMPOOL_F_SP_PUT and MEMPOOL_F_SC_GET before DPDK 21.11,
+// the same values) by rte_mempool_create and rte_mempool_create_empty; and
+// for rte_pktmbuf_pool_create, or a null ops name, the default ops, which
+// the program does not choose and which declare nothing single. Flags or
+// ops computed at run time, given differently by two creations or two
+// settings, or never seen because the creation is out of sight are not
+// known.
+QueueOwnershipAnalysisPass::WrittenDeclaration
+QueueOwnershipAnalysisPass::writtenDeclaration(llvm::ArrayRef<cir::CallOp> ctors) {
+    WrittenDeclaration w;
+    const bool pool = !ctors.empty() && libraryCall(ctors.front()).kind == LibraryQueueKind::Mempool;
+    llvm::SmallVector<cir::CallOp, 2> deciding;
+    if (pool)
+        for (cir::CallOp c : ctors)
+            if (LibraryQueueCall l = libraryCall(c); l.role == LibraryQueueRole::Construct && l.opsOperand)
+                deciding.push_back(c);
+    const bool setByName = !deciding.empty();
+    // Only a creation, or a call that sets flags: populating a pool built
+    // elsewhere declares nothing.
+    if (!setByName)
+        for (cir::CallOp c : ctors)
+            if (LibraryQueueCall l = libraryCall(c);
+                l.role == LibraryQueueRole::Create || l.flagsOperand || l.opsOperand)
+                deciding.push_back(c);
+    if (deciding.empty()) {
+        w.unknown = "its creation is not in this translation unit, so its flags are not known";
+        return w;
+    }
+    for (cir::CallOp c : deciding) {
+        LibraryQueueCall l = libraryCall(c);
+        auto operand = [&](std::optional<unsigned> i) {
+            return i && *i < c.getNumOperands() ? c.getOperand(*i) : Value();
+        };
+        int64_t bits = 0;
+        std::string text;
+        // The default ops, for a pool whose creation names none: the
+        // program may have set them.
+        const bool defaultOps = pool && l.role == LibraryQueueRole::Create && !l.flagsOperand &&
+                                (!l.opsOperand || isNullPointer(operand(l.opsOperand)));
+        if (defaultOps)
+            if (Operation *set = defaultOpsSetter()) {
+                w.unknown = ("its ops are the default ops, which " +
+                             lookupCallee(cast<cir::CallOp>(set)).getSymName() + " sets at " +
+                             whereOf(set->getLoc(), /*fileOnly=*/true))
+                                .str();
+                return w;
+            }
+        if (l.opsOperand) {
+            Value v = operand(l.opsOperand);
+            if (!isNullPointer(v)) {
+                std::optional<std::string> ops = constantString(v);
+                if (!ops) {
+                    w.unknown = "its ops are chosen at run time";
+                    return w;
+                }
+                bits = opsBits(*ops);
+                text = "by its ops \"" + *ops + "\"";
+            }
+        } else if (l.flagsOperand) {
+            std::optional<int64_t> f = constantInteger(operand(l.flagsOperand));
+            if (!f) {
+                w.unknown = "its flags are computed at run time";
+                return w;
+            }
+            bits = pool ? ((*f & 4) ? 1 : 0) | ((*f & 8) ? 2 : 0) : (*f & 3);
+            const char *sp = pool ? "RTE_MEMPOOL_F_SP_PUT" : "RING_F_SP_ENQ";
+            const char *sc = pool ? "RTE_MEMPOOL_F_SC_GET" : "RING_F_SC_DEQ";
+            text = "by its flags ";
+            if (bits & 1) text += sp;
+            if (bits == 3) text += " | ";
+            if (bits & 2) text += sc;
+        }
+        if (w.bits && *w.bits != bits) {
+            w.unknown = setByName ? "it is given different ops" : "its creations give it different flags";
+            return w;
+        }
+        w.bits = bits;
+        if (w.text.empty()) w.text = text;
+    }
+    return w;
+}
+
 // What a modelled library queue declares. A class declares one thread on
 // each side through its type, whether its constructor is in sight or only
 // its pushes and pops are. An rte_ring declares a side single through an
-// rte_ring_sp_* or rte_ring_sc_* call on that side, and through its flags
-// (RING_F_SP_ENQ 0x1, RING_F_SC_DEQ 0x2, rte_ring_core.h) when some call on
-// that side follows them or when no call on that side is seen at all: a
-// side reached only by rte_ring_mp_* or rte_ring_mc_* calls is many
-// whatever the flags say. The flags are reported as written, with what
-// qualifies them on each side. Flags computed at run time, given
-// differently by two creations, or never seen because the creation is out
-// of sight leave such a side unknown.
+// rte_ring_sp_* or rte_ring_sc_* call on that side, and an rte_ring or a
+// mempool through what its creation writes (writtenDeclaration) when some
+// call on that side follows it or when no call on that side is seen at
+// all: a side reached only by rte_ring_mp_* or rte_ring_mc_* calls is many
+// whatever the flags say. The declaration is reported as written, with
+// what qualifies it on each side. One that is not known leaves such a side
+// unknown.
 QueueOwnershipAnalysisPass::LibraryDeclaration
 QueueOwnershipAnalysisPass::libraryDeclared(llvm::ArrayRef<cir::CallOp> ctors, const RootInfo &info) {
     LibraryDeclaration d;
@@ -819,33 +1212,13 @@ QueueOwnershipAnalysisPass::libraryDeclared(llvm::ArrayRef<cir::CallOp> ctors, c
         d.how = "by its type";
         return d;
     }
-    std::optional<int64_t> flags;
-    if (ctors.empty()) d.unknown = "its creation is not in this translation unit, so its flags are not known";
-    for (cir::CallOp ctor : ctors) {
-        LibraryQueueCall l = libraryCall(ctor);
-        std::optional<int64_t> f = l.flagsOperand && *l.flagsOperand < ctor.getNumOperands()
-                                       ? constantInteger(ctor.getOperand(*l.flagsOperand))
-                                       : std::nullopt;
-        if (!f) {
-            d.unknown = "its flags are computed at run time";
-            break;
-        }
-        if (flags && (*flags & 3) != (*f & 3)) {
-            d.unknown = "its creations give it different flags";
-            break;
-        }
-        flags = f;
-    }
-    // The flags as written, then what qualifies them on a side, then the
-    // calls that declare a side single themselves.
-    const bool flagsKnown = d.unknown.empty() && flags;
+    const WrittenDeclaration w = writtenDeclaration(ctors);
+    d.unknown = w.unknown;
+    // The declaration as written, then what qualifies it on a side, then
+    // the calls that declare a side single themselves.
+    const bool known = d.unknown.empty() && w.bits;
     std::string byFlags, byCalls;
-    if (flagsKnown && (*flags & 3)) {
-        byFlags = "by its flags ";
-        if (*flags & 1) byFlags += "RING_F_SP_ENQ";
-        if ((*flags & 3) == 3) byFlags += " | ";
-        if (*flags & 2) byFlags += "RING_F_SC_DEQ";
-    }
+    if (known && (*w.bits & 3)) byFlags = w.text;
     for (auto [side, out, bit, name] : {std::tuple{&info.producers, &d.producers, int64_t(1), "producer"},
                                         std::tuple{&info.consumers, &d.consumers, int64_t(2), "consumer"}}) {
         const Access *single = nullptr;
@@ -855,7 +1228,7 @@ QueueOwnershipAnalysisPass::libraryDeclared(llvm::ArrayRef<cir::CallOp> ctors, c
             if (sync == LibraryQueueSync::Single && !single) single = &a;
             if (sync == LibraryQueueSync::ByFlags) followsFlags = true;
         }
-        const bool flagged = flagsKnown && (*flags & bit);
+        const bool flagged = known && (*w.bits & bit);
         if (single) {
             *out = Declared::One;
             auto call = cast<cir::CallOp>(single->op);
@@ -881,10 +1254,7 @@ std::string QueueOwnershipAnalysisPass::openWhy(Type t) {
     auto [it, fresh] = openWhyCache.try_emplace(t);
     if (!fresh) return it->second;
     std::string why;
-    auto isRing = [](Type ty) {
-        auto rec = dyn_cast_or_null<cir::RecordType>(ty);
-        return rec && rec.getName() && rec.getName().getValue() == "rte_ring";
-    };
+    const bool ring = isRecordNamed(t, "rte_ring"), pool = isRecordNamed(t, "rte_mempool");
     // A pointer to a queue of this type, or to one (an array of rings).
     auto pointsToQueue = [&](Type ty) {
         auto p = dyn_cast<cir::PointerType>(ty);
@@ -937,14 +1307,32 @@ std::string QueueOwnershipAnalysisPass::openWhy(Type t) {
         auto p = dyn_cast<cir::PointerType>(ty);
         return p && isa<cir::VoidType>(p.getPointee());
     };
+    // A pool's mbufs handed to code out of sight -- a driver's burst
+    // function, called through a pointer by rte_eth_tx_burst -- may be
+    // freed or refilled there, on the thread that hands them over.
+    auto handsMbufs = [&](cir::CallOp call) {
+        return pool && llvm::any_of(call.getArgOperands(), [](Value v) { return isMbufPointer(v.getType()); });
+    };
     module.walk([&](cir::CallOp call) {
         if (!why.empty()) return WalkResult::interrupt();
-        cir::FuncOp callee = lookupCallee(call);
-        if (!callee) return WalkResult::advance();
         if (auto f = call->getParentOfType<cir::FuncOp>(); f && isLibraryFunction(f))
             return WalkResult::advance();
-        if (isRing(t) && callee.getSymName() == "rte_ring_lookup") {
+        cir::FuncOp callee = lookupCallee(call);
+        if (!callee) {
+            if (call.isIndirect() && handsMbufs(call)) {
+                auto in = call->getParentOfType<cir::FuncOp>();
+                why = "mbufs are handed to a call through a pointer in " +
+                      (in ? llvm::demangle(in.getSymName().str()) : std::string("the program")) +
+                      ", which may free them or take more from a pool";
+            }
+            return WalkResult::advance();
+        }
+        if (ring && callee.getSymName() == "rte_ring_lookup") {
             why = "rte_ring_lookup hands rings to code that finds them by name";
+            return WalkResult::interrupt();
+        }
+        if (pool && callee.getSymName() == "rte_mempool_lookup") {
+            why = "rte_mempool_lookup hands pools to code that finds them by name";
             return WalkResult::interrupt();
         }
         // A thread start's argument goes to an entry the walk follows.
@@ -954,6 +1342,10 @@ std::string QueueOwnershipAnalysisPass::openWhy(Type t) {
             return WalkResult::advance();
         if (llvm::any_of(call.getOperands(), reaches))
             why = ("it is handed to " + callee.getSymName() + ", whose body is not here").str();
+        else if (handsMbufs(call))
+            why = ("mbufs are handed to " + callee.getSymName() +
+                   ", whose body is not here and may free them or take more from a pool")
+                      .str();
         else if (storedInRecord &&
                  llvm::any_of(call.getOperands(), [&](Value v) { return isVoidPointer(v.getType()); }))
             why = ("it is kept in a structure, and " + callee.getSymName() +
@@ -990,10 +1382,12 @@ void QueueOwnershipAnalysisPass::poisonAddressTakenLibraryOps() {
         const unsigned arg = (firstArgIsSret(f) ? 1 : 0) + l.queueArg;
         auto inputs = f.getFunctionType().getInputs();
         auto pt = arg < inputs.size() ? dyn_cast<cir::PointerType>(inputs[arg]) : cir::PointerType();
+        // A free's queue is the pool its mbuf names.
+        Type queueTy = !pt ? Type() : l.viaMbuf != MbufFree::None ? mbufPoolType(pt) : pt.getPointee();
         const std::string why = "the address of " + llvm::demangle(f.getSymName().str()) +
                                 " is taken, and calls through it are not counted";
-        if (!pt) globalPoison = true;
-        else if (poisonedTypes.insert(pt.getPointee()).second) poisonWhy[pt.getPointee()] = why;
+        if (!queueTy) globalPoison = true;
+        else if (poisonedTypes.insert(queueTy).second) poisonWhy[queueTy] = why;
         taken->emitRemark() << "wtc: " << why << "; every queue of its type is now unknown";
         ++remarks;
     });
@@ -1031,7 +1425,14 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
         }
         const bool oneProducer = d.producers == Declared::One, oneConsumer = d.consumers == Declared::One;
         tag = oneProducer && oneConsumer ? 1 : oneConsumer ? 3 : oneProducer ? 4 : 0;
-        if (*tag == 0 && poisoned != poisonWhy.end()) {
+        // A queue that declares nothing single has nothing to check: a
+        // pool on the default ops, a ring created with no flags.
+        // Unless the type has a single-thread form whose calls may be the
+        // unknown ones: a ring created with no flags is single-producer
+        // where rte_ring_sp_enqueue is called through its address.
+        const bool declaresNothing =
+            d.producers == Declared::Many && d.consumers == Declared::Many && !hasSingleForm(objTy);
+        if (*tag == 0 && poisoned != poisonWhy.end() && !declaresNothing) {
             at->emitWarning() << "wtc: queue " << label << " cannot be checked: " << poisoned->second;
             ++remarks;
             return true;
@@ -1134,7 +1535,9 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
     else if (globalPoison) w << "an access to some queue could not be attributed";
     else if (auto it = poisonWhy.find(objTy); it != poisonWhy.end()) w << it->second;
     else if (summary) w << summary;
-    else if (llvm::any_of(info.producers.accesses, [](const Access &a) { return a.oneOf; }) ||
+    else if (const Access *u = unresolvedPutOf(info.producers); u && !declaredMpsc && countOf(info.producers) == 2)
+        w << u->poolWhy;
+    else if (llvm::any_of(info.producers.accesses, [](const Access &a) { return a.oneOf && a.poolWhy.empty(); }) ||
              llvm::any_of(info.consumers.accesses, [](const Access &a) { return a.oneOf; }))
         w << "an operation may act on it or on another queue";
     else if (conditionalSide)
@@ -1288,7 +1691,8 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
     ctorKeys.clear(); keyCtors.clear(); ctorUnplaced.clear(); keyType.clear();
     memberCtors.clear(); abstractKeys.clear(); elementKeys.clear(); layout.reset();
     keyCtorInst.clear(); captureStores.clear(); libraryKeys.clear(); openWhyCache.clear();
-    libraryFunctions.clear();
+    libraryFunctions.clear(); unresolvedPuts.clear(); mbufPoolKeys.clear(); mbufLink.reset();
+    defaultOpsSet.reset(); objectPools.clear(); singleForm.clear();
     globalPoison = false; remarks = 0;
     poisonedOps.clear();
 
@@ -1336,7 +1740,7 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
         // rte_ring_create is the allocation and the constructor in one: the
         // ring is the object the call hands back, which the walk places at
         // the call itself.
-        if (isRingCreate(op)) {
+        if (isLibraryCreate(op)) {
             auto made = call.getNumResults() ? dyn_cast<cir::PointerType>(call.getResult().getType())
                                              : cir::PointerType();
             if (!made) { ctorUnplaced.insert(op); continue; }
@@ -1346,6 +1750,10 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
             keyType.try_emplace(k, made.getPointee());
             auto [ci, first] = keyCtorInst.try_emplace(k, inst);
             if (!first && ci->second != inst) ci->second = kAmbiguous;
+            if (libraryCall(call).kind == LibraryQueueKind::Mempool) {
+                if (mayHoldMbufs(call)) mbufPoolKeys.insert(k);
+                else objectPools.insert(k);
+            }
             continue;
         }
         auto built = dyn_cast<cir::PointerType>(call.getOperand(0).getType());
@@ -1397,6 +1805,9 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
             const Key k{pl.root, pl.offset};
             ctorKeys[op].insert(k);
             keyCtors[k].insert(op);
+            // A pool made out of sight, set up here: it may hold mbufs.
+            if (library && libraryCall(call).kind == LibraryQueueKind::Mempool && !isLibraryCreate(pl.root))
+                mbufPoolKeys.insert(k);
             auto [it, fresh] = keyType.try_emplace(k, built.getPointee());
             if (!fresh && it->second != built.getPointee()) it->second = Type();   // two types: neither
             auto [ci, first] = keyCtorInst.try_emplace(k, inst);
@@ -1422,6 +1833,15 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
     // the walk cannot read, or one constructor call builds every element;
     // read only with constant indices, and built element by element, each
     // element stays a queue of its own.
+    // A free whose pool the analysis cannot name puts into some pool that
+    // may hold mbufs; it is counted on each of them once all are known.
+    llvm::erase_if(visits, [&](const std::pair<Operation *, Instance *> &v) {
+        if (libraryOp(v.first).viaMbuf == MbufFree::None) return false;
+        std::string why;
+        if (mbufPool(v.first, &why)) return false;
+        unresolvedPuts.push_back({v.first, v.second, why});
+        return true;
+    });
     llvm::SmallVector<llvm::SmallVector<Place, 4>, 32> placesOf;
     placesOf.reserve(visits.size());
     for (auto [op, inst] : visits) {
@@ -1561,7 +1981,12 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
         }
         for (const Key &root : rs) {
             RootInfo &info = roots[root];
-            if (libraryOp(op)) libraryKeys.insert(root);
+            if (LibraryQueueCall l = libraryOp(op)) {
+                libraryKeys.insert(root);
+                // A pool the walk places but whose creation is not in
+                // sight: it may hold mbufs.
+                if (l.kind == LibraryQueueKind::Mempool && !isLibraryCreate(root.first)) mbufPoolKeys.insert(root);
+            }
             SideInfo &side = isConsumerOp(op) ? info.consumers : info.producers;
             side.threads.insert(inst->thread);
             Access a = accessOf(op, *inst);
@@ -1594,6 +2019,22 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
         }
     }
 
+    addPoolsInitialisedLater(objectPools.getArrayRef());
+    // Each unresolved free is a put, on its thread, into one of the pools
+    // that may hold mbufs: counted on every one, as one of several, so it
+    // can make a side many but never proves it.
+    for (const UnresolvedPut &u : unresolvedPuts)
+        for (const Key &k : mbufPoolKeys) {
+            SideInfo &side = roots[k].producers;
+            libraryKeys.insert(k);
+            side.threads.insert(u.inst->thread);
+            Access a = accessOf(u.op, *u.inst);
+            a.oneOf = true;
+            a.poolWhy = u.why;
+            side.accesses.push_back(a);
+            if (u.inst->threadMult == Mult::Many) side.anyMany = true;
+        }
+
     remarks += walk.remarks();
 
     // Two different failures, and telling them apart is the difference
@@ -1606,6 +2047,7 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
     }
     // Before the remarks below: it may leave an access with no type.
     poisonAddressTakenLibraryOps();
+    poisonUnmodelledMempoolCalls();
     if (globalPoison) {
         module.emitRemark() << "wtc: an unresolvable queue access had no type to attribute it to; "
                                "every queue is unknown";

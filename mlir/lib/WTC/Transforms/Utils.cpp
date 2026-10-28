@@ -157,11 +157,174 @@ const LibraryClass *libraryClassOf(StringRef mangled, std::string &base, bool &c
 
 bool isDpdkRingFunction(StringRef n) { return n.starts_with("rte_ring_") || n.starts_with("__rte_ring"); }
 
+// DPDK's mempool library and the mbuf library built on it; before DPDK
+// 21.11 the mempool's inline put and get were __mempool_generic_put and
+// __mempool_generic_get.
+bool isDpdkMempoolFunction(StringRef n) {
+    return n.starts_with("rte_mempool_") || n.starts_with("__rte_mempool") || n.starts_with("__mempool_") ||
+           n.starts_with("rte_pktmbuf_") || n.starts_with("__rte_pktmbuf") || n.starts_with("rte_mbuf_") ||
+           n.starts_with("__rte_mbuf");
+}
+
+// The functions of DPDK's mempool and mbuf libraries (26.11, and older
+// names) that neither put nor get: they read or set metadata, build or
+// look up a pool, iterate, link mbufs (which a free then has to follow:
+// isMbufLinkFunction), or release a pool. Any other unmodelled function of
+// those libraries that is handed a pool or an mbuf is taken to put or get.
+bool isInertMempoolFunction(StringRef n) {
+    static const llvm::StringSet<> inert = {
+        // rte_mempool.h
+        "rte_mempool_avail_count", "rte_mempool_in_use_count", "rte_mempool_full", "rte_mempool_empty",
+        "rte_mempool_count", "rte_mempool_free_count", "rte_mempool_get_priv", "rte_mempool_get_ops",
+        "rte_mempool_get_header", "rte_mempool_get_trailer", "rte_mempool_from_obj", "rte_mempool_virt2iova",
+        "rte_mempool_get_page_size", "rte_mempool_get_mem_range", "rte_mempool_get_obj_alignment",
+        "rte_mempool_calc_obj_size", "rte_mempool_dump", "rte_mempool_list_dump", "rte_mempool_audit",
+        "rte_mempool_walk", "rte_mempool_lookup", "rte_mempool_free", "rte_mempool_obj_iter",
+        "rte_mempool_mem_iter", "rte_mempool_cache_create", "rte_mempool_cache_free",
+        "rte_mempool_default_cache", "rte_mempool_check_cookies", "rte_mempool_contig_blocks_check_cookies",
+        "rte_mempool_stats_reset", "rte_mempool_register_ops", "rte_mempool_ops_get_info",
+        "rte_mempool_ops_get_count", "rte_mempool_ops_alloc", "rte_mempool_ops_free",
+        "rte_mempool_ops_calc_mem_size", "rte_mempool_op_calc_mem_size_default",
+        "rte_mempool_op_calc_mem_size_helper", "rte_mempool_event_callback_register",
+        "rte_mempool_event_callback_unregister", "rte_mempool_trace_ops_alloc", "__mempool_check_cookies",
+        "__mempool_contig_blocks_check_cookies",
+        // rte_mbuf.h, rte_mbuf_core.h, rte_mbuf_dyn.h, rte_mbuf_pool_ops.h
+        "rte_mbuf_refcnt_read", "rte_mbuf_refcnt_set", "rte_mbuf_refcnt_update", "__rte_mbuf_refcnt_update",
+        "rte_mbuf_ext_refcnt_read", "rte_mbuf_ext_refcnt_set", "rte_mbuf_ext_refcnt_update",
+        "rte_mbuf_buf_addr", "rte_mbuf_data_addr_default", "rte_mbuf_data_iova", "rte_mbuf_data_iova_default",
+        "rte_mbuf_iova_get", "rte_mbuf_iova_set", "rte_mbuf_to_baddr", "rte_mbuf_to_priv",
+        "rte_mbuf_from_indirect", "rte_mbuf_prefetch_part1", "rte_mbuf_prefetch_part2",
+        "rte_mbuf_sanity_check", "rte_mbuf_raw_sanity_check", "__rte_mbuf_sanity_check",
+        "__rte_mbuf_raw_sanity_check", "rte_mbuf_check", "rte_mbuf_raw_check", "rte_mbuf_raw_reset_bulk",
+        "rte_mbuf_sched_get", "rte_mbuf_sched_set", "rte_mbuf_sched_queue_get", "rte_mbuf_sched_queue_set",
+        "rte_mbuf_sched_color_get", "rte_mbuf_sched_color_set", "rte_mbuf_sched_traffic_class_get",
+        "rte_mbuf_sched_traffic_class_set", "rte_mbuf_tx_offload", "rte_mbuf_dynfield_copy",
+        "rte_mbuf_dynfield_lookup", "rte_mbuf_dynfield_register", "rte_mbuf_dynfield_register_offset",
+        "rte_mbuf_dynflag_lookup", "rte_mbuf_dynflag_register", "rte_mbuf_dynflag_register_bitnum",
+        "rte_mbuf_dyn_dump", "rte_mbuf_dyn_rx_timestamp_register", "rte_mbuf_dyn_tx_timestamp_register",
+        "rte_mbuf_history_dump", "rte_mbuf_history_dump_all", "rte_mbuf_history_dump_mempool",
+        "rte_mbuf_history_init", "rte_mbuf_history_mark", "rte_mbuf_history_mark_bulk",
+        "rte_mbuf_best_mempool_ops", "rte_mbuf_platform_mempool_ops", "rte_mbuf_user_mempool_ops",
+        "rte_mbuf_set_platform_mempool_ops", "rte_mbuf_set_user_mempool_ops", "rte_pktmbuf_adj",
+        "rte_pktmbuf_append", "rte_pktmbuf_prepend", "rte_pktmbuf_trim", "rte_pktmbuf_data_len",
+        "rte_pktmbuf_pkt_len", "rte_pktmbuf_headroom", "rte_pktmbuf_tailroom", "rte_pktmbuf_lastseg",
+        "rte_pktmbuf_reset", "rte_pktmbuf_reset_headroom", "rte_pktmbuf_read", "__rte_pktmbuf_read",
+        "rte_pktmbuf_dump", "rte_pktmbuf_is_contiguous", "rte_pktmbuf_iova", "rte_pktmbuf_iova_offset",
+        "rte_pktmbuf_priv_size", "rte_pktmbuf_priv_flags", "rte_pktmbuf_data_room_size",
+        "rte_pktmbuf_ext_shinfo_init_helper", "rte_pktmbuf_refcnt_update", "rte_pktmbuf_pool_init",
+        "rte_pktmbuf_init", "__rte_pktmbuf_copy_hdr", "rte_pktmbuf_chain", "rte_pktmbuf_attach",
+        "rte_pktmbuf_attach_extbuf"};
+    return inert.contains(n);
+}
+
+// A mempool function as the model reads it (rte_mempool.h, rte_mbuf.h,
+// DPDK 26.11). A pool's ops name its sides: "ring_sp_sc", "ring_sp_mc",
+// "ring_mp_sc" and "ring_mp_mc", picked from RTE_MEMPOOL_F_SP_PUT and
+// RTE_MEMPOOL_F_SC_GET by rte_mempool_create and, since DPDK 23.11, by
+// rte_mempool_create_empty, or set by name. Every put and get goes through
+// the ops, so every one follows them. A per-lcore cache changes when a put
+// or a get reaches the pool's ring, not which threads may: each lcore
+// flushes and refills its own cache, and a thread with no lcore has none,
+// so every put and get is counted on the thread that makes it.
+LibraryQueueFunction classifyMempool(StringRef n) {
+    LibraryQueueFunction r;
+    r.member = true;
+    r.kind = LibraryQueueKind::Mempool;
+    r.sync = LibraryQueueSync::ByFlags;
+    auto create = [&](std::optional<unsigned> flags, std::optional<unsigned> ops) {
+        r.role = LibraryQueueRole::Create;
+        r.flagsArg = flags;
+        r.opsArg = ops;
+    };
+    auto op = [&](LibraryQueueRole role, unsigned arg = 0) {
+        r.role = role;
+        r.queueArg = arg;
+    };
+    // rte_mempool_create(name, n, elt_size, cache_size, private_data_size,
+    //   mp_init, mp_init_arg, obj_init, obj_init_arg, socket_id, flags),
+    // rte_mempool_create_empty(name, n, elt_size, cache_size,
+    //   private_data_size, socket_id, flags),
+    // rte_pktmbuf_pool_create_by_ops(name, n, cache_size, priv_size,
+    //   data_room_size, socket_id, ops_name). rte_pktmbuf_pool_create and
+    // _extbuf take the platform's or the command line's default ops, which
+    // the program does not choose: nothing is declared single.
+    if (n == "rte_mempool_create") create(10, std::nullopt);
+    else if (n == "rte_mempool_create_empty") create(6, std::nullopt);
+    else if (n == "rte_pktmbuf_pool_create_by_ops") create(std::nullopt, 6);
+    else if (n == "rte_pktmbuf_pool_create" || n == "rte_pktmbuf_pool_create_extbuf") create(std::nullopt, std::nullopt);
+    // rte_mempool_set_ops_byname(mp, name, pool_config) replaces the ops.
+    else if (n == "rte_mempool_set_ops_byname") {
+        op(LibraryQueueRole::Construct);
+        r.opsArg = 1;
+    }
+    // Populating a pool puts its objects in, as its creation does when it
+    // populates: part of building it, before any thread takes from it.
+    else if (n == "rte_mempool_populate_default" || n == "rte_mempool_populate_anon" ||
+             n == "rte_mempool_populate_iova" || n == "rte_mempool_populate_virt" ||
+             n == "rte_mempool_ops_populate" || n == "rte_mempool_op_populate_default" ||
+             n == "rte_mempool_op_populate_helper")
+        op(LibraryQueueRole::Construct);
+    else if (n == "rte_mempool_put" || n == "rte_mempool_put_bulk" || n == "rte_mempool_generic_put" ||
+             n == "rte_mempool_do_generic_put" || n == "__mempool_generic_put" ||
+             n == "rte_mempool_ops_enqueue_bulk" || n == "rte_mbuf_raw_free_bulk" ||
+             n == "rte_mempool_mp_put" || n == "rte_mempool_mp_put_bulk")
+        op(LibraryQueueRole::Push);
+    // (cache, mp, ...): the flush, and the zero-copy cache access proposed
+    // for DPDK (not in it as of 26.11), which reaches the ring as a flush
+    // or a refill does.
+    else if (n == "rte_mempool_cache_flush" || n == "rte_mempool_cache_zc_put_bulk")
+        op(LibraryQueueRole::Push, 1);
+    else if (n == "rte_mempool_cache_zc_get_bulk") op(LibraryQueueRole::Pop, 1);
+    else if (n == "rte_mempool_get" || n == "rte_mempool_get_bulk" || n == "rte_mempool_generic_get" ||
+             n == "rte_mempool_do_generic_get" || n == "__mempool_generic_get" ||
+             n == "rte_mempool_get_contig_blocks" || n == "rte_mempool_ops_dequeue_bulk" ||
+             n == "rte_mempool_ops_dequeue_contig_blocks" || n == "rte_pktmbuf_alloc_bulk" ||
+             n == "rte_mbuf_raw_alloc_bulk" || n == "rte_mempool_mc_get" || n == "rte_mempool_mc_get_bulk")
+        op(LibraryQueueRole::Pop);
+    // The single-thread forms DPDK deprecated in 17.05 and removed after:
+    // the call promises one thread on its side, as rte_ring_sp_* does. Their
+    // multi-thread forms went through the ops, and follow them above.
+    else if (n == "rte_mempool_sp_put" || n == "rte_mempool_sp_put_bulk") {
+        op(LibraryQueueRole::Push);
+        r.sync = LibraryQueueSync::Single;
+    } else if (n == "rte_mempool_sc_get" || n == "rte_mempool_sc_get_bulk") {
+        op(LibraryQueueRole::Pop);
+        r.sync = LibraryQueueSync::Single;
+    }
+    else if (n == "rte_pktmbuf_alloc" || n == "rte_mbuf_raw_alloc") {
+        op(LibraryQueueRole::Pop);
+        r.returnsMbuf = true;
+    } else if (n == "rte_pktmbuf_copy" || n == "rte_pktmbuf_clone") {   // (m, mp, ...)
+        op(LibraryQueueRole::Pop, 1);
+        r.returnsMbuf = true;
+    }
+    // A free puts into the pool the mbuf's `pool` field names.
+    else if (n == "rte_mbuf_raw_free") {
+        op(LibraryQueueRole::Push);
+        r.viaMbuf = MbufFree::Own;
+    } else if (n == "rte_pktmbuf_free" || n == "rte_pktmbuf_free_seg" || n == "rte_pktmbuf_free_bulk" ||
+               n == "rte_pktmbuf_linearize" || n == "__rte_pktmbuf_linearize") {
+        // rte_pktmbuf_linearize frees the segments it copies out of.
+        op(LibraryQueueRole::Push);
+        r.viaMbuf = MbufFree::Chain;
+    } else if (n == "rte_pktmbuf_detach" || n == "rte_pktmbuf_prefree_seg" || n == "__rte_pktmbuf_free_direct") {
+        // rte_pktmbuf_prefree_seg detaches an indirect mbuf, which may free
+        // the buffer it was attached to.
+        op(LibraryQueueRole::Push);
+        r.viaMbuf = MbufFree::Attached;
+    } else {
+        r.unmodelled = !isInertMempoolFunction(n);
+    }
+    return r;
+}
+
 // What a function is, read from its name alone.
 LibraryQueueFunction classify(StringRef n) {
     LibraryQueueFunction r;
+    if (isDpdkMempoolFunction(n)) return classifyMempool(n);
     if (isDpdkRingFunction(n)) {
         r.member = true;
+        r.kind = LibraryQueueKind::Ring;
         r.sync = LibraryQueueSync::ByFlags;
         // rte_ring_create(name, count, socket, flags),
         // rte_ring_create_elem(name, esize, count, socket, flags),
@@ -210,8 +373,12 @@ LibraryQueueCall libraryQueueCall(cir::CallOp call, const LibraryQueueFunction &
     const unsigned k = firstRealOperand(call);
     r.role = f.role;
     r.sync = f.sync;
+    r.kind = f.kind;
     r.queueOperand = k + f.queueArg;
     if (f.flagsArg) r.flagsOperand = k + *f.flagsArg;
+    if (f.opsArg) r.opsOperand = k + *f.opsArg;
+    r.viaMbuf = f.viaMbuf;
+    r.returnsMbuf = f.returnsMbuf;
     if (r.role != LibraryQueueRole::Create && r.queueOperand >= call.getNumOperands()) return {};
     return r;
 }
@@ -221,6 +388,11 @@ LibraryQueueCall libraryQueueCall(cir::CallOp call) {
 }
 
 bool isLibraryQueueFunction(cir::FuncOp f) { return libraryQueueFunction(f).member; }
+
+bool isMbufLinkFunction(StringRef n) {
+    return n == "rte_pktmbuf_chain" || n == "rte_pktmbuf_attach" || n == "rte_pktmbuf_attach_extbuf" ||
+           n == "rte_pktmbuf_clone";
+}
 
 static bool dictHasSret(Attribute dictLike) {
     auto dict = mlir::dyn_cast_or_null<DictionaryAttr>(dictLike);
@@ -470,15 +642,19 @@ bool isAllocator(cir::FuncOp f) {
         n == "_ZnwmSt11align_val_t" || n == "_ZnamSt11align_val_t")
         return true;
     // DPDK's EAL heap, rte_malloc(type, size, align) and its zeroing, counting
-    // and per-socket forms, and the ring and stack constructors, which hand
-    // back a fresh object that exists nowhere else: rte_ring_create(name,
-    // count, socket, flags), rte_ring_create_elem(name, esize, count,
-    // socket, flags) and rte_stack_create(name, count, socket, flags). The
-    // memzone behind them is reserved cache-line aligned, which the pass
-    // does not read; the heap-align option stands in for it.
+    // and per-socket forms, and the ring, stack and mempool constructors,
+    // which hand back a fresh object that exists nowhere else:
+    // rte_ring_create(name, count, socket, flags), rte_ring_create_elem(name,
+    // esize, count, socket, flags), rte_stack_create(name, count, socket,
+    // flags), rte_mempool_create and rte_mempool_create_empty, and the mbuf
+    // pools' rte_pktmbuf_pool_create, _by_ops and _extbuf. The memzone
+    // behind them is reserved cache-line aligned, which the pass does not
+    // read; the heap-align option stands in for it.
     return n == "rte_malloc" || n == "rte_zmalloc" || n == "rte_calloc" ||
            n == "rte_malloc_socket" || n == "rte_zmalloc_socket" || n == "rte_calloc_socket" ||
-           n == "rte_ring_create" || n == "rte_ring_create_elem" || n == "rte_stack_create";
+           n == "rte_ring_create" || n == "rte_ring_create_elem" || n == "rte_stack_create" ||
+           n == "rte_mempool_create" || n == "rte_mempool_create_empty" || n == "rte_pktmbuf_pool_create" ||
+           n == "rte_pktmbuf_pool_create_by_ops" || n == "rte_pktmbuf_pool_create_extbuf";
 }
 
 static void allocationsBehindImpl(cir::CallOp call, unsigned depth, llvm::SmallVectorImpl<cir::CallOp> &sites,

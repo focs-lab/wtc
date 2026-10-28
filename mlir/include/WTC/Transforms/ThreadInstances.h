@@ -205,6 +205,9 @@ public:
     // cause set; several places all carry oneOf; one place without it is
     // as certain as resolvePlace's.
     llvm::SmallVector<Place, 4> resolvePlaces(Value v, Instance *inst) const;
+    // Every instance of a function the walk made, none for a function it
+    // did not enter.
+    llvm::ArrayRef<Instance *> instancesOf(cir::FuncOp f) const;
     // More sources than this, or more instances of a storing function
     // than this, and the load stays unplaced: a set that large says
     // nothing about where the pointer points.
@@ -376,7 +379,6 @@ private:
     // anything else, a view into part of a global included.
     bool placeConstant(Attribute a, llvm::SmallVectorImpl<Place> &out) const;
     void computeFieldStores() const;
-    llvm::ArrayRef<Instance *> instancesOf(cir::FuncOp f) const;
     // Whether `index` is the induction variable of `loop`: a slot whose
     // every store is either outside the loop or in its step region.
     // `unitStep` is set when the step region advances it by exactly one.

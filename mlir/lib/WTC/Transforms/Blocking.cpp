@@ -27,10 +27,13 @@ std::optional<ExternalBlocking> externalBlocking(cir::FuncOp f) {
     auto is = [&](BlockingKind kind, llvm::StringRef what, bool threading = false) {
         return ExternalBlocking{kind, (what + " (" + name + ")").str(), threading};
     };
-    // DPDK's ring and stack constructors allocate from the EAL heap, and
-    // take the EAL's tail-queue lock to register the object by name first.
-    static const llvm::StringSet<> registering = {"rte_ring_create", "rte_ring_create_elem",
-                                                  "rte_stack_create"};
+    // DPDK's ring, stack and mempool constructors allocate from the EAL
+    // heap, and take the EAL's tail-queue lock to register the object by
+    // name first.
+    static const llvm::StringSet<> registering = {
+        "rte_ring_create",         "rte_ring_create_elem",           "rte_stack_create",
+        "rte_mempool_create",      "rte_mempool_create_empty",       "rte_pktmbuf_pool_create",
+        "rte_pktmbuf_pool_create_by_ops", "rte_pktmbuf_pool_create_extbuf"};
     if (registering.contains(mangled))
         return is(BlockingKind::Waits, "takes a DPDK library lock (the EAL tail-queue lock)");
     // The allocator: the C library's, DPDK's heap, and the replaceable
