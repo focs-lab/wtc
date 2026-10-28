@@ -1,0 +1,18 @@
+flavour w8c_plain_0=-O2 -DW8_PLAIN -DW8_WORK_ROUNDS=0
+flavour w8c_off_0=-O2 --batch-cost off -DW8_WORK_ROUNDS=0
+flavour w8c_on_0=-O2 --batch-ns-per-unit 0.125 -DW8_WORK_ROUNDS=0
+flavour w8c_plain_20=-O2 -DW8_PLAIN -DW8_WORK_ROUNDS=6
+flavour w8c_off_20=-O2 --batch-cost off -DW8_WORK_ROUNDS=6
+flavour w8c_on_20=-O2 --batch-ns-per-unit 0.125 -DW8_WORK_ROUNDS=6
+flavour w8c_plain_50=-O2 -DW8_PLAIN -DW8_WORK_ROUNDS=16
+flavour w8c_off_50=-O2 --batch-cost off -DW8_WORK_ROUNDS=16
+flavour w8c_on_50=-O2 --batch-ns-per-unit 0.125 -DW8_WORK_ROUNDS=16
+flavour w8c_plain_100=-O2 -DW8_PLAIN -DW8_WORK_ROUNDS=32
+flavour w8c_off_100=-O2 --batch-cost off -DW8_WORK_ROUNDS=32
+flavour w8c_on_100=-O2 --batch-ns-per-unit 0.125 -DW8_WORK_ROUNDS=32
+flavour w8c_plain_200=-O2 -DW8_PLAIN -DW8_WORK_ROUNDS=64
+flavour w8c_off_200=-O2 --batch-cost off -DW8_WORK_ROUNDS=64
+flavour w8c_on_200=-O2 --batch-ns-per-unit 0.125 -DW8_WORK_ROUNDS=64
+flavour w8c_plain_500=-O2 -DW8_PLAIN -DW8_WORK_ROUNDS=160
+flavour w8c_off_500=-O2 --batch-cost off -DW8_WORK_ROUNDS=160
+flavour w8c_on_500=-O2 --batch-ns-per-unit 0.125 -DW8_WORK_ROUNDS=160
