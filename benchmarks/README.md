@@ -59,7 +59,8 @@ scripts/
   build_w7_flavours.sh   W7 for each implementation: plain, batched by the
                          compiler, batched by hand; batch sizes 1 to 1024
   build_w8_flavours.sh   W8 as written, batched by the compiler, batched by
-                         hand; batch sizes 8, 64, 512
+                         hand; batch sizes 8, 64, 512; or, for the cost
+                         model, its work fixed at build time per level
   correctness.sh      sanitizer and contract-check leg
 third_party/          vendored baselines, pinned commits, licences
                       (boost and oneTBB come from system packages instead)
@@ -144,7 +145,11 @@ variants are the ceiling.
   how far apart they finish, and the distribution of one section's time,
   wait included. Holding the mutex across sections also holds it across
   the work between them, so batching loses once that work is long enough:
-  the sweep over `--work-ns` is where that shows.
+  the sweep over `--work-ns` is where that shows. The work is read at run
+  time, which the compiler's cost model cannot bound, so the evaluation's
+  flavours are built with the model off (`--batch-cost off`);
+  `-DW8_WORK_ROUNDS=R` fixes it at build time instead, which is how the
+  model's decisions are checked (`decisions/0006`).
 - **W9** `w9_mpmc_scaling`: the general-purpose queues alone, as threads are
   added: `--mode split` with P producers and C consumers (order checked per
   producer), and `--mode pairwise`, where every thread pushes then pops, as
