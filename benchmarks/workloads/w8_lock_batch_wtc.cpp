@@ -19,7 +19,16 @@
 //                               compiler's
 //
 // -DWTC_LOCK_BATCH_K sets the batch size (64 by default); every line
-// records it. Holding the mutex longer makes the other threads wait longer
+// records it.
+//
+// The work's round count is read at run time, so the compiler cannot bound
+// it, and its cost model (decisions/0006) refuses the loop: the flavours
+// above are built with the model off, to measure the transformation itself.
+// -DW8_WORK_ROUNDS=R fixes the count when the program is built instead, as
+// a constant the model can read; --work and --work-ns then only name the
+// level the build stands for, and the line records the rounds and what they
+// took on this run. build_w8_flavours.sh builds that way for the model's
+// validation. Holding the mutex longer makes the other threads wait longer
 // for it, so beside the rate the result reports how evenly the threads
 // progress -- Jain's fairness index over each thread's rate (every thread
 // does the same number of sections, so its rate is that over its finish
@@ -64,6 +73,12 @@ std::uint64_t g_n = 10'000'000;
 std::uint64_t g_work = 0;
 std::atomic<int> g_go{0};
 
+#ifdef W8_WORK_ROUNDS
+#define W8_WORK static_cast<std::uint64_t>(W8_WORK_ROUNDS)
+#else
+#define W8_WORK g_work
+#endif
+
 inline std::uint64_t step(std::uint64_t x) {
     x ^= x >> 33;
     x *= 0xff51afd7ed558ccdull;
@@ -86,7 +101,7 @@ std::uint64_t run(std::uint64_t seed, std::uint64_t* samples) {
         ++shared.count;
         m.batch_step(b);
         if (i % 61 == 0) samples[i / 61] = rdtsc() - t0;
-        for (std::uint64_t w = 0; w < g_work; ++w) x = step(x);
+        for (std::uint64_t w = 0; w < W8_WORK; ++w) x = step(x);
     }
     m.batch_end(b);
     return x;
@@ -101,7 +116,7 @@ W8_LOOP std::uint64_t run(std::uint64_t seed, std::uint64_t* samples) {
         ++shared.count;
         m.unlock();
         if (i % 61 == 0) samples[i / 61] = rdtsc() - t0;
-        for (std::uint64_t w = 0; w < g_work; ++w) x = step(x);
+        for (std::uint64_t w = 0; w < W8_WORK; ++w) x = step(x);
     }
     return x;
 }
@@ -149,6 +164,9 @@ int main(int argc, char** argv) {
         g_work = a.getu("work", 0);
         work_asked = std::to_string(g_work);
     }
+#ifdef W8_WORK_ROUNDS
+    g_work = W8_WORK;
+#endif
     const int threads = static_cast<int>(a.getu("threads", 2));
     const int rep = static_cast<int>(a.getu("rep", 0));
     const std::string json = a.get("json", "");
