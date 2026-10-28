@@ -10,7 +10,7 @@
 # Clones supercollider at the audited commit with the two submodules the
 # backend needs (a checkout already in <work dir> is used only at that
 # commit), then compiles supercollider_driver.cpp to CIR and runs the
-# analysis. CLANG and WTC_OPT as in dpdk.sh.
+# analysis. CLANG, WTC_OPT and VACUOUS as in dpdk.sh.
 set -euo pipefail
 
 W=$(mkdir -p "${1:?usage: $0 <work dir>}" && cd "$1" && pwd)
@@ -18,6 +18,8 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 CLANG=${CLANG:-$ROOT/build-llvm/bin/clang}
 WTC_OPT=${WTC_OPT:-$ROOT/build/bin/wtc-opt}
+ANALYSIS=--queue-ownership-analysis
+[ "${VACUOUS:-0}" = 1 ] && ANALYSIS=--queue-ownership-analysis=vacuous-outcome=true
 S=$W/supercollider
 
 COMMIT=b2f6e4422088c511ef75951069ad854761b81fe0
@@ -35,7 +37,7 @@ fi
   -I"$S/external_libraries/boost_sync/include" -I"$S/external_libraries/nova-tt" -I"$S/external_libraries" \
   -I"$S/external_libraries/libsndfile" -fclangir -emit-cir "$HERE/supercollider_driver.cpp" -o "$W/supercollider.cir"
 rc=0
-"$WTC_OPT" "$W/supercollider.cir" --lift-cir-to-wtc --queue-ownership-analysis -o /dev/null \
+"$WTC_OPT" "$W/supercollider.cir" --lift-cir-to-wtc "$ANALYSIS" -o /dev/null \
   >"$W/supercollider.log" 2>&1 || rc=$?
 echo "== supercollider (wtc-opt exit $rc)"
 grep -E 'wtc: ' "$W/supercollider.log" | sed -E 's#^[^ ]*/##' | sort -u || true

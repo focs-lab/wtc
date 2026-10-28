@@ -205,6 +205,9 @@ class QueueOwnershipAnalysisPass
 public:
     MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(QueueOwnershipAnalysisPass)
 
+    QueueOwnershipAnalysisPass() = default;
+    QueueOwnershipAnalysisPass(const QueueOwnershipAnalysisPass &other) : PassWrapper(other) {}
+
     StringRef getArgument() const final { return "queue-ownership-analysis"; }
     StringRef getDescription() const final {
         return "Count the threads that push to and pop from each wtc queue and write the "
@@ -522,6 +525,13 @@ private:
     // Pools that may hold mbufs although their creation suggests not: one
     // rte_pktmbuf_pool_init or rte_mempool_obj_iter is handed later.
     void addPoolsInitialisedLater(llvm::ArrayRef<Key> candidates);
+    // Report a verified declaration whose declared-single side has no
+    // access as such (see the pass option).
+    Option<bool> vacuousOutcome{
+        *this, "vacuous-outcome",
+        llvm::cl::desc("Report a library queue verified only because a side it declares single has no "
+                       "access in this translation unit as \"verified (vacuous: ...)\""),
+        llvm::cl::init(false)};
     // Why one side of a queue counts many, in the program's own terms.
     std::string whyMany(const SideInfo &side);
     // The arrays whose elements a constructor call builds one per run of a
@@ -1461,8 +1471,15 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
     if (!how.empty()) declared += " (" + how + ")";
     if (verdict == Topology::spsc || (declaredMpsc && verdict == Topology::mpsc) ||
         (declaredSpmc && verdict == Topology::spmc)) {
-        InFlightDiagnostic r =
-            at->emitRemark() << "wtc: queue " << label << ": declared " << declared << ", verified";
+        // A side declared single with no access at all holds vacuously:
+        // in this translation unit nothing touches it.
+        const char *vacuousSide = nullptr;
+        if (library && vacuousOutcome) {
+            if (*tag != 3 && info.producers.accesses.empty()) vacuousSide = "producer";
+            else if (*tag != 4 && info.consumers.accesses.empty()) vacuousSide = "consumer";
+        }
+        InFlightDiagnostic r = at->emitRemark() << "wtc: queue " << label << ": declared " << declared << ", verified";
+        if (vacuousSide) r << " (vacuous: no " << vacuousSide << " access seen)";
         // A library queue may be shared with code the module does not show:
         // another file, another process, a library that takes it whole or
         // inside a structure. The verdict is about this one.
