@@ -223,9 +223,10 @@ repeat on the current runtime are listed below.
   and coarsening (W8).
 - The profitability of coarsening and fusion has crossovers but no model;
   nothing in the compiler decides by cost yet.
-- The declared-topology check has caught no wrong declaration that shipped:
-  the three DPDK history fixes are of forms it does not model (mempool
-  flags, a driver that starts no threads).
+- The declared-topology check has caught no wrong declaration that shipped.
+  Of the three DPDK history fixes, the two mempools are now modelled and
+  still missed: their threads are in another process or in other files.
+  The third is a driver whose threads are the application's.
 - No cross-socket placement has been measured on any host.
 - The compile-cost figure predates the `std::thread`, array and shared
   blocking analyses.

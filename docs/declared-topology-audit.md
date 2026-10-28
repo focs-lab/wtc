@@ -148,6 +148,115 @@ operations inside them are the library's. `rte_eal_mp_remote_launch` starts
 its function on every worker lcore, and on the calling one too unless the
 flag is `SKIP_MAIN`.
 
+**Mempools (28 October 2026).** A DPDK mempool is a queue of free
+objects: a put pushes one back and a get pops one. The pool is the object
+`rte_mempool_create`, `rte_mempool_create_empty`, `rte_pktmbuf_pool_create`
+or its `_by_ops` and `_extbuf` forms hands back. Its ops declare the sides.
+They are named by `rte_mempool_set_ops_byname`, which replaces whatever the
+creation chose, or by `rte_pktmbuf_pool_create_by_ops`. Otherwise
+`rte_mempool_create` and `rte_mempool_create_empty` pick them from the
+flags `RTE_MEMPOOL_F_SP_PUT` and `RTE_MEMPOOL_F_SC_GET`; the names
+`MEMPOOL_F_*` used before DPDK 21.11 have the same values. (Before DPDK
+23.11, `rte_mempool_create_empty` left the choice to a later
+`rte_mempool_set_ops_byname`, or to whichever ops registered first; the
+model reads the flags as DPDK reads them now. For an older build that
+reading can only be stricter than the ops it ran with, never looser: the
+ops registered first is a multi-thread one.) Only
+`"ring_sp_sc"`, `"ring_sp_mc"` and `"ring_mp_sc"` declare a side single.
+`rte_pktmbuf_pool_create` and a null ops name take the default ops, which
+the program does not choose; they declare nothing single, unless the
+program sets that default itself (`rte_mbuf_set_user_mempool_ops`, or the
+platform's), when they are not known. A pool or a ring that declares
+nothing single has nothing to check. It is not reported as uncheckable
+when every queue of its type is unknown, unless a single-thread form of
+its operations (`rte_ring_sp_enqueue`, say) is used somewhere and may be
+among the calls not counted. The report gives the flags or the ops as
+written, as for a ring. Every put and get goes
+through the ops, so all of them follow it:
+
+- pushes: `rte_mempool_put`, `_put_bulk`, `_generic_put`,
+  `rte_mempool_cache_flush` and `rte_mbuf_raw_free_bulk`;
+- pops: `rte_mempool_get`, `_get_bulk`, `_generic_get`, the mbuf
+  allocations (`rte_pktmbuf_alloc` and `_alloc_bulk`, `rte_mbuf_raw_alloc`
+  and `_alloc_bulk`), and `rte_pktmbuf_copy` and `rte_pktmbuf_clone`,
+  which take from the pool they are given;
+- the zero-copy cache access proposed for DPDK (not in it as of 26.11),
+  a push or a pop as a flush or a refill is;
+- the forms DPDK deprecated in 17.05: `rte_mempool_sp_put` and
+  `rte_mempool_sc_get` declare their side single at the call, as
+  `rte_ring_sp_*` does, and their multi-thread forms follow the ops;
+- part of building the pool, as its creation is: populating it
+  (`rte_mempool_populate_*`).
+
+Every other function of the mempool and mbuf libraries is either known to
+neither put nor get (counts, metadata, offsets, lookups, iteration,
+linking mbufs) or, when it is handed a pool or an mbuf, makes every pool
+unknown, naming itself: "rte_xxx is handed an mbuf, and the model does
+not read what it puts or gets". So a function the model has not read
+cannot leave a declaration verified.
+
+Three decisions shape the model:
+
+- **Per-lcore caches.** With `cache_size` above zero, a put lands in the
+  calling lcore's cache. The lcore flushes the cache into the pool's ring
+  when it fills, and a get refills it the same way. A cache changes when
+  the ring is touched, not which threads may touch it. Every lcore that
+  puts may flush, a thread that is not an EAL lcore has no cache, and a
+  cache the program owns is flushed by whoever calls
+  `rte_mempool_cache_flush`. So every put and get counts on the thread
+  that makes it, cache or not, and two lcores that put break
+  `RTE_MEMPOOL_F_SP_PUT` however large the cache. That is also what
+  DPDK's documentation of the flags says: they govern
+  `rte_mempool_put` and `rte_mempool_get` themselves.
+- **Frees.** `rte_pktmbuf_free`, `_free_seg`, `_free_bulk`,
+  `rte_mbuf_raw_free` and `rte_pktmbuf_detach` put into the pool the
+  mbuf's `pool` field names, which is no operand.
+  - **When the pool is named.** The analysis names it when the freed mbuf
+    is, in the same function, the value an allocation from a pool handed
+    back (through a slot stored once).
+  - **Links.** A free that walks a chain or an indirect mbuf's attached
+    buffer puts each into its own pool. So once the program links mbufs
+    anywhere (`rte_pktmbuf_chain`, `_attach`, `_attach_extbuf`, `_clone`,
+    or its own `m->next = ...`), only `rte_mbuf_raw_free` is still
+    followed.
+  - **Any other free** puts into a pool the analysis does not name: an
+    mbuf from a ring, a burst receive, a parameter, an array. It counts on
+    its thread as a possible put into every pool that may hold mbufs. That
+    is every pool except one `rte_mempool_create` makes with no
+    initialiser and that is never set up for mbufs afterwards
+    (`rte_mempool_obj_iter` with a callback, `rte_pktmbuf_pool_init`); a
+    pool made out of sight and only set up here may hold them too. The
+    frees include `rte_pktmbuf_linearize`, which frees the segments it
+    copies out of, and `rte_pktmbuf_prefree_seg`, which may free the
+    buffer an indirect mbuf was attached to. The put can make a put side
+    many, as one of several candidates; it never proves a break, and it
+    leaves the get side alone.
+    A declaration it leaves unverified gets a warning that names the free:
+    "cannot verify: an mbuf freed at *file:line:column* goes back to the
+    pool its `pool` field names, which the analysis does not resolve".
+- **Out of sight.** Code out of sight may use a pool as it may use a ring:
+  a call of `rte_mempool_lookup`, or a pool handed to a function with no
+  body here (`rte_eth_rx_queue_setup`, whose driver allocates from it).
+  For a pool there is one more case: mbufs handed to such a function or
+  through a pointer. `rte_eth_tx_burst` calls the driver through its
+  function table, and the driver frees the mbufs it sent. Each of these is
+  named as the reason the verdict holds in this translation unit only. A
+  free whose address is taken makes every pool unknown, as any modelled
+  push or pop does. `rte_mempool_create` runs the program's initialisers
+  with the arguments it is handed, so a structure handed to it may come
+  back rewritten, and a queue kept in it is no longer placed.
+
+A declared side with no access in the translation unit holds there
+vacuously; the report says "no producer access seen" and names any reason
+the queue is used out of sight. The pass option
+`--queue-ownership-analysis=vacuous-outcome=true` marks such a verdict as
+"verified (vacuous: no consumer access seen)", and `VACUOUS=1` passes it
+through `tools/declared-check/*.sh` and `declared_recall.sh`, which then
+count those rows as vacuous. It is off: whether a vacuous verdict should
+be a warning is a decision for the check's next revision.
+
+The tests are `test/Transforms/DeclaredTopology/dpdk-mempool-*.c`.
+
 Any of these queues may be reached from another file, another process, or a
 library that takes it whole or inside a structure of parameters, so a
 verdict on one holds in this translation unit and says so. It names a reason
@@ -306,18 +415,57 @@ their real headers, with a second thread started in six ways.
   It never reports a second consumer of `boost::lockfree::spsc_queue`, an
   atomicity violation that loses elements in every run.
 - **History.** Two searches of DPDK's commit messages give 49 candidates.
-  Three fix a wrong single-side declaration, and the check models none of
-  them:
+  Three fix a wrong single-side declaration. On 26 October the check
+  modelled none of them:
   - af_xdp's `buf_ring` (5b2baff902): a driver, whose threads are the
     application's and not in its translation unit;
   - dumpcap's and vhost's mempools (27a26d65f8, 46d3f57537): mempools,
-    which are not modelled.
+    which were not modelled then.
+
+- **The two mempool fixes, modelled (28 October 2026).** With mempools
+  modelled (part 3), the check was run on both fixed files, at the
+  parent of each fix and at the fix
+  (`tools/declared-check/dpdk-history.sh`;
+  `benchmarks/results/2026-10-28-mempool-history`). It catches neither,
+  before or after, and warns on neither:
+
+  | fix | file | at the parent | at the fix |
+  |---|---|---|---|
+  | dumpcap, ops `"ring_mp_sc"` to `"ring_mp_mc"` | `app/dumpcap/main.c` | verified in this translation unit, vacuously: `declared mpsc (by its ops "ring_mp_sc"; no consumer access seen)`, with `rte_mempool_lookup` named as code that may use the pool elsewhere | nothing declared single |
+  | | `lib/pdump/rte_pdump.c` | unresolved | unresolved |
+  | vhost, `MEMPOOL_F_SC_GET` dropped | `lib/librte_vhost/iotlb.c` | unresolved: no line names the pool | unresolved |
+
+  Both are missed for reach, not for the model.
+  - **dumpcap.** The gets that break the declaration are made in
+    another program. The primary process runs pdump's copy callbacks on
+    the lcores that poll the captured queues, one allocation per packet.
+    In `rte_pdump.c` the pool is a field filled from the secondary's
+    request, which the walk cannot place. In dumpcap the get side has no
+    access at all.
+  - **vhost.** `iotlb.c` starts no thread. The control thread and the
+    forwarding lcores that take from the pool call into it from other
+    files.
+  - **vhost's pool.** The pool sits in `vq->iotlb_pool`, written twice:
+    first with what `rte_mempool_lookup` finds, freed at once, then with
+    the new pool. A load may be either, so it is not placed. A reduced
+    copy with both threads in sight
+    (`test/Transforms/DeclaredTopology/dpdk-mempool-iotlb-shape.c`)
+    stops the build when the field is written once. With vhost's two
+    stores it is unresolved.
+  - **After vhost's fix.** `MEMPOOL_F_SP_PUT` stays, though both threads
+    still put, under two different locks. The check is silent on that
+    too.
+  - **What the rerun leaves unchanged.** The DPDK driver and the recall
+    study, rerun, give the same outcome for every row.
 
 So the check never verified a wrong declaration here, and it stopped
 every one whose threads were in sight in the library programs. On the
 audited applications it stops 6 of 22 and changes its verdict on 13.
-Recall is per audited ring, not per real bug: it has not yet met a real
-wrong declaration.
+Recall is per audited ring, not per real bug. Of the real wrong
+declarations it has met, two of DPDK's three, it caught neither. Its
+"verified in this translation unit" on dumpcap is true of the translation
+unit and wrong for the program, with the line naming both the empty side
+and the reason.
 
 ## What a compiler check needs
 
@@ -357,10 +505,12 @@ the audit found one over-cautious queue (plugdata), no broken
 declaration, two latent two-producer traps that a change of one line
 would spring (distributor's commented swap, EPSILON's spinner), and ten
 declarations that hold only by convention (one of DPDK, nine of the
-library users). That is fewer than three, and part 4 adds that the three
-wrong declarations DPDK has fixed in its history are of forms the check
-does not model; thesis C stays a section, the checking of declared
-topologies, and not the paper's claim. The strongest argument the audit
+library users). That is fewer than three. Part 4 adds DPDK's three
+historical fixes of a wrong declaration: two are mempools, now modelled,
+and the check catches neither, because the threads that break them are
+in another process or in other files; the third is a driver's ring.
+Thesis C stays a section, the checking of declared topologies, and not
+the paper's claim. The strongest argument the audit
 gives that section is the ten conventions: declarations hold because
 people read, and a compiler that proves the same two facts the
 declaration asserts is what lets them stop.

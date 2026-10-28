@@ -277,4 +277,7 @@ of them:
 - **Real bugs.** The record does not support "catches real bugs". The
   three historical fixes are out of the model: mempools and driver
   threads. Modelling `rte_mempool`, with its `SP_PUT`/`SC_GET` flags and
-  ops names, would bring two of them in.
+  ops names, would bring two of them in. That was done on 28 Oct, and
+  the check catches neither, before or after the fix: the threads that
+  break them are in another process or in other files
+  (`../2026-10-28-mempool-history/NOTE.md`).
