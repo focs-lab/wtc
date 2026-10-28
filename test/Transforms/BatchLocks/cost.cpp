@@ -12,11 +12,14 @@
 //
 // With the model off every legal loop is batched, as before the model, and
 // the remark says nothing of the work (OFF). A threshold given outright
-// replaces the table (GIVEN), and the constant of a faster host scales the
-// estimate down (FAST).
+// replaces the table (GIVEN), the constant of a faster host scales the
+// estimate down (FAST), and another class of host brings its own constant
+// and thresholds (HOST, for cascade-lake: 0.122 ns a unit, 70 ns for any
+// count).
 // RUN: wtc-opt %t.cir --lift-cir-to-wtc --wtc-batch-locks=cost=off -o /dev/null 2>&1 | FileCheck %s --check-prefix=OFF
 // RUN: wtc-opt %t.cir --lift-cir-to-wtc --wtc-batch-locks=threshold-ns=1000 -o /dev/null 2>&1 | FileCheck %s --check-prefix=GIVEN
 // RUN: wtc-opt %t.cir --lift-cir-to-wtc --wtc-batch-locks=ns-per-unit=0.01 -o /dev/null 2>&1 | FileCheck %s --check-prefix=FAST
+// RUN: wtc-opt %t.cir --lift-cir-to-wtc --wtc-batch-locks=host=cascade-lake -o /dev/null 2>&1 | FileCheck %s --check-prefix=HOST
 // RUN: not wtc-opt %t.cir --lift-cir-to-wtc --wtc-batch-locks=cost=maybe -o /dev/null 2>&1 | FileCheck %s --check-prefix=BAD
 // RUN: not wtc-opt %t.cir --lift-cir-to-wtc --wtc-batch-locks=host=zen -o /dev/null 2>&1 | FileCheck %s --check-prefix=BADHOST
 
@@ -38,15 +41,17 @@ static long halve(long x) { return x > 1 ? halve(x / 2) : x; }
 WTC_BATCH void none(int n) { for (int i = 0; i < n; ++i) { m.lock(); ++total; m.unlock(); } }
 
 // Light work: eight rounds of arithmetic, 10 units each.
-// CHECK-DAG: [[@LINE+1]]:{{.*}} remark: wtc: critical sections in this loop batched: {{.*}}; work between sections estimated at 13 ns (89 units), under the 180 ns threshold that holds for any number of threads
+// CHECK-DAG: [[@LINE+2]]:{{.*}} remark: wtc: critical sections in this loop batched: {{.*}}; work between sections estimated at 13 ns (89 units), under the 180 ns threshold that holds for any number of threads
+// HOST-DAG: [[@LINE+1]]:{{.*}} remark: wtc: critical sections in this loop batched: {{.*}}; work between sections estimated at 11 ns (89 units), under the 70 ns threshold that holds for any number of threads
 WTC_BATCH void light(int n) { long x = 1; for (int i = 0; i < n; ++i) { m.lock(); total += x; m.unlock(); for (int k = 0; k < 8; ++k) x = x * 31 + k; } }
 
 // Heavy work: a thousand rounds. Run under the mutex, they would hold up
 // every other thread that wants it.
-// CHECK-DAG: [[@LINE+4]]:{{.*}} remark: wtc: critical sections in this loop not batched: work between sections estimated at 1481 ns (10009 units), over the 180 ns threshold that holds for any number of threads (the threads that take the mutex are not counted here)
-// OFF-DAG: [[@LINE+3]]:{{.*}} remark: wtc: critical sections in this loop batched: the mutex is let go every WTC_LOCK_BATCH_K sections and at the end{{$}}
-// GIVEN-DAG: [[@LINE+2]]:{{.*}} remark: wtc: critical sections in this loop not batched: work between sections estimated at 1481 ns (10009 units), over the given threshold of 1000 ns
-// FAST-DAG: [[@LINE+1]]:{{.*}} remark: wtc: critical sections in this loop batched: {{.*}}; work between sections estimated at 100 ns (10009 units), under the 180 ns threshold that holds for any number of threads
+// CHECK-DAG: [[@LINE+5]]:{{.*}} remark: wtc: critical sections in this loop not batched: work between sections estimated at 1481 ns (10009 units), over the 180 ns threshold that holds for any number of threads (the threads that take the mutex are not counted here)
+// OFF-DAG: [[@LINE+4]]:{{.*}} remark: wtc: critical sections in this loop batched: the mutex is let go every WTC_LOCK_BATCH_K sections and at the end{{$}}
+// GIVEN-DAG: [[@LINE+3]]:{{.*}} remark: wtc: critical sections in this loop not batched: work between sections estimated at 1481 ns (10009 units), over the given threshold of 1000 ns
+// FAST-DAG: [[@LINE+2]]:{{.*}} remark: wtc: critical sections in this loop batched: {{.*}}; work between sections estimated at 100 ns (10009 units), under the 180 ns threshold that holds for any number of threads
+// HOST-DAG: [[@LINE+1]]:{{.*}} remark: wtc: critical sections in this loop not batched: work between sections estimated at 1221 ns (10009 units), over the 70 ns threshold that holds for any number of threads (the threads that take the mutex are not counted here)
 WTC_BATCH void heavy(int n) { long x = 1; for (int i = 0; i < n; ++i) { m.lock(); total += x; m.unlock(); for (int k = 0; k < 1000; ++k) x = x * 31 + k; } }
 
 // A call with a body here costs that body: two hundred rounds.
@@ -106,4 +111,4 @@ WTC_BATCH void wraps_down(int n) { long x = 1; for (int i = 0; i < n; ++i) { m.l
 // IR: cir.return
 
 // BAD: error: wtc: --wtc-batch-locks: cost is estimate or off, not 'maybe'
-// BADHOST: error: wtc: --wtc-batch-locks: no host class 'zen'; the classes are sapphire-rapids
+// BADHOST: error: wtc: --wtc-batch-locks: no host class 'zen'; the classes are sapphire-rapids cascade-lake

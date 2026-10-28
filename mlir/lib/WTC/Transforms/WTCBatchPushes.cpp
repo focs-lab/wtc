@@ -485,6 +485,14 @@ constexpr HostClass kHosts[] = {
     // (crossing at 152), with four and eight it won at 200 and lost at 500
     // (245 and 305). 152 + 31 and 245 + 31, rounded down.
     {"sapphire-rapids", 0.148, 180, 275},
+    // Xeon Gold 6230 under the powersave governor with turbo
+    // (benchmarks/results/2026-10-28-w8-cost, untimed, frequency not fixed):
+    // a round took 3.1 ns (median of the leg's runs), and W8's loop with no
+    // work is estimated at 26 ns; with two threads batching won at 100 ns of
+    // work and lost at 200 (crossing at 177), with four and eight it won at
+    // 20 and lost or broke even at 50 (48 and 47). 177 + 26 and 47 + 26,
+    // rounded down. Handing the mutex over costs far more here.
+    {"cascade-lake", 0.122, 200, 70},
 };
 
 class WTCBatchLocksPass : public PassWrapper<WTCBatchLocksPass, OperationPass<ModuleOp>> {
