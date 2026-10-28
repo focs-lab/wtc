@@ -38,7 +38,7 @@ workloads/
   w10_ablation        the runtime's queues used directly: synchronisation
                       strength and element ownership, alone and together
   w11_pool            a thread pool's tasks on the heap or in the cell,
-                      through the general queue or the ring for one producer
+                      through the general queue or the queue for one producer
   w12_fusion          three stages on three threads, or fused on one
 apps/ferret/          PARSEC ferret ported onto the shim (GPL, see there)
 apps/dedup/           PARSEC dedup ported onto the shim (BSD-3, see there)
@@ -172,8 +172,9 @@ variants are the ceiling.
 - **W11** `w11_pool`: one submitter and 1 to 8 workers (`--consumers`). A
   task is a `std::function` (`heap_*`) or a function pointer and its capture
   held by value in the queue's cell (`cell_*`), through the general queue
-  (`*_mpmc`) or the ring for one producer and many consumers that a pool's
-  topology allows (`*_spmc`). The capture is `--elem` 16, 64 or 256 bytes,
+  (`*_mpmc`) or the lock-free queue for one producer and many consumers
+  (`runtime/spmc_queue.hpp`; the turn-taking ring before 27 Oct) that a
+  pool's topology allows (`*_spmc`). The capture is `--elem` 16, 64 or 256 bytes,
   and every word of it is folded into the task's arithmetic, a few
   operations on top of its `--work`, so each variant reads all of it. At 16
   bytes libstdc++ keeps a trivially copyable capture inside the
