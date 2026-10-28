@@ -137,9 +137,13 @@ the check's verdict, and none is verified; of 18 programs misusing
 `rigtorp::SPSCQueue`, `moodycamel::ReaderWriterQueue` and
 `boost::lockfree::spsc_queue` from a second thread, all 18 stop the
 build, where ThreadSanitizer reports 14 to 17 depending on the run (17
-without the libraries' assertions). The three wrong declarations DPDK has
-fixed in its history are of forms the check does not model (mempool
-flags, a driver that starts no threads).
+without the libraries' assertions). Of the three wrong declarations DPDK
+has fixed in its history, the two mempools are modelled since 28 October
+and neither is caught, before the fix or after
+(`2026-10-28-mempool-history`): the threads that break them are in
+another process (dumpcap's capture pool) or in other files (vhost's IOTLB
+pool), and vhost's pool is stored where the walk cannot place it. The
+third is a driver's ring, whose threads are the application's.
 
 **One representation, two uses** (`benchmarks/results/2026-10-28-two-uses`,
 untimed). This asks whether the progress check reads the facts that chose
