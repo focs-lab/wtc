@@ -12,9 +12,10 @@ tools/wtc-cc --toolchain build-llvm <options> <file.cpp> -o prog
 
 ## 1. A queue with one producer and one consumer
 
-The gate's result: the compiler proves the topology and substitutes a
-wait-free ring for the mutex-based queue. `docs/gate.md` has the
-measurements.
+The compiler proves the topology and substitutes a wait-free ring for the
+general-purpose queue (in September a two-lock list, since 22 October the
+segmented queue). `docs/gate.md` has the September measurements; the
+current ones are in the README's [Results](../README.md#results).
 
 ```sh
 tools/wtc-cc --toolchain build-llvm examples/queue_example.cpp -o prog
@@ -46,10 +47,14 @@ borrows, and the next section is what that buys.
 
 ## 2. No allocation per element
 
-The gate's second finding was that the queue's main cost is not its
-synchronisation but the `shared_ptr` it allocated for every element, on the
-producer's side, to be freed on the consumer's: the same ring with elements
-held inline was 10 to 41 times faster. Every implementation now holds the
+The gate's second finding, against the September queue, was that its main
+cost was not its synchronisation but the `shared_ptr` it allocated for
+every element, on the producer's side, to be freed on the consumer's: the
+same ring with elements held inline was 10 to 41 times faster. Against the
+current queue, which already holds the element in its cell, the order is
+reversed: the topology is the larger step (5.9× through the shim) and
+lending instead of allocating the smaller (1.7×; README, "What each fact
+buys"). Every implementation now holds the
 element in its cell, and what remains per element is what the pop hands
 out: a `shared_ptr` the consumer allocates for itself (the original API), a
 move into the consumer's object (`try_pop(T&)`), or, best, nothing at all,
@@ -184,6 +189,13 @@ program a positive integration test runs; the one program with a single
 thread is the exception.
 
 ## What it is worth
+
+Superseded: everything in this section was measured on 19 and 20 October
+2026 against the two-lock list the general-purpose queue then was; the
+current figures, on the segmented queue, the ring with its gated wait and
+the lock-free queue for one producer, are in the README's
+[Results](../README.md#results) and `docs/evaluation.md`. Kept as the
+record of what the first build gave.
 
 Measured on 19 October 2026 on the lab server under the gate's protocol:
 three reserved cores with their SMT siblings offline, governor fixed,

@@ -21,13 +21,18 @@ Every implementation carries, in its header comment:
 | `segment_queue.hpp` | nothing: it is `wtc::queue<T>`'s general-purpose implementation | none: any number of producers and consumers |
 | `segment_queue.hpp`, single-consumer form | `wtc::queue<T>` | exactly one thread ever pops, any number push, and the destructor runs after all are done |
 | `spmc_queue.hpp` | `wtc::queue<T>` | exactly one thread ever pushes, any number pop, and the destructor runs after all are done |
+| `stream_gate.hpp` | nothing: whether a single consumer waits for a batch, shared by the ring and the single-consumer form | none |
+| `hazard.hpp` | nothing: hazard pointers for the segmented queues, one slot for pushes and one for pops | none |
 
 `spsc_ring<Slot, kSlots>` is an unbounded wait-free ring of blocks of 128 KiB
 each. It keeps the generic queue's semantics exactly: FIFO, `push` never
 blocks or fails, `try_pop` never blocks and says empty only when the queue
-was empty. The consumer keeps its distance from the producer: when it
+was empty. The consumer keeps its distance from a streaming producer: when it
 catches up and finds fewer than a batch of elements published it waits,
-boundedly (about 64 pauses), for the batch, so that a slot line crosses the cores
+boundedly (about 64 pauses), for the batch, but only while
+`stream_gate.hpp` reads the producer as streaming (an element faster than a
+line crosses between cores; a paced producer is not waited for, apart from
+a rare bounded probe that keeps the gate from locking shut), so that a slot line crosses the cores
 once rather than once per element in it; the batch tracks the producer's
 rate, one for a trickle and up to thirty-two lines' worth for a stream,
 and the wait polls the producer's counter about as often as the batch
@@ -92,23 +97,28 @@ both kinds of test.
 
 ## Measured numbers
 
-From `benchmarks/results/`, not from memory. Two physical cores with their
-hardware-thread siblings offlined, governor fixed, turbo off, five
-repetitions, 64-byte elements.
+From `benchmarks/results/`, not from memory. Current, through the shim,
+one producer and one consumer, 64-byte elements, geometric mean over five
+allocators (`2026-10-26-eval-w1`, paired runs on a two-socket AMD host,
+frequency not fixed):
 
-| | general-purpose queue | this ring, via the shim |
-|---|---|---|
-| throughput | 1.08 M/s | 3.31 M/s, **3.07x** |
-| p99 at one microsecond offered | 10,906 ns | 1,716 ns, **0.16x** |
-| p99.9 | 41,808 ns | 3,485 ns, **0.08x** |
+| | general-purpose queue | this ring, `spsc` | this ring, `spsc_inline` |
+|---|---|---|---|
+| throughput | 15 M/s | 104 M/s, about 6.8× | 162 M/s, about 10.6× |
 
-Against other people's rings, which is the check that these gains are the
-substitution's and not an artefact of a badly written baseline: with
-elements inline, 1.06 times Rigtorp's flat bounded ring; with shared-pointer
-slots, 1.05 times moodycamel's ReaderWriterQueue on the same slot type.
+Over sizes and allocators the inline ring is 10.2× the general-purpose
+queue (5.1–23×) and 0.87× rigtorp's ring (behind at 8 bytes, within about
+10% at 64 and 256). Latency (`2026-10-27-eval-w2`, after the gated wait):
+at one element a microsecond the inline ring's p99 is 173 ns against 287
+for the general-purpose queue and 180 for rigtorp's ring, and its median
+the shortest measured at every rate.
 
-The number that says what to do next is elsewhere. This same ring with
-elements stored inline runs at 148 million a second against 3.6 with the
-shared pointer the shim's interface hands back. The synchronisation this
-ring removes was the smaller of the queue's two costs; the larger is an
-allocation per element. See `docs/gate.md`.
+The September gate's numbers (`docs/gate.md`), against the two-lock list
+the general-purpose queue then was, are kept as history: 3.07× throughput,
+a p99 of 1,716 ns against 10,906 at one microsecond offered, and the
+observation that the inline ring ran 148 M/s against 3.6 with the
+`shared_ptr` the shim handed back. That ordering of the two costs held for
+the old queue; for the current one, whose element already lives in its
+cell, removing the shared counters is the larger step (5.9× through the
+shim, 8.3× in the ablation) and lending instead of allocating the smaller
+(1.7×; see the README's "What each fact buys").

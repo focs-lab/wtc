@@ -93,7 +93,8 @@ store and of a pop at the acquire load that first observed its element
 (or, for an empty answer, at the acquire load that returned the current
 count); the single consumer reads elements in index order, so the
 sequential queue matches. The slip (the consumer waiting, boundedly, for a
-batch) delays a pop's linearisation point but never moves it before the
+batch, and since 27 Oct only while `runtime/stream_gate.hpp` reads the
+producer as streaming, plus a rare bounded probe) delays a pop's linearisation point but never moves it before the
 element's publication and never answers empty while an element is
 published: the empty answer is given only when the acquire load returned a
 count equal to the consumer's own. Block reuse: the consumer announces that
@@ -199,7 +200,9 @@ they rely on, with a thread held at a named point (the queues' `Hooks`, a
 move of the element, a pop's taker): `runtime/test/lemma_rings_test.cpp`
 for Lemmas 1 to 3 (a push not yet published, a consumer held inside its
 pop while the producer laps the ring, a borrowed element across laps,
-consumers waiting for each other's turn) and `lemma_segment_test.cpp` for
+a consumer of the spmc queue held in its taker while another pops and
+returns, and one held on the last cell of a segment that another drains
+and retires) and `lemma_segment_test.cpp` for
 the multi-consumer form (a held push is waited for, pushes ordered by the
 cell they take, a pop that returns a push which took its cell after it
 did, a segment kept for a held reader, a batch split by a skip), each with
@@ -291,7 +294,8 @@ applied only where the walk gave "one" on every side the chosen
 implementation requires (`WTCSpecialize.cpp`). Fact O is checked on every
 pop the ownership analysis attributes to the object, including pops in
 helpers called for several objects, each of which is checked for each
-(`decisions/0003`'s R11 note in `docs/evaluation.md`).
+(`mlir/lib/WTC/Transforms/WTCBorrowAnalysis.cpp`, tests under
+`test/Transforms/BorrowAnalysis`).
 
 ## 5. The tag chosen when the queue is built
 
@@ -358,7 +362,9 @@ A reviewer should see each soundness obligation and the lemma it serves.
   `shared_ptr`, its allocation) runs after the claim, holding nothing
   another consumer waits on (`runtime/test/lemma_spmc_liveness.cpp`). The
   ring's slip is a further wait, but bounded: it ends after a fixed number
-  of pauses whatever the producer does.
+  of pauses whatever the producer does, and since 27 Oct it is taken only
+  while the producer streams, plus one bounded probe per up to
+  `kProbeMax` catch-ups (`runtime/stream_gate.hpp`).
 - **The element's destructor** runs at a different time under
   `spsc_inline`; the shim restricts that tag to trivially destructible
   elements, so the difference is unobservable.
@@ -371,5 +377,5 @@ A reviewer should see each soundness obligation and the lemma it serves.
   beyond the absence of an allocation; it is the program's own object that
   receives the element.
 - **Timing.** The slip in the ring and in the single-consumer segmented
-  queue delays pops by a bounded number of pauses; the contract has no
-  timing clause.
+  queue delays pops by a bounded number of pauses, gated on a streaming
+  producer; the contract has no timing clause.
