@@ -99,16 +99,16 @@ both kinds of test.
 
 From `benchmarks/results/`, not from memory. Current, through the shim,
 one producer and one consumer, 64-byte elements, geometric mean over five
-allocators (`2026-10-26-eval-w1`, paired runs on a two-socket AMD host,
+allocators (`2026-10-28-eval-w1`, paired runs on a two-socket AMD host,
 frequency not fixed):
 
 | | general-purpose queue | this ring, `spsc` | this ring, `spsc_inline` |
 |---|---|---|---|
-| throughput | 15 M/s | 104 M/s, about 6.8× | 162 M/s, about 10.6× |
+| throughput | 15 M/s | 105 M/s, about 6.7× | 158 M/s, about 10.2× |
 
-Over sizes and allocators the inline ring is 10.2× the general-purpose
-queue (5.1–23×) and 0.87× rigtorp's ring (behind at 8 bytes, within about
-10% at 64 and 256). Latency (`2026-10-27-eval-w2`, after the gated wait):
+Over sizes and allocators the inline ring is 11× the general-purpose
+queue (5.1–27×) and 0.84× rigtorp's ring (behind at 8 bytes, 0.87–1.30×
+at 64 and 256). Latency (`2026-10-27-eval-w2`, after the gated wait):
 at one element a microsecond the inline ring's p99 is 173 ns against 287
 for the general-purpose queue and 180 for rigtorp's ring, and its median
 the shortest measured at every rate.
@@ -119,6 +119,6 @@ a p99 of 1,716 ns against 10,906 at one microsecond offered, and the
 observation that the inline ring ran 148 M/s against 3.6 with the
 `shared_ptr` the shim handed back. That ordering of the two costs held for
 the old queue; for the current one, whose element already lives in its
-cell, removing the shared counters is the larger step (5.9× through the
-shim, 8.3× in the ablation) and lending instead of allocating the smaller
+cell, removing the shared counters is the larger step (6.6× through the
+shim, 8.4× in the ablation) and lending instead of allocating the smaller
 (1.7×; see the README's "What each fact buys").

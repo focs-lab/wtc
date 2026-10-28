@@ -135,7 +135,7 @@ No prior work found, after the sweep above and the audit of 22 Oct:
 - Kotlin's channels and the LPRQ family show that a general-purpose queue
   can be fast. The ablation answers part of it: with the element already in
   the cell, the topology (synchronisation for one producer and one
-  consumer) is the larger step, 8.3× against 2.0× for the pop form; the
+  consumer) is the larger step, 8.4× against 2.1× for the pop form; the
   cell is most of the gain only against a queue that allocates per
   element. W9 puts the general-purpose queue ahead of LCRQ with separate
   producer and consumer threads; in the pairwise workload it trails LCRQ,
