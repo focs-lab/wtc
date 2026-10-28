@@ -115,12 +115,21 @@ own CIR emission, and the ownership analysis takes 0.2 seconds a
 workload. The specialised build's code is under 0.4% larger than the
 general build's on the workloads.
 
-**RQ6** (`benchmarks/results/2026-10-21-tsan-apps`). The compiler's
-builds of dedup and ferret, inline rings included, run under
-ThreadSanitizer without a report and with PARSEC's output, at every
-thread count tried; the lit suite runs every positive integration test's
-program the same way, and a negative control shows the build reports a
-race when a ring is forced on a queue with two producers. The
+**RQ6** (`benchmarks/results/2026-10-28-tsan-apps`, on the current
+runtime; `benchmarks/scripts/tsan_apps.sh`). The compiler's builds of
+dedup, ferret and spdlog run under ThreadSanitizer, 30 runs of every
+configuration, with no report from any implementation the compiler
+substituted: inline rings, the single-consumer queue (dedup with up to
+eight producers, ferret, spdlog with eight logging threads) and the
+lock-free queue for one producer (dedup with up to four consumers); every
+output is the original program's, and spdlog's file holds every message
+once. ferret's only report is PARSEC's own race on a progress counter
+(`cnt_enqueue`, read by the output stage while the loader increments it),
+in 24 of 210 runs of the port's builds, as often on the general queue as
+on the compiler's choice, and in 74 of 90 runs of PARSEC's own build
+under ThreadSanitizer. The lit suite runs every positive integration
+test's program the same way, and a negative control shows the build
+reports a race when a ring is forced on a queue with two producers. The
 declared-topology check's recall (`2026-10-26-declared-recall`, per
 audited ring, not per real bug): of 22 declarations in DPDK's examples
 and supercollider made wrong on purpose, 6 stop the build and 13 change
@@ -171,26 +180,38 @@ implementation and, in its single-consumer form, the one for many
 producers; the legs whose B0 it changes were run again on 26 October
 (below).
 
-**RQ2, re-measured on 26 October** against the current general-purpose
-queue (`benchmarks/results/2026-10-26-*`; paired runs on a second host
-whose frequency is not fixed, so ratios within a repetition, not absolute
-speeds, carry over). The paragraph above measured against the two-lock
-list; these supersede its ratios.
+**RQ2, re-measured from 26 October** against the current general-purpose
+queue (`benchmarks/results/2026-10-2[678]-*`; paired runs on a second
+host whose frequency is not fixed, so ratios within a repetition, not
+absolute speeds, carry over; the 27 and 28 October legs on the runtime as
+it is now). The paragraph above measured against the two-lock list;
+these supersede its ratios.
 
-- The queue alone (`2026-10-26-eval-w1`): the compiler's queue is 10× the
-  program as written (geometric mean over sizes and five allocators,
-  5.1–23×) and the same over moodycamel's ConcurrentQueue, the best
+- The queue alone (`2026-10-28-eval-w1`, on the current runtime): the
+  compiler's queue is 11× the program as written (geometric mean over
+  sizes and five allocators, 5.1–27×), the topology alone 6.6× (4.5–8.7)
+  and the borrow proof 1.7× on top (0.70–5.0; 3.9× at 8 B, 0.86× at
+  256 B), and as much over moodycamel's ConcurrentQueue, the best
   general-purpose library of those measured, which the program as written
-  now matches (1.00×); against the expert rings it is within 13%, 0.87×
-  rigtorp's (0.62–1.43; behind at 8 B, within about 10% at 64 and 256 B).
-- The ablation (`2026-10-26-eval-ablation`): from the general queue to
-  the single-producer ring with the element moved out is 17× on the
-  hand-over (5.3–54), the topology 8.3× and the pop form 2.0× of it
-  (moving the element out needs no proof); the borrow proof's own step,
-  lending instead of popping a shared_ptr, is 1.7× in W1 (0.89–4.49, a
-  loss at 256 B); against moodycamel holding the
-  element by value the topology alone buys 8.8× (3.1–28); against a
-  heap-allocating queue the diagonal is 24×.
+  about matches (0.94×); against the expert rings it is within 16%, 0.84×
+  rigtorp's (0.49–1.30; behind at 8 B, 0.87–1.30 at 64 and 256 B).
+  On 26 October (`2026-10-26-eval-w1`) it was 10×, 5.9× and 1.7×; the
+  program as written at 8 B under glibc runs at 50 or at 16–21 M/s
+  depending on the run (four of five repetitions at 50 then, one now),
+  which moves most of the difference, and the compiler's queue at 8 B
+  runs 1.16× its earlier rate across days.
+- The ablation (`2026-10-28-eval-ablation`, on the current runtime):
+  from the general queue to the single-producer ring with the element
+  moved out is 18× on the hand-over (17.9×, 5.3–54), the topology 8.4×
+  (5.7–12.8) and the pop form 2.1× (0.82–6.7) of it (moving the element
+  out needs no proof); the borrow proof's own step, lending instead of
+  popping a shared_ptr, is 1.7× in W1 (0.70–5.0, a loss at 256 B);
+  against moodycamel holding the element by value the topology alone
+  buys 9.0× (3.1–30); against a heap-allocating queue the diagonal is
+  24×; the element in the cell alone is 7.7× on the ring and 1.3× on the
+  segmented queue. On 26 October (`2026-10-26-eval-ablation`) these were
+  17×, 8.3×, 2.0×, 8.8× and 24×; the leg was not quiet either day, and
+  the ratios are paired.
 - The pipeline (`2026-10-27-eval-w3`, after the ring's gate of PR #37):
   1.90× (glibc) and 1.81× (jemalloc), equal to the hand-tagged build, and a
   p99 of 0.27–0.29 µs at every offered rate from 0.5 to 4 M records a
@@ -201,16 +222,24 @@ list; these supersede its ratios.
   record, so the gain is above 10% only for stages under about 0.5 µs
   (1.90–2.06× at no work, 1.04× at 1.1 µs, 1.00× from about 5 µs); the
   same as before the gate (`2026-10-26-eval-w3grain`).
-- spdlog (`2026-10-26-eval-spdlog-rerun`, with the waiting control
-  spinning outside the queue's mutex): 2.52× over spdlog as released
-  (1.21–6.35), faster in all 36 configurations, of which the topology's
-  share is 1.05× (1.01–1.13); the rest is the general-purpose queue the
-  program gets without proof, 2.51× the spinning control, while spinning
-  instead of blocking is level with the original (0.96×). The p99 of a
-  call is 3.5× shorter on the geometric mean but longer in 3 of 36
-  configurations, all at 256 bytes under glibc. The first leg of the day
-  (`2026-10-26-eval-spdlog`), whose control re-took the mutex, gave the
-  same 2.52× and 1.06×.
+- spdlog (`2026-10-28-eval-spdlog`, on the current runtime, every
+  build made again; a quiet leg, no run above the busy gate): 2.46× over
+  spdlog as released (1.16–6.55), faster in all 36 configurations, of
+  which the topology's share is 1.02× (0.91–1.12); the rest is the
+  general-purpose queue the program gets without proof, 2.53× the
+  spinning control, while spinning instead of blocking is level with the
+  original (0.96×). The p99 of a call is 3.7× shorter on the geometric
+  mean but longer in 3 of 36 configurations, all at 256 bytes. The
+  topology's share was 1.05× (1.01–1.13) on 26 October
+  (`2026-10-26-eval-spdlog-rerun`, binaries from before the runtime
+  changes of that day); it fell at one and two logging threads (0.98×
+  and 1.01×, from 1.08× and 1.06×; under glibc with small messages the
+  single-consumer queue is now 0.91–0.94× the general one) and held at
+  four and eight (1.03–1.04×). Across the two days the other builds run
+  at the rates they had and the compiler's build at 0.93× with one
+  logging thread: the single-consumer queue's new pop and its gated batch
+  wait cost where its worker most often finds it empty, and the leg does
+  not separate the two.
 - Latency under load (`2026-10-27-eval-w2`, after the ring's gate): every
   queue keeps up to 10 M/s except moodycamel's ConcurrentQueue; at every
   rate the runtime's ring, bare or through the shim, has the shortest
@@ -317,11 +346,10 @@ push instead (`2026-10-28-two-uses`, "spdlog's CIR").
   hosts.
   Not repeated on the current runtime (the single consumer's pop and the
   lock-free queue for one producer of 26 October, the ring's gated wait
-  of 27 October): the queue alone (W1, and W1smt of 21 October), the
-  ablation, fusion (its pipeline is the ring, built before the gate),
-  batching (W7, the rings before the gate), spdlog (its rerun's binaries
-  predate the 26 October runtime changes), PARSEC's ferret and dedup,
-  the compile cost, the ThreadSanitizer runs, and coarsening (W8).
+  of 27 October): the queue on SMT siblings (W1smt, 21 October), fusion
+  (its pipeline is the ring, built before the gate), batching (W7, the
+  rings before the gate), PARSEC's ferret and dedup, the compile cost,
+  and coarsening (W8).
 - **The ports change waiting.** PARSEC's queues block on condition
   variables; every ported build spins on `try_pop`, threads never
   outnumbering cores. PARSEC's own build is reported beside them as the

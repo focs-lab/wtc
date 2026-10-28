@@ -52,7 +52,7 @@ cost was not its synchronisation but the `shared_ptr` it allocated for
 every element, on the producer's side, to be freed on the consumer's: the
 same ring with elements held inline was 10 to 41 times faster. Against the
 current queue, which already holds the element in its cell, the order is
-reversed: the topology is the larger step (5.9× through the shim) and
+reversed: the topology is the larger step (6.6× through the shim) and
 lending instead of allocating the smaller (1.7×; README, "What each fact
 buys"). Every implementation now holds the
 element in its cell, and what remains per element is what the pop hands
