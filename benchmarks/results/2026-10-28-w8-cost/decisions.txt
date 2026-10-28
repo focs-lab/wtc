@@ -1,0 +1,26 @@
+# The cost model's decision for W8 at each level; the remark's fixed part (the
+# mutex is let go every WTC_LOCK_BATCH_K sections and at the end) left out.
+
+== the builds measured here (build_w8_flavours.sh, W8_ROUNDS_PER_NS=0.32, W8_NS_PER_UNIT=0.125, the default class's thresholds)
+0 ns, 0 rounds: batched: work between sections estimated at 26 ns (212 units), under the 180 ns threshold that holds for any number of threads
+20 ns, 6 rounds: batched: work between sections estimated at 45 ns (362 units), under the 180 ns threshold that holds for any number of threads
+50 ns, 16 rounds: batched: work between sections estimated at 76 ns (612 units), under the 180 ns threshold that holds for any number of threads
+100 ns, 32 rounds: batched: work between sections estimated at 126 ns (1012 units), under the 180 ns threshold that holds for any number of threads
+200 ns, 64 rounds: not batched: work between sections estimated at 226 ns (1812 units), over the 180 ns threshold that holds for any number of threads (the threads that take the mutex are not counted here)
+500 ns, 160 rounds: not batched: work between sections estimated at 526 ns (4212 units), over the 180 ns threshold that holds for any number of threads (the threads that take the mutex are not counted here)
+
+== the same rounds as the class this leg gives, cascade-lake, would decide (0.122 ns a unit; W8's threads not counted, so its lowest threshold, 70 ns): wtc-opt --wtc-batch-locks="ns-per-unit=0.122 threshold-ns=70"
+0 ns, 0 rounds: batched: work between sections estimated at 26 ns (212 units), under the given threshold of 70 ns
+20 ns, 6 rounds: batched: work between sections estimated at 44 ns (362 units), under the given threshold of 70 ns
+50 ns, 16 rounds: not batched: work between sections estimated at 75 ns (612 units), over the given threshold of 70 ns
+100 ns, 32 rounds: not batched: work between sections estimated at 123 ns (1012 units), over the given threshold of 70 ns
+200 ns, 64 rounds: not batched: work between sections estimated at 221 ns (1812 units), over the given threshold of 70 ns
+500 ns, 160 rounds: not batched: work between sections estimated at 514 ns (4212 units), over the given threshold of 70 ns
+
+== the rounds of the timed leg 2026-10-21-eval-w8 (0.2697 a ns), the default class
+0 ns, 0 rounds: batched: work between sections estimated at 31 ns (212 units), under the 180 ns threshold that holds for any number of threads
+20 ns, 5 rounds: batched: work between sections estimated at 50 ns (337 units), under the 180 ns threshold that holds for any number of threads
+50 ns, 13 rounds: batched: work between sections estimated at 79 ns (537 units), under the 180 ns threshold that holds for any number of threads
+100 ns, 27 rounds: batched: work between sections estimated at 131 ns (887 units), under the 180 ns threshold that holds for any number of threads
+200 ns, 54 rounds: not batched: work between sections estimated at 231 ns (1562 units), over the 180 ns threshold that holds for any number of threads (the threads that take the mutex are not counted here)
+500 ns, 135 rounds: not batched: work between sections estimated at 531 ns (3587 units), over the 180 ns threshold that holds for any number of threads (the threads that take the mutex are not counted here)
