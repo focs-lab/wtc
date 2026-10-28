@@ -151,10 +151,12 @@ should say so, as the reason every lemma now has its test.
   code), **safety** (RQ6: every positive test and both applications under
   ThreadSanitizer; the planted violations; the declared-topology check's
   recall on wrong declarations made on purpose, `2026-10-26-declared-recall`).
-- **One representation, two uses** (`2026-10-26-two-uses`): the facts
+- **One representation, two uses** (`2026-10-28-two-uses`): the facts
   that choose the implementation also check declared contracts (topology:
   substitution and the declared check; what may block: batching legality
-  and the progress check, shared since 26 October).
+  and the progress check, shared since 26 October). On the progress
+  check they decide 3 of 58 verdicts, all in examples written to show
+  it, and none of 10 in real code.
 - **Batching and coarsening** (`eval-w7`, `eval-w8`): one paragraph, as
   known techniques with their crossover; legality is not profitability.
 
@@ -199,7 +201,7 @@ repeat on the current runtime are listed below.
 | 7 applications | `eval-ferret`, `eval-dedup` | run 21 Oct against the two-lock list; repeat |
 | 4 reach | `reach.sh` | run 26 Oct with arrays, records and exclusive arms |
 | 7 safety | `declared_recall.sh`, the TSan runs | recall 26 Oct; TSan runs 21 Oct, repeat |
-| 7 two uses | `two_uses.sh` | run 26 Oct before the shared blocking query; repeat |
+| 7 two uses | `two_uses.sh` | run 28 Oct on the current runtime and the shared blocking query |
 | 7 cost | `compile_cost.sh` | run 21 Oct; repeat after the analysis changes |
 | 7 batching | `eval-w7`, `eval-w8` | W7 26 Oct; W8 21 Oct, against the two-lock list |
 | 9 cross-socket | the L8 leg | not run |
@@ -212,9 +214,7 @@ repeat on the current runtime are listed below.
   ablation, fusion (its pipeline is the ring, built before the gate),
   batching (W7, the rings before the gate), spdlog (its rerun's binaries
   predate the 26 October runtime changes), PARSEC's ferret and dedup,
-  the compile cost, the ThreadSanitizer runs, coarsening (W8), and the
-  two-uses count (measured before the shared blocking query and the new
-  queue for one producer).
+  the compile cost, the ThreadSanitizer runs, and coarsening (W8).
 - The profitability of coarsening and fusion has crossovers but no model;
   nothing in the compiler decides by cost yet.
 - The declared-topology check has caught no wrong declaration that shipped:

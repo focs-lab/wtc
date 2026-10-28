@@ -132,6 +132,17 @@ without the libraries' assertions). The three wrong declarations DPDK has
 fixed in its history are of forms the check does not model (mempool
 flags, a driver that starts no threads).
 
+**One representation, two uses** (`benchmarks/results/2026-10-28-two-uses`,
+untimed). This asks whether the progress check reads the facts that chose
+the implementation. Every function declared lock-free is checked in the
+specialised build and in the general one. Of 58 such functions, 3 change
+their verdict between the builds, all in examples written to show it;
+none of the 10 in DPDK, Cinder and spdlog does. The counts on 26 October
+(`2026-10-26-two-uses`) were 3 of 54 and 0 of 10. Since then, no verdict
+has changed: the four new functions are tests added with the shared
+blocking answer, and the changes to the queues for many producers and
+for many consumers moved only reasons.
+
 **RQ2** (`eval-w1`, `eval-w1smt`, `eval-w2`, `eval-w3`, `eval-w3grain`,
 `eval-w9`, `eval-ferret`, `eval-dedup`). With one producer and one consumer
 on two cores the compiler's inline queue is 17 to 60 times the program as
@@ -287,6 +298,13 @@ of beyond 10. 5e682b6 and 63c2ba7 keep that bookkeeping in each thread
 until it ends; the five legs were run again on 22 October, and their
 result directories hold only the new runs.
 
+The spdlog CIR of the 26 October two-uses measurement holds a sleep that
+was injected into the port's bound by an earlier experiment. That note's
+reason for the producer's enqueue, a bound that sleeps, is that injected
+sleep, and the port itself spins. Emitted again with nothing injected,
+the port gives the same verdicts, and the enqueue fails on its queue's
+push instead (`2026-10-28-two-uses`, "spdlog's CIR").
+
 ## Threats to validity
 
 - **One socket per leg.** The timed host has one socket; the 26 and 27
@@ -303,9 +321,7 @@ result directories hold only the new runs.
   ablation, fusion (its pipeline is the ring, built before the gate),
   batching (W7, the rings before the gate), spdlog (its rerun's binaries
   predate the 26 October runtime changes), PARSEC's ferret and dedup,
-  the compile cost, the ThreadSanitizer runs, coarsening (W8), and the
-  two-uses count (measured before the shared blocking query and the new
-  queue for one producer).
+  the compile cost, the ThreadSanitizer runs, and coarsening (W8).
 - **The ports change waiting.** PARSEC's queues block on condition
   variables; every ported build spins on `try_pop`, threads never
   outnumbering cores. PARSEC's own build is reported beside them as the

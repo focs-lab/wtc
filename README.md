@@ -134,9 +134,7 @@ lock-free queue for one producer of 26 October, the ring's gated wait of
 ablation, fusion (its pipeline is the ring, built before the gate),
 batching (W7, the rings before the gate), spdlog (its rerun's binaries
 predate the 26 October runtime changes), PARSEC's ferret and dedup, the
-compile cost, the ThreadSanitizer runs, coarsening (W8), and the
-two-uses count (measured before the shared blocking query and the new
-queue for one producer).
+compile cost, the ThreadSanitizer runs, and coarsening (W8).
 The baselines are the ones the concurrent-queue literature measures
 against:
 
@@ -401,6 +399,7 @@ compiler. The gain belongs to programs whose stages take microseconds.
 | Output | ferret and dedup as PARSEC's own build computes them, at 1, 2 and 4 threads a stage |
 | Contracts | eight planted violations, each caught: a second producer on the spsc ring and on the spmc queue, a second consumer on the single-consumer queue (each under `WTC_CHECK` and ThreadSanitizer), spsc forced on a queue with two producers and two consumers, a plain race, and a borrowed element kept past the next pop |
 | Declared topologies | wrong declarations made on purpose, per audited ring, not per real bug ([`2026-10-26-declared-recall`](benchmarks/results/2026-10-26-declared-recall/NOTE.md)): of 22 in DPDK's examples and supercollider, 6 stop the build and 13 change the check's verdict (the 6 errors, and 7 verified becoming not verifiable); none is verified; of 18 programs misusing `rigtorp::SPSCQueue`, `moodycamel::ReaderWriterQueue` and `boost::lockfree::spsc_queue` from a second thread, all 18 stop the build, where ThreadSanitizer reports 14 to 17 depending on the run (17 without the libraries' assertions); the three wrong declarations DPDK has fixed in its history are of forms the check does not model |
+| Progress check | whether the check reads the facts that chose the implementation ([`2026-10-28-two-uses`](benchmarks/results/2026-10-28-two-uses/NOTE.md)): of 58 functions marked `WTC_LOCK_FREE`, 3 have a different verdict in the specialised build and the general one, all in examples written to show it; none of 10 in DPDK, Cinder and spdlog |
 
 ## What is there
 
