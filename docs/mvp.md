@@ -110,7 +110,7 @@ tools/wtc-cc --toolchain build-llvm examples/lock_loop.cpp -o prog
 ```
 
 ```
-remark: wtc: critical sections in this loop batched: the mutex is let go every WTC_LOCK_BATCH_K sections and at the end
+remark: wtc: critical sections in this loop batched: the mutex is let go every WTC_LOCK_BATCH_K sections and at the end; work between sections estimated at 0.9 ns (6 units), under the 180 ns threshold that holds for any number of threads
 ```
 
 Every interleaving of the result is one the original allows, so no
@@ -121,6 +121,18 @@ would wait for each other, so the rules are stricter than for pushes:
 nothing in the loop may do input or output, sleep, or call anything the
 compiler cannot see into other than the allocator and functions that only
 touch the memory they are given (`test/Transforms/BatchLocks/refusals.cpp`).
+
+Legal is not profitable: with the mutex held, the other threads wait
+through the code between the sections too, and W8 measured batching turn
+from 11 times faster into a loss once that code takes 100 to 500 ns. So
+the compiler also estimates it -- one iteration without its critical
+section, counted over the CIR and turned into nanoseconds by a constant for
+the class of host -- and batches only below the crossover W8 measured on
+that class for the number of threads that take the mutex (the lowest of
+the class's, when it cannot count them). The remark gives both numbers,
+batched or not; `--batch-host` names the class (`sapphire-rapids` unless
+told otherwise), and `--batch-cost off` batches every legal loop
+(`decisions/0006`, `test/Transforms/BatchLocks/cost.cpp`).
 
 ## 4. Promises the build holds the program to
 

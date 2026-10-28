@@ -11,6 +11,7 @@ add_mlir_library(MLIRWTCTransforms
   WTCCheckProgress.cpp
   WTCFalseSharingDiagnose.cpp
   WTCSpecialize.cpp
+  WorkEstimate.cpp
   Utils.cpp
 
   LINK_COMPONENTS
