@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
-# Builds PARSEC ferret from the pinned PARSEC tree, five ways:
+# Builds PARSEC ferret from the pinned PARSEC tree, six ways, and with
+# TSAN=1 four more:
 #
 #   ferret-orig          PARSEC's own pthreads build (condition-variable queues)
 #   ferret-generic-one   the port, one thread per stage, wtc-cc --no-specialize (B0)
@@ -9,6 +10,11 @@
 #   ferret-hand-one      the port, one thread per stage, every queue tagged
 #                        spsc_inline by hand (B3)
 #   ferret-generic, ferret-compiler   the port, n threads per middle stage
+#   ferret-compiler-one-tsan, ferret-compiler-tsan
+#                        the compiler's builds under ThreadSanitizer
+#   ferret-generic-tsan  the port, n threads per middle stage,
+#                        --no-specialize, under ThreadSanitizer
+#   ferret-orig-tsan     PARSEC's own pthreads build under ThreadSanitizer
 #
 #   build.sh <parsec-dir> <out-dir>
 #
@@ -64,11 +70,19 @@ build hand-one     --no-specialize -DFERRET_ONE -DFERRET_HAND_TAG
 build generic      --no-specialize
 build compiler
 # TSAN=1 adds the compiler's builds under ThreadSanitizer, for the safety
-# question. The translation unit with the queues and the threads is
-# instrumented; ferret's libraries, which start no threads, are not.
+# question, and the port on the general-purpose queue and PARSEC's own
+# build the same way, so that a report can be told apart as the program's
+# own or the substitution's. The translation unit with the queues and the
+# threads is instrumented; ferret's libraries, which start no threads, are
+# not (PARSEC's queue is among them: ThreadSanitizer sees its mutex
+# through its interceptors).
 if [ "${TSAN:-0}" = 1 ]; then
   build compiler-one-tsan -DFERRET_ONE --tsan -O1 -g
   build compiler-tsan --tsan -O1 -g
+  build generic-tsan --no-specialize --tsan -O1 -g
+  $CC $OLDC -O1 -g -fsanitize=thread -I"$W/ferret-src/include" -I"$W/ferret-src/image" -I"$W/gsl/include" \
+      -c ferret-src/benchmark/ferret-pthreads.c -o ferret-orig-tsan.o
+  clang++-18 -fsanitize=thread ferret-orig-tsan.o $LIBS -lpthread -o bin/ferret-orig-tsan
 fi
 {
   echo "compiler=tools/wtc-cc, ClangIR $(git -c safe.directory="$WTC" -C "$WTC" submodule status llvm 2>/dev/null | awk '{print $1}' | tr -d '+-' | cut -c1-12)"

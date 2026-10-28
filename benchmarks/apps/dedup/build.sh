@@ -81,8 +81,11 @@ OBJS=${OTHERS/obj\/dedup.o /} build compiler-unity -DDEDUP_UNITY
 OBJS=${OTHERS/obj\/dedup.o /} build compiler-one-unity -DDEDUP_ONE -DDEDUP_UNITY
 # TSAN=1 adds the compiler's builds under ThreadSanitizer, every file
 # instrumented, for the safety question: the build as written, whose
-# queues stay general, and the one translation unit whose proved queues
-# are inline rings.
+# queues stay general; the one translation unit with one thread per stage,
+# whose proved queues are inline rings and the list for many producers;
+# and the arrays kept in one translation unit with threads per stage from
+# argv, whose refine queue is the queue for one producer and many
+# consumers and whose reorder queue is the list for many producers.
 if [ "${TSAN:-0}" = 1 ]; then
   mkdir -p obj-tsan
   for f in hashtable util dedup rabin decoder mbuffer sha binheap tree; do
@@ -92,6 +95,7 @@ if [ "${TSAN:-0}" = 1 ]; then
   TOTHERS=${OTHERS//obj\//obj-tsan/}
   OBJS=$TOTHERS build compiler-tsan --tsan -O1 -g
   OBJS=${TOTHERS/obj-tsan\/dedup.o /} build compiler-flat-one-unity-tsan --tsan -O1 -g -DDEDUP_FLAT -DDEDUP_ONE -DDEDUP_UNITY
+  OBJS=${TOTHERS/obj-tsan\/dedup.o /} build compiler-unity-tsan --tsan -O1 -g -DDEDUP_UNITY
 fi
 {
   echo "compiler=tools/wtc-cc, ClangIR $(git -c safe.directory="$WTC" -C "$WTC" submodule status llvm 2>/dev/null | awk '{print $1}' | tr -d '+-' | cut -c1-12)"
