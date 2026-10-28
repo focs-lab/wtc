@@ -1,0 +1,21 @@
+# label|lang|file|flags -- paths relative to the repository root
+progress-reasons|c++|test/Transforms/Progress/reasons.cpp|
+progress-queue-impls|c++|test/Transforms/Progress/queue-impls.cpp|
+progress-sites|c++|test/Transforms/Progress/sites.cpp|
+progress-aarch64-asm|c++|test/Transforms/Progress/aarch64-asm.cpp|--target=aarch64-unknown-linux-gnu
+progress_consumer|c++|examples/progress_consumer.cpp|
+progress_consumer-RETAIN|c++|examples/progress_consumer.cpp|-DRETAIN
+progress_consumer-LOG|c++|examples/progress_consumer.cpp|-DLOG
+progress_consumer-PRODUCER|c++|examples/progress_consumer.cpp|-DPRODUCER
+transfer_pipeline|c++|examples/transfer_pipeline.cpp|
+# The real code, from the CIRs the progress check was first run on (see
+# NOTE.md); they are not in the repository. With them in CIRDIR, replace
+# CIRDIR and drop the leading "#" to rerun these four jobs (ten rows).
+#dpdk-l2fwd|c|CIRDIR/l2fwd.c.cir|
+#dpdk-ring_fast|c|CIRDIR/ring_fast.c.cir|
+#cinder-MonitorNode|c++|CIRDIR/MonitorNode.cpp.cir|
+#spdlog-bench|c++|CIRDIR/bench.cpp.cir|
+# The control for the last job (NOTE.md, "spdlog's CIR"): the same port
+# emitted from this tree with nothing injected. Its rows are not in
+# verdicts.tsv.
+#spdlog-bench-clean|c++|CIRDIR/bench-clean.cpp.cir|
