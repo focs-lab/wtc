@@ -18,6 +18,16 @@
 #                      (negative control; pass a comma-separated list)
 #   --force-inline SYMS  tag these global queues spsc_inline regardless of
 #                      the verdicts (negative control, as above)
+#   --batch-cost MODE  estimate (default): hold a mutex across a WTC_BATCH
+#                      loop's critical sections only where the work between
+#                      them is estimated under the threshold (decisions/0006);
+#                      off: wherever it is legal
+#   --batch-host NAME  the class of host the program will run on, whose
+#                      constant and thresholds that estimate takes
+#                      (decisions/0006 lists them); without it the default
+#                      class, sapphire-rapids, is applied whatever the host
+#   --batch-ns-per-unit NS  nanoseconds a unit of that estimate takes on the
+#                      host, in place of the class's (decisions/0006)
 #   --toolchain DIR    where clang++, wtc-opt, cir-translate live (default:
 #                      wtc-opt from the build tree next to this repo, the
 #                      rest from PATH)
@@ -54,6 +64,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)
 
 KEEP=""; SPECIALIZE=1; TSAN=0; CENSUS=0; COMPILE_ONLY=0; FORCE=""; FORCE_INLINE=""; TOOLCHAIN=""; OUT="a.out"; SRC=""
+BATCH_COST=""; BATCH_HOST=""; BATCH_NS=""
 PASSTHRU=(); LINKARGS=(); OPTARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -62,6 +73,9 @@ while [ $# -gt 0 ]; do
     --force-spsc) FORCE=$2; shift 2 ;;
     --force-inline) FORCE_INLINE=$2; shift 2 ;;
     --toolchain) TOOLCHAIN=$2; shift 2 ;;
+    --batch-cost) BATCH_COST=$2; shift 2 ;;
+    --batch-host) BATCH_HOST=$2; shift 2 ;;
+    --batch-ns-per-unit) BATCH_NS=$2; shift 2 ;;
     --tsan) TSAN=1; shift ;;
     --census) CENSUS=1; shift ;;
     -c) COMPILE_ONLY=1; shift ;;
@@ -106,7 +120,12 @@ step() { # name, command...
 
 step cir "$CLANGXX" -std=c++17 -I"$ROOT/shim" -fclangir -emit-cir "${PASSTHRU[@]}" "$SRC" -o "$WORK/$base.cir"
 
-PASSES=(--lift-cir-to-wtc --wtc-batch-pushes --wtc-batch-locks --queue-ownership-analysis --wtc-borrow-analysis)
+LOCKOPTS=""
+[ -n "$BATCH_COST" ] && LOCKOPTS="cost=$BATCH_COST"
+[ -n "$BATCH_HOST" ] && LOCKOPTS="${LOCKOPTS:+$LOCKOPTS }host=$BATCH_HOST"
+[ -n "$BATCH_NS" ] && LOCKOPTS="${LOCKOPTS:+$LOCKOPTS }ns-per-unit=$BATCH_NS"
+PASSES=(--lift-cir-to-wtc --wtc-batch-pushes "--wtc-batch-locks${LOCKOPTS:+=$LOCKOPTS}"
+        --queue-ownership-analysis --wtc-borrow-analysis)
 if (( SPECIALIZE )); then
   OPTS=""
   [ -n "$FORCE" ] && OPTS="force-spsc=$FORCE"

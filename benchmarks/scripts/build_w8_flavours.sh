@@ -10,7 +10,10 @@
 #   w8_<batched|hand>_k<K>   K: 8 512, the batch size swept
 #
 # and checks that the compiler's batched builds were batched and the others
-# not. Never run this inside a `bench` reservation; it compiles.
+# not. W8 reads its work at run time, which the cost model cannot bound
+# (decisions/0006), so these builds turn the model off: they measure the
+# transformation, not the decision to make it. Never run this inside a
+# `bench` reservation; it compiles.
 #
 #   build_w8_flavours.sh <out-dir>
 set -euo pipefail
@@ -39,10 +42,10 @@ build() { # name, extra wtc-cc args...
 }
 
 build w8_plain -DW8_PLAIN
-build w8_batched
+build w8_batched --batch-cost off
 build w8_hand -DW8_HAND_BATCH
 for k in 8 512; do
-  build "w8_batched_k$k" -DWTC_LOCK_BATCH_K=$k
+  build "w8_batched_k$k" --batch-cost off -DWTC_LOCK_BATCH_K=$k
   build "w8_hand_k$k" -DW8_HAND_BATCH -DWTC_LOCK_BATCH_K=$k
 done
 echo
