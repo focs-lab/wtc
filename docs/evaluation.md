@@ -308,6 +308,19 @@ batching a producer's pushes gains nothing, 1.00× at every K from 1 to
 with one atomic and the rings publish with one store; the 1.8× above was
 the two-lock list's. The delay remains, 33 µs at K = 64.
 
+Since 28 October the coarsening has a cost model (`decisions/0006`): the
+work of one iteration outside the critical section, estimated over the
+CIR, against W8's crossover for the class of host and the threads that
+take the mutex. Its untimed check (`2026-10-28-w8-cost`, W8 rebuilt with
+its work fixed at compile time, twelve paired repetitions) found it
+refusing at 200 and 500 ns, where it ran 1.15–2.16× the batched loop at two
+to eight threads, and keeping the gain with two threads at 0–100 ns
+(1.67–6.25× the plain loop). On that host batching loses from about 50 ns
+with four and eight threads (0.77 and 0.80 at 100 ns), against 200–500 on
+the timed leg's host, and the default class's thresholds, which are not
+that host's, batched there: the thresholds belong to a host, and that
+host has a class of its own. Pushes get no model: W7 shows no loss to avoid.
+
 Each leg's NOTE.md, beside its summary, gives the setup, the controls and
 what the numbers can and cannot carry.
 

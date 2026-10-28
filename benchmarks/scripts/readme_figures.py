@@ -360,6 +360,20 @@ def w8(leg):
     for i, w in enumerate(works):
         f.add(f.text(x(i), bottom + 22, w, 13, MUTED))
     f.add(f.text((left + right) / 2, bottom + 46, "work between sections, ns", 14, MUTED))
+    # Where the compiler stops batching W8 (decisions/0006), placed between
+    # the levels by linear interpolation. Its thresholds apply to its
+    # estimate of the whole loop, which counts 31 ns more than the work
+    # here, so on this axis they sit at W8's crossovers.
+    def xw(ns):
+        for i in range(len(works) - 1):
+            if works[i] <= ns <= works[i + 1]:
+                return x(i + (ns - works[i]) / (works[i + 1] - works[i]))
+        return x(len(works) - 1)
+    for ns, lab, dy in ((152, "compiler batches W8 below 152 ns: 2 threads, or not counted", 0),
+                        (245, "below 245 ns: 4-8 threads", 18)):
+        f.line(xw(ns), top, xw(ns), bottom, MUTED, 1.5, "5 4")
+        f.add(f.text(xw(ns) - 6, top + 14 + dy, lab, 12, MUTED, "end"))
+    f.add(f.text(xw(245) - 6, top + 50, "(thresholds 180 and 275 ns on its estimate, which adds 31 ns)", 12, MUTED, "end"))
     for t, col in (("2", B2), ("4", INLINE), ("8", INK)):
         pts = [(x(i), y(leg.get(workload="W8", variant="batched", threads=t, work=f"{w}ns", k=64)
                        / leg.get(workload="W8", variant="plain", threads=t, work=f"{w}ns", k=1))) for i, w in enumerate(works)]
