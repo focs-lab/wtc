@@ -10,11 +10,11 @@ numbers live in `benchmarks/results/`, one directory per leg with its own
 | | question | answered by |
 |---|---|---|
 | RQ1 | Reach and precision: of the queues in real programs, how many does the analysis prove, how many does it refuse and why, and does it ever claim a topology the program does not have? | `benchmarks/scripts/reach.sh` against `benchmarks/reach/oracle.json`; `tools/corpus-sync-census.py` for what unported code holds |
-| RQ2 | Substitution: what does the specialised queue buy in throughput, cost per element, latency under load and scaling, against strong libraries as well as against the program as written? | legs `eval-w1`, `eval-w1smt`, `eval-w2`, `eval-w3`, `eval-w3grain`, `eval-w9`, `eval-pool`, `eval-fusion`, `eval-ferret`, `eval-dedup` |
+| RQ2 | Substitution: what does the specialised queue buy in throughput, cost per element, latency under load and scaling, against strong libraries as well as against the program as written? | legs `eval-w1`, `eval-w1smt`, `eval-ablation`, `eval-w2`, `eval-w3`, `eval-w3grain`, `eval-w9`, `eval-pool`, `eval-fusion`, `eval-spdlog`, `eval-ferret`, `eval-dedup` |
 | RQ3 | Allocation: what does an element cost in allocations and resident memory with each implementation? | the mechanism runs of `eval-w1` (allocation counter, `perf` counters, peak RSS) |
 | RQ4 | Batching: throughput against latency as the batch grows, for a producer's pushes and for a mutex's sections, and fairness between threads | legs `eval-w7`, `eval-w8` |
 | RQ5 | Cost: compile time by pass, code size, and nothing lost where nothing is proved | `benchmarks/scripts/compile_cost.sh`; the general and compiler builds of every leg |
-| RQ6 | Safety: does the compiler's output run clean under ThreadSanitizer, and does the build refuse a program that breaks a declared topology? | the lit suite (`%if tsan` runs on every positive integration test, `WTC_CHECK`, the planted violations under `runtime/test` and `test/Integration`) |
+| RQ6 | Safety: does the compiler's output run clean under ThreadSanitizer, and does the build refuse a program that breaks a declared topology? | the lit suite (`%if tsan` runs on every positive integration test, `WTC_CHECK`, the planted violations under `runtime/test` and `test/Integration`); `benchmarks/scripts/declared_recall.sh` for the declared-topology check's recall |
 
 ## Baselines
 
@@ -120,7 +120,17 @@ builds of dedup and ferret, inline rings included, run under
 ThreadSanitizer without a report and with PARSEC's output, at every
 thread count tried; the lit suite runs every positive integration test's
 program the same way, and a negative control shows the build reports a
-race when a ring is forced on a queue with two producers.
+race when a ring is forced on a queue with two producers. The
+declared-topology check's recall (`2026-10-26-declared-recall`, per
+audited ring, not per real bug): of 22 declarations in DPDK's examples
+and supercollider made wrong on purpose, 6 stop the build and 13 change
+the check's verdict, and none is verified; of 18 programs misusing
+`rigtorp::SPSCQueue`, `moodycamel::ReaderWriterQueue` and
+`boost::lockfree::spsc_queue` from a second thread, all 18 stop the
+build, where ThreadSanitizer reports 14 to 17 depending on the run (17
+without the libraries' assertions). The three wrong declarations DPDK has
+fixed in its history are of forms the check does not model (mempool
+flags, a driver that starts no threads).
 
 **RQ2** (`eval-w1`, `eval-w1smt`, `eval-w2`, `eval-w3`, `eval-w3grain`,
 `eval-w9`, `eval-ferret`, `eval-dedup`). With one producer and one consumer
@@ -234,8 +244,9 @@ list; these supersede its ratios.
 **RQ3** (the legs' mechanism passes). On the pipeline the compiler's build
 allocates nothing per record. Against the two-lock list (21 October) the
 program as written allocated four per record and spent 785 cycles a record
-against 7,677; against the current queue (26 October) it allocates two
-per record, and the cycles are 846 against 2,396.
+against 7,677; against the current queue it allocates two per
+record, and the cycles are 830 against 2,476 (27 October,
+`2026-10-27-eval-w3`, per record; 846 against 2,396 on 26 October).
 
 **RQ4** (`eval-w7`, `eval-w8`). Batching a producer's pushes gains 1.8
 times on the general queue at the default K = 64 and nothing on the rings,
@@ -278,10 +289,23 @@ result directories hold only the new runs.
 
 ## Threats to validity
 
-- **One socket.** The timed host has one socket; cross-socket placements
-  depend on a second host and on synchronised timestamp counters across
-  its sockets, which are to be checked before any cross-socket latency is
-  reported.
+- **One socket per leg.** The timed host has one socket; the 26 and 27
+  October legs ran on a two-socket AMD host, but each within one socket
+  (socket 1). Cross-socket placements are still unmeasured, and depend on
+  synchronised timestamp counters across the sockets, to be checked
+  before any cross-socket latency is reported.
+- **Frequency not fixed on the second host.** Its legs are paired within a
+  repetition and report ratios; absolute rates are not compared across
+  hosts.
+  Not repeated on the current runtime (the single consumer's pop and the
+  lock-free queue for one producer of 26 October, the ring's gated wait
+  of 27 October): the queue alone (W1, and W1smt of 21 October), the
+  ablation, fusion (its pipeline is the ring, built before the gate),
+  batching (W7, the rings before the gate), spdlog (its rerun's binaries
+  predate the 26 October runtime changes), PARSEC's ferret and dedup,
+  the compile cost, the ThreadSanitizer runs, coarsening (W8), and the
+  two-uses count (measured before the shared blocking query and the new
+  queue for one producer).
 - **The ports change waiting.** PARSEC's queues block on condition
   variables; every ported build spins on `try_pop`, threads never
   outnumbering cores. PARSEC's own build is reported beside them as the

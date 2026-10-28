@@ -1,7 +1,8 @@
 # Known defects
 
 State as of September 2026 for the queue analysis, and October 2026 for the
-layout passes (the section after "Still open"). The first review was of the
+layout passes (the section after "Still open"); the closed table and the
+array entry below are updated to 28 October 2026. The first review was of the
 prototype before it moved into this repository; the sections below have since been worked
 through, and each one now says what became of it. A defect is only marked
 closed where a test would fail if it came back.
@@ -26,6 +27,8 @@ Read "Still open" and the October section before building anything on top of a v
 | Output order came from a hash map | insertion-ordered, and the two-queue test matches in order | `multi-queue.mlir` |
 | No end-to-end example from C++ source | `examples/`, `tools/wtc-cc`, and seven `.cpp` lit tests | the tests themselves |
 | A test used unordered matching that would accept swapped verdicts | ordered matching | `multi-queue.mlir` |
+| The single-consumer queue's pop answered empty at a reserved, unfilled cell while a later push had finished: not linearisable, so substituting it for the general queue could add a behaviour (26 Oct) | the pop takes the first filled cell after it, out of order, and answers empty only when none is filled | `runtime/test/segment_queue_empty_test.cpp`, `lemma_segment_test.cpp` |
+| The queue for one producer was a ring whose consumers took turns under one spin lock, moving the element inside the turn: a thread pool lost to the general queue (0.51× at eight workers, 1 µs tasks), and an element whose move takes a lock another consumer holds could deadlock (26 Oct) | replaced by `runtime/spmc_queue.hpp`: a consumer claims its cell with a compare-and-swap and moves the element out after the claim, holding nothing the others wait on | `runtime/test/lemma_spmc_liveness.cpp`, `spmc_queue_stress.cpp` |
 
 Two infrastructure defects were fixed before the move into this repository:
 the build hard-coded one developer's home directory, and `shim/queue.hpp` did
@@ -39,8 +42,8 @@ queue is invisible. Nothing enforces this; `wtc-cc` compiles one file. A
 rewritten constructor call may sit in an inline function -- a struct's
 constructor -- that another unit also emits, and the linker keeps one copy.
 
-**A queue in an array, or built by a shared constructor, is not
-specialised.** A queue pointer loaded from a field, or from a slot or a
+**A queue built by a shared constructor is not specialised; an array of
+queues is one queue.** A queue pointer loaded from a field, or from a slot or a
 global written in several places, is followed to every write of it,
 constant initialisers included, and an operation that may act on one of
 several queues counts on each (`test/Integration/queue_via_struct.cpp`,

@@ -43,7 +43,7 @@ applies to C++ as compiled today, and the parts of WTC that do this on
 |---|---|---|
 | Escape analysis finds objects reachable from one thread; their monitors are removed | Escape Analysis for Java (OOPSLA 1999): 11% to 92% of lock operations removed; Removing Unnecessary Synchronization in Java (OOPSLA 1999) | the same reasoning on C++ pthread and `std::mutex` objects is the follow-up thesis; what is done here already is the stronger version of the same fact for a queue, how many threads on each side, which no Java analysis computed because no Java collection changes implementation by it |
 | Biased locking: a monitor's first owner takes it without an atomic operation, speculatively | HotSpot; deprecated and disabled by JEP 374 (JDK 15, 2020): its gains "far less evident", its cost in maintenance too high | an argument for a static proof over a speculation: WTC decides at compile time and never has to revoke |
-| Lock coarsening: several acquisitions of one lock merged into one | Lock Coarsening (JPDC 1998; LCPC 1996), which already warns that over-coarsening serialises and measures its cost | WTC's batching of critical sections is the same transformation; its contribution can only be the profitability model, measured in W8 (losing from about 200 ns of work between sections), for which the 1998 paper gives no threshold |
+| Lock coarsening: several acquisitions of one lock merged into one | Lock Coarsening (JPDC 1998; LCPC 1996), which already warns that over-coarsening serialises and measures its cost | WTC's batching of critical sections is the same transformation; its contribution can only be the profitability model, measured in W8 (a loss somewhere between 100 and 500 ns of work between sections, sooner with fewer threads), for which the 1998 paper gives no threshold |
 | Reference count updated non-atomically by the owning thread, atomically by others | Biased Reference Counting (PACT 2018); adopted by CPython's free-threaded build (PEP 703) | dynamic, with a per-object owner; WTC would prove the owner statically for `shared_ptr` and emit no check at all; the libstdc++ dispatch (`__libc_single_threaded`, PR 96817, 2020; `__gthread_active_p` before it) is per process, not per object |
 | Non-atomic count where the object cannot be shared, by analysis | Dynamic Atomicity: Optimizing Swift Memory Management (DLS 2017): up to 220% on microbenchmarks; Counting Immutable Beans (IFL 2019) and Perceus (PLDI 2021), borrowed references and reuse in functional languages | the Swift work is a run-time check; the functional work has a type system to lean on; C++ has neither, and the question is whether its pointers leave enough precision, which the dynamic census here measures first |
 | The committee's view that compilers may optimise atomics under the as-if rule | N4455 (2015) and P0062 | WTC's read-modify-write to plain store on confined data is such an optimisation, with the proof the papers ask for; it is not measured yet |
@@ -53,9 +53,10 @@ applies to C++ as compiled today, and the parts of WTC that do this on
 Where it was done: in allocators built for producer-consumer traffic, in
 languages with ownership types, and by hand in low-latency systems. That the
 compiler decides where a message lives from a proof about its consumer is
-the open part, and it is where the measured gain is: in an untimed probe
-of 22 Oct an element in the cell beat the best allocator by a large factor,
-which the `eval-ablation` leg is to measure.
+the open part, and it is where the measured gain is: the `eval-ablation` leg
+(26 Oct) measures it: the element in the cell is 7.5× on the ring and
+1.3× on the segmented queue, and against a queue that allocates every
+element on the heap the full step is 24×, which no allocator closes.
 
 | Technique | Where | What WTC does differently |
 |---|---|---|
@@ -132,8 +133,14 @@ No prior work found, after the sweep above and the audit of 22 Oct:
   carried by a type or a flag; the answer is that both are declared and
   neither is checked, and that neither decides where the element lives.
 - Kotlin's channels and the LPRQ family show that a general-purpose queue
-  can be fast; the ablation must keep showing that the cell, not the
-  synchronisation, is most of the gain, under snmalloc as well as glibc.
+  can be fast. The ablation answers part of it: with the element already in
+  the cell, the topology (synchronisation for one producer and one
+  consumer) is the larger step, 8.3× against 2.0× for the pop form; the
+  cell is most of the gain only against a queue that allocates per
+  element. W9 puts the general-purpose queue ahead of LCRQ with separate
+  producer and consumer threads; in the pairwise workload it trails LCRQ,
+  LPRQ and the fetch-and-add array queue (0.69–0.84×) and is ahead of LSCQ
+  (1.18×).
 - The confinement proofs for `std::mutex` and `shared_ptr` are escape
   analysis of 1999 on a new language; they are presented as a follow-up,
   with the dynamic census first, and not as the paper's claim.
