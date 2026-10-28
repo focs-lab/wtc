@@ -20,6 +20,9 @@
 # EXAMPLES (the examples directory to read, default: the checkout's),
 # DPDK_BUILD (an already configured build directory, default: <work
 # dir>/dpdk-build) and ONLY (one application's name, default: all).
+# VACUOUS=1 runs the analysis with vacuous-outcome, which marks a
+# declaration verified only because a side it declares single has no
+# access here.
 set -euo pipefail
 
 COMMIT=6bbb7b38b17f9ea4c981b5d374612a16833df41e
@@ -28,6 +31,8 @@ ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 CLANG=${CLANG:-$ROOT/build-llvm/bin/clang}
 WTC_OPT=${WTC_OPT:-$ROOT/build/bin/wtc-opt}
 MESON=${MESON:-meson}
+ANALYSIS=--queue-ownership-analysis
+[ "${VACUOUS:-0}" = 1 ] && ANALYSIS=--queue-ownership-analysis=vacuous-outcome=true
 
 if [ -n "${2:-}" ]; then
   D=$(cd "$2" && pwd)
@@ -79,7 +84,7 @@ run() {  # name dir files...
     return
   fi
   local rc=0
-  "$WTC_OPT" "$OUT/$name.cir" --lift-cir-to-wtc --queue-ownership-analysis -o /dev/null \
+  "$WTC_OPT" "$OUT/$name.cir" --lift-cir-to-wtc "$ANALYSIS" -o /dev/null \
     >"$OUT/$name.log" 2>&1 || rc=$?
   echo "== $name (wtc-opt exit $rc)"
   grep -E 'wtc: (queue|the address)' "$OUT/$name.log" | sed -E 's#^[^ ]*/##' | sort -u || true

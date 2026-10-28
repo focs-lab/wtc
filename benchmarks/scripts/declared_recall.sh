@@ -31,7 +31,10 @@
 # verified (the check says the declaration holds), unresolved (no line about
 # the queue, only remarks that accesses to queues of its type are
 # unresolvable, which makes every queue of the type unknown), silent
-# (nothing at all). <work dir>/tools.txt records the compilers and commits.
+# (nothing at all). With VACUOUS=1 (passed on to dpdk.sh and
+# supercollider.sh) the analysis marks a declaration verified only because
+# a side it declares single has no access, and such a row is vacuous.
+# <work dir>/tools.txt records the compilers and commits.
 #
 # Environment: CLANG, WTC_OPT as in tools/declared-check/dpdk.sh; the DPDK
 # build directory is configured once in <work dir>/dpdk-build (MESON).
@@ -51,6 +54,9 @@ CLANG=${CLANG:-$ROOT/build-llvm/bin/clang}
 WTC_OPT=${WTC_OPT:-$ROOT/build/bin/wtc-opt}
 export CLANG WTC_OPT
 CHECK=$ROOT/tools/declared-check
+export VACUOUS=${VACUOUS:-0}
+ANALYSIS=--queue-ownership-analysis
+[ "$VACUOUS" = 1 ] && ANALYSIS=--queue-ownership-analysis=vacuous-outcome=true
 PARTS=${PARTS:-mutants libs}
 if [ -z "${TSAN_CXX:-}" ]; then
   t=$(mktemp -d)
@@ -85,6 +91,7 @@ classify() {
   lines=$(grep -E "wtc: (queue|the address)" "$log" | grep -E "$pat" | sed -E 's#^[^ ]*/##' || true)
   if l=$(grep -m1 -E 'error: wtc:' <<<"$lines"); then echo "caught	$l"
   elif l=$(grep -m1 -E 'warning: wtc: .*cannot verify' <<<"$lines"); then echo "warned	$l"
+  elif l=$(grep -m1 -E 'verified \(vacuous' <<<"$lines"); then echo "vacuous	$l"
   elif l=$(grep -m1 -E 'verified' <<<"$lines"); then echo "verified	$l"
   elif l=$(grep -m1 -E 'queue access is unresolvable' "$log" | sed -E 's#^[^ ]*/##'); then
     echo "unresolved	$l"
@@ -176,7 +183,7 @@ for lib in RIGTORP MOODY BOOST; do
     # shellcheck disable=SC2086
     "${CLANG}++" -std=c++17 -w $INC -DLIB_$lib -DSHAPE_$shape -fclangir -emit-cir \
       "$CHECK/recall_spsc.cpp" -o "$L/$n.cir"
-    "$WTC_OPT" "$L/$n.cir" --lift-cir-to-wtc --queue-ownership-analysis -o /dev/null >"$L/$n.log" 2>&1 || true
+    "$WTC_OPT" "$L/$n.cir" --lift-cir-to-wtc "$ANALYSIS" -o /dev/null >"$L/$n.log" 2>&1 || true
     tsan=$(tsan_runs "$n" -DLIB_$lib -DSHAPE_$shape)
     tsan_ndebug=$(tsan_runs "$n.ndebug" -DNDEBUG -DLIB_$lib -DSHAPE_$shape)
     k=c; [ "$shape" = OK ] && k=control

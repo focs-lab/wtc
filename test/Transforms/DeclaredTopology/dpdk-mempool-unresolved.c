@@ -10,6 +10,7 @@
 
    RUN: %clang -std=gnu11 -I%S/Inputs -fclangir -emit-cir %s -o %t.cir
    RUN: not wtc-opt %t.cir --lift-cir-to-wtc --queue-ownership-analysis -o /dev/null 2>&1 | FileCheck %s
+   RUN: not wtc-opt %t.cir --lift-cir-to-wtc --queue-ownership-analysis=vacuous-outcome=true -o /dev/null 2>&1 | FileCheck %s --check-prefix=VACUOUS
    RUN: %clang -std=gnu11 -I%S/Inputs -fclangir -emit-cir %s -DRUNTIME -o %t.runtime.cir
    RUN: wtc-opt %t.runtime.cir --lift-cir-to-wtc --queue-ownership-analysis -o /dev/null 2>&1 | FileCheck %s --check-prefix=RUNTIME
    RUN: %clang -std=gnu11 -I%S/Inputs -fclangir -emit-cir %s -DLOOKUP -o %t.lookup.cir
@@ -21,6 +22,11 @@
    CHECK-DAG: error: wtc: queue *@two_getters is declared spsc (by its flags RTE_MEMPOOL_F_SP_PUT | RTE_MEMPOOL_F_SC_GET; no producer access seen) but 2 threads pop from it
    CHECK-DAG: remark: wtc: queue *@no_getter: declared mpsc (by its ops "ring_mp_sc"; no consumer access seen), verified in this translation unit
    CHECK-NOT: declared mpmc
+
+   With vacuous-outcome, a declaration verified only because a side it
+   declares single has no access says so.
+   VACUOUS-DAG: remark: wtc: queue *@one_getter: declared spsc (by its flags RTE_MEMPOOL_F_SP_PUT | RTE_MEMPOOL_F_SC_GET; no producer access seen), verified (vacuous: no producer access seen) in this translation unit
+   VACUOUS-DAG: remark: wtc: queue *@no_getter: declared mpsc (by its ops "ring_mp_sc"; no consumer access seen), verified (vacuous: no consumer access seen) in this translation unit
 
    RUNTIME-DAG: warning: wtc: queue *@by_flags cannot be checked: its flags are computed at run time
    RUNTIME-DAG: warning: wtc: queue *@by_name cannot be checked: its ops are chosen at run time
