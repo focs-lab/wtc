@@ -25,8 +25,8 @@ Whatever it cannot prove keeps the general implementation.
 
 | | |
 |:--|:--|
-| **10×** | the compiler's queue against the program as written, one producer and one consumer, geometric mean over sizes and allocators (5–23×); within 13% of the expert rings ([W1](#the-queue-alone)) |
-| **5.9× · 1.7×** | what each fact buys through the shim: the topology 5.9× (one producer and one consumer instead of the general queue), and on top of it the proof that the consumer only borrows 1.7× in code written against the `shared_ptr` API (a loss at 256 bytes); 5.9 × 1.7 ≈ the 10× above ([W1](#the-queue-alone), [ablation](#what-each-fact-buys)) |
+| **11×** | the compiler's queue against the program as written, one producer and one consumer, geometric mean over sizes and allocators (5–27×); within 16% of the expert rings ([W1](#the-queue-alone)) |
+| **6.6× · 1.7×** | what each fact buys through the shim: the topology 6.6× (one producer and one consumer instead of the general queue), and on top of it the proof that the consumer only borrows 1.7× in code written against the `shared_ptr` API (a loss at 256 bytes); 6.6 × 1.7 ≈ the 11× above ([W1](#the-queue-alone), [ablation](#what-each-fact-buys)) |
 | **= by hand** | on a pipeline the compiler's build is byte for byte the hand-tagged one, 1.8–1.9× the program as written ([W3](#a-pipeline)) |
 | **0 wrong** | verdicts over 43 queues in examples, workloads and two PARSEC programs ([reach](#reach)) |
 | **1.65×** | compile time against the same clang, for code 0.4% larger ([cost](#cost-and-safety)) |
@@ -46,9 +46,9 @@ none of the shared counters: a ring, where the producer writes a slot and
 publishes a count with one store. And if the consumer keeps nothing it
 pops, the element can be lent in place, with no allocation at all. Through
 the shim, the ring for one producer and one consumer is worth about six
-times the general-purpose queue (5.9×, geometric mean over sizes and
-allocators), and lending instead of allocating another 1.7× (a loss at
-256 bytes, 0.94×) ([W1](#the-queue-alone)).
+and a half times the general-purpose queue (6.6×, geometric mean over
+sizes and allocators), and lending instead of allocating another 1.7× (a
+loss at 256 bytes, 0.86×) ([W1](#the-queue-alone)).
 
 Which of these is safe is a fact about the program, not about the queue,
 and no single component holds it. The library is compiled once for every
@@ -107,7 +107,7 @@ a function marked `WTC_LOCK_FREE` that can reach a blocking operation.
 
 ## Results
 
-The numbers come from three sets of legs. The 21 October legs are timed:
+The numbers come from four sets of legs. The 21 October legs are timed:
 reserved cores of one Xeon w9-3495X, their SMT siblings offline, turbo off,
 the rest of the machine quiet, ten repetitions, medians with bootstrap 95%
 intervals; their program as written is the retired two-lock list. The
@@ -119,22 +119,22 @@ written; they report ratios, not absolute speeds to compare across hosts.
 The 27 October legs repeat the pool, W9, W2, W3 and the grain sweep the
 same way on the runtime as it is now: the single consumer's pop of
 26 October, the lock-free queue for one producer and the ring's gated
-wait.
+wait; the 28 October legs repeat the queue alone (W1), the ablation and
+spdlog.
 In them the allocator is a factor: each variant under glibc and jemalloc,
 in W1 and the ablation also under tcmalloc, mimalloc and snmalloc, in W9
 also under mimalloc and in the thread pool also under snmalloc,
 since a queue that hands its elements over through the heap is measuring
 the allocator as much as itself. Each figure below names the leg it is
-drawn from: the queue alone and batching from the 26 October legs, latency,
-the pipeline, its grain and many threads from the 27 October ones (under
-glibc), coarsening from the 21 October one.
+drawn from: the queue alone from the 28 October leg, batching from the
+26 October one, latency, the pipeline, its grain and many threads from the
+27 October ones (under glibc), coarsening from the 21 October one.
 Not repeated on the current runtime (the single consumer's pop and the
 lock-free queue for one producer of 26 October, the ring's gated wait of
-27 October): the queue alone (W1, and W1smt of 21 October), the
-ablation, fusion (its pipeline is the ring, built before the gate),
-batching (W7, the rings before the gate), spdlog (its rerun's binaries
-predate the 26 October runtime changes), PARSEC's ferret and dedup, the
-compile cost, the ThreadSanitizer runs, and coarsening (W8).
+27 October): the queue on SMT siblings (W1smt, 21 October), fusion (its
+pipeline is the ring, built before the gate), batching (W7, the rings
+before the gate), PARSEC's ferret and dedup, the compile cost, and
+coarsening (W8).
 The baselines are the ones the concurrent-queue literature measures
 against:
 
@@ -181,33 +181,42 @@ analysis's own account of each verdict, is
 
 <p align="center"><img src="docs/figures/w1.svg" alt="W1 throughput by element size" width="100%"></p>
 
-One producer and one consumer, on two cores. Against the current
-program as written the compiler's queue is 10× (geometric mean over three
-sizes and five allocators, 5.1–23×), and the same over moodycamel's
-ConcurrentQueue, the best general-purpose library of those measured, which
-the program as written now matches (1.00×). Against the expert rings it is
-within 13%: 0.87× rigtorp's in the geometric mean, behind at 8 bytes
-(0.62–0.71) and within about 10% at 64 and 256 (ahead under glibc only),
-and 2.2× moodycamel's ReaderWriterQueue. Moving the element out instead of lending it runs as
-fast and needs no proof
+One producer and one consumer, on two cores, on the current runtime.
+Against the program as written the compiler's queue is 11× (geometric
+mean over three sizes and five allocators, 5.1–27×; 25× at 8 bytes, 10×
+at 64, 5.6× at 256), and as much over moodycamel's ConcurrentQueue, the
+best general-purpose library of those measured, which the program as
+written about matches (0.94×). Against the expert rings it is within
+16%: 0.84× rigtorp's in the geometric mean, behind at 8 bytes (0.49–0.78)
+and 0.87–1.30× at 64 and 256 (ahead under glibc only), and 2.3×
+moodycamel's ReaderWriterQueue. Moving the element out instead of lending
+it runs about as fast (0.96×) and needs no proof
+([`2026-10-28-eval-w1`](benchmarks/results/2026-10-28-eval-w1/NOTE.md)).
+On 26 October, before the ring's gated wait, it was 10× and 0.87×; most of
+the difference is the program as written at 8 bytes under glibc, which
+runs at 50 or at 16–21 M elements a second depending on the run, and was
+at 50 in four of five repetitions then and in one now
 ([`2026-10-26-eval-w1`](benchmarks/results/2026-10-26-eval-w1/NOTE.md)).
 Against the two-lock list (21 October) the compiler's queue was 17–60×.
 
 ### What each fact buys
 
 The ablation runs the runtime's queues directly, each fact on its own and
-both together. Over the program as written through the shim, the
-step from the general queue to the single-producer ring with the element
-moved out is 17× on the hand-over (geometric mean, 5.3–54): the topology
-alone 8.3×, and moving the element out instead of popping a `shared_ptr`
-2.0× (a loss at 256 bytes). Moving it out needs no proof (`try_pop(T&)`);
-the proof that the consumer only borrows buys the same step for code
-written against the `shared_ptr` API, 1.7× in W1 (3.5× at 8 bytes, 1.6×
-at 64, 0.94× at 256). Against moodycamel holding the element by value, so
-that nothing is allocated on either side, the topology still buys 8.8×
-(26× at 8 bytes, 3× at 256). Against a queue that allocates every element on the heap the
-diagonal is 24×, and no allocator closes it
-([`2026-10-26-eval-ablation`](benchmarks/results/2026-10-26-eval-ablation/NOTE.md)).
+both together, on the current runtime. Over the program as written
+through the shim, the step from the general queue to the single-producer
+ring with the element moved out is 18× on the hand-over (geometric mean,
+5.3–54): the topology alone 8.4×, and moving the element out instead of
+popping a `shared_ptr` 2.1× (a loss at 256 bytes, 0.90×). Moving it out
+needs no proof (`try_pop(T&)`); the proof that the consumer only borrows
+buys the same step for code written against the `shared_ptr` API, 1.7×
+in W1 (3.9× at 8 bytes, 1.5× at 64, 0.86× at 256). Against moodycamel
+holding the element by value, so that nothing is allocated on either
+side, the topology still buys 9.0× (25× at 8 bytes, 3.3× at 256). Against
+a queue that allocates every element on the heap the diagonal is 24×, and
+no allocator closes it
+([`2026-10-28-eval-ablation`](benchmarks/results/2026-10-28-eval-ablation/NOTE.md);
+on 26 October, before the ring's gated wait, 17×, 8.3× and 2.0×:
+[`2026-10-26-eval-ablation`](benchmarks/results/2026-10-26-eval-ablation/NOTE.md)).
 
 ### Latency under load
 
@@ -388,6 +397,22 @@ above, and every build is within 2% of the others; the port trails
 PARSEC's own dedup by 1–2% at two and four threads, with or without the
 compiler. The gain belongs to programs whose stages take microseconds.
 
+spdlog's asynchronous logger (v1.14.1) is one: logging threads hand each
+message to the pool's worker through one queue, a message every few
+hundred nanoseconds, and the analysis reads the pool as written, choosing
+the single-consumer queue when it is built with one worker. On the
+current runtime the compiler's build logs 2.46× the messages a second of
+spdlog as released (geometric mean over 1 to 8 logging threads, three
+message sizes and three allocators; 1.16–6.55×, faster in all 36
+configurations) and makes the p99 of a call 3.7× shorter
+([`2026-10-28-eval-spdlog`](benchmarks/results/2026-10-28-eval-spdlog/NOTE.md)).
+Nearly all of it is the general-purpose queue the port gets without any
+proof, 2.53× a control that keeps spdlog's queue and only waits the way
+the port does. The topology adds 1.02×: 1.03–1.04× from four logging
+threads, 0.98× at one, where the single-consumer queue's changes of 26
+and 27 October (the pop past an unfilled cell, the gated batch wait) cost
+what it saves; it was 1.08× there before them.
+
 ### Cost and safety
 
 | | |
@@ -395,7 +420,7 @@ compiler. The gain belongs to programs whose stages take microseconds.
 | Compile time | 1.65× the same clang on the workloads; of `wtc-cc`'s 4.9 s, emitting ClangIR takes 2.2 and `wtc-opt` 1.0 |
 | Code size | `.text` 81–175 bytes larger than the general build, 0.4% on the workloads |
 | Tests | 309 lit tests, passing at every commit; the runtime's own tests in CI, plain, under ThreadSanitizer and with the contract checks |
-| Races | ThreadSanitizer on the compiler's own output, every positive test, the W3 and W7 builds, ferret at one and two threads a stage and dedup at one, two and four: no report; planted races are reported |
+| Races | ThreadSanitizer on the compiler's own output, every positive test, the W3 and W7 builds, and on the current runtime dedup, ferret and spdlog, 30 runs of each configuration ([`2026-10-28-tsan-apps`](benchmarks/results/2026-10-28-tsan-apps/NOTE.md)): no report from a substituted queue (inline rings, the single-consumer queue with up to eight producers, the lock-free queue for one producer with up to four consumers), every output the original's; ferret's one report is PARSEC's own race on a progress counter, which its own build shows too; planted races are reported |
 | Output | ferret and dedup as PARSEC's own build computes them, at 1, 2 and 4 threads a stage |
 | Contracts | eight planted violations, each caught: a second producer on the spsc ring and on the spmc queue, a second consumer on the single-consumer queue (each under `WTC_CHECK` and ThreadSanitizer), spsc forced on a queue with two producers and two consumers, a plain race, and a borrowed element kept past the next pop |
 | Declared topologies | wrong declarations made on purpose, per audited ring, not per real bug ([`2026-10-26-declared-recall`](benchmarks/results/2026-10-26-declared-recall/NOTE.md)): of 22 in DPDK's examples and supercollider, 6 stop the build and 13 change the check's verdict (the 6 errors, and 7 verified becoming not verifiable); none is verified; of 18 programs misusing `rigtorp::SPSCQueue`, `moodycamel::ReaderWriterQueue` and `boost::lockfree::spsc_queue` from a second thread, all 18 stop the build, where ThreadSanitizer reports 14 to 17 depending on the run (17 without the libraries' assertions); the three wrong declarations DPDK has fixed in its history are of forms the check does not model |
