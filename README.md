@@ -34,16 +34,21 @@ Whatever it cannot prove keeps the general implementation.
 ## Why
 
 <p align="center">
-  <img src="docs/figures/cost.svg" alt="What one element costs: the general-purpose queue makes two allocations, two frees and takes three locks; the SPSC ring one allocation and one free; the inline ring none" width="100%">
+  <img src="docs/figures/cost.svg" alt="What one element costs: the general-purpose queue makes one allocation, one free and three atomic read-modify-writes; the SPSC ring one allocation and one free; the inline ring none" width="100%">
 </p>
 
-The usual concurrent queue is a linked list behind two mutexes: correct for
-any number of producers and consumers, and paying for all of them on every
-element. A program with one producer and one consumer needs none of that: a
-ring, where the producer writes a slot and publishes a counter. And if the
-consumer keeps nothing it pops, the element can live in the slot itself,
-with no allocation at all. Removing the locks is worth about three times;
-removing the allocation, twenty more.
+A general-purpose concurrent queue is correct for any number of producers
+and consumers, and pays for all of them on every element: here each side
+takes its cell with an atomic read-modify-write on a counter the other
+threads of its side share, and the API hands the element out in a freshly
+allocated `shared_ptr`. A program with one producer and one consumer needs
+none of the shared counters: a ring, where the producer writes a slot and
+publishes a count with one store. And if the consumer keeps nothing it
+pops, the element can be lent in place, with no allocation at all. Through
+the shim, the ring for one producer and one consumer is worth about six
+times the general-purpose queue (5.9×, geometric mean over sizes and
+allocators), and lending instead of allocating another 1.7× (a loss at
+256 bytes, 0.94×) ([W1](#the-queue-alone)).
 
 Which of these is safe is a fact about the program, not about the queue,
 and no single component holds it. The library is compiled once for every
@@ -102,7 +107,7 @@ a function marked `WTC_LOCK_FREE` that can reach a blocking operation.
 
 ## Results
 
-The numbers come from two kinds of leg. The 21 October legs are timed:
+The numbers come from three sets of legs. The 21 October legs are timed:
 reserved cores of one Xeon w9-3495X, their SMT siblings offline, turbo off,
 the rest of the machine quiet, ten repetitions, medians with bootstrap 95%
 intervals; their program as written is the retired two-lock list. The
@@ -111,14 +116,28 @@ frequency is not fixed (`WTC_UNPINNED`, see `benchmarks/README.md`): five
 repetitions with the variants interleaved, ratios taken within a
 repetition, and the current general-purpose queue as the program as
 written; they report ratios, not absolute speeds to compare across hosts.
+The 27 October legs repeat the pool, W9, W2, W3 and the grain sweep the
+same way on the runtime as it is now: the single consumer's pop of
+26 October, the lock-free queue for one producer and the ring's gated
+wait.
 In them the allocator is a factor: each variant under glibc and jemalloc,
 in W1 and the ablation also under tcmalloc, mimalloc and snmalloc, in W9
 also under mimalloc and in the thread pool also under snmalloc,
 since a queue that hands its elements over through the heap is measuring
 the allocator as much as itself. Each figure below names the leg it is
-drawn from: the queue alone, the pipeline, its grain, batching and many
-threads from the 26 October legs (under glibc), coarsening from the 21
-October one. The baselines are the ones the concurrent-queue literature measures
+drawn from: the queue alone and batching from the 26 October legs, latency,
+the pipeline, its grain and many threads from the 27 October ones (under
+glibc), coarsening from the 21 October one.
+Not repeated on the current runtime (the single consumer's pop and the
+lock-free queue for one producer of 26 October, the ring's gated wait of
+27 October): the queue alone (W1, and W1smt of 21 October), the
+ablation, fusion (its pipeline is the ring, built before the gate),
+batching (W7, the rings before the gate), spdlog (its rerun's binaries
+predate the 26 October runtime changes), PARSEC's ferret and dedup, the
+compile cost, the ThreadSanitizer runs, coarsening (W8), and the
+two-uses count (measured before the shared blocking query and the new
+queue for one producer).
+The baselines are the ones the concurrent-queue literature measures
 against:
 
 - **B0**, the program as written: the shim's general-purpose queue, since
@@ -222,8 +241,8 @@ the gate's paired A/B is
 Three stages, two queues, 64-byte records. From the unmodified source the
 compiler builds exactly what the best hand-written tags give: 1.90× the
 program as written under glibc and 1.81× under jemalloc, with no
-allocation per record where the program as written makes two (922 cycles a
-record against 2,752); 3.1× over the pipeline with moodycamel's
+allocation per record where the program as written makes two (830 cycles a
+record against 2,476); 3.1× over the pipeline with moodycamel's
 ConcurrentQueue between the stages, and ahead of the expert inline rings
 (16.9 against 14.1 M records a second for rigtorp's). Its tail latency is
 level with theirs: a p99 of 0.27-0.29 µs at every offered rate from 0.5 to
@@ -357,11 +376,13 @@ and run on PARSEC's simlarge and native inputs. Seconds, medians of ten:
 
 The analysis does what a reader would. With one thread a stage it proves
 four of ferret's five queues single-producer and makes them inline rings.
-It refuses dedup as written and says why: the queues are elements of
-arrays, and the threads start in a function that only another file calls.
-With both obstacles removed it proves exactly the reader's topology, three
-inline rings and a list for many producers. All 230 runs compute PARSEC's
-output.
+On dedup as written it counts each array of queues as one queue and stays
+conservative where it must, and says why: the threads start in a function
+that only another file calls (2 exact, 6 conservative). With `main` in the
+same file it proves exactly the reader's topology, three inline rings and
+the queue for many producers ([reach](#reach)). The timings below were
+measured on 21 October, when dedup's queues were made globals to be proved;
+all 230 runs compute PARSEC's output.
 
 Neither program gets faster. A ferret query spends about 13 ms in its
 stages and a dedup chunk about 57 µs, both far to the right of the knee
@@ -375,7 +396,7 @@ compiler. The gain belongs to programs whose stages take microseconds.
 |:--|:--|
 | Compile time | 1.65× the same clang on the workloads; of `wtc-cc`'s 4.9 s, emitting ClangIR takes 2.2 and `wtc-opt` 1.0 |
 | Code size | `.text` 81–175 bytes larger than the general build, 0.4% on the workloads |
-| Tests | 258 lit tests, passing at every commit; the runtime's own tests in CI, plain, under ThreadSanitizer and with the contract checks |
+| Tests | 309 lit tests, passing at every commit; the runtime's own tests in CI, plain, under ThreadSanitizer and with the contract checks |
 | Races | ThreadSanitizer on the compiler's own output, every positive test, the W3 and W7 builds, ferret at one and two threads a stage and dedup at one, two and four: no report; planted races are reported |
 | Output | ferret and dedup as PARSEC's own build computes them, at 1, 2 and 4 threads a stage |
 | Contracts | eight planted violations, each caught: a second producer on the spsc ring and on the spmc queue, a second consumer on the single-consumer queue (each under `WTC_CHECK` and ThreadSanitizer), spsc forced on a queue with two producers and two consumers, a plain race, and a borrowed element kept past the next pop |
@@ -388,16 +409,16 @@ compiler. The gain belongs to programs whose stages take microseconds.
 
 | Piece | State |
 | --- | --- |
-| `wtc` dialect: `mutex` and `queue<T>` types, seven operations, topology and implementation attributes | each operation is verified against the call it lowers to, carries the contract of `decisions/0003`, and answers what it guarantees about progress under its implementation (`decisions/0004`); no memory-ordering attribute yet |
+| `wtc` dialect: `mutex` and `queue<T>` types, ten operations (lock and unlock, push and pop, and three batch operations each for the mutex and for pushes), topology and implementation attributes | each operation is verified against the call it lowers to, carries the contract of `decisions/0003`, and answers what it guarantees about progress under its implementation (`decisions/0004`); no memory-ordering attribute yet |
 | Lifting CIR calls into the dialect | reads operands through the calling convention, including calls with a hidden return slot; driven from C++ source by the tests |
-| Queue ownership analysis | thread instances by call string; a spawn in a loop is many threads, and a counted loop's are recorded as one per iteration, `main` is a thread, parameters resolve by index; a queue pointer loaded from a field, or from a slot or global written more than once, is resolved from every write of it, and an operation that may act on one of several queues counts on each; a queue may be a global, a local, a member of a struct or a heap object, whose verdict is kept on the one constructor call that builds it, or a member of an object the walk cannot place, identified by its record type and offset as that member of every object the one constructor call builds; a thread started with `std::thread` runs the function the constructor was handed, a lambda, a function or a member function, found through the state object the constructor builds, and a thread started below a counted loop through calls that each start exactly one (a vector's `emplace_back`) is one per iteration; whatever it cannot resolve is `unknown`. A topology the program declares is checked: certainly broken fails the build, naming the threads |
+| Queue ownership analysis | thread instances by call string; a spawn in a loop is many threads, and a counted loop's are recorded as one per iteration, `main` is a thread, parameters resolve by index; a queue pointer loaded from a field, or from a slot or global written more than once, is resolved from every write of it, and an operation that may act on one of several queues counts on each; a queue may be a global, a local, a member of a struct or a heap object, whose verdict is kept on the one constructor call that builds it, or a member of an object the walk cannot place, identified by its record type and offset as that member of every object the one constructor call builds; a thread started with `std::thread` runs the function the constructor was handed, a lambda, a function or a member function, found through the state object the constructor builds, and a thread started below a counted loop through calls that each start exactly one (a vector's `emplace_back`) is one per iteration; an array of queues is one queue, every element together; a record built field by field and copied whole (a compound literal) keeps its fields' values; threads started on the two arms of one branch, never both alive, count as one, unless the function or one of its callers can return twice (`setjmp` and its kind) or jumps with `goto`; whatever it cannot resolve is `unknown`. A topology the program declares is checked: certainly broken fails the build, naming the threads |
 | Borrow analysis | proves, for each pop of an spsc queue, that the program keeps neither the returned `shared_ptr` nor a pointer into the element past its next pop |
 | Specialisation | rewrites the topology tag of every queue proved SPSC (to inline storage when its consumer borrows and the element type allows it), of every queue proved to have one consumer and many producers to the segmented queue's single-consumer form, and of every queue proved to have one producer and many consumers to the queue whose consumers claim cells with a compare-and-swap; where a side's threads are all started by one counted loop whose bound is settled before the queue is built, the tag is chosen when the queue is built, from whether that loop will run at most once (`decisions/0005`); anything unclear keeps the general-purpose implementation |
 | Batching | in a function marked `WTC_BATCH`, a loop of pushes in which nothing can wait for an unpublished element becomes one batched run, and a loop that takes and lets go of one mutex on every iteration, with nothing in it that can wait for another thread, holds the mutex across its sections, letting it go every 64 |
 | Progress check | a function marked `WTC_LOCK_FREE` that can reach a blocking operation fails the build with the call chain |
 | Lowering back to CIR | faithful, restores the original argument attributes, and leaves no attribute of ours behind |
 | Specialised implementations | `runtime/spsc_ring.hpp`, an unbounded wait-free ring holding elements in raw storage, popped by moving or by borrowing, published per element or per run; `runtime/segment_queue.hpp`, the general-purpose queue, linearisable, its cells taken with one fetch-and-add and its segments freed through hazard pointers (`runtime/hazard.hpp`), and in its single-consumer form the queue for many producers and one consumer; `runtime/spmc_queue.hpp`, the queue for one producer and many consumers, segments the producer fills and publishes alone and whose cells the consumers claim with a compare-and-swap, lock-free; all tested plain, under ThreadSanitizer and with their contract checks, in CI |
-| Measurements | the harness, ten workloads (W10 is the ablation: the runtime's queues used directly, synchronisation strength and element ownership alone and together) and the baselines above in `benchmarks/`; the evaluation's timed legs in `benchmarks/scripts/campaign.sh`, their results, summaries and notes under `benchmarks/results/`, and the PARSEC ports, ferret and dedup, in `benchmarks/apps/` |
+| Measurements | the harness, eleven workloads (W10 is the ablation: the runtime's queues used directly, synchronisation strength and element ownership alone and together; W11 a thread pool; W12 a pipeline against the same stages fused) and the baselines above in `benchmarks/`; the evaluation's timed legs in `benchmarks/scripts/campaign.sh`, their results, summaries and notes under `benchmarks/results/`, and the PARSEC ports, ferret and dedup, in `benchmarks/apps/` |
 | False-sharing diagnosis | the same thread walk over field accesses; `definite`, `possible` and `cold` verdicts, each a claim with a test; arrays and heap objects are counted as unidentified, not guessed at |
 | Alignment by owner | raises a global a different thread repeatedly touches to a line of its own; kept as a measurement, since on memcached it is close to a build flag |
 
@@ -407,10 +428,14 @@ fields that different threads repeatedly touch in one cache line, and
 [`docs/corpus.md`](docs/corpus.md) says how it was tested, with a census of
 what seventeen codebases pad by hand.
 
-The analysis assumes one translation unit. A queue in an array is
-`unknown`, and a queue whose constructor call also builds another queue (a
-struct's constructor run for two objects) keeps the general-purpose
-implementation: the safe direction, but not the useful one.
+The analysis assumes one translation unit. An array of queues gets one
+verdict for all its elements, which is exact only when every element has
+the same threads, and a queue whose constructor call also builds another
+queue (a struct's constructor run for two objects) keeps the
+general-purpose implementation: the safe direction, but not the useful
+one. Specialisation is chosen from what is legal, not from what pays: the
+two measured crossovers (coarsening above about 100–500 ns between
+sections, fusion above about 18 ns a stage) have no cost model yet.
 [`docs/audit.md`](docs/audit.md) records what is closed and what is not.
 
 </details>
