@@ -1,0 +1,82 @@
+== packet_ordering (wtc-opt exit 0)
+main.c:720:14: remark: wtc: queue *@mbuf_pool: many producers: started in a loop at main.c:776:4
+main.c:720:14: remark: wtc: queue *@mbuf_pool: mpsc (producers: many, consumers: 0)
+main.c:750:18: remark: wtc: queue the heap object made at main.c:750:18: declared spmc (by its flags RING_F_SP_ENQ), verified in this translation unit; it is kept in a structure, and rte_eth_tx_buffer_set_err_callback, whose body is not here, takes a void * that may hold one
+main.c:750:18: remark: wtc: queue the heap object made at main.c:750:18: many consumers: started in a loop at main.c:776:4
+main.c:750:18: remark: wtc: queue the heap object made at main.c:750:18: spmc (producers: 1, consumers: many)
+main.c:755:18: remark: wtc: queue the heap object made at main.c:755:18: consumers: 2 threads, started on different arms of one branch, so at most one exists
+main.c:755:18: remark: wtc: queue the heap object made at main.c:755:18: declared mpsc (by its flags RING_F_SC_DEQ), verified in this translation unit; it is kept in a structure, and rte_eth_tx_buffer_set_err_callback, whose body is not here, takes a void * that may hold one
+main.c:755:18: remark: wtc: queue the heap object made at main.c:755:18: many producers: started in a loop at main.c:776:4
+main.c:755:18: remark: wtc: queue the heap object made at main.c:755:18: mpsc (producers: many, consumers: 1)
+== distributor (wtc-opt exit 0)
+main.c:828:14: remark: wtc: queue the heap object made at main.c:828:14: many producers: 4 threads: lcore_distributor started at main.c:985:3, lcore_rx_and_distributor started at main.c:997:3, lcore_rx started at main.c:1000:3, ...
+main.c:828:14: remark: wtc: queue the heap object made at main.c:828:14: mpsc (producers: many, consumers: 0)
+main.c:866:17: remark: wtc: queue the heap object made at main.c:866:17: many producers: 2 threads: lcore_distributor started at main.c:985:3, lcore_rx_and_distributor started at main.c:997:3
+main.c:866:17: remark: wtc: queue the heap object made at main.c:866:17: mpsc (producers: many, consumers: 1)
+main.c:866:17: warning: wtc: queue the heap object made at main.c:866:17 is declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ); cannot verify: the threads that push to it are each started under a condition of its own, and whether the conditions can hold together is not known
+main.c:871:17: remark: wtc: queue the heap object made at main.c:871:17: declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ), verified in this translation unit; it is handed to rte_free, whose body is not here
+main.c:871:17: remark: wtc: queue the heap object made at main.c:871:17: spsc (producers: 1, consumers: 1)
+== dma (wtc-opt exit 0)
+dmafwd.c:1049:21: remark: wtc: queue *@dma_pktmbuf_pool: consumers: 2 threads, started on different arms of one branch, so at most one exists
+dmafwd.c:1049:21: remark: wtc: queue *@dma_pktmbuf_pool: many producers: 3 threads: rxtx_main_loop started at dmafwd.c:564:3, rx_main_loop started at dmafwd.c:568:3, tx_main_loop started at dmafwd.c:572:3
+dmafwd.c:1049:21: remark: wtc: queue *@dma_pktmbuf_pool: mpsc (producers: many, consumers: 1)
+dmafwd.c:833:32: remark: wtc: queue the heap object made at dmafwd.c:833:32: consumers: 2 threads, started on different arms of one branch, so at most one exists
+dmafwd.c:833:32: remark: wtc: queue the heap object made at dmafwd.c:833:32: declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ), verified in this translation unit; it is kept in a structure, and rte_eth_call_rx_callbacks, whose body is not here, takes a void * that may hold one
+dmafwd.c:833:32: remark: wtc: queue the heap object made at dmafwd.c:833:32: producers: 2 threads, started on different arms of one branch, so at most one exists
+dmafwd.c:833:32: remark: wtc: queue the heap object made at dmafwd.c:833:32: spsc (producers: 1, consumers: 1)
+== bbdev_app (wtc-opt exit 0)
+main.c:1113:24: remark: wtc: queue the heap object made at main.c:1113:24: many producers: started in a loop at main.c:1167:4
+main.c:1113:24: remark: wtc: queue the heap object made at main.c:1113:24: unknown (producers: many, consumers: 0)
+main.c:1120:23: remark: wtc: queue the heap object made at main.c:1120:23: many producers: started in a loop at main.c:1167:4
+main.c:1120:23: remark: wtc: queue the heap object made at main.c:1120:23: unknown (producers: many, consumers: 0)
+main.c:715:6: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+main.c:807:12: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+main.c:840:12: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+rte_bbdev_op.h:1089:9: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+rte_bbdev_op.h:1120:9: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+rte_bbdev_op.h:1195:3: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+rte_bbdev_op.h:1212:3: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+== simple_mp (wtc-opt exit 0)
+main.c:63:7: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+main.c:68:3: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+mp_commands.c:18:6: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+mp_commands.c:21:6: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+mp_commands.c:23:3: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+== qos_sched (wtc-opt exit 0)
+app_thread.c:115:13: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+app_thread.c:141:12: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+app_thread.c:154:11: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+app_thread.c:176:12: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+app_thread.c:91:8: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+init.c:361:27: remark: wtc: queue the heap object made at init.c:361:27: many producers: started on every worker lcore at main.c:194:2
+init.c:361:27: remark: wtc: queue the heap object made at init.c:361:27: mpsc (producers: many, consumers: 0)
+== efd_server (wtc-opt exit 0)
+init.c:188:19: remark: wtc: queue the heap object made at init.c:188:19: declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ; no consumer access seen), verified in this translation unit; it is kept in a structure, and rte_efd_update, whose body is not here, takes a void * that may hold one
+init.c:188:19: remark: wtc: queue the heap object made at init.c:188:19: spsc (producers: 1, consumers: 0)
+init.c:79:17: remark: wtc: queue *@pktmbuf_pool: spsc (producers: 1, consumers: 0)
+== efd_node (wtc-opt exit 0)
+node.c:369:5: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+== mp_server (wtc-opt exit 0)
+init.c:168:21: remark: wtc: queue the heap object made at init.c:168:21: declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ; no consumer access seen), verified in this translation unit; it is kept in a structure, and rte_eth_call_rx_callbacks, whose body is not here, takes a void * that may hold one
+init.c:168:21: remark: wtc: queue the heap object made at init.c:168:21: spsc (producers: 1, consumers: 0)
+init.c:77:17: remark: wtc: queue *@pktmbuf_pool: spsc (producers: 1, consumers: 0)
+== mp_client (wtc-opt exit 0)
+client.c:249:13: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+== ip_pipeline (wtc-opt exit 0)
+pipeline.c:89:13: remark: wtc: queue the heap object made at pipeline.c:89:13: many producers: cli_process may run any number of times: its address is taken, so it may run on any thread
+pipeline.c:89:13: remark: wtc: queue the heap object made at pipeline.c:89:13: unknown (producers: many, consumers: 0)
+pipeline.c:89:13: warning: wtc: queue the heap object made at pipeline.c:89:13 is declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ; no consumer access seen, and by rte_ring_sp_enqueue at thread.c:757:12); cannot verify: the queue object could not be identified
+pipeline.c:98:13: remark: wtc: queue the heap object made at pipeline.c:98:13: many consumers: cli_process may run any number of times: its address is taken, so it may run on any thread
+pipeline.c:98:13: remark: wtc: queue the heap object made at pipeline.c:98:13: unknown (producers: 0, consumers: many)
+pipeline.c:98:13: warning: wtc: queue the heap object made at pipeline.c:98:13 is declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ; no producer access seen, and by rte_ring_sc_dequeue at thread.c:762:12); cannot verify: the queue object could not be identified
+thread.c:116:14: remark: wtc: queue the heap object made at thread.c:116:14: many consumers: started on every worker lcore at main.c:243:2
+thread.c:116:14: remark: wtc: queue the heap object made at thread.c:116:14: many producers: cli_process may run any number of times: its address is taken, so it may run on any thread
+thread.c:116:14: remark: wtc: queue the heap object made at thread.c:116:14: unknown (producers: many, consumers: many)
+thread.c:116:14: warning: wtc: queue the heap object made at thread.c:116:14 is declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ, and by rte_ring_sp_enqueue at thread.c:243:12, and by rte_ring_sc_dequeue at thread.c:435:15); cannot verify: the queue object could not be identified
+thread.c:128:14: remark: wtc: queue the heap object made at thread.c:128:14: many consumers: cli_process may run any number of times: its address is taken, so it may run on any thread
+thread.c:128:14: remark: wtc: queue the heap object made at thread.c:128:14: many producers: started on every worker lcore at main.c:243:2
+thread.c:128:14: remark: wtc: queue the heap object made at thread.c:128:14: unknown (producers: many, consumers: many)
+thread.c:128:14: warning: wtc: queue the heap object made at thread.c:128:14 is declared spsc (by its flags RING_F_SP_ENQ | RING_F_SC_DEQ, and by rte_ring_sp_enqueue at thread.c:450:12, and by rte_ring_sc_dequeue at thread.c:248:12); cannot verify: the queue object could not be identified
+thread.c:2206:15: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+thread.c:2221:12: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+== pipeline (wtc-opt exit 0)

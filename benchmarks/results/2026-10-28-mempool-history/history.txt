@@ -1,0 +1,35 @@
+== dumpcap-before (wtc-opt exit 0)
+main.c:694:7: remark: wtc: queue the heap object made at main.c:694:7: declared mpsc (by its ops "ring_mp_sc"; no consumer access seen), verified in this translation unit; rte_mempool_lookup hands pools to code that finds them by name
+main.c:694:7: remark: wtc: queue the heap object made at main.c:694:7: spsc (producers: 1, consumers: 0)
+main.c:912:6: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+== pdump-before (wtc-opt exit 0)
+rte_pdump.c:127:8: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+rte_pdump.c:137:13: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+== vhost-before (wtc-opt exit 0)
+iotlb.c:111:3: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+iotlb.c:126:3: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+iotlb.c:147:4: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+iotlb.c:164:8: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+iotlb.c:171:9: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+iotlb.c:191:4: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+iotlb.c:228:4: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+iotlb.c:37:3: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+iotlb.c:71:8: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+iotlb.c:78:9: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+== dumpcap-after (wtc-opt exit 0)
+main.c:694:7: remark: wtc: queue the heap object made at main.c:694:7: spsc (producers: 1, consumers: 0)
+main.c:912:6: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+== pdump-after (wtc-opt exit 0)
+rte_pdump.c:127:8: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+rte_pdump.c:137:13: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+== vhost-after (wtc-opt exit 0)
+iotlb.c:111:3: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+iotlb.c:126:3: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+iotlb.c:147:4: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+iotlb.c:164:8: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+iotlb.c:171:9: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+iotlb.c:191:4: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+iotlb.c:228:4: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+iotlb.c:37:3: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+iotlb.c:71:8: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
+iotlb.c:78:9: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
