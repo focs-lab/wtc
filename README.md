@@ -309,8 +309,21 @@ Holding a mutex across 64 critical sections is 11–12× faster when nothing
 happens between them. With work between sections the batched loop does
 that work under the lock, so it turns into a loss somewhere between 100 and
 500 ns, sooner with fewer threads, and it costs fairness: Jain's index
-falls to 0.59 at eight threads. Legal is not the same as profitable; an
-estimate of that work is the next step for this transformation.
+falls to 0.59 at eight threads. Legal is not the same as profitable, so the
+compiler now estimates that work: it counts the operations of one
+iteration outside the critical section in the CIR, turns the count into
+nanoseconds with a constant for the class of host, and holds the mutex only
+under the crossover W8 measured on that class for the threads that take it
+(the dashed lines: where W8 stops being batched, 152 ns of work with two
+threads or a count it cannot make, 245 ns with four to eight). On W8
+rebuilt with its work visible to the compiler it batches at 0–100 ns and
+refuses at 200 and 500, where it runs 1.15–2.16× the batched loop
+([`2026-10-28-w8-cost`](benchmarks/results/2026-10-28-w8-cost/NOTE.md),
+untimed). The crossover is the host's as much as the program's: on that
+Cascade Lake host batching already loses from about 50 ns with four and
+eight threads, so the host has a class of its own, with which W8, its
+threads uncounted, is batched there only up to about 45 ns of work
+([`decisions/0006`](decisions/0006-when-coarsening-pays.md)).
 
 ### Many threads
 
@@ -438,7 +451,7 @@ what it saves; it was 1.08× there before them.
 | Queue ownership analysis | thread instances by call string; a spawn in a loop is many threads, and a counted loop's are recorded as one per iteration, `main` is a thread, parameters resolve by index; a queue pointer loaded from a field, or from a slot or global written more than once, is resolved from every write of it, and an operation that may act on one of several queues counts on each; a queue may be a global, a local, a member of a struct or a heap object, whose verdict is kept on the one constructor call that builds it, or a member of an object the walk cannot place, identified by its record type and offset as that member of every object the one constructor call builds; a thread started with `std::thread` runs the function the constructor was handed, a lambda, a function or a member function, found through the state object the constructor builds, and a thread started below a counted loop through calls that each start exactly one (a vector's `emplace_back`) is one per iteration; an array of queues is one queue, every element together; a record built field by field and copied whole (a compound literal) keeps its fields' values; threads started on the two arms of one branch, never both alive, count as one, unless the function or one of its callers can return twice (`setjmp` and its kind) or jumps with `goto`; whatever it cannot resolve is `unknown`. A topology the program declares is checked: certainly broken fails the build, naming the threads. Declarations are read from the shim's tag, from a DPDK ring's flags and its `sp`/`sc` calls, from a DPDK mempool's flags or ops (an mbuf's free counted on its pool when its allocation is in sight, and on every pool that may hold mbufs when not), and from the type of four libraries' single-producer single-consumer queues |
 | Borrow analysis | proves, for each pop of an spsc queue, that the program keeps neither the returned `shared_ptr` nor a pointer into the element past its next pop |
 | Specialisation | rewrites the topology tag of every queue proved SPSC (to inline storage when its consumer borrows and the element type allows it), of every queue proved to have one consumer and many producers to the segmented queue's single-consumer form, and of every queue proved to have one producer and many consumers to the queue whose consumers claim cells with a compare-and-swap; where a side's threads are all started by one counted loop whose bound is settled before the queue is built, the tag is chosen when the queue is built, from whether that loop will run at most once (`decisions/0005`); anything unclear keeps the general-purpose implementation |
-| Batching | in a function marked `WTC_BATCH`, a loop of pushes in which nothing can wait for an unpublished element becomes one batched run, and a loop that takes and lets go of one mutex on every iteration, with nothing in it that can wait for another thread, holds the mutex across its sections, letting it go every 64 |
+| Batching | in a function marked `WTC_BATCH`, a loop of pushes in which nothing can wait for an unpublished element becomes one batched run, and a loop that takes and lets go of one mutex on every iteration, with nothing in it that can wait for another thread, holds the mutex across its sections, letting it go every 64, where the work between sections is estimated under the crossover measured for the class of host and the number of threads that take the mutex (`decisions/0006`) |
 | Progress check | a function marked `WTC_LOCK_FREE` that can reach a blocking operation fails the build with the call chain |
 | Lowering back to CIR | faithful, restores the original argument attributes, and leaves no attribute of ours behind |
 | Specialised implementations | `runtime/spsc_ring.hpp`, an unbounded wait-free ring holding elements in raw storage, popped by moving or by borrowing, published per element or per run; `runtime/segment_queue.hpp`, the general-purpose queue, linearisable, its cells taken with one fetch-and-add and its segments freed through hazard pointers (`runtime/hazard.hpp`), and in its single-consumer form the queue for many producers and one consumer; `runtime/spmc_queue.hpp`, the queue for one producer and many consumers, segments the producer fills and publishes alone and whose cells the consumers claim with a compare-and-swap, lock-free; all tested plain, under ThreadSanitizer and with their contract checks, in CI |
@@ -457,9 +470,11 @@ verdict for all its elements, which is exact only when every element has
 the same threads, and a queue whose constructor call also builds another
 queue (a struct's constructor run for two objects) keeps the
 general-purpose implementation: the safe direction, but not the useful
-one. Specialisation is chosen from what is legal, not from what pays: the
-two measured crossovers (coarsening above about 100–500 ns between
-sections, fusion above about 18 ns a stage) have no cost model yet.
+one. Specialisation is chosen from what is legal, not from what pays. Of
+the two measured crossovers, coarsening's (about 100–500 ns between
+sections on one host, 50–180 on another) has a cost model, whose
+thresholds belong to the host it was measured on; fusion's (about 18 ns a
+stage) has a cost condition written down and no pass.
 [`docs/audit.md`](docs/audit.md) records what is closed and what is not.
 
 </details>
