@@ -127,9 +127,13 @@ once. ferret's only report is PARSEC's own race on a progress counter
 (`cnt_enqueue`, read by the output stage while the loader increments it),
 in 24 of 210 runs of the port's builds, as often on the general queue as
 on the compiler's choice, and in 74 of 90 runs of PARSEC's own build
-under ThreadSanitizer. The lit suite runs every positive integration
-test's program the same way, and a negative control shows the build
-reports a race when a ring is forced on a queue with two producers. The
+under ThreadSanitizer. The ports of ThreadPool and BS::thread_pool
+(`2026-10-28-pool-libs`, `benchmarks/scripts/pool_apps_tsan.sh`) run 30
+times in each of 16 configurations, on spsc, the lock-free queue for one
+producer, the single-consumer queue and the general queue, with no
+report and every run's checks passed. The lit suite runs every positive
+integration test's program the same way, and a negative control shows
+the build reports a race when a ring is forced on a queue with two producers. The
 declared-topology check's recall (`2026-10-26-declared-recall`, per
 audited ring, not per real bug): of 22 declarations in DPDK's examples
 and supercollider made wrong on purpose, 6 stop the build and 13 change
@@ -244,6 +248,19 @@ these supersede its ratios.
   logging thread: the single-consumer queue's new pop and its gated batch
   wait cost where its worker most often finds it empty, and the leg does
   not separate the two.
+- Two thread-pool libraries (`2026-10-28-pool-libs`, ThreadPool and
+  BS::thread_pool ported to the shim; untimed, on one socket of the
+  two-socket Xeon Gold 6230, paired within a round): with one submitting
+  thread the compiler's build is 2.24× and 2.18× the library as released
+  (0.99–6.25), of which the topology is 1.17× and 1.12× (0.99–1.56; spsc
+  chosen when ThreadPool's pool is built with one worker, spmc otherwise
+  and in BS::thread_pool at every size), the port's lock-free queue 1.7×
+  against the library's locked one waiting the same way, and spinning
+  instead of sleeping 1.1× (the ports have no blocking pop; their idle
+  workers spin and then yield). The hand declaration equals the
+  compiler's choice (1.00×). With four submitting threads the general
+  queue stays (1.00×), and BS::thread_pool's port loses at one worker
+  (0.79–0.92×), where the library as released is at its fastest.
 - Latency under load (`2026-10-27-eval-w2`, after the ring's gate): every
   queue keeps up to 10 M/s except moodycamel's ConcurrentQueue; at every
   rate the runtime's ring, bare or through the shim, has the shortest

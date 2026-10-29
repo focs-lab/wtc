@@ -1,0 +1,16 @@
+start 2026-10-28T09:05:28Z
+host cb9176d1c0ef kernel 6.12.63+deb13-amd64
+cpu Intel(R) Xeon(R) Gold 6230 CPU @ 2.10GHz
+allowed 20-39
+governor powersave
+rounds_per_ns 0.8754
+reps 12 run_seconds 0.5 works 0 100 1000 10000 workers 1 2 4 8 submitters 4
+threadpool compiler=tools/wtc-cc, ClangIR 
+threadpool wtc=
+threadpool threadpool=9a42ec1329f2
+threadpool orig-clang=clang++-18 -O2
+bs-thread-pool compiler=tools/wtc-cc, ClangIR 
+bs-thread-pool wtc=
+bs-thread-pool bs-thread-pool=bd4533f1f70c
+bs-thread-pool orig-clang=clang++-18 -O2
+end 2026-10-28T09:50:08Z

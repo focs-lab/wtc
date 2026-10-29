@@ -1,0 +1,47 @@
+== threadpool-generic
+        1 wtc: queue tasks in any ThreadPool: consumers: one thread per iteration of the loop at ThreadPool.h:41:5, so one when it runs at most once
+        1 wtc: queue tasks in any ThreadPool: every pop moves its element out or only borrows it (2 pops)
+        1 wtc: queue tasks in any ThreadPool: many consumers: reached by a call in a loop at ThreadPool.h:42:9
+        1 wtc: queue tasks in any ThreadPool: spmc (producers: 1, consumers: many)
+== threadpool-multi-generic
+        1 wtc: queue tasks in any ThreadPool: consumers: one thread per iteration of the loop at ThreadPool.h:41:5, so one when it runs at most once
+        1 wtc: queue tasks in any ThreadPool: many consumers: reached by a call in a loop at ThreadPool.h:42:9
+        1 wtc: queue tasks in any ThreadPool: many producers: reached by a call in a loop at bench.cpp:190:13
+        1 wtc: queue tasks in any ThreadPool: mpmc (producers: many, consumers: many)
+== threadpool-compiler
+        1 wtc: queue tasks in any ThreadPool: consumers: one thread per iteration of the loop at ThreadPool.h:41:5, so one when it runs at most once
+        1 wtc: queue tasks in any ThreadPool: every pop moves its element out or only borrows it (2 pops)
+        1 wtc: queue tasks in any ThreadPool: many consumers: reached by a call in a loop at ThreadPool.h:42:9
+        1 wtc: queue tasks in any ThreadPool: spmc (producers: 1, consumers: many)
+        1 wtc: specialised at run time: spsc when the loop at ThreadPool.h:41:5 (consumers) runs at most once, else spmc
+== threadpool-multi-compiler
+        1 wtc: queue tasks in any ThreadPool: consumers: one thread per iteration of the loop at ThreadPool.h:41:5, so one when it runs at most once
+        1 wtc: queue tasks in any ThreadPool: many consumers: reached by a call in a loop at ThreadPool.h:42:9
+        1 wtc: queue tasks in any ThreadPool: many producers: reached by a call in a loop at bench.cpp:190:13
+        1 wtc: queue tasks in any ThreadPool: mpmc (producers: many, consumers: many)
+        1 wtc: specialised at run time: mpsc when the loop at ThreadPool.h:41:5 (consumers) runs at most once, else generic
+== threadpool-hand
+        1 wtc: queue tasks in any ThreadPool: consumers: one thread per iteration of the loop at ThreadPool.h:41:5, so one when it runs at most once
+        1 wtc: queue tasks in any ThreadPool: declared spmc, verified
+        1 wtc: queue tasks in any ThreadPool: every pop moves its element out or only borrows it (2 pops)
+        1 wtc: queue tasks in any ThreadPool: many consumers: reached by a call in a loop at ThreadPool.h:42:9
+        1 wtc: queue tasks in any ThreadPool: spmc (producers: 1, consumers: many)
+== bs-thread-pool-generic
+        1 wtc: queue tasks in any BS::thread_pool<BS::tp::none>: many consumers: reached by a call in a loop at BS_thread_pool.hpp:2046:26
+        1 wtc: queue tasks in any BS::thread_pool<BS::tp::none>: spmc (producers: 1, consumers: many)
+== bs-thread-pool-multi-generic
+        1 wtc: queue tasks in any BS::thread_pool<BS::tp::none>: many consumers: reached by a call in a loop at BS_thread_pool.hpp:2046:26
+        1 wtc: queue tasks in any BS::thread_pool<BS::tp::none>: many producers: reached by a call in a loop at bench.cpp:195:13
+        1 wtc: queue tasks in any BS::thread_pool<BS::tp::none>: mpmc (producers: many, consumers: many)
+== bs-thread-pool-compiler
+        1 wtc: queue tasks in any BS::thread_pool<BS::tp::none>: many consumers: reached by a call in a loop at BS_thread_pool.hpp:2046:26
+        1 wtc: queue tasks in any BS::thread_pool<BS::tp::none>: spmc (producers: 1, consumers: many)
+        1 wtc: specialised: constructor tag rewritten to spmc
+== bs-thread-pool-multi-compiler
+        1 wtc: queue tasks in any BS::thread_pool<BS::tp::none>: many consumers: reached by a call in a loop at BS_thread_pool.hpp:2046:26
+        1 wtc: queue tasks in any BS::thread_pool<BS::tp::none>: many producers: reached by a call in a loop at bench.cpp:195:13
+        1 wtc: queue tasks in any BS::thread_pool<BS::tp::none>: mpmc (producers: many, consumers: many)
+== bs-thread-pool-hand
+        1 wtc: queue tasks in any BS::thread_pool<BS::tp::none>: declared spmc, verified
+        1 wtc: queue tasks in any BS::thread_pool<BS::tp::none>: many consumers: reached by a call in a loop at BS_thread_pool.hpp:2046:26
+        1 wtc: queue tasks in any BS::thread_pool<BS::tp::none>: spmc (producers: 1, consumers: many)

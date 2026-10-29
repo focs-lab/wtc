@@ -426,6 +426,32 @@ threads, 0.98× at one, where the single-consumer queue's changes of 26
 and 27 October (the pop past an unfilled cell, the gated batch wait) cost
 what it saves; it was 1.08× there before them.
 
+Two thread-pool libraries as they are used, ThreadPool (2014) and
+BS::thread_pool (v5.1.0), are ported the same way: the pool's task queue
+becomes the shim's, and nothing else changes shape. With the main thread
+submitting, the analysis reads both as a reader does, one producer and
+many consumers, and its choice equals the hand declaration. ThreadPool
+starts its workers in a counted loop in its constructor, so the tag is
+chosen when the pool is built (spsc with one worker); BS::thread_pool's
+loop counts to a member in another function, so its queue is spmc at
+every size. With one submitting thread the compiler's builds run about
+2.2× the libraries as released, 2.24× and 2.18× (geometric means over 1
+to 8 workers and 0 to 10 µs of work a task; 0.99–6.25×), and that is two
+factors: the runtime's general queue, the port built with
+`--no-specialize`, about 1.9× (1.90× and 1.93×), times the topology the
+compiler proves, 1.17× and 1.12× (up to 1.56× at eight workers and short
+tasks). The general queue's share is in turn the port's lock-free queue
+against the library's locked one, both waiting the same way, 1.7×, and
+waiting by spinning instead of sleeping, 1.1×: the ports' workers spin
+and then yield where the libraries' sleep, which costs a core the leg
+does not count; the shim's blocking pop would let them sleep, and the
+ports do not use it yet. With four submitting threads
+the general queue stays (1.00×), and BS::thread_pool's port loses at one
+worker, 0.79–0.92×, where the library as released is at its fastest. The
+leg is untimed, on one socket of a two-socket Xeon Gold 6230, and
+reports ratios within a round
+([`2026-10-28-pool-libs`](benchmarks/results/2026-10-28-pool-libs/NOTE.md)).
+
 ### Cost and safety
 
 | | |
@@ -433,7 +459,7 @@ what it saves; it was 1.08× there before them.
 | Compile time | 1.65× the same clang on the workloads; of `wtc-cc`'s 4.9 s, emitting ClangIR takes 2.2 and `wtc-opt` 1.0 |
 | Code size | `.text` 81–175 bytes larger than the general build, 0.4% on the workloads |
 | Tests | 327 lit tests, passing at every commit; the runtime's own tests in CI, plain, under ThreadSanitizer and with the contract checks |
-| Races | ThreadSanitizer on the compiler's own output, every positive test, the W3 and W7 builds, and on the current runtime dedup, ferret and spdlog, 30 runs of each configuration ([`2026-10-28-tsan-apps`](benchmarks/results/2026-10-28-tsan-apps/NOTE.md)): no report from a substituted queue (inline rings, the single-consumer queue with up to eight producers, the lock-free queue for one producer with up to four consumers), every output the original's; ferret's one report is PARSEC's own race on a progress counter, which its own build shows too; planted races are reported |
+| Races | ThreadSanitizer on the compiler's own output, every positive test, the W3 and W7 builds, and on the current runtime dedup, ferret and spdlog, 30 runs of each configuration ([`2026-10-28-tsan-apps`](benchmarks/results/2026-10-28-tsan-apps/NOTE.md)): no report from a substituted queue (inline rings, the single-consumer queue with up to eight producers, the lock-free queue for one producer with up to four consumers), every output the original's; ferret's one report is PARSEC's own race on a progress counter, which its own build shows too; the ports of ThreadPool and BS::thread_pool, 30 runs of each of 16 configurations on spsc, the lock-free queue for one producer, the single-consumer queue and the general queue, no report and every check passed ([`2026-10-28-pool-libs`](benchmarks/results/2026-10-28-pool-libs/NOTE.md)); planted races are reported |
 | Output | ferret and dedup as PARSEC's own build computes them, at 1, 2 and 4 threads a stage |
 | Contracts | eight planted violations, each caught: a second producer on the spsc ring and on the spmc queue, a second consumer on the single-consumer queue (each under `WTC_CHECK` and ThreadSanitizer), spsc forced on a queue with two producers and two consumers, a plain race, and a borrowed element kept past the next pop |
 | Declared topologies | wrong declarations made on purpose, per audited ring, not per real bug ([`2026-10-26-declared-recall`](benchmarks/results/2026-10-26-declared-recall/NOTE.md)): of 22 in DPDK's examples and supercollider, 6 stop the build and 13 change the check's verdict (the 6 errors, and 7 verified becoming not verifiable); none is verified; of 18 programs misusing `rigtorp::SPSCQueue`, `moodycamel::ReaderWriterQueue` and `boost::lockfree::spsc_queue` from a second thread, all 18 stop the build, where ThreadSanitizer reports 14 to 17 depending on the run (17 without the libraries' assertions); of the three wrong declarations DPDK has fixed in its history, the two mempools are modelled since 28 October and neither is caught, before or after the fix, because the threads that break them are in another process or in other files ([`2026-10-28-mempool-history`](benchmarks/results/2026-10-28-mempool-history/NOTE.md)); the third is a driver's ring |
