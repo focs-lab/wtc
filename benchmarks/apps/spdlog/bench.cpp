@@ -104,6 +104,12 @@ int main(int argc, char** argv) {
     while (ready.load() < threads) cpu_relax();
     go.store(true, std::memory_order_release);
     for (auto& th : loggers) th.join();
+#ifdef SPDLOG_BENCH_DRAIN
+    // A queue without an order between producers may hand the flush below
+    // to the worker before the logging threads' last messages (wtc_q.h,
+    // SPDLOG_WTC_HAND_LANED): wait until the worker has taken them all.
+    while (spdlog::thread_pool()->queue_size() != 0) cpu_relax();
+#endif
     log->flush();  // returns once the workers have written everything
     const std::uint64_t t_end = now_ns();
     const double secs = static_cast<double>(t_end - t_first.load()) / 1e9;

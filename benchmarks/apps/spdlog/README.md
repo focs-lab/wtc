@@ -54,6 +54,21 @@ The pool's queue is spdlog's one multi-producer, multi-consumer queue
 whatever the number of workers, because that number is only known when the
 pool is built. The compiler makes the choice there.
 
+## Relaxing the order between logging threads
+
+`LANED=1 build.sh` adds two builds made with clang++-18 rather than
+`wtc-cc`: the pool's queue declared `mpsc` (`spdlog-hand-cxx`), and the
+same queue on the laned experiment (`spdlog-laned-cxx`), which keeps each
+logging thread's order and none between threads (`runtime/laned_mpsc.hpp`,
+an experimental tag the compiler does not know). It measures the ceiling
+of that relaxation, and it is not a correct substitution here: spdlog
+observes the order between producers. `flush` and the pool's terminate
+message are pushed by a thread that has joined the logging threads and
+must come out after their messages; on the laned queue they can overtake
+them, so `flush` returns early and shutdown drops what is left. Both builds
+therefore wait for the queue to drain before the final flush
+(`SPDLOG_BENCH_DRAIN`).
+
 ## Building and running
 
     benchmarks/apps/spdlog/fetch.sh <spdlog-dir>

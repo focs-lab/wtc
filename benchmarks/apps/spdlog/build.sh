@@ -15,6 +15,9 @@
 #                     the pool is built from its number of workers
 #   spdlog-hand       the port with the pool's queue declared mpsc by hand
 #                     (B3), which the compiler checks
+#   spdlog-hand-cxx,  with LANED=1: the tag declared mpsc, and the laned
+#   spdlog-laned-cxx  queue's experimental tag, both built with clang++-18
+#                     (see below)
 #
 #   build.sh <spdlog-dir> <out-dir>
 #
@@ -47,6 +50,18 @@ build() { # name, wtc-cc flags...
 build generic  --no-specialize
 build compiler
 build hand     --no-specialize -DSPDLOG_WTC_HAND_MPSC
+# LANED=1 adds the experiment of relaxing the order between logging
+# threads (wtc_q.h, SPDLOG_WTC_HAND_LANED), which the compiler does not
+# know, so it is built with clang++-18, and beside it the tag declared
+# mpsc built the same way, so that the two differ only in the queue. Both
+# wait for the queue to drain before the final flush.
+if [ "${LANED:-0}" = 1 ]; then
+  for v in hand:-DSPDLOG_WTC_HAND_MPSC laned:"-DSPDLOG_WTC_HAND_LANED -DWTC_LANED_MPSC"; do
+    # shellcheck disable=SC2086
+    clang++-18 -O2 -std=c++17 -I"$W/include" -I"$WTC/shim" $INC ${v#*:} -DSPDLOG_BENCH_DRAIN \
+      "$HERE/bench.cpp" -lpthread -o "bin/spdlog-${v%%:*}-cxx"
+  done
+fi
 if [ "${TSAN:-0}" = 1 ]; then
   build compiler-tsan --tsan -O1 -g
 fi

@@ -37,7 +37,17 @@
 namespace spdlog {
 namespace details {
 
-#ifdef SPDLOG_WTC_HAND_MPSC
+#if defined(SPDLOG_WTC_HAND_LANED)
+// An experiment, not a substitution: the laned queue (shim/topology.hpp,
+// runtime/laned_mpsc.hpp) keeps each logging thread's order and none
+// between them, and spdlog observes that order. A flush or the pool's
+// terminate message, pushed by a thread after it has joined the logging
+// threads, may come out before their messages: flush then returns early
+// and shutdown drops what is left. This build measures the ceiling of
+// relaxing the order, with bench.cpp waiting for the queue to drain
+// before it flushes (SPDLOG_BENCH_DRAIN).
+#define SPDLOG_WTC_TAG wtc::topology::mpsc_laned
+#elif defined(SPDLOG_WTC_HAND_MPSC)
 #define SPDLOG_WTC_TAG wtc::topology::mpsc
 #else
 #define SPDLOG_WTC_TAG
