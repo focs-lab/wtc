@@ -163,6 +163,30 @@ target_link_libraries(segment_queue_one_consumer_stall_stress PRIVATE wtc_rt_fla
 target_compile_definitions(segment_queue_one_consumer_stall_stress PRIVATE WTC_STRESS_ONE_CONSUMER=1 WTC_STRESS_STALL=1)
 add_test(NAME segment_queue_one_consumer_stall_stress COMMAND segment_queue_one_consumer_stall_stress 200000)
 
+# The queue that keeps each producer's order and no order between
+# producers: its unit tests, the stress run with producers that come and
+# go, and its test that must fail: a second consumer.
+add_executable(laned_mpsc_test laned_mpsc_test.cpp)
+target_link_libraries(laned_mpsc_test PRIVATE wtc_rt_flags)
+add_test(NAME laned_mpsc_test COMMAND laned_mpsc_test)
+
+add_executable(laned_mpsc_stress laned_mpsc_stress.cpp)
+target_link_libraries(laned_mpsc_stress PRIVATE wtc_rt_flags)
+add_test(NAME laned_mpsc_stress COMMAND laned_mpsc_stress 300000)
+
+add_executable(laned_mpsc_two_consumers laned_mpsc_stress.cpp)
+target_link_libraries(laned_mpsc_two_consumers PRIVATE wtc_rt_flags)
+target_compile_definitions(laned_mpsc_two_consumers PRIVATE WTC_STRESS_TWO_CONSUMERS=1)
+if(WTC_CHECK)
+  add_test(NAME laned_mpsc_two_consumers_is_caught
+           COMMAND sh -c "$<TARGET_FILE:laned_mpsc_two_consumers> 100000 2>&1 | grep -q 'MPSC contract violated'")
+elseif(WTC_RT_SANITIZE STREQUAL "thread")
+  add_test(NAME laned_mpsc_two_consumers_is_caught
+           COMMAND sh -c "$<TARGET_FILE:laned_mpsc_two_consumers> 100000 2>&1 | grep -qE 'ThreadSanitizer: (data race|heap-use-after-free)'")
+  set_tests_properties(laned_mpsc_two_consumers_is_caught PROPERTIES
+                       ENVIRONMENT "TSAN_OPTIONS=halt_on_error=1:symbolize=0")
+endif()
+
 # The lemmas of docs/correctness.md, each on the interleaving its sketch
 # relies on, forced by holding a thread at a named point (lemma_util.hpp).
 add_executable(lemma_rings_test lemma_rings_test.cpp)

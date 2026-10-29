@@ -21,6 +21,7 @@ Every implementation carries, in its header comment:
 | `segment_queue.hpp` | nothing: it is `wtc::queue<T>`'s general-purpose implementation | none: any number of producers and consumers |
 | `segment_queue.hpp`, single-consumer form | `wtc::queue<T>` | exactly one thread ever pops, any number push, and the destructor runs after all are done |
 | `spmc_queue.hpp` | `wtc::queue<T>` | exactly one thread ever pushes, any number pop, and the destructor runs after all are done |
+| `laned_mpsc.hpp` | `wtc::queue<T>`, only in a build with `WTC_LANED_MPSC`, as an experiment | the single-consumer form's fact, and that no thread can observe the order between elements of different producers |
 | `stream_gate.hpp` | nothing: whether a single consumer waits for a batch, shared by the ring and the single-consumer form | none |
 | `hazard.hpp` | nothing: hazard pointers for the segmented queues, one slot for pushes and one for pops | none |
 
@@ -61,6 +62,20 @@ to its length of them), allocating past 64 of them. A producer that stops for ev
 reserving and filling a cell keeps the consumer's head there, so the
 segments after it are never freed.
 
+`laned_mpsc<Slot>` gives up the one order the single-consumer form keeps
+that a program may not need: between producers. Every producer thread
+pushes into an spsc ring of its own, its lane, found through a table of the
+thread's and made on its first push under the only lock; the consumer
+takes up to 64 elements from a lane before it moves to the next, and
+answers empty after one sweep of all of them finds nothing. Each
+producer's order is kept exactly, so a batch still comes out whole; the
+lane of a producer that has exited is drained and then freed. The queue
+is not linearisable: a push that finished before another producer's push
+began may come out after it. It exists to measure what that relaxation
+is worth before any analysis tries to prove it safe; the shim carries it
+only in a build that defines `WTC_LANED_MPSC`, under the tag
+`mpsc_laned`, which the compiler does not know.
+
 Contract checking: build with `-DWTC_CHECK` and every ring records the first
 producer and the first consumer thread and aborts the moment a different
 thread appears in either role. That turns each static verdict into a claim
@@ -84,8 +99,9 @@ cmake -S runtime/test -B build-rt-check -DCMAKE_CXX_COMPILER=clang++-18 -DWTC_CH
 ```
 
 The suite includes tests that must fail: a two-producer run of the ring, a
-two-consumer run of the segmented queue's single-consumer form and a
-two-producer run of the spmc queue, which TSan has to report and
+two-consumer run of the segmented queue's single-consumer form, a
+two-consumer run of the laned queue and a two-producer run of the spmc
+queue, which TSan has to report and
 `WTC_CHECK` has to abort. A suite that cannot fail proves nothing, which is
 a lesson this project has already paid for once.
 

@@ -140,7 +140,11 @@ constexpr unsigned default_slots() {
   return n < 2 ? 2 : n;
 }
 
-template <class Slot, unsigned kSlots = default_slots<Slot>(), unsigned kLine = 64>
+// kSlip false turns the consumer's slip off: it reads what is published
+// the moment it is, as a ring without the slip would. For a consumer that
+// has somewhere else to be when it catches up, the laned queue's
+// (laned_mpsc.hpp), which can take another lane instead of waiting.
+template <class Slot, unsigned kSlots = default_slots<Slot>(), unsigned kLine = 64, bool kSlip = true>
 class spsc_ring {
   static_assert(kSlots >= 2, "a block needs at least two slots");
   static_assert((kLine & (kLine - 1)) == 0, "kLine must be a power of two");
@@ -320,7 +324,7 @@ class spsc_ring {
     if (c_.count == c_.cached_push) {
       c_.cached_push = push_pub_.load(std::memory_order_acquire);
       if (c_.count == c_.cached_push) return nullptr;
-      slip();
+      if constexpr (kSlip) slip();
     }
     if (c_.off == kSlots) {
       // Element c_.count lives in the next block. Leave this one, then tell
