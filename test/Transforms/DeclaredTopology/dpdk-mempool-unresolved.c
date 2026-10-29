@@ -6,11 +6,14 @@
    says so instead of guessing (RUNTIME). A pool found by name may be used
    by another process, and the verdict says so (LOOKUP); one the analysis
    cannot place -- what rte_mempool_lookup hands back here -- makes every
-   pool unknown (UNPLACED).
+   pool unknown (UNPLACED). A declaration that holds only because a side
+   it declares single has no access here is vacuously satisfied, not
+   verified; vacuous-outcome=false gives the wording of before 29 Oct
+   (VERIFIED).
 
    RUN: %clang -std=gnu11 -I%S/Inputs -fclangir -emit-cir %s -o %t.cir
    RUN: not wtc-opt %t.cir --lift-cir-to-wtc --queue-ownership-analysis -o /dev/null 2>&1 | FileCheck %s
-   RUN: not wtc-opt %t.cir --lift-cir-to-wtc --queue-ownership-analysis=vacuous-outcome=true -o /dev/null 2>&1 | FileCheck %s --check-prefix=VACUOUS
+   RUN: not wtc-opt %t.cir --lift-cir-to-wtc --queue-ownership-analysis=vacuous-outcome=false -o /dev/null 2>&1 | FileCheck %s --check-prefix=VERIFIED
    RUN: %clang -std=gnu11 -I%S/Inputs -fclangir -emit-cir %s -DRUNTIME -o %t.runtime.cir
    RUN: wtc-opt %t.runtime.cir --lift-cir-to-wtc --queue-ownership-analysis -o /dev/null 2>&1 | FileCheck %s --check-prefix=RUNTIME
    RUN: %clang -std=gnu11 -I%S/Inputs -fclangir -emit-cir %s -DLOOKUP -o %t.lookup.cir
@@ -18,28 +21,30 @@
    RUN: %clang -std=gnu11 -I%S/Inputs -fclangir -emit-cir %s -DUNPLACED -o %t.unplaced.cir
    RUN: wtc-opt %t.unplaced.cir --lift-cir-to-wtc --queue-ownership-analysis -o /dev/null 2>&1 | FileCheck %s --check-prefix=UNPLACED
 
-   CHECK-DAG: remark: wtc: queue *@one_getter: declared spsc (by its flags RTE_MEMPOOL_F_SP_PUT | RTE_MEMPOOL_F_SC_GET; no producer access seen), verified in this translation unit
+   CHECK-DAG: remark: wtc: queue *@one_getter: declared spsc (by its flags RTE_MEMPOOL_F_SP_PUT | RTE_MEMPOOL_F_SC_GET; no producer access seen), verified for its consumer and vacuously satisfied: no producer access in this translation unit
    CHECK-DAG: error: wtc: queue *@two_getters is declared spsc (by its flags RTE_MEMPOOL_F_SP_PUT | RTE_MEMPOOL_F_SC_GET; no producer access seen) but 2 threads pop from it
-   CHECK-DAG: remark: wtc: queue *@no_getter: declared mpsc (by its ops "ring_mp_sc"; no consumer access seen), verified in this translation unit
+   CHECK-DAG: remark: wtc: queue *@no_getter: declared mpsc (by its ops "ring_mp_sc"; no consumer access seen), vacuously satisfied: no consumer access in this translation unit
    CHECK-NOT: declared mpmc
+   CHECK-NOT: verified in this translation unit
 
-   With vacuous-outcome, a declaration verified only because a side it
-   declares single has no access says so.
-   VACUOUS-DAG: remark: wtc: queue *@one_getter: declared spsc (by its flags RTE_MEMPOOL_F_SP_PUT | RTE_MEMPOOL_F_SC_GET; no producer access seen), verified (vacuous: no producer access seen) in this translation unit
-   VACUOUS-DAG: remark: wtc: queue *@no_getter: declared mpsc (by its ops "ring_mp_sc"; no consumer access seen), verified (vacuous: no consumer access seen) in this translation unit
+   VERIFIED-DAG: remark: wtc: queue *@one_getter: declared spsc (by its flags RTE_MEMPOOL_F_SP_PUT | RTE_MEMPOOL_F_SC_GET; no producer access seen), verified in this translation unit
+   VERIFIED-DAG: remark: wtc: queue *@no_getter: declared mpsc (by its ops "ring_mp_sc"; no consumer access seen), verified in this translation unit
+   VERIFIED-NOT: vacuously
 
    RUNTIME-DAG: warning: wtc: queue *@by_flags cannot be checked: its flags are computed at run time
    RUNTIME-DAG: warning: wtc: queue *@by_name cannot be checked: its ops are chosen at run time
    RUNTIME-DAG: warning: wtc: queue *@twice cannot be checked: it is given different ops
    RUNTIME-NOT: verified
+   RUNTIME-NOT: vacuously
    RUNTIME-NOT: error
 
-   LOOKUP-DAG: remark: wtc: queue *@one_getter: declared spsc (by its flags RTE_MEMPOOL_F_SP_PUT | RTE_MEMPOOL_F_SC_GET; no producer access seen), verified in this translation unit; rte_mempool_lookup hands pools to code that finds them by name
+   LOOKUP-DAG: remark: wtc: queue *@one_getter: declared spsc (by its flags RTE_MEMPOOL_F_SP_PUT | RTE_MEMPOOL_F_SC_GET; no producer access seen), verified for its consumer and vacuously satisfied: no producer access in this translation unit; rte_mempool_lookup hands pools to code that finds them by name
    LOOKUP-DAG: error: wtc: queue *@two_getters is declared spsc
 
    UNPLACED-DAG: remark: wtc: queue access is unresolvable (the queue object could not be identified); every queue of this type is now unknown
    UNPLACED-DAG: warning: wtc: queue *@one_getter is declared spsc (by its flags RTE_MEMPOOL_F_SP_PUT | RTE_MEMPOOL_F_SC_GET; no producer access seen); cannot verify: the queue object could not be identified
    UNPLACED-NOT: verified
+   UNPLACED-NOT: vacuously
    UNPLACED-NOT: error
 */
 

@@ -19,7 +19,7 @@ ROOT=$(cd "$HERE/../.." && pwd)
 CLANG=${CLANG:-$ROOT/build-llvm/bin/clang}
 WTC_OPT=${WTC_OPT:-$ROOT/build/bin/wtc-opt}
 ANALYSIS=--queue-ownership-analysis
-[ "${VACUOUS:-0}" = 1 ] && ANALYSIS=--queue-ownership-analysis=vacuous-outcome=true
+[ "${VACUOUS:-1}" = 0 ] && ANALYSIS=--queue-ownership-analysis=vacuous-outcome=false
 S=$W/supercollider
 
 COMMIT=b2f6e4422088c511ef75951069ad854761b81fe0

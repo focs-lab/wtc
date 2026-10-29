@@ -31,9 +31,12 @@
 # verified (the check says the declaration holds), unresolved (no line about
 # the queue, only remarks that accesses to queues of its type are
 # unresolvable, which makes every queue of the type unknown), silent
-# (nothing at all). With VACUOUS=1 (passed on to dpdk.sh and
-# supercollider.sh) the analysis marks a declaration verified only because
-# a side it declares single has no access, and such a row is vacuous.
+# (nothing at all), vacuous (the declaration holds only because a side it
+# declares single has no access in the translation unit, which the
+# analysis reports as vacuously satisfied). VACUOUS=0 (passed on to
+# dpdk.sh and supercollider.sh) runs the analysis with
+# vacuous-outcome=false, which reports those as verified, as the runs
+# before 29 Oct did.
 # <work dir>/tools.txt records the compilers and commits.
 #
 # Environment: CLANG, WTC_OPT as in tools/declared-check/dpdk.sh; the DPDK
@@ -54,9 +57,9 @@ CLANG=${CLANG:-$ROOT/build-llvm/bin/clang}
 WTC_OPT=${WTC_OPT:-$ROOT/build/bin/wtc-opt}
 export CLANG WTC_OPT
 CHECK=$ROOT/tools/declared-check
-export VACUOUS=${VACUOUS:-0}
+export VACUOUS=${VACUOUS:-1}
 ANALYSIS=--queue-ownership-analysis
-[ "$VACUOUS" = 1 ] && ANALYSIS=--queue-ownership-analysis=vacuous-outcome=true
+[ "$VACUOUS" = 0 ] && ANALYSIS=--queue-ownership-analysis=vacuous-outcome=false
 PARTS=${PARTS:-mutants libs}
 if [ -z "${TSAN_CXX:-}" ]; then
   t=$(mktemp -d)
@@ -91,7 +94,7 @@ classify() {
   lines=$(grep -E "wtc: (queue|the address)" "$log" | grep -E "$pat" | sed -E 's#^[^ ]*/##' || true)
   if l=$(grep -m1 -E 'error: wtc:' <<<"$lines"); then echo "caught	$l"
   elif l=$(grep -m1 -E 'warning: wtc: .*cannot verify' <<<"$lines"); then echo "warned	$l"
-  elif l=$(grep -m1 -E 'verified \(vacuous' <<<"$lines"); then echo "vacuous	$l"
+  elif l=$(grep -m1 -E 'vacuously satisfied' <<<"$lines"); then echo "vacuous	$l"
   elif l=$(grep -m1 -E 'verified' <<<"$lines"); then echo "verified	$l"
   elif l=$(grep -m1 -E 'queue access is unresolvable' "$log" | sed -E 's#^[^ ]*/##'); then
     echo "unresolved	$l"

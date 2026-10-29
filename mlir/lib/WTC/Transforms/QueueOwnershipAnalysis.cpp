@@ -525,13 +525,17 @@ private:
     // Pools that may hold mbufs although their creation suggests not: one
     // rte_pktmbuf_pool_init or rte_mempool_obj_iter is handed later.
     void addPoolsInitialisedLater(llvm::ArrayRef<Key> candidates);
-    // Report a verified declaration whose declared-single side has no
-    // access as such (see the pass option).
+    // A declaration that holds only because a side it declares single has
+    // no access in this translation unit is reported as vacuously
+    // satisfied, not verified: nothing here was checked on that side, and
+    // whatever touches it is out of sight. Off, the report reads
+    // "verified", as it did before 29 Oct, for comparison with older runs.
     Option<bool> vacuousOutcome{
         *this, "vacuous-outcome",
-        llvm::cl::desc("Report a library queue verified only because a side it declares single has no "
-                       "access in this translation unit as \"verified (vacuous: ...)\""),
-        llvm::cl::init(false)};
+        llvm::cl::desc("Report a declaration that holds only because a side it declares single has no "
+                       "access in this translation unit as \"vacuously satisfied\" rather than "
+                       "\"verified\""),
+        llvm::cl::init(true)};
     // Why one side of a queue counts many, in the program's own terms.
     std::string whyMany(const SideInfo &side);
     // The arrays whose elements a constructor call builds one per run of a
@@ -1472,18 +1476,28 @@ bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &
     if (verdict == Topology::spsc || (declaredMpsc && verdict == Topology::mpsc) ||
         (declaredSpmc && verdict == Topology::spmc)) {
         // A side declared single with no access at all holds vacuously:
-        // in this translation unit nothing touches it.
-        const char *vacuousSide = nullptr;
-        if (library && vacuousOutcome) {
-            if (*tag != 3 && info.producers.accesses.empty()) vacuousSide = "producer";
-            else if (*tag != 4 && info.consumers.accesses.empty()) vacuousSide = "consumer";
+        // in this translation unit nothing touches it, so nothing was
+        // checked there. mpsc declares only its consumer single, spmc only
+        // its producer.
+        const bool producerSingle = *tag != 3, consumerSingle = *tag != 4;
+        const bool noProducer = producerSingle && info.producers.accesses.empty();
+        const bool noConsumer = consumerSingle && info.consumers.accesses.empty();
+        InFlightDiagnostic r = at->emitRemark() << "wtc: queue " << label << ": declared " << declared << ", ";
+        if (vacuousOutcome && (noProducer || noConsumer)) {
+            const char *none = noProducer && noConsumer ? "producer or consumer" : noProducer ? "producer" : "consumer";
+            // Both sides declared single and one of them seen: that one
+            // is verified.
+            if (producerSingle && consumerSingle && !(noProducer && noConsumer))
+                r << "verified for its " << (noProducer ? "consumer" : "producer") << " and ";
+            r << "vacuously satisfied: no " << none << " access in this translation unit";
+            if (library && !open.empty()) r << "; " << open;
+        } else {
+            r << "verified";
+            // A library queue may be shared with code the module does not
+            // show: another file, another process, a library that takes it
+            // whole or inside a structure. The verdict is about this one.
+            if (library) r << " in this translation unit" << (open.empty() ? "" : "; " + open);
         }
-        InFlightDiagnostic r = at->emitRemark() << "wtc: queue " << label << ": declared " << declared << ", verified";
-        if (vacuousSide) r << " (vacuous: no " << vacuousSide << " access seen)";
-        // A library queue may be shared with code the module does not show:
-        // another file, another process, a library that takes it whole or
-        // inside a structure. The verdict is about this one.
-        if (library) r << " in this translation unit" << (open.empty() ? "" : "; " + open);
         ++remarks;
         return true;
     }

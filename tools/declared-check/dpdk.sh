@@ -20,9 +20,10 @@
 # EXAMPLES (the examples directory to read, default: the checkout's),
 # DPDK_BUILD (an already configured build directory, default: <work
 # dir>/dpdk-build) and ONLY (one application's name, default: all).
-# VACUOUS=1 runs the analysis with vacuous-outcome, which marks a
-# declaration verified only because a side it declares single has no
-# access here.
+# A declaration that holds only because a side it declares single has no
+# access here is reported as vacuously satisfied; VACUOUS=0 runs the
+# analysis with vacuous-outcome=false, which calls it verified, as runs
+# before 29 Oct did.
 set -euo pipefail
 
 COMMIT=6bbb7b38b17f9ea4c981b5d374612a16833df41e
@@ -32,7 +33,7 @@ CLANG=${CLANG:-$ROOT/build-llvm/bin/clang}
 WTC_OPT=${WTC_OPT:-$ROOT/build/bin/wtc-opt}
 MESON=${MESON:-meson}
 ANALYSIS=--queue-ownership-analysis
-[ "${VACUOUS:-0}" = 1 ] && ANALYSIS=--queue-ownership-analysis=vacuous-outcome=true
+[ "${VACUOUS:-1}" = 0 ] && ANALYSIS=--queue-ownership-analysis=vacuous-outcome=false
 
 if [ -n "${2:-}" ]; then
   D=$(cd "$2" && pwd)

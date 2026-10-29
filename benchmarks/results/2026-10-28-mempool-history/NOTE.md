@@ -163,10 +163,17 @@ No false "verified", and no false error on a control.
     warned: efd_server's and client_server_mp's `rx_q`, whose consumer is
     another process. That is not done here; it is a choice for the
     check's next revision.
-  - **Prepared, off.** The option `vacuous-outcome` (`VACUOUS=1` in the
-    scripts) reports such a verdict as "verified (vacuous: no consumer
-    access seen)", and the recall driver counts it as vacuous. Run with
-    it, it changes 3 verdicts here and no other line:
+  - **Prepared, off; on since 29 Oct.** The option `vacuous-outcome`
+    (`VACUOUS=1` in the scripts) reported such a verdict as "verified
+    (vacuous: no consumer access seen)", and the recall driver counts it
+    as vacuous. Since 29 Oct it is the default, and the verdict no longer
+    says "verified" at all: dumpcap's line reads "declared mpsc (by its
+    ops "ring_mp_sc"; no consumer access seen), vacuously satisfied: no
+    consumer access in this translation unit; rte_mempool_lookup hands
+    pools to code that finds them by name" (`vacuous-outcome=false`, or
+    `VACUOUS=0`, gives the wording recorded here). The lines in this
+    directory were recorded before that. Run with the option, this leg
+    changed 3 verdicts and no other line:
     - in the driver, the two `rx_q` rings (efd_server `init.c:188`,
       mp_server `init.c:168`);
     - in the recall study, the 4 control rows of those two rings;

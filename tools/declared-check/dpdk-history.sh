@@ -39,7 +39,7 @@ CLANG=${CLANG:-$ROOT/build-llvm/bin/clang}
 WTC_OPT=${WTC_OPT:-$ROOT/build/bin/wtc-opt}
 MESON=${MESON:-meson}
 ANALYSIS=--queue-ownership-analysis
-[ "${VACUOUS:-0}" = 1 ] && ANALYSIS=--queue-ownership-analysis=vacuous-outcome=true
+[ "${VACUOUS:-1}" = 0 ] && ANALYSIS=--queue-ownership-analysis=vacuous-outcome=false
 FLAGS="-std=gnu11 -O0 -include rte_config.h -D_GNU_SOURCE -DALLOW_EXPERIMENTAL_API -march=x86-64-v2 -w"
 
 export_tree() {  # dir rev

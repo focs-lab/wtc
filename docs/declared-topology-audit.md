@@ -247,13 +247,18 @@ Three decisions shape the model:
   back rewritten, and a queue kept in it is no longer placed.
 
 A declared side with no access in the translation unit holds there
-vacuously; the report says "no producer access seen" and names any reason
-the queue is used out of sight. The pass option
-`--queue-ownership-analysis=vacuous-outcome=true` marks such a verdict as
-"verified (vacuous: no consumer access seen)", and `VACUOUS=1` passes it
-through `tools/declared-check/*.sh` and `declared_recall.sh`, which then
-count those rows as vacuous. It is off: whether a vacuous verdict should
-be a warning is a decision for the check's next revision.
+vacuously: nothing was checked on it. Since 29 October the report says so
+instead of "verified": "declared mpsc (...), vacuously satisfied: no
+consumer access in this translation unit", or, for a queue declared spsc
+whose other side is seen, "verified for its producer and vacuously
+satisfied: no consumer access in this translation unit", followed by any
+reason the queue is used out of sight. `declared_recall.sh` counts those
+rows as vacuous. Until 28 October the report read "verified in this
+translation unit", true of the file and a false assurance about the
+program (dumpcap below); `--queue-ownership-analysis=vacuous-outcome=false`,
+or `VACUOUS=0` for `tools/declared-check/*.sh` and `declared_recall.sh`,
+gives that wording back, for comparison with older runs. Whether a vacuous
+verdict should be a warning is a decision for the check's next revision.
 
 The tests are `test/Transforms/DeclaredTopology/dpdk-mempool-*.c`.
 
@@ -431,7 +436,7 @@ their real headers, with a second thread started in six ways.
 
   | fix | file | at the parent | at the fix |
   |---|---|---|---|
-  | dumpcap, ops `"ring_mp_sc"` to `"ring_mp_mc"` | `app/dumpcap/main.c` | verified in this translation unit, vacuously: `declared mpsc (by its ops "ring_mp_sc"; no consumer access seen)`, with `rte_mempool_lookup` named as code that may use the pool elsewhere | nothing declared single |
+  | dumpcap, ops `"ring_mp_sc"` to `"ring_mp_mc"` | `app/dumpcap/main.c` | verified in this translation unit, vacuously: `declared mpsc (by its ops "ring_mp_sc"; no consumer access seen)`, with `rte_mempool_lookup` named as code that may use the pool elsewhere (reported since 29 Oct as "vacuously satisfied: no consumer access in this translation unit") | nothing declared single |
   | | `lib/pdump/rte_pdump.c` | unresolved | unresolved |
   | vhost, `MEMPOOL_F_SC_GET` dropped | `lib/librte_vhost/iotlb.c` | unresolved: no line names the pool | unresolved |
 
@@ -463,9 +468,10 @@ every one whose threads were in sight in the library programs. On the
 audited applications it stops 6 of 22 and changes its verdict on 13.
 Recall is per audited ring, not per real bug. Of the real wrong
 declarations it has met, two of DPDK's three, it caught neither. Its
-"verified in this translation unit" on dumpcap is true of the translation
+"verified in this translation unit" on dumpcap was true of the translation
 unit and wrong for the program, with the line naming both the empty side
-and the reason.
+and the reason; since 29 October the line says "vacuously satisfied"
+instead, which is what the check knew.
 
 ## What a compiler check needs
 
