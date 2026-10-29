@@ -11,12 +11,17 @@
 # benchmarks/apps/{ferret,dedup}/build.sh, whose bin/ holds a log per build.
 # Writes <out-dir>/logs/ (the remarks of each build) and <out-dir>/TABLE.md,
 # and fails if any verdict is wrong. Build the applications from the same
-# commit first; WTC_SHA names it where the tree is not a git checkout. It
+# commit first; WTC_GIT_SHA names it where the tree is not a git checkout
+# (source_rev.sh). It
 # compiles: never inside a `bench` reservation.
 set -euo pipefail
 OUT=${1:?out dir}; FERRET=${2:?ferret build dir}; DEDUP=${3:?dedup build dir}
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
+# The commit measured; a copy of the tree takes it from WTC_GIT_SHA
+# (source_rev.sh).
+. "$HERE/source_rev.sh"
+source_rev "$ROOT" || exit 2
 mkdir -p "$OUT/logs"; OUT=$(cd "$OUT" && pwd)
 INC="-I$ROOT/shim -I$ROOT/benchmarks/queues -I$ROOT/benchmarks/harness"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
@@ -37,7 +42,7 @@ done
   echo "# Reach and precision"
   echo
   echo "Every queue of every program compiled, the analysis's verdict against the topology read"
-  echo "from the source (benchmarks/reach/oracle.json). wtc ${WTC_SHA:-$(git -c safe.directory="$ROOT" -C "$ROOT" rev-parse --short=12 HEAD 2>/dev/null)}."
+  echo "from the source (benchmarks/reach/oracle.json). wtc $(echo "$SOURCE_SHA" | cut -c1-12)$(case $SOURCE_DIRTY in true) echo ' (dirty)';; unknown) echo ' (dirty: unknown)';; esac)."
   echo
   python3 "$HERE/reach_table.py" "$ROOT/benchmarks/reach/oracle.json" "$OUT/logs" || true
 } > "$OUT/TABLE.md"

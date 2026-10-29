@@ -141,8 +141,8 @@ def main(out_dir):
     print(f"# {meta.get('leg', out.name)}  ({meta.get('date', '')})\n")
     if meta:
         print(f"{meta.get('cpu_model','')}, kernel {meta.get('kernel','')}, allowed cpus {meta.get('allowed_cpus','')}, "
-              f"smt {meta.get('smt_control','')}, build `{meta.get('build','')}`, git {meta.get('git_sha','')[:12]}"
-              f"{' (dirty)' if meta.get('git_dirty') else ''}\n")
+              f"smt {meta.get('smt_control','')}, build `{meta.get('build','')}`, git {meta.get('git_sha','')[:12] or 'not recorded'}"
+              f"{' (dirty)' if meta.get('git_dirty') else ' (dirty: unknown)' if meta.get('git_dirty', False) is None else ''}\n")
 
     # Two drift checks, because the first one on its own lies. Comparing a
     # single opening run with a single closing run of a variant whose own

@@ -34,6 +34,10 @@ set -euo pipefail
 OUT=${1:?output directory}
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
+# The commit built, asked before the build: a copy of the tree takes
+# it from WTC_GIT_SHA (source_rev.sh).
+. "$HERE/source_rev.sh"
+source_rev "$ROOT" || exit 2
 SRC="$ROOT/benchmarks/workloads/w8_lock_batch_wtc.cpp"
 CC="$ROOT/tools/wtc-cc"
 mkdir -p "$OUT"
@@ -85,12 +89,8 @@ else
 fi
 
 # What was built, for meta.json: the toolchain and each flavour's flags.
-# Outside a git checkout (a tree copied to another host) WTC_REV and
-# WTC_CLANGIR_REV name what was copied.
 {
-  cir=${WTC_CLANGIR_REV:-$(git -c safe.directory="$ROOT" -C "$ROOT" submodule status llvm 2>/dev/null | awk '{print $1}' | tr -d '+-' | cut -c1-12)}
-  rev=${WTC_REV:-$(git -c safe.directory="$ROOT" -C "$ROOT" rev-parse --short=12 HEAD 2>/dev/null)$([ -n "$(git -c safe.directory="$ROOT" -C "$ROOT" status --porcelain -- . ":(exclude)benchmarks/results" 2>/dev/null)" ] && echo ' (dirty)')}
-  echo "compiler=tools/wtc-cc, ClangIR ${cir:-unknown}"
-  echo "wtc=${rev:-unknown}"
+  echo "compiler=tools/wtc-cc, ClangIR $(echo "$SOURCE_LLVM_SHA" | cut -c1-12)"
+  echo "wtc=$(echo "$SOURCE_SHA" | cut -c1-12)$(case $SOURCE_DIRTY in true) echo ' (dirty)';; unknown) echo ' (dirty: unknown)';; esac)"
   cat "$OUT/flavours.txt"
 } > "$OUT/build-info.txt"

@@ -286,6 +286,22 @@ round-robin across repetitions so drift hits all of them equally. Each run
 is a fresh process and takes the host's exclusive measurement lock for its
 own duration.
 
+`meta.json` names the commit the leg ran (`git_sha`) and whether the
+source differed from it (`git_dirty`). A leg run from a copy of the tree
+without its `.git`, synced to another host, cannot ask git, and the legs
+of 26 to 28 October recorded an empty commit that way. Such a copy now
+needs its commit from whoever made it, or the leg stops before it starts:
+
+```sh
+WTC_GIT_SHA=$(git rev-parse HEAD) WTC_GIT_DIRTY=false \
+WTC_CLANGIR_REV=$(git rev-parse HEAD:llvm) benchmarks/scripts/campaign.sh eval-w1 build-bench 5
+```
+
+run where the copy was made, with the values carried to the host that
+runs the leg. `WTC_GIT_SHA=unknown` runs it anyway and records `unknown`,
+with a warning; `git_dirty` is then `null`. The build scripts that write
+`build-info.txt` ask the same way (`scripts/source_rev.sh`).
+
 The summary carries two drift checks, because the obvious one lies on its
 own. Comparing single control runs of a variant whose own run-to-run spread
 is about 8% flags every leg and means nothing, so the controls are compared

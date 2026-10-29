@@ -27,6 +27,10 @@ S=$(cd "${1:?spdlog dir}" && pwd)
 mkdir -p "${2:?out dir}"; W=$(cd "$2" && pwd)
 HERE=$(cd "$(dirname "$0")" && pwd)
 WTC=$(cd "$HERE/../../.." && pwd)
+# The commit built, asked before the build: a copy of the tree takes
+# it from WTC_GIT_SHA (source_rev.sh).
+. "$WTC/benchmarks/scripts/source_rev.sh"
+source_rev "$WTC" || exit 2
 cd "$W"
 mkdir -p bin
 python3 "$HERE/port.py" "$S" "$W/include"
@@ -51,8 +55,8 @@ if [ "${TSAN:-0}" = 1 ]; then
   build compiler-tsan --tsan -O1 -g
 fi
 {
-  echo "compiler=tools/wtc-cc, ClangIR $(git -c safe.directory="$WTC" -C "$WTC" submodule status llvm 2>/dev/null | awk '{print $1}' | tr -d '+-' | cut -c1-12)"
-  echo "wtc=$(git -c safe.directory="$WTC" -C "$WTC" rev-parse --short=12 HEAD 2>/dev/null)"
+  echo "compiler=tools/wtc-cc, ClangIR $(echo "$SOURCE_LLVM_SHA" | cut -c1-12)"
+  echo "wtc=$(echo "$SOURCE_SHA" | cut -c1-12)$(case $SOURCE_DIRTY in true) echo ' (dirty)';; unknown) echo ' (dirty: unknown)';; esac)"
   echo "spdlog=$(git -c safe.directory="$S" -C "$S" rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
   echo "orig=clang++-18 -O2 header-only"
 } > bin/build-info.txt

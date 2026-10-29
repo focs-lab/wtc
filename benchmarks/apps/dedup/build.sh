@@ -33,6 +33,10 @@ P=$(cd "${1:?parsec dir}" && pwd)
 mkdir -p "${2:?out dir}"; W=$(cd "$2" && pwd)
 HERE=$(cd "$(dirname "$0")" && pwd)
 WTC=$(cd "$HERE/../../.." && pwd)
+# The commit built, asked before the build: a copy of the tree takes
+# it from WTC_GIT_SHA (source_rev.sh).
+. "$WTC/benchmarks/scripts/source_rev.sh"
+source_rev "$WTC" || exit 2
 SRC="$P/pkgs/kernels/dedup/src"
 CC=clang-18
 cd "$W"
@@ -98,8 +102,8 @@ if [ "${TSAN:-0}" = 1 ]; then
   OBJS=${TOTHERS/obj-tsan\/dedup.o /} build compiler-unity-tsan --tsan -O1 -g -DDEDUP_UNITY
 fi
 {
-  echo "compiler=tools/wtc-cc, ClangIR $(git -c safe.directory="$WTC" -C "$WTC" submodule status llvm 2>/dev/null | awk '{print $1}' | tr -d '+-' | cut -c1-12)"
-  echo "wtc=$(git -c safe.directory="$WTC" -C "$WTC" rev-parse --short=12 HEAD 2>/dev/null)"
+  echo "compiler=tools/wtc-cc, ClangIR $(echo "$SOURCE_LLVM_SHA" | cut -c1-12)"
+  echo "wtc=$(echo "$SOURCE_SHA" | cut -c1-12)$(case $SOURCE_DIRTY in true) echo ' (dirty)';; unknown) echo ' (dirty: unknown)';; esac)"
   echo "parsec=$(git -c safe.directory="$P" -C "$P" rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
   echo "others=$CC $CFLAGS"
 } > bin/build-info.txt

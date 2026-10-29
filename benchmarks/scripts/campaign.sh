@@ -15,6 +15,11 @@
 # as BUILD and need the CMake build too, for the controls and the
 # allocation counter: CONTROL_BUILD=<cmake build dir>.
 #
+# meta.json names the commit the leg ran. A leg run from a copy of the
+# tree without its .git is told it by the caller -- WTC_GIT_SHA,
+# WTC_GIT_DIRTY and WTC_CLANGIR_REV, see source_rev.sh -- and stops before
+# it starts without them.
+#
 # Run this INSIDE a `bench` reservation (see benchmarks/README.md) and never
 # build inside one. Every measured run takes the host's exclusive measurement
 # lock for its own duration, per the agreed rule that a leg locks per run.
@@ -47,6 +52,10 @@ CONTROL_BUILD=${CONTROL_BUILD:-$BUILD}
 BUILD=$(cd "$BUILD" && pwd); CONTROL_BUILD=$(cd "$CONTROL_BUILD" && pwd)
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
+# The commit the leg runs, asked before anything is written: a leg run
+# from a copy of the tree takes it from WTC_GIT_SHA (source_rev.sh).
+. "$HERE/source_rev.sh"
+source_rev "$ROOT" || exit 2
 DATE=$(date -u +%Y-%m-%d)
 OUT="$ROOT/benchmarks/results/$DATE-$LEG"
 mkdir -p "$OUT"
@@ -118,9 +127,9 @@ meta() {
   {
     echo "{"
     echo "  \"leg\": \"$LEG\", \"date\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
-    # Dirty means the source differs from the commit; the results of the
-    # legs before this one in a chain are output, not source.
-    echo "  \"git_sha\": \"$(git -c safe.directory="$ROOT" -C "$ROOT" rev-parse HEAD)\", \"git_dirty\": $([ -z "$(git -c safe.directory="$ROOT" -C "$ROOT" status --porcelain -- . ':(exclude)benchmarks/results')" ] && echo false || echo true),"
+    # The commit and whether the source differed from it (source_rev.sh);
+    # null where no one could say.
+    echo "  \"git_sha\": \"$SOURCE_SHA\", \"git_dirty\": $([ "$SOURCE_DIRTY" = unknown ] && echo null || echo "$SOURCE_DIRTY"),"
     echo "  \"kernel\": \"$(uname -r)\","
     echo "  \"cpu_model\": \"$(lscpu | sed -n 's/^Model name: *//p')\","
     echo "  \"sockets\": \"$(lscpu | sed -n 's/^Socket(s): *//p')\", \"numa_nodes\": \"$(lscpu | sed -n 's/^NUMA node(s): *//p')\","
@@ -136,7 +145,7 @@ meta() {
     echo "  \"governor\": \"$(cat /sys/devices/system/cpu/cpu$cpu0/cpufreq/scaling_governor 2>/dev/null || echo unknown)\","
     echo "  \"no_turbo\": \"$(cat /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null || echo "boost=$(cat /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || echo unknown)")\","
     echo "  \"freq_khz\": \"$(cat /sys/devices/system/cpu/cpu$cpu0/cpufreq/scaling_cur_freq 2>/dev/null || echo unknown)\","
-    echo "  \"llvm_sha\": \"$(git -c safe.directory="$ROOT" -C "$ROOT" submodule status llvm 2>/dev/null | awk '{print $1}' | tr -d '+-')\","
+    echo "  \"llvm_sha\": \"$SOURCE_LLVM_SHA\","
     echo "  \"boost\": \"$(sed -n 's/^#define BOOST_LIB_VERSION \"\(.*\)\"/\1/p' /usr/include/boost/version.hpp 2>/dev/null)\","
     echo "  \"tbb\": \"$(dpkg-query -W -f='${Version}' libtbb12 2>/dev/null || echo none)\","
     echo "  \"vendored\": \"$(sed -n 's/^| \([a-z]*\)\/ | [^|]* | \([^ |]*\)[^|]*|.*/\1@\2/p' "$ROOT/benchmarks/third_party/VENDORED.md" | tr '\n' ' ')\","
