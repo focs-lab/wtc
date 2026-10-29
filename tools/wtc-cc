@@ -14,6 +14,10 @@
 #   --keep DIR         keep the intermediate .cir/.ll files in DIR
 #   --no-specialize    run the analysis but leave every tag alone (the
 #                      "generic" build of an unmodified source)
+#   --no-lift          leave the program's own locked queues as written
+#                      (--wtc-lift-locked-queues, docs/lifting.md); without
+#                      it, a class the pass lifts is replaced by
+#                      wtc::lifted, whose instantiations this script adds
 #   --force-spsc SYMS  tag these global queues spsc regardless of the verdict
 #                      (negative control; pass a comma-separated list)
 #   --force-inline SYMS  tag these global queues spsc_inline regardless of
@@ -67,13 +71,14 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)
 
-KEEP=""; SPECIALIZE=1; TSAN=0; CENSUS=0; COMPILE_ONLY=0; FORCE=""; FORCE_INLINE=""; TOOLCHAIN=""; OUT="a.out"; SRC=""
+KEEP=""; SPECIALIZE=1; LIFT=1; TSAN=0; CENSUS=0; COMPILE_ONLY=0; FORCE=""; FORCE_INLINE=""; TOOLCHAIN=""; OUT="a.out"; SRC=""
 BATCH_COST=""; BATCH_HOST=""; BATCH_NS=""
 PASSTHRU=(); LINKARGS=(); OPTARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --keep) KEEP=$2; shift 2 ;;
     --no-specialize) SPECIALIZE=0; shift ;;
+    --no-lift) LIFT=0; shift ;;
     --force-spsc) FORCE=$2; shift 2 ;;
     --force-inline) FORCE_INLINE=$2; shift 2 ;;
     --toolchain) TOOLCHAIN=$2; shift 2 ;;
@@ -124,6 +129,25 @@ step() { # name, command...
 
 step cir "$CLANGXX" -std=c++17 -I"$ROOT/shim" -fclangir -emit-cir "${PASSTHRU[@]}" "$SRC" -o "$WORK/$base.cir"
 
+# The program's own locked queues. The runtime that replaces them is a
+# template the program never names, so a first look lists the container
+# types of the classes that would lift, and the file is compiled again with
+# their explicit instantiations after it: the program's text is unchanged,
+# and the second CIR is the first plus wtc::lifted<C> for each. The pass
+# itself runs in the pipeline below.
+PRE=()
+if (( LIFT )); then
+  step lift-scan "$WTCOPT" "$WORK/$base.cir" "--wtc-lift-locked-queues=rewrite=false instantiations=$WORK/$base.inst" \
+    -o /dev/null 2>/dev/null
+  if [ -s "$WORK/$base.inst" ]; then
+    abs="$(cd "$(dirname "$SRC")" && pwd)/$(basename "$SRC")"
+    { printf '#include "%s"\n#include "lifted.hpp"\n' "$abs"; cat "$WORK/$base.inst"; } > "$WORK/$base.lifted.cpp"
+    step cir "$CLANGXX" -std=c++17 -I"$ROOT/shim" -fclangir -emit-cir "${PASSTHRU[@]}" "$WORK/$base.lifted.cpp" \
+      -o "$WORK/$base.cir"
+  fi
+  PRE=(--wtc-lift-locked-queues)
+fi
+
 LOCKOPTS=""
 [ -n "$BATCH_COST" ] && LOCKOPTS="cost=$BATCH_COST"
 [ -n "$BATCH_HOST" ] && LOCKOPTS="${LOCKOPTS:+$LOCKOPTS }host=$BATCH_HOST"
@@ -163,7 +187,7 @@ else
     fi
   fi
 fi
-PASSES=(--lift-cir-to-wtc --wtc-batch-pushes "--wtc-batch-locks${LOCKOPTS:+=$LOCKOPTS}"
+PASSES=("${PRE[@]}" --lift-cir-to-wtc --wtc-batch-pushes "--wtc-batch-locks${LOCKOPTS:+=$LOCKOPTS}"
         "$QOA" --wtc-borrow-analysis)
 if (( SPECIALIZE )); then
   OPTS=""

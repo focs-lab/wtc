@@ -18,6 +18,7 @@ int main(int argc, char **argv) {
   registry.insert<cir::CIRDialect>();
 
   mlir::wtc::registerLiftCIRToWTCPass();
+  mlir::wtc::registerLiftLockedQueuesPass();
   mlir::wtc::registerLowerWTCToCIRPass();
   mlir::wtc::registerQueueOwnershipAnalysisPass();
   mlir::wtc::registerWTCSpecializePass();
