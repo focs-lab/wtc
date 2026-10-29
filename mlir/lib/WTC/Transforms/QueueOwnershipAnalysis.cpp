@@ -352,7 +352,7 @@ private:
         auto call = dyn_cast<cir::CallOp>(op);
         if (!call) return false;
         if (getSemanticKind(lookupCallee(call)) == SemanticOpKind::QueueConstruction)
-            return call.getNumOperands() > 0 && firstRealOperand(call) == 0;
+            return call.getNumOperands() > 0 && firstRealOperand(call) == 0 && !insideLiftedRuntime(call);
         LibraryQueueCall l = libraryCall(call);
         return l.role == LibraryQueueRole::Create ||
                (l.role == LibraryQueueRole::Construct && l.queueOperand == 0);
