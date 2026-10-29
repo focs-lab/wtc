@@ -251,8 +251,13 @@ in direction and magnitude with the open-loop figures.
 ## What is not proved
 
 **One translation unit.** The analysis sees one file. A second file touching
-the same global queue is invisible to it, and nothing enforces the
-assumption.
+the same global queue is invisible to it. Since 29 October part of the
+assumption is checked: a queue handed to a function with no body here
+escapes, and where other files may name this one's symbols (no `main`,
+`wtc-cc -c`, or object files linked by `wtc-cc`) a queue they may reach
+escapes and a function they may call counts many threads. A file with
+`main` linked with nothing else is still taken for the whole program
+(`docs/audit.md`, "Still open").
 
 **Queues reached through a member or the heap are refused.** Tracing stops at
 a load that is not from a stack slot written once. That is the safe

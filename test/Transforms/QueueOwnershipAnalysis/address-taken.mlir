@@ -8,8 +8,8 @@
 !s32i = !cir.int<s, 32>
 !fnptr = !cir.ptr<!cir.func<()>>
 module {
-  cir.global "private" external @q : !s32i
-  cir.global "private" external @v : !s32i
+  cir.global "private" external @q = #cir.int<0> : !s32i
+  cir.global "private" external @v = #cir.int<0> : !s32i
   cir.global external @table = #cir.global_view<@producer> : !fnptr
 
   cir.func @spawn(%fn: !fnptr) [#cir.annotation<"wtc_thread_spawn">] {

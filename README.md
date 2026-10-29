@@ -432,7 +432,7 @@ what it saves; it was 1.08× there before them.
 |:--|:--|
 | Compile time | 1.65× the same clang on the workloads; of `wtc-cc`'s 4.9 s, emitting ClangIR takes 2.2 and `wtc-opt` 1.0 |
 | Code size | `.text` 81–175 bytes larger than the general build, 0.4% on the workloads |
-| Tests | 317 lit tests, passing at every commit; the runtime's own tests in CI, plain, under ThreadSanitizer and with the contract checks |
+| Tests | 324 lit tests, passing at every commit; the runtime's own tests in CI, plain, under ThreadSanitizer and with the contract checks |
 | Races | ThreadSanitizer on the compiler's own output, every positive test, the W3 and W7 builds, and on the current runtime dedup, ferret and spdlog, 30 runs of each configuration ([`2026-10-28-tsan-apps`](benchmarks/results/2026-10-28-tsan-apps/NOTE.md)): no report from a substituted queue (inline rings, the single-consumer queue with up to eight producers, the lock-free queue for one producer with up to four consumers), every output the original's; ferret's one report is PARSEC's own race on a progress counter, which its own build shows too; planted races are reported |
 | Output | ferret and dedup as PARSEC's own build computes them, at 1, 2 and 4 threads a stage |
 | Contracts | eight planted violations, each caught: a second producer on the spsc ring and on the spmc queue, a second consumer on the single-consumer queue (each under `WTC_CHECK` and ThreadSanitizer), spsc forced on a queue with two producers and two consumers, a plain race, and a borrowed element kept past the next pop |
@@ -465,7 +465,10 @@ fields that different threads repeatedly touch in one cache line, and
 [`docs/corpus.md`](docs/corpus.md) says how it was tested, with a census of
 what seventeen codebases pad by hand.
 
-The analysis assumes one translation unit. An array of queues gets one
+The analysis sees one translation unit. A queue handed to code it cannot
+see, or that other files of the program may name, keeps the
+general-purpose implementation; a file with `main` linked with nothing
+else is taken for the whole program (`docs/audit.md`). An array of queues gets one
 verdict for all its elements, which is exact only when every element has
 the same threads, and a queue whose constructor call also builds another
 queue (a struct's constructor run for two objects) keeps the

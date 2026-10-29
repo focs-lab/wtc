@@ -33,7 +33,11 @@
 #                      rest from PATH)
 #   --tsan             build the compiler's own output under ThreadSanitizer
 #   -c                 stop at an object file, for a program whose other files
-#                      are built without wtc-cc and linked with it
+#                      are built without wtc-cc and linked with it; the
+#                      analysis then lets those files name any external
+#                      symbol of this one (open-world), and object files,
+#                      archives and shared objects linked here the symbols
+#                      nm lists for them (named-elsewhere)
 #   --wtc-opt-arg ARG  pass ARG to wtc-opt (repeatable), e.g. --mlir-timing
 #   --census           call wtc_rc_note at the entry of shared_ptr's reference
 #                      counts (--wtc-census), for the thread census in
@@ -124,8 +128,43 @@ LOCKOPTS=""
 [ -n "$BATCH_COST" ] && LOCKOPTS="cost=$BATCH_COST"
 [ -n "$BATCH_HOST" ] && LOCKOPTS="${LOCKOPTS:+$LOCKOPTS }host=$BATCH_HOST"
 [ -n "$BATCH_NS" ] && LOCKOPTS="${LOCKOPTS:+$LOCKOPTS }ns-per-unit=$BATCH_NS"
+# What the rest of the program may name. The analysis takes a file with
+# main, linked with nothing but -l libraries, for the whole program
+# (docs/audit.md). Compiled with -c, the file is linked later with others
+# it never sees, which may name any of its external symbols. Linked here
+# with object files, archives or shared objects, it shares with them the
+# symbols they define or reference, which nm lists; without nm, any.
+QOA=--queue-ownership-analysis
+if (( COMPILE_ONLY )); then
+  QOA=--queue-ownership-analysis=open-world=true
+else
+  OTHERS=()
+  for a in "${LINKARGS[@]}"; do case "$a" in *.o|*.a|*.so) OTHERS+=("$a") ;; esac; done
+  if (( ${#OTHERS[@]} )); then
+    NM=""
+    for c in ${TOOLCHAIN:+"$TOOLCHAIN/bin/llvm-nm"} "$ROOT/build-llvm/bin/llvm-nm" \
+             "$(command -v llvm-nm || true)" "$(command -v nm || true)"; do
+      if [ -n "$c" ] && [ -x "$c" ]; then NM=$c; break; fi
+    done
+    listed=1
+    : > "$WORK/$base.nm"
+    for o in "${OTHERS[@]}"; do
+      flags=(-P -g); [[ $o == *.so ]] && flags+=(-D)
+      [ -n "$NM" ] && "$NM" "${flags[@]}" "$o" >> "$WORK/$base.nm" 2>/dev/null || listed=0
+    done
+    if (( listed )); then
+      # posix format: "name type [value size]", and "archive[member]:"
+      # before each member of an archive.
+      awk 'NF >= 2 && $1 !~ /:$/ { print $1 }' "$WORK/$base.nm" | sort -u > "$WORK/$base.elsewhere"
+      QOA="--queue-ownership-analysis=named-elsewhere=$WORK/$base.elsewhere"
+    else
+      echo "wtc-cc: cannot list the symbols of ${OTHERS[*]}; any symbol of $SRC may be named there" >&2
+      QOA=--queue-ownership-analysis=open-world=true
+    fi
+  fi
+fi
 PASSES=(--lift-cir-to-wtc --wtc-batch-pushes "--wtc-batch-locks${LOCKOPTS:+=$LOCKOPTS}"
-        --queue-ownership-analysis --wtc-borrow-analysis)
+        "$QOA" --wtc-borrow-analysis)
 if (( SPECIALIZE )); then
   OPTS=""
   [ -n "$FORCE" ] && OPTS="force-spsc=$FORCE"

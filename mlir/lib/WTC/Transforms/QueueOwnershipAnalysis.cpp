@@ -16,8 +16,11 @@ using namespace mlir::wtc;
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/Demangle/Demangle.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 
 #include <functional>
@@ -57,6 +60,20 @@ using namespace mlir::wtc;
 // the build fails, naming each thread and where it touches the queue; when
 // the analysis cannot tell, a warning says why; when it agrees, a remark
 // says the declaration is verified.
+//
+// The analysis sees one translation unit. What it assumes of the rest of
+// the program, and what it checks (docs/audit.md, "Still open"): a unit
+// that defines main is the program, apart from libraries, which reach the
+// program's queues only through what they are handed. A unit without
+// main, or one built to be linked with other files of the program
+// (open-world; or named-elsewhere, the symbols those files name, which
+// also stands for the rest of a unit without main), shares its external
+// symbols: a function another unit may call is a root for
+// any number of threads, and a queue another unit may name -- one in, or
+// reachable from, a global it may name, or handed out by a function it may
+// call -- escapes. A queue whose address goes to a function with no body
+// here escapes in either case. Every queue of an escaping queue's type is
+// unknown, and keeps the general-purpose implementation.
 
 namespace {
 
@@ -536,6 +553,32 @@ private:
                        "access in this translation unit as \"vacuously satisfied\" rather than "
                        "\"verified\""),
         llvm::cl::init(true)};
+    // The rest of the program (see the comment at the top of the file).
+    Option<bool> openWorldOption{
+        *this, "open-world",
+        llvm::cl::desc("Other translation units of the program may name every symbol with external "
+                       "linkage here: a unit built to be linked with other files of the program. "
+                       "Assumed when the module defines no main and named-elsewhere is not given"),
+        llvm::cl::init(false)};
+    Option<std::string> namedElsewhereFile{
+        *this, "named-elsewhere",
+        llvm::cl::desc("A file of the symbols the program's other files define or reference, one per "
+                       "line (what nm prints for them): each one this module defines with external "
+                       "linkage may be named by another translation unit, and no other may"),
+        llvm::cl::init("")};
+    bool openWorld = false;
+    std::string openWorldWhy;
+    llvm::StringSet<> namedElsewhere;
+    // Whether another translation unit may name this function or global,
+    // and if so why, in the words of a remark.
+    bool visibleElsewhere(Operation *symbol, std::string *why = nullptr);
+    // Every shim queue type a queue of which leaves this translation unit
+    // -- its address handed to a function with no body here, or, where
+    // other units may name this one's symbols, kept in or reachable from a
+    // global they may name, or handed out by a function they may call --
+    // is poisoned: another unit may push to or pop from it on threads the
+    // walk never sees.
+    void poisonEscapes();
     // Why one side of a queue counts many, in the program's own terms.
     std::string whyMany(const SideInfo &side);
     // The arrays whose elements a constructor call builds one per run of a
@@ -1407,6 +1450,345 @@ void QueueOwnershipAnalysisPass::poisonAddressTakenLibraryOps() {
     });
 }
 
+bool QueueOwnershipAnalysisPass::visibleElsewhere(Operation *symbol, std::string *why) {
+    std::optional<cir::GlobalLinkageKind> linkage;
+    llvm::StringRef name;
+    if (auto f = dyn_cast<cir::FuncOp>(symbol)) { linkage = f.getLinkage(); name = f.getSymName(); }
+    else if (auto g = dyn_cast<cir::GlobalOp>(symbol)) { linkage = g.getLinkage(); name = g.getSymName(); }
+    if (!linkage || *linkage == cir::GlobalLinkageKind::InternalLinkage ||
+        *linkage == cir::GlobalLinkageKind::PrivateLinkage)
+        return false;
+    // A global only declared here is defined in another unit, which
+    // names it by definition.
+    if (auto g = dyn_cast<cir::GlobalOp>(symbol); g && g.isDeclaration()) {
+        if (why) *why = "it is defined in another translation unit";
+        return true;
+    }
+    if (openWorld) {
+        if (why) *why = openWorldWhy;
+        return true;
+    }
+    if (namedElsewhere.contains(name)) {
+        if (why) *why = "another file of the program names it";
+        return true;
+    }
+    return false;
+}
+
+void QueueOwnershipAnalysisPass::poisonEscapes() {
+    // The shim's queue types that carry a verdict; a library's queues are
+    // never rewritten, and their verdicts say what may use them out of
+    // sight instead (openWhy).
+    llvm::SetVector<Type> types;
+    for (auto &entry : roots) {
+        if (libraryKeys.contains(entry.first)) continue;
+        if (Type t = queueTypeOf(entry.first); t && !poisonedTypes.contains(t)) types.insert(t);
+    }
+    if (types.empty()) return;
+    // The shim's own code, and the standard library's, which keep their
+    // queues to themselves; a callback handed to a library is a root of
+    // the walk already.
+    auto shimOrStd = [](llvm::StringRef n) {
+        return n.starts_with("_ZN3wtc") || n.starts_with("_ZNK3wtc") || n.starts_with("_ZSt") ||
+               n.starts_with("_ZNSt") || n.starts_with("_ZNKSt");
+    };
+    // Functions with no body here that cannot hand a queue to anyone: they
+    // touch only the bytes they are handed, allocate or free them, start
+    // a thread whose entry the walk follows, or run a destructor at exit.
+    auto harmless = [&](cir::FuncOp callee) {
+        const llvm::StringRef n = callee.getSymName();
+        return getSemanticKind(callee) != SemanticOpKind::Unknown || isLibraryFunction(callee) ||
+               isAllocator(callee) || touchesOnlyItsArguments(callee) || n == "free" ||
+               n.starts_with("_ZdlPv") || n.starts_with("_ZdaPv") || n == "__cxa_atexit" ||
+               n == "__cxa_thread_atexit" || n == "__cxa_thread_atexit_impl" || shimOrStd(n);
+    };
+    for (Type t : types) {
+        // Whether a value of this type is, holds, or points to a queue of
+        // type t, at any depth: a pointer to it, a structure of parameters
+        // naming it, a vector of pointers to it. True answers are kept; a
+        // false one may come from a type still being looked at on a cycle.
+        llvm::DenseSet<Type> holding;
+        std::function<bool(Type, llvm::DenseSet<Type> &)> holdsIn = [&](Type ty, llvm::DenseSet<Type> &seen) {
+            while (auto a = dyn_cast_or_null<cir::ArrayType>(ty)) ty = a.getElementType();
+            if (!ty) return false;
+            if (ty == t || holding.contains(ty)) return true;
+            if (!seen.insert(ty).second) return false;
+            bool r = false;
+            if (auto p = dyn_cast<cir::PointerType>(ty)) r = holdsIn(p.getPointee(), seen);
+            else if (auto rec = dyn_cast<cir::RecordType>(ty); rec && !rec.isIncomplete())
+                r = llvm::any_of(rec.getMembers(), [&](Type m) { return holdsIn(m, seen); });
+            if (r) holding.insert(ty);
+            return r;
+        };
+        // A whole search from one type is exact, and kept.
+        llvm::DenseMap<Type, bool> holdsMemo;
+        auto holds = [&](Type ty) {
+            if (auto it = holdsMemo.find(ty); it != holdsMemo.end()) return it->second;
+            llvm::DenseSet<Type> seen;
+            const bool r = holdsIn(ty, seen);
+            holdsMemo[ty] = r;
+            return r;
+        };
+        // Whether a value carries the address of such a queue: its type
+        // says so, at any depth (a structure of parameters passed by
+        // value); or, seen through casts of any kind -- (void *)&q,
+        // (uintptr_t)&q -- what it was made from does; or it is loaded
+        // from, or points into, an object such a value was stored in (a
+        // local variable, a void * member set to &q, the copy the ABI makes
+        // of a structure passed by value); or it is a parameter some caller
+        // here passes such a value for.
+        llvm::DenseSet<Operation *> taintedRoots;   // allocas, globals, allocating calls
+        std::optional<llvm::DenseMap<Operation *, llvm::SmallVector<cir::CallOp, 2>>> callersOf;
+        auto rootOf = [](Value a) {
+            a = traceToLocalRoot(a);
+            for (unsigned depth = 0; depth < 8; ++depth) {
+                if (auto m = a.getDefiningOp<cir::GetMemberOp>()) a = traceToLocalRoot(m.getAddr());
+                else if (auto ps = a.getDefiningOp<cir::PtrStrideOp>()) a = traceToLocalRoot(ps.getBase());
+                else if (auto ge = a.getDefiningOp<cir::GetElementOp>()) a = traceToLocalRoot(ge.getBase());
+                else break;
+            }
+            return a;
+        };
+        // The callers here of each function, for its parameters.
+        auto callersOfFunc = [&](cir::FuncOp f) -> llvm::ArrayRef<cir::CallOp> {
+            if (!callersOf) {
+                callersOf.emplace();
+                module.walk([&](cir::CallOp c) {
+                    if (cir::FuncOp to = lookupCallee(c); to && !c.isIndirect())
+                        (*callersOf)[to.getOperation()].push_back(c);
+                });
+            }
+            auto it = callersOf->find(f.getOperation());
+            return it == callersOf->end() ? llvm::ArrayRef<cir::CallOp>() : llvm::ArrayRef<cir::CallOp>(it->second);
+        };
+        // The objects a pointer may point into: a local, a global or a heap
+        // object made by a call; through a pointer kept in a local slot (a
+        // parameter spilled at -O0, `box *b = new box`), every value stored
+        // in the slot; through a parameter, what each direct caller passes.
+        // A pointer loaded from anywhere else points nowhere this knows.
+        std::function<void(Value, unsigned, llvm::SmallVectorImpl<Operation *> &)> pointees =
+            [&](Value addr, unsigned depth, llvm::SmallVectorImpl<Operation *> &out) {
+                if (depth > 8) return;
+                Value a = rootOf(addr);
+                if (auto arg = dyn_cast<BlockArgument>(a)) {
+                    auto f = dyn_cast<cir::FuncOp>(arg.getOwner()->getParentOp());
+                    if (!f || arg.getOwner() != &f.getBody().front()) return;
+                    for (cir::CallOp call : callersOfFunc(f)) {
+                        auto args = call.getArgOperands();
+                        if (arg.getArgNumber() < args.size()) pointees(args[arg.getArgNumber()], depth + 1, out);
+                    }
+                    return;
+                }
+                Operation *d = a.getDefiningOp();
+                if (!d) return;
+                if (auto gg = dyn_cast<cir::GetGlobalOp>(d)) {
+                    if (auto g = module.lookupSymbol<cir::GlobalOp>(gg.getName())) out.push_back(g);
+                } else if (isa<cir::AllocaOp, cir::CallOp>(d)) {
+                    out.push_back(d);
+                } else if (auto ld = dyn_cast<cir::LoadOp>(d)) {
+                    if (auto slot = traceToLocalRoot(ld.getAddr()).getDefiningOp<cir::AllocaOp>())
+                        for (Operation *user : slot->getUsers())
+                            if (auto st = dyn_cast<cir::StoreOp>(user); st && st.getAddr() == slot.getResult())
+                                pointees(st.getValue(), depth + 1, out);
+                }
+            };
+        // An object one of whose bytes may hold such an address.
+        auto tainted = [&](Value addr) {
+            llvm::SmallVector<Operation *, 4> objects;
+            pointees(addr, 0, objects);
+            return llvm::any_of(objects, [&](Operation *o) { return taintedRoots.contains(o); });
+        };
+        std::function<bool(Value, unsigned)> carries = [&](Value v, unsigned depth) -> bool {
+            if (depth > 8) return false;
+            if (holds(v.getType())) return true;
+            Value r = v;
+            while (Operation *d = r.getDefiningOp()) {
+                if (auto c = dyn_cast<cir::CastOp>(d)) r = c.getSrc();
+                else if (auto u = dyn_cast<mlir::UnrealizedConversionCastOp>(d); u && u.getNumOperands() == 1)
+                    r = u.getOperand(0);
+                else break;
+                if (holds(r.getType())) return true;
+            }
+            // A pointer into such an object, or a value read from one: a
+            // field the address was stored in, the copy the ABI makes of a
+            // structure passed by value.
+            if (isa<cir::PointerType>(r.getType()) && tainted(r)) return true;
+            if (auto ld = r.getDefiningOp<cir::LoadOp>(); ld && tainted(ld.getAddr())) return true;
+            // A parameter: what any direct caller here passes for it.
+            if (auto arg = dyn_cast<BlockArgument>(r)) {
+                auto f = dyn_cast<cir::FuncOp>(arg.getOwner()->getParentOp());
+                if (!f || arg.getOwner() != &f.getBody().front()) return false;
+                for (cir::CallOp call : callersOfFunc(f)) {
+                    auto args = call.getArgOperands();
+                    if (arg.getArgNumber() < args.size() && carries(args[arg.getArgNumber()], depth + 1))
+                        return true;
+                }
+            }
+            return false;
+        };
+        // Every object the address may point into, a store through a
+        // pointer parameter included (`*slot = &q` taints what the callers
+        // pass for slot).
+        auto taint = [&](Value addr) {
+            llvm::SmallVector<Operation *, 4> objects;
+            pointees(addr, 0, objects);
+            bool grew = false;
+            for (Operation *o : objects) grew |= taintedRoots.insert(o).second;
+            return grew;
+        };
+        // The objects such an address is stored or copied into, until
+        // nothing changes: a global whose initialiser names a queue (the
+        // constant a local structure is copied from), a local, a field or a
+        // heap object given such a value, an object copied from a tainted
+        // one.
+        module.walk([&](cir::GlobalOp g) {
+            std::optional<Attribute> init = g.getInitialValue();
+            if (!init) return;
+            bool names = false;
+            init->walk([&](cir::GlobalViewAttr gv) {
+                auto viewed = module.lookupSymbol<cir::GlobalOp>(gv.getSymbol().getValue());
+                if (viewed && holds(viewed.getSymType())) names = true;
+            });
+            if (names) taintedRoots.insert(g);
+        });
+        // A fixpoint: the set only grows, and is bounded by the objects of
+        // the module, so a chain of copies written in any order is
+        // followed to its end.
+        for (bool changed = true; changed;) {
+            changed = false;
+            module.walk([&](Operation *op) {
+                if (auto st = dyn_cast<cir::StoreOp>(op)) {
+                    if (!tainted(st.getAddr()) && carries(st.getValue(), 0)) changed |= taint(st.getAddr());
+                } else if (auto cp = dyn_cast<cir::CopyOp>(op)) {
+                    if (!tainted(cp.getDst()) && carries(cp.getSrc(), 0)) changed |= taint(cp.getDst());
+                }
+            });
+        }
+        auto reaches = [&](Value v) { return carries(v, 0); };
+        Operation *at = nullptr;
+        std::string why;
+        // Handed to code with no body here: another file, or a library.
+        // Directly, as an argument of a function with no body; along with
+        // the address of such a function -- a thread started in it
+        // (wtc::spawn, std::thread, pthread_create) or a callback handed
+        // with its argument; or through a call by pointer, which reaches
+        // such a function when the program takes the address of one, and
+        // anything when other units may hand it theirs.
+        auto externalEntry = [&](Value v) -> cir::FuncOp {
+            Value r = v;
+            while (Operation *d = r.getDefiningOp()) {
+                if (auto c = dyn_cast<cir::CastOp>(d)) r = c.getSrc();
+                else if (auto u = dyn_cast<mlir::UnrealizedConversionCastOp>(d); u && u.getNumOperands() == 1)
+                    r = u.getOperand(0);
+                else break;
+            }
+            auto gg = r.getDefiningOp<cir::GetGlobalOp>();
+            auto f = gg ? module.lookupSymbol<cir::FuncOp>(gg.getName()) : cir::FuncOp();
+            return f && f.getBody().empty() && !harmless(f) ? f : cir::FuncOp();
+        };
+        auto inProgram = [&](Operation *op) {
+            auto in = op->getParentOfType<cir::FuncOp>();
+            return in && !isLibraryFunction(in) && !shimOrStd(in.getSymName()) &&
+                   !in.getSymName().starts_with("__") && getSemanticKind(in) == SemanticOpKind::Unknown;
+        };
+        cir::FuncOp takenOutside;
+        module.walk([&](cir::GetGlobalOp gg) {
+            if (takenOutside || !inProgram(gg)) return;
+            auto f = module.lookupSymbol<cir::FuncOp>(gg.getName());
+            if (f && f.getBody().empty() && !harmless(f) && !f.getSymName().starts_with("__")) takenOutside = f;
+        });
+        module.walk([&](cir::CallOp call) {
+            if (!inProgram(call)) return WalkResult::advance();
+            cir::FuncOp callee = lookupCallee(call);
+            auto args = call.getArgOperands();
+            if (callee && callee.getBody().empty() && !harmless(callee) && llvm::any_of(args, reaches)) {
+                at = call;
+                why = "it is handed to " + llvm::demangle(callee.getSymName().str()) + ", whose body is not here";
+                return WalkResult::interrupt();
+            }
+            for (Value a : call.getOperands())
+                if (cir::FuncOp entry = externalEntry(a); entry && llvm::any_of(args, reaches)) {
+                    at = call;
+                    why = "it is handed, with the address of " + llvm::demangle(entry.getSymName().str()) +
+                          ", whose body is not here, to " +
+                          (callee ? llvm::demangle(callee.getSymName().str()) : std::string("a call through a pointer"));
+                    return WalkResult::interrupt();
+                }
+            if (!callee && call.isIndirect() && (openWorld || !namedElsewhere.empty() || takenOutside) &&
+                llvm::any_of(args, reaches)) {
+                at = call;
+                why = takenOutside ? "it is handed to a call through a pointer, which may reach " +
+                                         llvm::demangle(takenOutside.getSymName().str()) +
+                                         ", whose body is not here"
+                                   : std::string("it is handed to a call through a pointer, which may reach "
+                                                 "another translation unit");
+                return WalkResult::interrupt();
+            }
+            return WalkResult::advance();
+        });
+        // Named by another unit: a global it may name that holds the queue
+        // or a pointer to it, or into which its address is stored.
+        if (!at)
+            module.walk([&](cir::GlobalOp g) {
+                std::string elsewhere;
+                if (!holds(g.getSymType()) || !visibleElsewhere(g, &elsewhere)) return WalkResult::advance();
+                at = g;
+                why = "it is reachable from the global " + llvm::demangle(g.getSymName().str()) + ", and " +
+                      elsewhere;
+                return WalkResult::interrupt();
+            });
+        if (!at && (openWorld || !namedElsewhere.empty()))
+            module.walk([&](cir::StoreOp st) {
+                if (!reaches(st.getValue())) return WalkResult::advance();
+                Value a = traceToLocalRoot(st.getAddr());
+                for (unsigned depth = 0; depth < 8; ++depth) {
+                    if (auto m = a.getDefiningOp<cir::GetMemberOp>()) a = traceToLocalRoot(m.getAddr());
+                    else if (auto ps = a.getDefiningOp<cir::PtrStrideOp>()) a = traceToLocalRoot(ps.getBase());
+                    else break;
+                }
+                auto gg = a.getDefiningOp<cir::GetGlobalOp>();
+                auto g = gg ? module.lookupSymbol<cir::GlobalOp>(gg.getName()) : cir::GlobalOp();
+                std::string elsewhere;
+                if (!g || !visibleElsewhere(g, &elsewhere)) return WalkResult::advance();
+                at = st;
+                why = "its address is stored in the global " + llvm::demangle(g.getSymName().str()) + ", and " +
+                      elsewhere;
+                return WalkResult::interrupt();
+            });
+        // Handed out by a function another unit may call: returned, or
+        // written through a parameter (a pointer to a pointer to it). A
+        // parameter that is the queue itself is no way out -- the other
+        // unit would hand in a queue of its own, and an access through a
+        // parameter of a root is unresolvable anyway. Inline functions and
+        // template instances are each unit's own copy, and hand out only
+        // what their callers hand them.
+        if (!at && (openWorld || !namedElsewhere.empty()))
+            module.walk([&](cir::FuncOp f) {
+                if (f.getBody().empty() || f.getSymName() == "main" || shimOrStd(f.getSymName()) ||
+                    f.getLinkage() != cir::GlobalLinkageKind::ExternalLinkage)
+                    return WalkResult::advance();
+                std::string elsewhere;
+                if (!visibleElsewhere(f, &elsewhere)) return WalkResult::advance();
+                auto fty = f.getFunctionType();
+                bool out = !fty.hasVoidReturn() && holds(fty.getReturnType());
+                for (Type in : fty.getInputs()) {
+                    auto p = dyn_cast<cir::PointerType>(in);
+                    if (p && p.getPointee() != t && holds(p.getPointee())) out = true;
+                }
+                if (!out) return WalkResult::advance();
+                at = f;
+                why = "it is handed out by " + llvm::demangle(f.getSymName().str()) + ", and " + elsewhere;
+                return WalkResult::interrupt();
+            });
+        if (!at) continue;
+        poisonedTypes.insert(t);
+        poisonWhy[t] = "it escapes this translation unit: " + why;
+        at->emitRemark() << "wtc: a queue escapes this translation unit (" << why
+                         << "); every queue of its type is now unknown";
+        ++remarks;
+    }
+}
+
 bool QueueOwnershipAnalysisPass::checkDeclared(Operation *root, const RootInfo &info, Topology verdict,
                                                const std::string &label,
                                                llvm::ArrayRef<cir::CallOp> ctors, bool capExceeded,
@@ -1725,6 +2107,30 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
     libraryFunctions.clear(); unresolvedPuts.clear(); mbufPoolKeys.clear(); mbufLink.reset();
     defaultOpsSet.reset(); objectPools.clear(); singleForm.clear();
     globalPoison = false; remarks = 0;
+    namedElsewhere.clear();
+    openWorld = openWorldOption;
+    openWorldWhy = "the unit is built to be linked with other files of the program";
+    // Without main the rest of the program is elsewhere, and may name
+    // anything, unless the files that make it up are listed: then they
+    // name what the list says.
+    if (!openWorld && namedElsewhereFile.empty()) {
+        auto mainFn = module.lookupSymbol<cir::FuncOp>("main");
+        if (!mainFn || mainFn.getBody().empty()) {
+            openWorld = true;
+            openWorldWhy = "this unit has no main, so the rest of the program is elsewhere";
+        }
+    }
+    if (!namedElsewhereFile.empty()) {
+        auto buf = llvm::MemoryBuffer::getFile(namedElsewhereFile.getValue());
+        if (!buf) {
+            module.emitError() << "wtc: cannot read the symbols named elsewhere from " << namedElsewhereFile.getValue();
+            return signalPassFailure();
+        }
+        llvm::SmallVector<llvm::StringRef, 64> lines;
+        (*buf)->getBuffer().split(lines, '\n', -1, false);
+        for (llvm::StringRef l : lines)
+            if (!(l = l.trim()).empty()) namedElsewhere.insert(l);
+    }
     poisonedOps.clear();
 
     // A function that can reach neither a queue operation nor a queue's
@@ -1745,6 +2151,19 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
         });
     };
     ThreadInstanceWalk walk(module, relevant);
+    // A function another unit may call runs on threads this one cannot
+    // count; main is the program's own, run once. An inline function or a
+    // template instance (linkonce) is each unit's own copy: what another
+    // unit's copy touches is its own, or a queue that unit could name,
+    // which escapes (poisonEscapes).
+    if (openWorld || !namedElsewhere.empty())
+        walk.setCallableElsewhere([this](cir::FuncOp f) {
+            const auto l = f.getLinkage();
+            return f.getSymName() != "main" &&
+                   (l == cir::GlobalLinkageKind::ExternalLinkage || l == cir::GlobalLinkageKind::WeakAnyLinkage ||
+                    l == cir::GlobalLinkageKind::WeakODRLinkage) &&
+                   visibleElsewhere(f);
+        });
     self = &walk;
     this->walk = &walk;
 
@@ -2079,6 +2498,7 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
     // Before the remarks below: it may leave an access with no type.
     poisonAddressTakenLibraryOps();
     poisonUnmodelledMempoolCalls();
+    poisonEscapes();
     if (globalPoison) {
         module.emitRemark() << "wtc: an unresolvable queue access had no type to attribute it to; "
                                "every queue is unknown";

@@ -186,6 +186,31 @@ No false "verified", and no false error on a control.
 - **The rerun is untimed.** The ThreadSanitizer columns of `recall.tsv`
   vary from run to run, as they did on 26 Oct.
 
+## Rerun on 29 Oct
+
+The driver, supercollider, the recall study and the history were rerun
+on 29 Oct with the analysis that reports vacuous declarations as such
+by default and poisons queues that leave the translation unit (units
+without `main`, such as `rte_pdump.c`, share every external symbol).
+Same host, container, checkouts and commands; untimed, verdicts only.
+`driver-2026-10-29.txt`, `history-2026-10-29.txt` and
+`recall-2026-10-29.tsv` are the outputs.
+
+- **What moved: the wording of the 3 vacuous verdicts and nothing
+  else.** The two `rx_q` lines of the driver and dumpcap's line of the
+  history now read "vacuously satisfied" instead of "verified in this
+  translation unit"; in the recall study the 4 control rows of those
+  rings are classified vacuous instead of verified. These are the lines
+  the option changed on 28 Oct.
+- **What did not.** No other line of the driver or the history, no
+  mutant row, no library-program verdict and none of supercollider's
+  lines changes. No queue in any of them escapes the translation unit
+  and no root is added: the escape rules apply to the shim's queues,
+  and the roots for functions other units may call to units without
+  `main`, of which `rte_pdump.c` is the only one here and has no queue
+  the walk can place.
+- The ThreadSanitizer columns of `recall-2026-10-29.tsv` are this run's.
+
 ## What it means for the claims
 
 - **Real bugs.** The check has caught no wrong declaration that shipped.

@@ -19,10 +19,14 @@
 //
 // Roots of the walk: main; the functions global constructors run (on the
 // main thread, once); every function whose address is taken other than as a
-// spawn entry, which may be called from any thread any number of times; and
-// any remaining externally visible function nobody in this translation unit
-// calls. The whole-program assumption is one translation unit, stated here
-// because nothing enforces it.
+// spawn entry, which may be called from any thread any number of times; any
+// remaining externally visible function nobody in this translation unit
+// calls; and, when the client says another translation unit may call it
+// (setCallableElsewhere), an externally visible function this one calls as
+// well. Each of the last three stands for any number of threads the module
+// cannot account for. Which other units exist is the client's to say: the
+// walk sees one translation unit, and docs/audit.md says what the queue
+// analysis assumes of the rest of the program and what it checks.
 
 #include "clang/CIR/Dialect/IR/CIRDialect.h"
 
@@ -36,6 +40,7 @@
 #include "llvm/ADT/SmallVector.h"
 
 #include <deque>
+#include <functional>
 #include <optional>
 #include <utility>
 
@@ -182,6 +187,14 @@ public:
     // than guess.
     void run(llvm::function_ref<void(Instance &)> visit,
              llvm::function_ref<void(cir::FuncOp)> onRecursion);
+
+    // Functions another translation unit may call, whether or not this one
+    // does: each is a root standing for any number of threads the module
+    // cannot account for, beside its callers here. Set before run(); by
+    // default only the functions nothing here calls are (addOrphanRoots).
+    void setCallableElsewhere(std::function<bool(cir::FuncOp)> calledElsewhere) {
+        callableElsewhere_ = std::move(calledElsewhere);
+    }
 
     // The root object a handle refers to -- a cir.global, a cir.alloca, or
     // the cir.call that allocated it -- resolved through the chain of call
@@ -416,6 +429,7 @@ private:
 
     ModuleOp module_;
     llvm::function_ref<bool(cir::FuncOp)> relevant_;
+    std::function<bool(cir::FuncOp)> callableElsewhere_;
     unsigned cap_;
     bool reachesComputed_ = false;
     unsigned nextThread_ = 0;

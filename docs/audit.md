@@ -2,7 +2,8 @@
 
 State as of September 2026 for the queue analysis, and October 2026 for the
 layout passes (the section after "Still open"); the closed table and the
-array entry below are updated to 28 October 2026. The first review was of the
+array entry below are updated to 28 October 2026, the translation-unit
+entry to 29 October. The first review was of the
 prototype before it moved into this repository; the sections below have since been worked
 through, and each one now says what became of it. A defect is only marked
 closed where a test would fail if it came back.
@@ -37,10 +38,71 @@ not compile under any compiler because its move constructor was written
 
 ## Still open
 
-**One translation unit is assumed.** A second unit touching the same global
-queue is invisible. Nothing enforces this; `wtc-cc` compiles one file. A
-rewritten constructor call may sit in an inline function -- a struct's
-constructor -- that another unit also emits, and the linker keeps one copy.
+**One translation unit is seen; the rest of the program is assumed, and
+partly checked (29 Oct).** The analysis sees one file. What it assumes of
+the others, and what it now enforces
+(`test/Transforms/QueueOwnershipAnalysis/escapes.cpp`, `other-units.cpp`,
+`test/Integration/wtc_cc_other_files.cpp`):
+
+- *Enforced, always.* A queue whose address is handed to a function with no
+  body here escapes: every queue of its type is unknown and keeps the
+  general-purpose implementation, and a remark names the call. Handed
+  means by pointer, by reference, inside a structure of parameters passed
+  by pointer or by value, cast to `void *` or to an integer, through a
+  local variable or a global, along a chain of copies in any order,
+  through a parameter of a function here that hands it on, stored through
+  a pointer parameter (`*slot = &q`), or in a field (a `void *` member)
+  of a local, a global or a heap object reached through a local pointer
+  (`box *b = new box; b->p = &q`) that is handed over. It also
+  means handed along with the address of such a function: a thread
+  started in a function defined in another file (`wtc::spawn`,
+  `std::thread`, `pthread_create`) or a callback registered with its
+  argument; and handed to a call through a pointer, when the program takes
+  the address of such a function. A queue only declared here (`extern`)
+  is defined in another file and escapes too. Until 29 Oct all of these
+  were specialised from the threads in sight, a race when the other file
+  pushes: a thread entry in another file stopped the contract checks of
+  `WTC_CHECK` at the second producer
+  (`test/Integration/wtc_cc_spawn_elsewhere.cpp`). The shim's and the
+  standard library's own functions, allocation, `free`, `memcpy` and the
+  like, and `__cxa_atexit` are not counted as escapes, and neither are
+  calls inside the shim, the standard library and functions named with a
+  leading `__`.
+- *Enforced where other units share this one's symbols.* That is a unit
+  compiled with `wtc-cc -c` (`open-world`); a unit without `main`, unless
+  the rest of the program is listed; and, for the symbols they name, the
+  object files, archives and shared objects `wtc-cc` links with it, read
+  with `nm` (`named-elsewhere`, which is that list). A queue in, or
+  reachable from, a global another unit may name escapes, as does one whose
+  address is stored in such a global or that a function with external
+  linkage returns or writes through a parameter. A function with external
+  linkage another unit may call is a root standing for any number of
+  threads, as an orphan is, even when this unit calls it too.
+- *Assumed.* A unit with `main`, linked with nothing but `-l` libraries,
+  is the whole program: no other file names its globals or calls its
+  functions, and a library reaches a queue only through what it is
+  handed, which escapes, or through a callback, which is a root for any
+  thread already. `wtc-opt` run by hand on such a unit that is then linked
+  with other files of the program must be given `open-world=true` or
+  `named-elsewhere`. A shared library loaded with `dlopen`, or a `-l`
+  library built from the program's own sources, is not seen. A call
+  through a pointer is taken to reach this unit's functions or a library
+  unless other units share its symbols.
+- *Not covered.* The other passes that run the same walk for questions of
+  their own -- push batching, the layout passes -- do not add these roots
+  or escapes yet; the borrow analysis acts only on a queue this analysis
+  proved spsc, and inherits them.
+  An escape poisons a type, not a queue: one escaping `queue<int>` keeps
+  every `queue<int>` general. The flow of an address is followed through
+  casts, local variables, globals, fields of the object it is stored in,
+  pointers kept in local variables, and the parameters of direct calls;
+  not through a value returned from a function, a pointer loaded from a
+  field or a global (an object reached that way is not known), the
+  standard library's containers (`std::vector<void *>`, whose storage is
+  reached through such fields), or arithmetic on an integer made from
+  it. A rewritten constructor call may sit in an
+  inline function -- a struct's constructor -- that another unit also
+  emits, and the linker keeps one copy.
 
 **A queue built by a shared constructor is not specialised; an array of
 queues is one queue.** A queue pointer loaded from a field, or from a slot or a

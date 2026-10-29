@@ -7,9 +7,9 @@
 
 !s32i = !cir.int<s, 32>
 module {
-  cir.global "private" external @q1 : !s32i
-  cir.global "private" external @q2 : !s32i
-  cir.global "private" external @v : !s32i
+  cir.global "private" external @q1 = #cir.int<0> : !s32i
+  cir.global "private" external @q2 = #cir.int<0> : !s32i
+  cir.global "private" external @v = #cir.int<0> : !s32i
 
   cir.func @spawn(%fn: !cir.ptr<!cir.func<()>>) [#cir.annotation<"wtc_thread_spawn">] {
     cir.return

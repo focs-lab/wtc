@@ -8,8 +8,8 @@
 
 !s32i = !cir.int<s, 32>
 module {
-  cir.global "private" external @q : !s32i
-  cir.global "private" external @v : !s32i
+  cir.global "private" external @q = #cir.int<0> : !s32i
+  cir.global "private" external @v = #cir.int<0> : !s32i
 
   cir.func @main() {
     %queue = cir.get_global @q : !cir.ptr<!s32i>

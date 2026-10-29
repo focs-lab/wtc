@@ -2235,17 +2235,22 @@ void ThreadInstanceWalk::addOrphanRoots() {
                 work.push_back(callee.getOperation());
         });
     }
+    // A function this unit calls is a root too when another unit may call
+    // it as well (setCallableElsewhere): its callers here are no account
+    // of the threads it runs on.
     module_.walk([&](cir::FuncOp f) {
         if (f.getBody().empty()) return;
-        if (accounted.count(f.getOperation())) return;
         if (getSemanticKind(f) != SemanticOpKind::Unknown) return;
         const auto linkage = f.getLinkage();
         if (linkage == cir::GlobalLinkageKind::InternalLinkage ||
             linkage == cir::GlobalLinkageKind::PrivateLinkage)
             return;
+        const bool orphan = !accounted.count(f.getOperation());
+        if (!orphan && !(callableElsewhere_ && callableElsewhere_(f))) return;
         if (!relevant_(f)) return;
         if (Instance *root = addIfRoom({f, nextThread_++, Mult::Many, Mult::Many, nullptr, nullptr, true, false}))
-            root->manyRoot = "nothing in this translation unit calls it";
+            root->manyRoot = orphan ? "nothing in this translation unit calls it"
+                                    : "another translation unit may call it";
     });
 }
 

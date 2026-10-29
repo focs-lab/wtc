@@ -9,8 +9,8 @@
 !s32i = !cir.int<s, 32>
 !thread = !cir.struct<"std::thread" {data !cir.ptr<!s32i>}>
 module {
-  cir.global "private" external @q : !s32i
-  cir.global "private" external @v : !s32i
+  cir.global "private" external @q = #cir.int<0> : !s32i
+  cir.global "private" external @v = #cir.int<0> : !s32i
 
   cir.func @spawn(%ret: !cir.ptr<!thread>, %fn: !cir.ptr<!cir.func<()>>) [#cir.annotation<"wtc_thread_spawn">] {
     cir.return
