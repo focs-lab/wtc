@@ -15,6 +15,7 @@
 // the list the workloads dispatch over.
 
 #include <condition_variable>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -248,6 +249,48 @@ template <class T> struct ring_borrowed {
     wtc::rt::spsc_ring<T> q;
     void push(const T& v) { q.push(v); }
     bool try_pop(T& out) { T* p = q.try_pop_borrow(); if (!p) return false; out = *p; return true; }
+};
+
+// W13, many producers and one consumer with and without an order between
+// producers. Every one of these holds T in its cell and is popped by moving
+// it out, so nothing is allocated per element and what differs is the
+// queue: the shim's single-consumer segmented queue (linearisable), its
+// laned queue (each producer's order only; in a build that defines
+// WTC_LANED_MPSC), moodycamel's ConcurrentQueue by value (each producer's
+// order only, producers found by thread id, no token), and a deque under a
+// mutex by value. The shim's general queue popped by moving,
+// shim_generic_move, is above.
+template <class T> struct shim_mpsc_move {
+    wtc::queue<T> q{wtc::topology::mpsc};
+    void push(const T& v) { q.push(v); }
+    bool try_pop(T& out) { return q.try_pop(out); }
+};
+#ifdef WTC_LANED_MPSC
+template <class T> struct shim_laned_move {
+    wtc::queue<T> q{wtc::topology::mpsc_laned};
+    void push(const T& v) { q.push(v); }
+    bool try_pop(T& out) { return q.try_pop(out); }
+};
+#endif
+template <class T> struct moodycamel_cq_inline {
+    moodycamel::ConcurrentQueue<T> q;
+    void push(const T& v) { q.enqueue(v); }
+    bool try_pop(T& out) { return q.try_dequeue(out); }
+};
+template <class T> struct std_mutex_inline {
+    std::mutex m;
+    std::deque<T> q;
+    void push(const T& v) {
+        std::lock_guard<std::mutex> g(m);
+        q.push_back(v);
+    }
+    bool try_pop(T& out) {
+        std::lock_guard<std::mutex> g(m);
+        if (q.empty()) return false;
+        out = std::move(q.front());
+        q.pop_front();
+        return true;
+    }
 };
 
 inline const std::vector<std::string>& variant_names() {

@@ -40,6 +40,8 @@ workloads/
   w11_pool            a thread pool's tasks on the heap or in the cell,
                       through the general queue or the queue for one producer
   w12_fusion          three stages on three threads, or fused on one
+  w13_mpsc_order      many producers and one consumer, with and without
+                      an order between producers (the laned queue)
 apps/ferret/          PARSEC ferret ported onto the shim (GPL, see there)
 apps/dedup/           PARSEC dedup ported onto the shim (BSD-3, see there)
 apps/spdlog/          spdlog's asynchronous logger on the shim (MIT, see there)
@@ -201,6 +203,17 @@ variants are the ceiling.
   the fused loop spends one. The work is given as W11's is, and both
   variants print the same checksum of the first million records for the same
   count of rounds, so runs of the two can be checked against each other.
+- **W13** `w13_mpsc_order`: P producers and one consumer through queues that
+  hold the element in the cell and are popped by moving it out: the shim's
+  single-consumer and general queues, the laned queue that keeps only each
+  producer's order (`runtime/laned_mpsc.hpp`, built with `WTC_LANED_MPSC`),
+  moodycamel's ConcurrentQueue and a deque under a mutex, all by value.
+  What relaxing the order between producers could gain. Streaming, as W9's
+  split mode (throughput; the cost of a push, a pop and an empty poll, one
+  in 61 timed); or paced (`--interval-ns`, `--burst`, `--sleep`): latency
+  from push to pop, and with sleeping producers many more of them than
+  cores, the case where a consumer that searches its producers one by one
+  pays for the idle ones. The consumer checks each producer's order.
 
 Every results line also records the process's peak resident set
 (`peak_rss_kib`). The latency workloads record the whole distribution as

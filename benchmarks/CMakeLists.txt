@@ -90,6 +90,12 @@ endforeach()
 # The allocation counter: a preload for the runs that explain a result
 # (harness/alloccount.cpp). Linked into nothing, and never sanitized: it
 # replaces the allocator a sanitizer would also replace.
+# W13 measures the laned queue, which the shim carries only in a build that
+# asks for it (shim/topology.hpp).
+add_executable(w13_mpsc_order workloads/w13_mpsc_order.cpp)
+target_link_libraries(w13_mpsc_order PRIVATE wtc_bench_flags)
+target_compile_definitions(w13_mpsc_order PRIVATE WTC_LANED_MPSC=1)
+
 add_library(wtc_alloccount SHARED harness/alloccount.cpp)
 target_compile_options(wtc_alloccount PRIVATE -O2 -Wall -Wextra -Werror -fno-builtin)
 
