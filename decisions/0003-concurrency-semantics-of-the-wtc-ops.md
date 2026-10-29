@@ -139,3 +139,48 @@ there, or one that never runs again) used to leave the consumer answering
 empty for ever at that cell; now the consumer goes on past it, and the
 cell keeps the head where it is, so no segment after it is freed and the
 queue's memory grows with every element pushed after it.
+
+## Update, 29 Oct 2026: the waiting pop and close
+
+Programs whose consumers sleep on a condition variable until the queue
+has an element, and are told by a flag under the same mutex that no more
+will come, are being lifted into the dialect. Their pop is not
+`try_pop`: it waits. The shim now has one (`pop_wait(T&)`, and
+`pop_wait_for(T&, nanoseconds)` with a time limit) and a `close()`, and
+`queue_pop` has a form for it, marked `transfer` and `wait`, with the
+limit as a second operand. Its contract is the non-blocking pop's, with
+two clauses added:
+
+- it returns an element whenever `try_pop(T&)` would, and, while the
+  queue is empty, waits for a push instead of answering; its element obeys
+  C1 to C5 as any pop's does, because it is the element one of its own
+  `try_pop(T&)` calls returned;
+- it answers "none" only once the queue is closed and a pop it made after
+  seeing the close found the queue empty, or, with a limit, once the limit
+  has passed with the queue empty. Every push that happens before
+  `close()` is therefore taken by some pop; a push concurrent with it may
+  be taken or left. `close()` changes nothing for `try_pop` and for a
+  push, and is neither side's operation: any thread may call it, and it
+  counts towards no topology.
+
+The queue's lifetime is stated where it was implicit before: the queue
+may be destroyed only after every push to it has returned, its producers
+joined or otherwise ordered before the destructor, and not as soon as the
+last element has been popped. A push wakes sleepers after its element is
+visible, so a consumer can take the element and return while the push is
+still reading and writing the queue's waiter; a one-shot reply queue on
+the requester's stack, destroyed as soon as the reply arrives, would make
+the replying thread write freed memory. Folly's and moodycamel's queues
+make the same demand, and every implementation's header already states
+it as "the destructor runs after all of them have made their last call".
+
+How it waits is the queue's wait policy, chosen when the queue is built
+(`spin`, `park`, `spin_then_park`; `runtime/waiter.hpp`). The policy is
+not part of the contract: it changes when a waiting pop returns, never
+what it returns, and the analyses leave it as the program wrote it.
+
+The condition variable's own guarantees go further than this, and a
+lifted program cannot rely on them: a consumer woken by `notify_one`
+takes the element that woke it, and nothing else gets there first. Here
+a consumer that never slept can take it, and the one woken goes back to
+sleep. Which consumer takes an element was never part of the contract.

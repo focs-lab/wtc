@@ -39,6 +39,8 @@ struct CirToWTCConversionTarget : public ConversionTarget {
             case SemanticOpKind::QueuePush:
             case SemanticOpKind::QueueTryPop:
             case SemanticOpKind::QueueTryPopInto:
+            case SemanticOpKind::QueuePopWait:
+            case SemanticOpKind::QueuePopWaitFor:
             case SemanticOpKind::QueueBatchBegin:
             case SemanticOpKind::QueuePushDeferred:
             case SemanticOpKind::QueueBatchEnd:
@@ -112,8 +114,9 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
         const bool batchOp = kind == SemanticOpKind::QueueBatchBegin ||
                              kind == SemanticOpKind::QueuePushDeferred ||
                              kind == SemanticOpKind::QueueBatchEnd;
+        const bool waitOp = kind == SemanticOpKind::QueuePopWait || kind == SemanticOpKind::QueuePopWaitFor;
         if (kind != SemanticOpKind::QueuePush && kind != SemanticOpKind::QueueTryPop &&
-            kind != SemanticOpKind::QueueTryPopInto && !batchOp)
+            kind != SemanticOpKind::QueueTryPopInto && !waitOp && !batchOp)
             return failure();
 
         const unsigned k = firstRealOperand(op);
@@ -168,9 +171,24 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
             if (k != 0 || op.getNumOperands() != 2 || op.getNumResults() > 1)
                 return op.emitError("wtc: try_pop into an object takes the queue and the object");
             rewriter.replaceOpWithNewOp<QueuePopOp>(op, op.getResultTypes(),
-                                                    queue, adaptor.getOperands()[1],
+                                                    queue, ValueRange{adaptor.getOperands()[1]},
                                                     fallback, sourceType, argAttrs, TopologyAttr(), IntegerAttr(), ImplAttr(),
-                                                    UnitAttr(), rewriter.getUnitAttr());
+                                                    UnitAttr(), rewriter.getUnitAttr(), UnitAttr());
+            return success();
+        }
+
+        // pop_wait(T&) and pop_wait_for(T&, nanoseconds): a transfer that
+        // waits, with the limit after the object; the result, if any, says
+        // whether an element came.
+        if (waitOp) {
+            const unsigned want = kind == SemanticOpKind::QueuePopWaitFor ? 3 : 2;
+            if (k != 0 || op.getNumOperands() != want || op.getNumResults() > 1)
+                return op.emitError(want == 3 ? "wtc: pop_wait_for takes the queue, the object and the limit"
+                                              : "wtc: pop_wait takes the queue and the object");
+            rewriter.replaceOpWithNewOp<QueuePopOp>(op, op.getResultTypes(), queue,
+                                                    adaptor.getOperands().drop_front(1), fallback, sourceType,
+                                                    argAttrs, TopologyAttr(), IntegerAttr(), ImplAttr(),
+                                                    UnitAttr(), rewriter.getUnitAttr(), rewriter.getUnitAttr());
             return success();
         }
 
@@ -180,17 +198,17 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
             if (op.getNumOperands() != 2 || op.getNumResults() != 0)
                 return op.emitError("wtc: try_pop with a return slot must have two operands and no result");
             rewriter.replaceOpWithNewOp<QueuePopOp>(op, /*resultTypes=*/TypeRange{},
-                                                    queue, adaptor.getOperands()[0],
+                                                    queue, ValueRange{adaptor.getOperands()[0]},
                                                     fallback, sourceType, argAttrs, TopologyAttr(), IntegerAttr(), ImplAttr(),
-                                                    UnitAttr(), UnitAttr());
+                                                    UnitAttr(), UnitAttr(), UnitAttr());
             return success();
         }
         if (op.getNumOperands() != 1 || op.getNumResults() != 1)
             return op.emitError("wtc: try_pop without a return slot must have one operand and one result");
         rewriter.replaceOpWithNewOp<QueuePopOp>(op, TypeRange{op.getResult().getType()},
-                                                queue, /*out=*/Value(),
+                                                queue, /*args=*/ValueRange{},
                                                 fallback, sourceType, argAttrs, TopologyAttr(), IntegerAttr(), ImplAttr(),
-                                                UnitAttr(), UnitAttr());
+                                                UnitAttr(), UnitAttr(), UnitAttr());
         return success();
     }
 };

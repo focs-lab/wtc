@@ -24,6 +24,8 @@ enum class SemanticOpKind {
     QueuePush,
     QueueTryPop,
     QueueTryPopInto,
+    QueuePopWait,
+    QueuePopWaitFor,
     QueueBatchBegin,
     QueuePushDeferred,
     QueueBatchEnd,
@@ -263,9 +265,14 @@ std::optional<CountedLoop> countedLoop(cir::ForOp loop);
 // runs at most once: every side with many threads has its loop recorded.
 bool spscWhenLoopsRunOnce(Operation *root);
 
+// Whether a call of the shim's queue constructor passes a topology tag, as
+// its second operand: queue(topology), or queue(topology, wait_policy),
+// whose policy the analyses leave alone.
+bool takesTopologyTag(cir::CallOp ctor);
+
 // The topology tag a queue's one constructor passes, if it is a constant;
-// nullopt when there is not exactly one constructor of the two-operand
-// shape, or its tag is not a constant.
+// nullopt when there is not exactly one constructor that takes a tag
+// (takesTopologyTag), or its tag is not a constant.
 std::optional<int64_t> constructorTag(llvm::ArrayRef<cir::CallOp> ctors);
 
 }

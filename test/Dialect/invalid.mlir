@@ -105,3 +105,48 @@ module {
     cir.return
   }
 }
+
+// -----
+
+// A waiting pop is a transfer: it moves the element into the program's
+// object, and only it takes a limit.
+
+!s32i = !cir.int<s, 32>
+!q = !cir.struct<"q" {data !s32i}>
+module {
+  cir.func @wait_not_transfer(%qp: !cir.ptr<!q>, %obj: !cir.ptr<!s32i>) {
+    %h = builtin.unrealized_conversion_cast %qp : !cir.ptr<!q> to !wtc.queue<!q>
+    // expected-error @+1 {{a waiting pop moves the element into its `out` operand: it must be a transfer}}
+    "wtc.queue_pop"(%h, %obj) {wait} : (!wtc.queue<!q>, !cir.ptr<!s32i>) -> ()
+    cir.return
+  }
+}
+
+// -----
+
+!s32i = !cir.int<s, 32>
+!s64i = !cir.int<s, 64>
+!q = !cir.struct<"q" {data !s32i}>
+module {
+  cir.func @limit_without_wait(%qp: !cir.ptr<!q>, %obj: !cir.ptr<!s32i>, %limit: !s64i) {
+    %h = builtin.unrealized_conversion_cast %qp : !cir.ptr<!q> to !wtc.queue<!q>
+    // expected-error @+1 {{only a waiting pop takes a `timeout`}}
+    "wtc.queue_pop"(%h, %obj, %limit) {transfer} : (!wtc.queue<!q>, !cir.ptr<!s32i>, !s64i) -> !cir.bool
+    cir.return
+  }
+}
+
+// -----
+
+!s32i = !cir.int<s, 32>
+!q = !cir.struct<"q" {data !s32i}>
+module {
+  cir.func private @try_pop_into(!cir.ptr<!q>, !cir.ptr<!s32i>) -> !cir.bool [#cir.annotation<"wtc_queue_try_pop_into">]
+  // A waiting pop lowers to pop_wait, not to the non-blocking pop.
+  cir.func @wait_lowers_to_try_pop(%qp: !cir.ptr<!q>, %obj: !cir.ptr<!s32i>) {
+    %h = builtin.unrealized_conversion_cast %qp : !cir.ptr<!q> to !wtc.queue<!q>
+    // expected-error @+1 {{fallback_impl @try_pop_into is not annotated wtc_queue_pop_wait or wtc_impl_*_pop_wait}}
+    "wtc.queue_pop"(%h, %obj) {fallback_impl = @try_pop_into, transfer, wait} : (!wtc.queue<!q>, !cir.ptr<!s32i>) -> !cir.bool
+    cir.return
+  }
+}

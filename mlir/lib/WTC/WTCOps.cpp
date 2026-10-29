@@ -91,7 +91,11 @@ LogicalResult QueuePushOp::verifySymbolUses(SymbolTableCollection &symbolTable) 
 }
 
 LogicalResult QueuePopOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-    const unsigned expectedArgs = getOut() ? 2 : 1;
+    const unsigned expectedArgs = 1 + getArgs().size();
+    if (getWait())
+        return verifyFallbackImpl(*this, getFallbackImplAttr(),
+                                  getTimeout() ? "wtc_queue_pop_wait_for" : "wtc_queue_pop_wait",
+                                  getTimeout() ? "pop_wait_for" : "pop_wait", expectedArgs, symbolTable);
     return verifyFallbackImpl(*this, getFallbackImplAttr(),
                               getTransfer() ? "wtc_queue_try_pop_into" : "wtc_queue_try_pop",
                               "try_pop", expectedArgs, symbolTable);
@@ -104,6 +108,12 @@ LogicalResult QueuePushOp::verify() {
 LogicalResult QueuePopOp::verify() {
     const bool hasOut = static_cast<bool>(getOut());
     const bool hasValue = static_cast<bool>(getValue());
+    if (getArgs().size() > 2)
+        return emitOpError("takes at most an `out` operand and a `timeout`");
+    if (getTimeout() && !getWait())
+        return emitOpError("only a waiting pop takes a `timeout`");
+    if (getWait() && !getTransfer())
+        return emitOpError("a waiting pop moves the element into its `out` operand: it must be a transfer");
     if (getTransfer()) {
         if (!hasOut) return emitOpError("a transfer pop moves the element into its `out` operand");
     } else if (hasOut == hasValue) {
@@ -197,6 +207,9 @@ std::string QueuePushOp::getBlockingReason() {
 // spmc pop claims a published cell with a compare-and-swap that fails only
 // when another consumer has claimed it: lock-free.
 Progress QueuePopOp::getProgress() {
+    // A waiting pop waits for a push by design, whatever the queue and its
+    // wait policy: spinning is waiting too.
+    if (getWait()) return Progress::blocking;
     switch (implOf(getImpl())) {
     case ::mlir::wtc::Impl::generic:
         return Progress::blocking;
@@ -217,6 +230,24 @@ bool QueuePopOp::mayCallAllocator() {
     return impl != ::mlir::wtc::Impl::spsc_inline;
 }
 std::string QueuePopOp::getBlockingReason() {
+    if (getWait()) {
+        std::string why = getTimeout() ? "waits for a push, for the queue to be closed, or for its "
+                                         "time limit, as its wait policy says: spinning, or asleep "
+                                         "in the kernel"
+                                       : "waits for a push or for the queue to be closed, as its "
+                                         "wait policy says: spinning, or asleep in the kernel";
+        switch (implOf(getImpl())) {
+        case ::mlir::wtc::Impl::generic:
+            return why + "; and frees the segments it moves past";
+        case ::mlir::wtc::Impl::mpsc:
+            return why + "; and frees the segments it moves past, and may allocate to note the "
+                         "cells it passes that a push has taken and not filled";
+        case ::mlir::wtc::Impl::spmc:
+            return why + "; and frees the segments it moves past";
+        default:
+            return why;
+        }
+    }
     const bool shares = !getTransfer();
     switch (implOf(getImpl())) {
     case ::mlir::wtc::Impl::generic:

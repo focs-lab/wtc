@@ -8,6 +8,9 @@ function, and inline assembly that cannot wait is cleared (both under
 value in every implementation since 24 Oct; the facts are shared with the
 batching passes ("The same facts for batching").
 
+Revised 2026-10-29: the waiting pop (`pop_wait`, `pop_wait_for`) blocks on
+every implementation; see its row in the table.
+
 ## Context
 
 A function can be declared lock-free (`WTC_LOCK_FREE`, `shim/progress.hpp`),
@@ -28,6 +31,7 @@ blocking. The answers, by the implementation recorded on the operation
 |---|---|---|---|---|---|
 | push | lock-free; allocates a new segment when one fills | wait-free; allocates a new block when one fills | wait-free; allocates a new block when one fills | lock-free; allocates a new segment when one fills | wait-free; allocates a new segment when one fills |
 | pop | blocks: waits for a push that has taken its cell; frees drained segments | wait-free | wait-free; lends the element, allocates nothing | wait-free: past a cell a push has taken and not filled, O(h²) in the h cells it has passed and not taken, otherwise O(1) amortised; frees the segments it moves past, and allocates when it has passed more than 64 such cells | lock-free: its claim fails only to another consumer's; frees the segments it moves past |
+| waiting pop | blocks: waits for a push or a close; frees drained segments | blocks: waits for a push or a close | blocks: waits for a push or a close | blocks: waits for a push or a close; frees and may allocate as the pop above | blocks: waits for a push or a close; frees the segments it moves past |
 | lock, unlock | blocks | | | | |
 
 The generic and mpsc columns are as of 22 Oct 2026, when both became the
@@ -45,6 +49,20 @@ cells it has taken out of order pass each cell once (since 26 Oct 2026,
 past that, which the progress check reports. A producer that never fills
 its cell keeps the consumer's head there for ever, and the segments after
 it are then never freed.
+
+A waiting pop (`pop_wait(T&)`, `pop_wait_for`; `queue_pop` marked
+`wait`) waits for another thread by design: while the queue is empty it
+waits for a push, or for `close()`, whatever the implementation. It blocks
+under every wait policy, spinning included: a spinning consumer still
+cannot finish before some other thread acts, which is what the check
+refuses. The non-blocking pop of the same queue keeps its own row: a
+consumer step that only takes an element if there is one passes where it
+passed before. A queue whose wait policy can park also gives every push a
+fence, a load and, when a consumer is asleep, a futex wake. The wake
+waits for no thread of the program, so the push's row does not change;
+it is a system call, which holds a lock inside the kernel while it runs,
+and the check does not tell it apart from the allocation every push may
+already make, which keeps every producer from passing anyway.
 
 Every implementation holds the element itself in its cell, so a push
 allocates only when the queue grows. A pop in the shared_ptr form

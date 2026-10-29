@@ -148,7 +148,7 @@ public:
                 return;
             }
             cir::CallOp ctor = it->second.front();
-            if (ctor.getNumOperands() != 2) {
+            if (!takesTopologyTag(ctor)) {
                 ctor.emitRemark() << "wtc: not specialised: the constructor does not take a topology tag";
                 return;
             }
@@ -308,7 +308,7 @@ public:
         auto it = ctorsOf.find(root);
         if (it == ctorsOf.end() || it->second.size() != 1) return false;
         cir::CallOp ctor = it->second.front();
-        if (ctor.getNumOperands() != 2) return false;
+        if (!takesTopologyTag(ctor)) return false;
         auto tagConst = ctor.getOperand(1).getDefiningOp<cir::ConstantOp>();
         auto tagVal = tagConst ? dyn_cast<cir::IntAttr>(tagConst.getValue()) : cir::IntAttr();
         if (!tagVal || tagVal.getSInt() != 0) return false;

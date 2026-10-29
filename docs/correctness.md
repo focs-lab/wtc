@@ -15,8 +15,9 @@ A queue object `q` of type `wtc::queue<T>` is built once, with a tag, and
 destroyed once. Between the two, threads call `push` (copy or move an
 element in), `try_pop()` (the oldest element, or null, as a `shared_ptr`),
 `try_pop(T&)` (the oldest element moved into the caller's object, or
-false), and the batch operations, which are a `push` run published
-together. The tag selects an implementation when the object is built and
+false), the batch operations, which are a `push` run published
+together, and the waiting pops, `pop_wait(T&)` and `pop_wait_for`, with
+`close()`. The tag selects an implementation when the object is built and
 never changes afterwards (`shim/topology.hpp`).
 
 The original program uses the general-purpose implementation for every
@@ -383,6 +384,20 @@ A reviewer should see each soundness obligation and the lemma it serves.
 - **The transfer form** has no observable difference from the shared form
   beyond the absence of an allocation; it is the program's own object that
   receives the element.
+- **The waiting pops** add nothing to the argument. A `pop_wait` is a
+  sequence of `try_pop(T&)` calls with waiting between them, which returns
+  the first element one of them returns; it answers "none" only after it
+  has seen the queue closed and a `try_pop(T&)` made after that found it
+  empty (`runtime/waiter.hpp`). Each of those calls is the implementation's
+  own pop, so C1 to C5 carry over, and the waiting itself touches only the
+  waiter, which no implementation reads. What the waiter must add is
+  liveness, not safety: a consumer asleep must be woken by any publish
+  that comes after it last looked, which is the eventcount's fence
+  argument, tested by forcing that window (`runtime/test/waiter_test.cpp`).
+  The wait policy changes how long a waiting pop takes to return, never
+  what it returns, and it is the same before and after a substitution:
+  the tag and the policy are separate arguments of the constructor, and
+  only the tag is rewritten.
 - **Timing.** The slip in the ring and in the single-consumer segmented
   queue delays pops by a bounded number of pauses, gated on a streaming
   producer; the contract has no timing clause.

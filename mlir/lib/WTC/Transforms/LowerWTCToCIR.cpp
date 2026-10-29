@@ -99,20 +99,23 @@ struct LowerQueuePopPattern : public OpConversionPattern<QueuePopOp> {
             return failure();
         Value queue = mlir::UnrealizedConversionCastOp::create(
             rewriter, op.getLoc(), op.getSourceQueueTypeAttr().getValue(), adaptor.getQueue()).getResult(0);
-        if (adaptor.getOut()) {
+        ValueRange args = adaptor.getArgs();
+        if (!args.empty()) {
             // Return-slot form: the slot comes first, as in the original
             // call; a transfer's object comes after the queue, as try_pop(T&)
-            // takes it.
+            // takes it, and a waiting pop's limit after the object.
             if (op.getTransfer()) {
+                SmallVector<Value, 3> operands{queue};
+                operands.append(args.begin(), args.end());
                 auto call = rebuildCall(rewriter, op.getLoc(), op.getFallbackImplAttr(),
                                         op.getNumResults() ? op.getResult(0).getType() : Type{},
-                                        ValueRange{queue, adaptor.getOut()}, op.getSourceArgAttrsAttr());
+                                        operands, op.getSourceArgAttrsAttr());
                 if (op.getNumResults()) rewriter.replaceOp(op, call->getResults());
                 else rewriter.eraseOp(op);
                 return success();
             }
             rebuildCall(rewriter, op.getLoc(), op.getFallbackImplAttr(), Type{},
-                        ValueRange{adaptor.getOut(), queue}, op.getSourceArgAttrsAttr());
+                        ValueRange{args.front(), queue}, op.getSourceArgAttrsAttr());
             rewriter.eraseOp(op);
             return success();
         }

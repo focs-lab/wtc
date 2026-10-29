@@ -87,6 +87,8 @@ SemanticOpKind getSemanticKind(cir::FuncOp funcOp) {
         if (name == "wtc_queue_push")         return SemanticOpKind::QueuePush;
         if (name == "wtc_queue_try_pop")      return SemanticOpKind::QueueTryPop;
         if (name == "wtc_queue_try_pop_into") return SemanticOpKind::QueueTryPopInto;
+        if (name == "wtc_queue_pop_wait")     return SemanticOpKind::QueuePopWait;
+        if (name == "wtc_queue_pop_wait_for") return SemanticOpKind::QueuePopWaitFor;
         if (name == "wtc_queue_batch_begin")  return SemanticOpKind::QueueBatchBegin;
         if (name == "wtc_queue_push_deferred") return SemanticOpKind::QueuePushDeferred;
         if (name == "wtc_queue_batch_end")    return SemanticOpKind::QueueBatchEnd;
@@ -810,10 +812,14 @@ collectQueueConstructors(ModuleOp module) {
     return ctorsOf;
 }
 
+bool takesTopologyTag(cir::CallOp ctor) {
+    return ctor.getNumOperands() == 2 || ctor.getNumOperands() == 3;
+}
+
 std::optional<int64_t> constructorTag(llvm::ArrayRef<cir::CallOp> ctors) {
     if (ctors.size() != 1) return std::nullopt;
     cir::CallOp ctor = ctors.front();
-    if (ctor.getNumOperands() != 2) return std::nullopt;
+    if (!takesTopologyTag(ctor)) return std::nullopt;
     auto c = ctor.getOperand(1).getDefiningOp<cir::ConstantOp>();
     auto v = c ? dyn_cast<cir::IntAttr>(c.getValue()) : cir::IntAttr();
     if (!v) return std::nullopt;

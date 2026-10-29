@@ -101,7 +101,7 @@ def QueuePushOp : WTC_ObjectOp<"queue_push"> {
 }
 
 def QueuePopOp : WTC_ObjectOp<"queue_pop"> {
-    let summary = "A non-blocking queue pop; a null result means empty";
+    let summary = "A queue pop; non-blocking unless marked `wait`, and a null result means empty";
     let description = [{
         Removes the oldest item, under the same contract as queue_push
         (decisions/0003); an empty queue gives a null result, which says
@@ -109,10 +109,10 @@ def QueuePopOp : WTC_ObjectOp<"queue_pop"> {
 
         Two forms, exactly one of which is present. With a result, the popped
         value is the result: the shape hand-written IR uses. With the `out`
-        operand and no result, the popped value is written through `out`: the
-        shape the compiler emits, because the shim's try_pop returns a
-        shared_ptr by value and the calling convention passes that through a
-        hidden first pointer argument.
+        operand (the first of `args`) and no result, the popped value is
+        written through `out`: the shape the compiler emits, because the
+        shim's try_pop returns a shared_ptr by value and the calling
+        convention passes that through a hidden first pointer argument.
 
         `transfer` marks the third shape, the shim's try_pop(T&): `out` is
         then the program's own object of the element type, into which the
@@ -121,12 +121,24 @@ def QueuePopOp : WTC_ObjectOp<"queue_pop"> {
         element on either side, and the program keeps nothing of the
         queue's, so such a pop never stands in the way of inline storage.
 
+        `wait` marks a transfer that waits for an item: the shim's
+        pop_wait(T&), and with a second operand, `timeout`, its
+        pop_wait_for(T&, nanoseconds). It returns an item whenever the
+        non-blocking pop would, and while the queue is empty it waits for
+        a push instead of answering; it answers "none" only once the queue
+        is closed and empty, or, with a timeout, once that has passed with
+        the queue empty. Its item obeys the same contract. It blocks, on
+        every implementation and every wait policy: it waits for another
+        thread by design (decisions/0004). The wait policy (spin, park,
+        spin_then_park) is the queue's, set at its construction, and is
+        not recorded on the operation.
+
         `borrowed` says the program only borrows what this pop returns: it
         keeps no copy of the shared_ptr and no pointer into the element past
         the consumer's next pop of the same queue (WTCBorrowAnalysis.cpp).
     }];
     let arguments = (ins WTC_QueueType:$queue,
-        Optional<AnyType>:$out,
+        Variadic<AnyType>:$args,
         OptionalAttr<FlatSymbolRefAttr>:$fallback_impl,
         OptionalAttr<TypeAttr>:$source_queue_type,
         OptionalAttr<ArrayAttr>:$source_arg_attrs,
@@ -134,8 +146,21 @@ def QueuePopOp : WTC_ObjectOp<"queue_pop"> {
         OptionalAttr<I64Attr>:$queue_id,
         OptionalAttr<WTC_ImplAttr>:$impl,
         UnitAttr:$borrowed,
-        UnitAttr:$transfer);
+        UnitAttr:$transfer,
+        UnitAttr:$wait);
     let results = (outs Optional<AnyType>:$value);
+    let extraClassDeclaration = [{
+        // The slot or object the item goes to, if there is one.
+        ::mlir::Value getOut() {
+            auto a = getArgs();
+            return a.empty() ? ::mlir::Value() : a.front();
+        }
+        // A waiting pop's limit, if it has one.
+        ::mlir::Value getTimeout() {
+            auto a = getArgs();
+            return a.size() > 1 ? a[1] : ::mlir::Value();
+        }
+    }];
     let hasVerifier = 1;
 }
 
