@@ -28,12 +28,22 @@ namespace wtc {
 // read-modify-write and never skips a cell. spmc is for one producer and
 // any number of consumers: segments the producer fills alone, whose cells
 // the consumers claim with a compare-and-swap (runtime/spmc_queue.hpp).
+//
+// mpsc_laned exists only in a build that defines WTC_LANED_MPSC, as an
+// experiment: many producers and one consumer, each producer's order kept
+// and no order between producers (runtime/laned_mpsc.hpp). It is set by
+// hand to measure what relaxing the order could gain; the compiler neither
+// writes it nor checks it, so a build that declares it is compiled with a
+// plain C++ compiler.
 enum class topology : int {
     generic = 0,
     spsc = 1,
     spsc_inline = 2,
     mpsc = 3,
     spmc = 4,
+#ifdef WTC_LANED_MPSC
+    mpsc_laned = 5,
+#endif
 };
 
 }

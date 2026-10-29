@@ -11,6 +11,9 @@
 #include "../runtime/segment_queue.hpp"
 #include "../runtime/spmc_queue.hpp"
 #include "../runtime/spsc_ring.hpp"
+#ifdef WTC_LANED_MPSC
+#include "../runtime/laned_mpsc.hpp"
+#endif
 
 #ifndef WTC_BATCH_K
 #define WTC_BATCH_K 64
@@ -75,6 +78,9 @@ private:
     using mpsc_impl = rt::segment_queue<T, false>;
     using ring_impl = rt::spsc_ring<T>;  // spsc and spsc_inline
     using spmc_impl = rt::spmc_queue<T>;
+#ifdef WTC_LANED_MPSC
+    using laned_impl = rt::laned_mpsc<T>;
+#endif
 
     // Lending needs the element's end to be invisible: it is destroyed in
     // place at the next pop, not when the last shared_ptr to it goes.
@@ -96,6 +102,9 @@ private:
         ring_impl ring;
         mpsc_impl mpsc;
         spmc_impl spmc;
+#ifdef WTC_LANED_MPSC
+        laned_impl laned;
+#endif
         storage() {}
         ~storage() {}
     };
@@ -164,6 +173,11 @@ public:
         case topology::spmc:
             new (&impl_.spmc) spmc_impl();
             break;
+#ifdef WTC_LANED_MPSC
+        case topology::mpsc_laned:
+            new (&impl_.laned) laned_impl();
+            break;
+#endif
         case topology::generic:
         default:
             tag_ = topology::generic;
@@ -195,6 +209,11 @@ public:
         case topology::spmc:
             impl_.spmc.~spmc_impl();
             break;
+#ifdef WTC_LANED_MPSC
+        case topology::mpsc_laned:
+            impl_.laned.~laned_impl();
+            break;
+#endif
         default:
             impl_.generic.~generic_impl();
             break;
@@ -223,6 +242,11 @@ private:
         case topology::spmc:
             impl_.spmc.publish();
             return;
+#ifdef WTC_LANED_MPSC
+        case topology::mpsc_laned:
+            if (n) impl_.laned.publish();
+            return;
+#endif
         default:
             if (!n) return;
             impl_.generic.push_run(st.run_at(0), n);
@@ -242,6 +266,10 @@ private:
             return impl_.mpsc.consume(f);
         case topology::spmc:
             return impl_.spmc.consume(f);
+#ifdef WTC_LANED_MPSC
+        case topology::mpsc_laned:
+            return impl_.laned.consume(f);
+#endif
         default:
             return impl_.generic.consume(f);
         }
@@ -303,6 +331,11 @@ public:
             case topology::spmc:
                 impl_.spmc.push_deferred(new_value);
                 break;
+#ifdef WTC_LANED_MPSC
+            case topology::mpsc_laned:
+                impl_.laned.push_deferred(new_value);
+                break;
+#endif
             case topology::mpsc:
             default:
                 ::new (static_cast<void*>(st.run_at(st.pending))) T(new_value);
@@ -329,6 +362,11 @@ public:
         case topology::spmc:
             impl_.spmc.push_deferred(std::move(new_value));
             break;
+#ifdef WTC_LANED_MPSC
+        case topology::mpsc_laned:
+            impl_.laned.push_deferred(std::move(new_value));
+            break;
+#endif
         case topology::mpsc:
         default:
             ::new (static_cast<void*>(st.run_at(st.pending))) T(std::move(new_value));
@@ -356,6 +394,11 @@ public:
         case topology::spmc:
             impl_.spmc.push(new_value);
             return;
+#ifdef WTC_LANED_MPSC
+        case topology::mpsc_laned:
+            impl_.laned.push(new_value);
+            return;
+#endif
         default:
             impl_.generic.push(new_value);
             return;
@@ -375,6 +418,11 @@ public:
         case topology::spmc:
             impl_.spmc.push(std::move(new_value));
             return;
+#ifdef WTC_LANED_MPSC
+        case topology::mpsc_laned:
+            impl_.laned.push(std::move(new_value));
+            return;
+#endif
         default:
             impl_.generic.push(std::move(new_value));
             return;
