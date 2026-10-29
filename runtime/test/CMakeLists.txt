@@ -187,3 +187,34 @@ set_tests_properties(lemma_spmc_liveness_spmc PROPERTIES
 # A held thread that is never let go would hang the run.
 set_tests_properties(lemma_rings_test lemma_segment_test lemma_spmc_liveness_generic
                      lemma_spmc_liveness_spmc PROPERTIES TIMEOUT 300)
+
+# The waiting pop (waiter.hpp) through the shim's queue, on every topology
+# and wait policy: the lost wake-up's window forced, one element at a time
+# to consumers that sleep, producers that pause at random, close() with
+# sleepers, and the time limit. The shim's annotations are clang's; g++
+# warns about them. The test that must fail: a waiter that drops its
+# wake-ups must be caught sleeping through a publish.
+add_executable(waiter_test waiter_test.cpp)
+target_link_libraries(waiter_test PRIVATE wtc_rt_flags)
+target_compile_options(waiter_test PRIVATE $<$<CXX_COMPILER_ID:GNU>:-Wno-attributes>)
+if(WTC_RT_SANITIZE)
+  set(waiter_pingpong 300)
+  set(waiter_stress 10000)
+else()
+  set(waiter_pingpong 2000)
+  set(waiter_stress 100000)
+endif()
+add_test(NAME waiter_interleave COMMAND waiter_test interleave)
+add_test(NAME waiter_pingpong COMMAND waiter_test pingpong ${waiter_pingpong})
+add_test(NAME waiter_stress COMMAND waiter_test stress ${waiter_stress})
+add_test(NAME waiter_close COMMAND waiter_test close)
+add_test(NAME waiter_timed COMMAND waiter_test timed)
+set_tests_properties(waiter_interleave waiter_pingpong waiter_stress waiter_close waiter_timed
+                     PROPERTIES TIMEOUT 300)
+
+add_executable(waiter_drop_wakeups waiter_test.cpp)
+target_link_libraries(waiter_drop_wakeups PRIVATE wtc_rt_flags)
+target_compile_options(waiter_drop_wakeups PRIVATE $<$<CXX_COMPILER_ID:GNU>:-Wno-attributes>)
+target_compile_definitions(waiter_drop_wakeups PRIVATE WTC_TEST_DROP_WAKEUPS=1)
+add_test(NAME waiter_drop_wakeups_is_caught
+         COMMAND sh -c "$<TARGET_FILE:waiter_drop_wakeups> interleave 2>&1 | grep -q 'lost wake-up: a publish'")

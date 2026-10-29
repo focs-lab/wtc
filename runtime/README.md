@@ -23,6 +23,7 @@ Every implementation carries, in its header comment:
 | `spmc_queue.hpp` | `wtc::queue<T>` | exactly one thread ever pushes, any number pop, and the destructor runs after all are done |
 | `stream_gate.hpp` | nothing: whether a single consumer waits for a batch, shared by the ring and the single-consumer form | none |
 | `hazard.hpp` | nothing: hazard pointers for the segmented queues, one slot for pushes and one for pops | none |
+| `waiter.hpp` | nothing: how a pop that waits for an element waits (spin, park, or spin then park), and the wake-up a publish owes a sleeping consumer, shared by every queue above | none |
 
 `spsc_ring<Slot, kSlots>` is an unbounded wait-free ring of blocks of 128 KiB
 each. It keeps the generic queue's semantics exactly: FIFO, `push` never
@@ -61,6 +62,41 @@ to its length of them), allocating past 64 of them. A producer that stops for ev
 reserving and filling a cell keeps the consumer's head there, so the
 segments after it are never freed.
 
+`waiter` is what a waiting pop (`pop_wait`, `pop_wait_for` in the shim)
+adds to a queue, the same for every implementation and without changing
+any of them: it needs the queue's non-blocking pop and a call after every
+publish. It is an eventcount. A consumer about to sleep counts itself
+among the waiters, reads the futex word, looks at the queue once more, and
+sleeps only if that look found nothing and only while the word is
+unchanged; a publish reads the count of waiters and wakes one only if
+someone is there. A sequentially consistent fence on each side, after the
+consumer's count and after the producer's publish, is what keeps a
+publish from slipping past a consumer that is going to sleep (the comment
+at the top of the header gives the argument). The wait policy is chosen
+when the queue is built: `spin` polls with a pause and then yields and
+never sleeps, so a push owes it no wake-up and pays only a read of the
+policy and a branch; `park` sleeps in
+the kernel after one more look; `spin_then_park` polls for a budget of
+`WTC_SPIN_NS` nanoseconds (4 µs, about what a sleep and its wake-up cost
+together), converted to the processor's ticks at the rate
+`stream_gate.hpp` measures, then sleeps. A queue whose policy can park
+pays one fence and one load per publish, and the futex wake only when a
+consumer sleeps. The fence makes the producer wait for the line its
+publish wrote, which a polling consumer keeps taking, so on a queue that
+streams it costs more than the rest of the push; the shim's default is
+therefore `spin`. `close()` wakes every sleeper, and from then on a
+waiting pop that finds the queue empty returns false; elements pushed
+before it are still popped.
+
+A queue may be destroyed only after every push to it has returned (its
+producers joined, or otherwise ordered before the destructor), not as
+soon as its last element has been popped: a push wakes sleepers after its
+element is visible, so a consumer can take the element while the push is
+still reading and writing the waiter. A one-shot reply queue on the
+requester's stack, destroyed when the reply arrives, would let the
+replying thread write freed memory. Folly's and moodycamel's queues ask
+the same.
+
 Contract checking: build with `-DWTC_CHECK` and every ring records the first
 producer and the first consumer thread and aborts the moment a different
 thread appears in either role. That turns each static verdict into a claim
@@ -86,8 +122,20 @@ cmake -S runtime/test -B build-rt-check -DCMAKE_CXX_COMPILER=clang++-18 -DWTC_CH
 The suite includes tests that must fail: a two-producer run of the ring, a
 two-consumer run of the segmented queue's single-consumer form and a
 two-producer run of the spmc queue, which TSan has to report and
-`WTC_CHECK` has to abort. A suite that cannot fail proves nothing, which is
-a lesson this project has already paid for once.
+`WTC_CHECK` has to abort; and a waiter that drops its wake-ups, which the
+waiting pop's test has to catch asleep. A suite that cannot fail proves
+nothing, which is a lesson this project has already paid for once.
+
+`waiter_test` runs the waiting pop through the shim's queue on every
+topology and every wait policy: the lost wake-up's window forced (the
+consumer held between its last look and its sleep while the producer
+publishes, and while it closes the queue); one element at a time, pushed
+after a random delay so that it lands in every phase of a consumer going
+to sleep, and waited for before the next; producers pausing at random,
+pushing one by one and in runs, with every element taken before the queue
+is closed; `close()` with consumers asleep, with and without elements
+left; and the time limit. A consumer left asleep with an element queued is
+reported as a lost wake-up, with a deadline, rather than hanging the run.
 
 The lagging-consumer unit test found a real bug on its first run: the block
 the producer starts in never received its `end` mark, read as drained one lap

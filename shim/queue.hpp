@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
@@ -11,12 +12,18 @@
 #include "../runtime/segment_queue.hpp"
 #include "../runtime/spmc_queue.hpp"
 #include "../runtime/spsc_ring.hpp"
+#include "../runtime/waiter.hpp"
 
 #ifndef WTC_BATCH_K
 #define WTC_BATCH_K 64
 #endif
 
 namespace wtc {
+
+// How pop_wait waits: spinning, sleeping in the kernel, or spinning for a
+// while and then sleeping (runtime/waiter.hpp). Chosen when the queue is
+// built.
+using wait_policy = rt::wait_policy;
 
 // A queue with one API and several implementations, chosen per object at
 // construction by a topology tag. The general-purpose one is a list of array
@@ -66,6 +73,22 @@ namespace wtc {
 // The compiler rewrites a loop of pushes into this shape where the program
 // allows it (WTC_BATCH, shim/progress.hpp); a program may also write it by
 // hand.
+//
+// A consumer may also wait for an element: pop_wait(T&) moves the oldest
+// element out as try_pop(T&) does, waiting until there is one, and returns
+// false only once the queue is closed (close()) and empty; pop_wait_for
+// gives up after a time as well. How it waits is the queue's wait policy,
+// set when the queue is built: spin, park or spin_then_park
+// (runtime/waiter.hpp). A queue whose policy can park makes every publish
+// (a push, or a batch's publish) wake a sleeping consumer if one is
+// announced, at the price of a fence and a read per publish; a spin queue,
+// the default, adds a read of the policy and a branch to a push, and its
+// waiting consumers spin and then yield the processor, never sleep. The
+// queue may be destroyed only once every push has returned, since a push
+// wakes sleepers after its element is visible (runtime/waiter.hpp). try_pop is the same on every
+// policy. A waiting pop never returns an element that try_pop would not
+// have, and close() changes nothing for try_pop: it only stops waiting
+// pops from waiting on an empty queue.
 template <typename T>
 class queue {
 private:
@@ -108,6 +131,9 @@ private:
     // to take it back.
     alignas(128) topology tag_;
     alignas(128) storage impl_;
+    // Its own lines: a consumer that goes to sleep or wakes writes them,
+    // and every publish of a queue that can park reads them.
+    alignas(128) rt::waiter wait_;
 #ifdef WTC_CHECK
     // Shares ownership with every element lent by an spsc_inline queue;
     // anything above one reference is a consumer still holding one.
@@ -144,6 +170,19 @@ public:
     [[clang::annotate("wtc_queue_construction")]]
     explicit queue(topology tag = topology::generic) : tag_(tag) {
         if constexpr (kInlineOk) inline_ok();
+        construct();
+    }
+
+    // With a wait policy for pop_wait. The topology is still the first
+    // argument, the one the compiler rewrites.
+    [[clang::annotate("wtc_queue_construction")]]
+    queue(topology tag, wait_policy policy) : tag_(tag), wait_(policy) {
+        if constexpr (kInlineOk) inline_ok();
+        construct();
+    }
+
+private:
+    void construct() {
         switch (tag_) {
         case topology::spsc_inline:
             if constexpr (kInlineOk) {
@@ -172,6 +211,7 @@ public:
         }
     }
 
+public:
     queue(const queue&) = delete;
     queue& operator=(const queue&) = delete;
 
@@ -202,6 +242,7 @@ public:
     }
 
     topology tag() const { return tag_; }
+    wait_policy policy() const { return wait_.policy(); }
 
 private:
     // Makes the run so far visible: one release store on a ring, one
@@ -214,21 +255,22 @@ private:
         case topology::spsc_inline:
         case topology::spsc:
             impl_.ring.publish();
-            return;
+            break;
         case topology::mpsc:
             if (!n) return;
             impl_.mpsc.push_run(st.run_at(0), n);
             for (unsigned i = 0; i < n; ++i) st.run_at(i)->~T();
-            return;
+            break;
         case topology::spmc:
             impl_.spmc.publish();
-            return;
+            break;
         default:
             if (!n) return;
             impl_.generic.push_run(st.run_at(0), n);
             for (unsigned i = 0; i < n; ++i) st.run_at(i)->~T();
-            return;
+            break;
         }
+        wait_.notify(n);
     }
 
     // The oldest element to f, whichever implementation holds it.
@@ -283,6 +325,37 @@ public:
 #endif
         return consume([&](T&& e) noexcept { out = std::move(e); });
     }
+
+    // Transfer, waiting: the oldest element moved into out, as try_pop(T&)
+    // does, waiting for one while the queue is empty; false only once the
+    // queue is closed and empty, and out is then untouched. It blocks: the
+    // compiler's progress check treats it as a wait for another thread on
+    // every policy.
+    [[clang::annotate("wtc_queue_pop_wait")]]
+    bool pop_wait(T& out) {
+#ifdef WTC_CHECK
+        check_returned("at the next try_pop");
+#endif
+        return wait_.wait([&]() noexcept { return consume([&](T&& e) noexcept { out = std::move(e); }); });
+    }
+
+    // The same, giving up once timeout has passed with the queue empty:
+    // false then too. A timeout of zero or less looks once, as try_pop(T&).
+    [[clang::annotate("wtc_queue_pop_wait_for")]]
+    bool pop_wait_for(T& out, std::chrono::nanoseconds timeout) {
+#ifdef WTC_CHECK
+        check_returned("at the next try_pop");
+#endif
+        return wait_.wait_for([&]() noexcept { return consume([&](T&& e) noexcept { out = std::move(e); }); },
+                              timeout);
+    }
+
+    // From now on a waiting pop that finds the queue empty returns false,
+    // and every consumer asleep in one is woken. Elements already pushed
+    // are still popped, by either kind of pop. Any thread may call it; it
+    // is neither side's operation, so it changes no topology.
+    void close() { wait_.close(); }
+    bool closed() const { return wait_.closed(); }
 
     // gnu::used: the compiler calls these where the program allows it, so
     // they must be in every module that uses the queue, called or not.
@@ -343,23 +416,26 @@ public:
         b.get().~state();
     }
 
+    // A push wakes a consumer asleep in pop_wait, if the policy lets one
+    // sleep and one is announced (runtime/waiter.hpp).
     [[clang::annotate("wtc_queue_push")]]
     void push(const T& new_value) {
         switch (tag_) {
         case topology::spsc_inline:
         case topology::spsc:
             impl_.ring.push(new_value);
-            return;
+            break;
         case topology::mpsc:
             impl_.mpsc.push(new_value);
-            return;
+            break;
         case topology::spmc:
             impl_.spmc.push(new_value);
-            return;
+            break;
         default:
             impl_.generic.push(new_value);
-            return;
+            break;
         }
+        wait_.notify(1);
     }
 
     [[clang::annotate("wtc_queue_push")]]
@@ -368,17 +444,18 @@ public:
         case topology::spsc_inline:
         case topology::spsc:
             impl_.ring.push(std::move(new_value));
-            return;
+            break;
         case topology::mpsc:
             impl_.mpsc.push(std::move(new_value));
-            return;
+            break;
         case topology::spmc:
             impl_.spmc.push(std::move(new_value));
-            return;
+            break;
         default:
             impl_.generic.push(std::move(new_value));
-            return;
+            break;
         }
+        wait_.notify(1);
     }
 };
 
