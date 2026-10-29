@@ -180,7 +180,8 @@ as not novel; progress checks; raising to a dialect.
 
 One socket per leg (the timed host has one; the second host's legs run
 within one socket, frequency not fixed, reporting paired ratios); the
-shim's API (a program must use `wtc::queue`; the spdlog port replaces one
+shim's API (a program must use `wtc::queue`, or a locked queue class of
+the shape `docs/lifting.md` lifts; the spdlog port replaces one
 member, adds its bound and routes the pool's calls through a small
 adapter); one translation unit; the port's departures from spdlog (bound,
 spin); the grain model's reach (stages under about 0.5 µs); no cost model
