@@ -113,10 +113,11 @@ struct Instance {
     // For a thread started by a spawn that runs once in each iteration of a
     // counted loop (countedLoop in Utils.h), with nothing else repeating
     // around it, in an instance that runs once: that loop. The thread then
-    // stands for exactly as many threads as the loop has iterations, a
-    // number the program knows before the loop runs. threadMult says Many
-    // all the same, which is what holds whatever the number; every
-    // instance on the thread carries the loop.
+    // stands for at most as many threads as the loop has iterations, a
+    // number the program knows before the loop runs (fewer when the loop
+    // leaves early). threadMult says Many all the same, which is what
+    // holds whatever the number; every instance on the thread carries the
+    // loop.
     Operation *countLoop = nullptr;
     // With countLoop: the instance of the function that holds the loop,
     // the one run of it whose loop started this thread. A client that
@@ -442,9 +443,9 @@ private:
     // instance whose function holds the loop.
     Operation *countingLoop(Operation *spawn, const Instance &inst, const Instance **holder);
     // Whether every run of the region, or every call of the function,
-    // starts exactly one thread: one spawning call, or one spawning
-    // callee that does, on every path, with no loop, jump or early return
-    // around it.
+    // starts at most one thread: one spawning call, or one spawning callee
+    // that does, with no loop or jump around it (an early return or break
+    // only starts fewer).
     bool spawnsOnce(Region &r, unsigned depth);
     bool spawnsOncePerCall(cir::FuncOp f, unsigned depth);
     bool canSpawnIn(Operation *op);

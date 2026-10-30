@@ -1016,7 +1016,9 @@ bool ThreadInstanceWalk::isInductionOf(Value index, Operation *loop, bool &unitS
 // destructors of what it declares; a lambda that captures a std::function
 // gets one around the spawn -- and the body has no early exit or jump
 // that could skip it on some iterations.
-static bool unconditionalInBody(Operation *op, cir::ForOp loop) {
+// `exits` admits a return, break or continue elsewhere in the body: the
+// operation then runs at most once per iteration, not exactly once.
+static bool unconditionalInBody(Operation *op, cir::ForOp loop, bool exits = false) {
     Operation *child = op;
     for (Operation *p = op->getParentOp(); p != loop.getOperation(); child = p, p = p->getParentOp()) {
         if (!p) return false;
@@ -1027,7 +1029,7 @@ static bool unconditionalInBody(Operation *op, cir::ForOp loop) {
     if (!loop.getBody().isAncestor(op->getParentRegion())) return false;
     bool jumps = false;
     loop.getBody().walk([&](Operation *o) {
-        if (isa<cir::ContinueOp, cir::BreakOp, cir::GotoOp, cir::ReturnOp>(o)) jumps = true;
+        if (isa<cir::GotoOp>(o) || (!exits && isa<cir::ContinueOp, cir::BreakOp, cir::ReturnOp>(o))) jumps = true;
     });
     return !jumps;
 }
@@ -1052,15 +1054,18 @@ bool ThreadInstanceWalk::canSpawnIn(Region &r) {
     return false;
 }
 
-// Exactly one thread per run of the region: among its operations exactly
-// one starts a thread, and that one does so on every path -- a spawn, a
-// call to a function that starts exactly one per call, a scope or a try
+// At most one thread per run of the region: among its operations exactly
+// one starts a thread, and that one does so at most once -- a spawn, a
+// call to a function that starts at most one per call, a scope or a try
 // whose body does, or an `if` both of whose arms do. Anything that can
-// leave early (a return, a jump) or repeat (a loop) around it, and anything
-// else that can spawn, makes the count something other than one.
-// `std::vector::emplace_back` is the shape this is for: it constructs the
-// thread in place when there is room, else through a reallocation that
-// constructs it inside a `try`.
+// repeat (a loop) around it, and anything else that can spawn, makes the
+// count possibly more than one. A part that cannot spawn may leave early
+// (a return, a break, a continue): that only starts fewer, which is all
+// the reading of a counted loop needs -- one thread at most when the loop
+// runs at most once. ferret's tpool_create returns from its loop when a
+// spawn fails. `std::vector::emplace_back` is the shape this was first
+// for: it constructs the thread in place when there is room, else through
+// a reallocation that constructs it inside a `try`.
 bool ThreadInstanceWalk::spawnsOnce(Region &r, unsigned depth) {
     if (depth > 8 || !r.hasOneBlock()) return false;
     unsigned found = 0;
@@ -1081,7 +1086,7 @@ bool ThreadInstanceWalk::spawnsOnce(Region &r, unsigned depth) {
         if (!canSpawnIn(&op)) {
             bool jumps = false;
             op.walk([&](Operation *o) {
-                if (isa<cir::ReturnOp, cir::GotoOp, cir::BreakOp, cir::ContinueOp>(o)) jumps = true;
+                if (isa<cir::GotoOp>(o)) jumps = true;
             });
             if (jumps) return false;
             continue;
@@ -1116,14 +1121,15 @@ bool ThreadInstanceWalk::spawnsOncePerCall(cir::FuncOp f, unsigned depth) {
     return once;
 }
 
-// One thread per iteration, and the iterations counted: the spawn runs
-// unconditionally in the loop's body, no other loop encloses the loop, the
-// function's control flow is structured, and the instance that holds the
-// loop runs once on a thread the module accounts for. The loop may be in a
-// caller: then every call on the way down to the spawn sits outside any
-// loop of its function, and the loop's body starts exactly one thread per
-// iteration, through whichever calls it makes -- the spawn seen here is
-// then one of the ways it does.
+// At most one thread per iteration, and the iterations counted: the spawn
+// sits in the loop's body under nothing but scopes, no other loop encloses
+// the loop, the function's control flow is structured, and the instance
+// that holds the loop runs once on a thread the module accounts for. The
+// loop may be in a caller: then every call on the way down to the spawn
+// sits outside any loop of its function, and the loop's body starts at
+// most one thread per iteration, through whichever calls it makes -- the
+// spawn seen here is then one of the ways it does. An iteration may leave
+// early, before or after its spawn: that starts fewer.
 Operation *ThreadInstanceWalk::countingLoop(Operation *spawn, const Instance &inst, const Instance **holder) {
     Operation *site = spawn;
     const Instance *cur = &inst;
@@ -1135,7 +1141,8 @@ Operation *ThreadInstanceWalk::countingLoop(Operation *spawn, const Instance &in
         if (Operation *loop = enclosingLoop(site, cur->func)) {
             auto forOp = dyn_cast<cir::ForOp>(loop);
             if (!forOp || cur->execMult != Mult::One || enclosingLoop(forOp, cur->func) ||
-                !unconditionalInBody(site, forOp) || !countedLoop(forOp) || !spawnsOnce(forOp.getBody(), 0))
+                !unconditionalInBody(site, forOp, /*exits=*/true) || !countedLoop(forOp) ||
+                !spawnsOnce(forOp.getBody(), 0))
                 return nullptr;
             *holder = cur;
             return forOp.getOperation();

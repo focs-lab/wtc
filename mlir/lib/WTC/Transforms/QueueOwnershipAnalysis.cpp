@@ -110,9 +110,9 @@ struct SideInfo {
         if (threads.empty()) return 0;
         return (anyMany || threads.size() >= 2) ? 2 : 1;
     }
-    // The counted loop that starts every thread on this side, one per
-    // iteration, when there is one: the side then has one thread exactly
-    // when the loop runs at most once. The walk may tell several threads
+    // The counted loop that starts every thread on this side, at most one
+    // per iteration, when there is one: the side then has one thread at
+    // most when the loop runs at most once. The walk may tell several threads
     // apart under one such loop -- a vector's emplace_back constructs the
     // thread on one of two paths -- and together they are still one per
     // iteration, which the loop's record on each instance vouches for.
