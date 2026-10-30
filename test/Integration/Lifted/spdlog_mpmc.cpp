@@ -28,6 +28,14 @@
 // posted. The third has the worker of spdlog before 1.10, which waits with
 // dequeue_for and a time limit of ten seconds.
 //
+// The workers are started by the pool's constructor in a loop over its
+// count, and pop the queue object's queue through methods of the pool and
+// of the queue object, so the queue is single-consumer when the pool has
+// one worker, which the pool knows when it builds the queue object: the
+// queue object's constructor, which builds the lifted queue, is called
+// with the tag chosen there (BLOCK, TIMED). Where the loggers may overrun,
+// they are consumers too and nothing is chosen (RUNTIME).
+//
 // The code kept is the upstream code, reduced; spdlog is under the MIT licence.
 //
 // RUN: %wtc_cc -DWTC_CHECK %s -o %t.exe 2>&1 | FileCheck %s --check-prefixes=CHECK,BLOCK
@@ -56,6 +64,9 @@
 // CHECK-SAME: enqueue_nowait: push that overruns the oldest when full
 // CHECK-SAME: enqueue_if_have_room: push that discards when full
 // CHECK: queue q_ in any spdlog::details::mpmc_blocking_queue<async_msg>: mpmc (producers: many, consumers: many)
+// BLOCK: specialised at run time: mpsc when the loop at {{.*}} (consumers) runs at most once, else generic; chosen at the call at {{.*}}, which builds it
+// TIMED: specialised at run time: mpsc when the loop at {{.*}} (consumers) runs at most once, else generic; chosen at the call at {{.*}}, which builds it
+// RUNTIME-NOT: specialised at run time
 // TSAN-NOT: ThreadSanitizer
 // OUT: logged 30000 of 30000
 // DROPS: logged {{[0-9]+}} of 30000{{(: none more)?$}}

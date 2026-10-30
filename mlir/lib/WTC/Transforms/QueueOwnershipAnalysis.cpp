@@ -95,6 +95,9 @@ struct Access {
     // the thread was started some other way, or by the loop of another
     // object's constructor.
     Operation *countLoop = nullptr;
+    // With countLoop, when the loop is in a function that the run building
+    // the queue calls: that call, at which the loop's count is read.
+    Operation *countVia = nullptr;
     // For a put into some pool the analysis does not name -- a free of an
     // mbuf whose pool is its `pool` field, unresolved -- why; counted on
     // every pool that may hold mbufs, as one of several (oneOf).
@@ -125,15 +128,22 @@ struct SideInfo {
     // twice while its own ran not at all. Null when any access is not so
     // credited, is on a thread the module cannot account for, or may be
     // to another queue.
+    //
+    // A loop one call down from the run that built the queue (a pool's
+    // create function) is the same loop for every call of that function:
+    // the run is told by the call (countVia), and every access must name
+    // the same one.
     Operation *countLoop() const {
-        Operation *loop = nullptr;
+        Operation *loop = nullptr, *via = nullptr;
         for (const Access &a : accesses) {
             if (!a.countLoop || a.speculative || a.oneOf) return nullptr;
-            if (loop && loop != a.countLoop) return nullptr;
+            if (loop && (loop != a.countLoop || via != a.countVia)) return nullptr;
             loop = a.countLoop;
+            via = a.countVia;
         }
         return loop;
     }
+    Operation *countVia() const { return countLoop() ? accesses.front().countVia : nullptr; }
 };
 
 struct RootInfo {
@@ -253,6 +263,7 @@ private:
     llvm::DenseSet<Operation *> ctorUnplaced;
     llvm::DenseMap<Key, Type> keyType;             // the queue type its constructor builds
     llvm::DenseMap<Operation *, int64_t> loopIds;  // the counted spawn loops recorded, numbered
+    llvm::DenseMap<Operation *, int64_t> viaIds;   // the calls that run them, when one call down
     // (record, offset) -> the queue constructor calls that build that
     // member of the record, and the abstract keys in use.
     llvm::DenseMap<std::pair<Type, uint64_t>, llvm::SmallVector<Operation *, 2>> memberCtors;
@@ -265,6 +276,9 @@ private:
     // placed one key, which is then nobody's own object.
     static const Instance *const kAmbiguous;
     llvm::DenseMap<Key, const Instance *> keyCtorInst;
+    // The instance in which each queue constructor call ran, kAmbiguous
+    // when it ran in several: the function holding it runs more than once.
+    llvm::DenseMap<Operation *, const Instance *> ctorOpInst;
     // (closure type, field) -> every store into that field in the module;
     // empty when the field's address goes anywhere but a load or a store.
     llvm::DenseMap<std::pair<Type, unsigned>, llvm::SmallVector<cir::StoreOp, 2>> captureStores;
@@ -405,7 +419,18 @@ private:
     // followed through the parameters of the chain, is a load of a
     // closure's captured `this`, and every store into that capture in the
     // module stores the `this` of holder's function.
-    bool sameObject(Operation *op, Instance *inst, const Instance *holder);
+    bool sameObject(Operation *op, Instance *inst, const Instance *holder, Operation *ctor);
+    // Whether `ctor`, run under holderFn -- in it, or in the function it
+    // calls once -- builds the queue `offset` bytes into holderFn's
+    // object (`this`).
+    bool ctorBuildsAt(Operation *ctor, cir::FuncOp holderFn, uint64_t offset);
+    // Whether the constructor call `ctor` ran once in the whole walk, and
+    // in `holder` itself or in the run of the function holder's function
+    // calls exactly once (the call the specialisation pass redirects): a
+    // function that runs twice builds the queue twice, the second time
+    // under the threads the first run's loop started, and the count read
+    // at the second build is not theirs.
+    bool ctorRunBy(Operation *ctor, const Instance *holder);
     // The abstract key for an access the walk could not place, when its
     // handle names a member one constructor call builds; registered as a
     // queue of that constructor on first use.
@@ -1010,16 +1035,93 @@ std::optional<AbstractQueue> QueueOwnershipAnalysisPass::memberOf(Value handle, 
     return a;
 }
 
-bool QueueOwnershipAnalysisPass::sameObject(Operation *op, Instance *inst, const Instance *holder) {
+// How many bytes into the object `this` of `f` points to the object a
+// handle in f names: member steps from f's first parameter, read through
+// its slot. None when the handle is anything else.
+static std::optional<uint64_t> offsetFromThis(Value handle, cir::FuncOp f, const DataLayout &layout) {
+    uint64_t offset = 0;
+    Value t = traceToRoot(handle);
+    for (unsigned steps = 0; steps < 16; ++steps) {
+        auto gm = t.getDefiningOp<cir::GetMemberOp>();
+        if (!gm) break;
+        auto pt = dyn_cast<cir::PointerType>(gm.getAddr().getType());
+        auto rec = pt ? dyn_cast<cir::RecordType>(pt.getPointee()) : cir::RecordType();
+        if (!rec || rec.isIncomplete()) return std::nullopt;
+        offset += rec.getElementOffset(layout, gm.getIndex());
+        t = traceToRoot(gm.getAddr());
+    }
+    auto arg = dyn_cast<BlockArgument>(t);
+    if (!arg || arg.getArgNumber() != 0 || f.getBody().empty() || arg.getOwner() != &f.getBody().front())
+        return std::nullopt;
+    return offset;
+}
+
+bool QueueOwnershipAnalysisPass::ctorBuildsAt(Operation *ctor, cir::FuncOp holderFn, uint64_t offset) {
+    auto call = dyn_cast<cir::CallOp>(ctor);
+    if (!call || call.getNumOperands() == 0) return false;
+    auto inner = ctor->getParentOfType<cir::FuncOp>();
+    std::optional<uint64_t> in = offsetFromThis(call.getOperand(0), inner, *layout);
+    if (!in) return false;
+    if (inner == holderFn) return *in == offset;
+    // One call down: the holder calls the function that builds the queue
+    // once, on a member of its own object, and that function builds it
+    // on a member of the object it is handed (spdlog's pool and the queue
+    // object it holds, whose constructor builds the lifted queue).
+    cir::CallOp only;
+    unsigned n = 0;
+    holderFn.walk([&](cir::CallOp c) {
+        if (lookupCallee(c) == inner) { only = c; ++n; }
+    });
+    if (n != 1 || only.getNumOperands() == 0) return false;
+    std::optional<uint64_t> out = offsetFromThis(only.getOperand(0), holderFn, *layout);
+    return out && *out + *in == offset;
+}
+
+bool QueueOwnershipAnalysisPass::ctorRunBy(Operation *ctor, const Instance *holder) {
+    const Instance *ci = ctorOpInst.lookup(ctor);
+    if (!ci || ci == kAmbiguous || !holder || holder == kAmbiguous) return false;
+    if (ci == holder) return true;
+    if (ci->parent != holder || !ci->site) return false;
+    cir::CallOp only;
+    unsigned n = 0;
+    cir::FuncOp(holder->func).walk([&](cir::CallOp c) {
+        if (lookupCallee(c) == ci->func) { only = c; ++n; }
+    });
+    return n == 1 && only == ci->site;
+}
+
+bool QueueOwnershipAnalysisPass::sameObject(Operation *op, Instance *inst, const Instance *holder, Operation *ctor) {
     if (!holder || holder == kAmbiguous) return false;
     Value base;
     Instance *at = nullptr;
-    if (!memberOf(queueOf(op), inst, &base, &at)) return false;
+    std::optional<AbstractQueue> m = memberOf(queueOf(op), inst, &base, &at);
+    if (!m) return false;
     // The base is `this` of some method, handed down the chain from the
-    // closure that captured it.
-    base = throughParameters(base, at);
+    // closure that captured it, through the members of the objects on the
+    // way: spdlog's worker pops `this->q_.q_`, the queue object's member
+    // of the pool's member, one method of each.
+    uint64_t offset = m->offset;
+    for (unsigned hops = 0; hops < 16; ++hops) {
+        base = throughParameters(base, at);
+        auto gm = base ? base.getDefiningOp<cir::GetMemberOp>() : cir::GetMemberOp();
+        if (!gm) break;
+        auto pt = dyn_cast<cir::PointerType>(gm.getAddr().getType());
+        auto rec = pt ? dyn_cast<cir::RecordType>(pt.getPointee()) : cir::RecordType();
+        if (!rec || rec.isIncomplete()) return false;
+        offset += rec.getElementOffset(*layout, gm.getIndex());
+        base = traceToRoot(gm.getAddr());
+    }
     auto ld = base ? base.getDefiningOp<cir::LoadOp>() : cir::LoadOp();
     if (!ld) return false;
+    // ... and the constructor run by the holder builds that member of
+    // the holder's object, not another object's.
+    if (!ctorBuildsAt(ctor, holder->func, offset)) return false;
+    // A constructor runs once per object, so the queue it builds is built
+    // once under the threads its loop starts, however many objects there
+    // are. Any other holder may run twice on one object, building the
+    // queue again under the first run's threads: the queue's constructor
+    // must then have run once in the whole walk, in that holder.
+    if (!cir::FuncOp(holder->func).isCxxConstructor() && !ctorRunBy(ctor, holder)) return false;
     auto gm = traceToLocalRoot(ld.getAddr()).getDefiningOp<cir::GetMemberOp>();
     if (!gm) return false;
     auto pt = dyn_cast<cir::PointerType>(gm.getAddr().getType());
@@ -2104,19 +2206,27 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
         // program knows before the loop runs: the loop is recorded for the
         // specialisation pass, which can choose the implementation then.
         if (carrier && t != Topology::unknown)
-            for (auto [n, side, what, attr] :
-                 {std::tuple{p, &info.producers, "producers", kProducersLoopAttrName},
-                  std::tuple{c, &info.consumers, "consumers", kConsumersLoopAttrName}}) {
+            for (auto [n, side, what, attr, viaAttr] :
+                 {std::tuple{p, &info.producers, "producers", kProducersLoopAttrName, kProducersViaAttrName},
+                  std::tuple{c, &info.consumers, "consumers", kConsumersLoopAttrName, kConsumersViaAttrName}}) {
                 Operation *loop = n == 2 ? side->countLoop() : nullptr;
                 if (!loop) continue;
                 auto [it, fresh] = loopIds.try_emplace(loop, static_cast<int64_t>(loopIds.size()));
                 if (fresh)
                     loop->setAttr(kSpawnLoopAttrName, IntegerAttr::get(IntegerType::get(ctx, 64), it->second));
                 carrier->setAttr(attr, IntegerAttr::get(IntegerType::get(ctx, 64), it->second));
-                root->emitRemark() << "wtc: queue " << label << ": " << what
-                                   << ": one thread per iteration of the loop at "
-                                   << whereOf(loop->getLoc(), /*fileOnly=*/true)
-                                   << ", so one when it runs at most once";
+                InFlightDiagnostic d = root->emitRemark()
+                                       << "wtc: queue " << label << ": " << what
+                                       << ": one thread per iteration of the loop at "
+                                       << whereOf(loop->getLoc(), /*fileOnly=*/true);
+                if (Operation *via = side->countVia()) {
+                    auto [vt, vfresh] = viaIds.try_emplace(via, static_cast<int64_t>(viaIds.size()));
+                    if (vfresh)
+                        via->setAttr(kSpawnViaAttrName, IntegerAttr::get(IntegerType::get(ctx, 64), vt->second));
+                    carrier->setAttr(viaAttr, IntegerAttr::get(IntegerType::get(ctx, 64), vt->second));
+                    d << ", run by the call at " << whereOf(via->getLoc(), /*fileOnly=*/true);
+                }
+                d << ", so one when it runs at most once";
                 ++remarks;
             }
         if (!carrier && !library && t == Topology::spsc) {
@@ -2182,7 +2292,8 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
     roots.clear(); poisonedTypes.clear(); poisonWhy.clear(); opRoots.clear();
     ctorKeys.clear(); keyCtors.clear(); ctorUnplaced.clear(); keyType.clear();
     memberCtors.clear(); abstractKeys.clear(); elementKeys.clear(); layout.reset();
-    keyCtorInst.clear(); captureStores.clear(); libraryKeys.clear(); openWhyCache.clear();
+    keyCtorInst.clear(); ctorOpInst.clear(); captureStores.clear(); libraryKeys.clear(); openWhyCache.clear();
+    loopIds.clear(); viaIds.clear();
     libraryFunctions.clear(); unresolvedPuts.clear(); mbufPoolKeys.clear(); mbufLink.reset();
     defaultOpsSet.reset(); objectPools.clear(); singleForm.clear();
     globalPoison = false; remarks = 0;
@@ -2266,6 +2377,8 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
     // object; a heap queue by the call after its allocation.
     for (auto [op, inst] : ctorVisits) {
         auto call = cast<cir::CallOp>(op);
+        if (auto [ci, first] = ctorOpInst.try_emplace(op, inst); !first && ci->second != inst)
+            ci->second = kAmbiguous;
         // rte_ring_create is the allocation and the constructor in one: the
         // ring is the object the call hands back, which the walk places at
         // the call itself.
@@ -2535,13 +2648,16 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
             // belongs to the constructor of the object it touches: for an
             // abstract queue, the captured `this` is that run's; for a
             // placed one, the run is the one that built the queue, or the
-            // loop is not in the constructor's function at all, where no
-            // choice is made at construction.
+            // run that built it called the loop's function (countVia), or
+            // the constructor is in a function the loop's function calls
+            // and ran once, in the one call of it there (ctorRunBy), or
+            // neither function calls the other, where no choice is made at
+            // construction.
             if (Operation *loop = inst->countLoop) {
                 const Instance *holder = inst->countLoopInst;
                 bool credited = false;
                 if (abstractKeys.count(root)) {
-                    credited = sameObject(op, inst, holder);
+                    credited = sameObject(op, inst, holder, root.first);
                 } else {
                     auto loopFn = loop->getParentOfType<cir::FuncOp>();
                     bool ctorInLoopFn = false;
@@ -2549,7 +2665,33 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
                         for (Operation *c : kc->second)
                             if (c->getParentOfType<cir::FuncOp>() == loopFn) ctorInLoopFn = true;
                     const Instance *built = keyCtorInst.lookup(root);
-                    credited = !ctorInLoopFn || (built && built != kAmbiguous && built == holder);
+                    const bool builtOnce = built && built != kAmbiguous;
+                    // A constructor in a function the loop's function calls.
+                    Operation *below = nullptr;
+                    unsigned ctors = 0;
+                    if (auto kc = keyCtors.find(root); kc != keyCtors.end())
+                        for (Operation *c : kc->second) {
+                            ++ctors;
+                            auto cf = c->getParentOfType<cir::FuncOp>();
+                            loopFn.walk([&](cir::CallOp call) {
+                                if (cf != loopFn && lookupCallee(call) == cf) below = c;
+                            });
+                        }
+                    if (ctorInLoopFn) {
+                        credited = builtOnce && built == holder;
+                    } else if (builtOnce && holder && holder->site && built == holder->parent) {
+                        // The loop one call down from the run that built
+                        // the queue: the count is what that call passes.
+                        credited = true;
+                        a.countVia = cir::CallOp(holder->site).getOperation();
+                    } else if (below) {
+                        // The queue built one call down from the loop's
+                        // function: by the one constructor, run once, in
+                        // the call the specialisation pass redirects.
+                        credited = ctors == 1 && builtOnce && ctorRunBy(below, holder);
+                    } else {
+                        credited = true;
+                    }
                 }
                 if (credited) a.countLoop = loop;
             }
