@@ -1,0 +1,6 @@
+wtc: queue @tasks: spmc (producers: 1, consumers: many)
+wtc: queue @tasks: many consumers: started in a loop at waiting_pool.cpp:51:53
+wtc: queue @tasks: consumers: one thread per iteration of the loop at waiting_pool.cpp:51:5, so one when it runs at most once
+wtc: queue @tasks: every pop moves its element out or only borrows it (1 pop)
+wtc: not specialised at run time: the queue is built outside the function whose loop starts its threads
+wtc: specialised: constructor tag rewritten to spmc

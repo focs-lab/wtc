@@ -1,0 +1,12 @@
+wtc: queue *@refine_que[*]: spmc (producers: 1, consumers: many)
+wtc: queue *@refine_que[*]: many consumers: started in a loop at encoder-wtc.cpp:1617:30
+wtc: queue *@deduplicate_que[*]: mpmc (producers: many, consumers: many)
+wtc: queue *@deduplicate_que[*]: many producers: started in a loop at encoder-wtc.cpp:1617:30
+wtc: queue *@deduplicate_que[*]: many consumers: started in a loop at encoder-wtc.cpp:1619:29
+wtc: queue *@compress_que[*]: mpmc (producers: many, consumers: many)
+wtc: queue *@compress_que[*]: many producers: started in a loop at encoder-wtc.cpp:1619:29
+wtc: queue *@compress_que[*]: many consumers: started in a loop at encoder-wtc.cpp:1621:32
+wtc: queue *@reorder_que[*]: mpsc (producers: many, consumers: 1)
+wtc: queue *@reorder_que[*]: many producers: started in a loop at encoder-wtc.cpp:1619:29
+wtc: specialised: constructor tag rewritten to spmc
+wtc: specialised: constructor tag rewritten to mpsc

@@ -28,7 +28,7 @@ Whatever it cannot prove keeps the general implementation.
 | **11×** | the compiler's queue against the program as written, one producer and one consumer, geometric mean over sizes and allocators (5–27×); within 16% of the expert rings ([W1](#the-queue-alone)) |
 | **6.6× · 1.7×** | what each fact buys through the shim: the topology 6.6× (one producer and one consumer instead of the general queue), and on top of it the proof that the consumer only borrows 1.7× in code written against the `shared_ptr` API (a loss at 256 bytes); 6.6 × 1.7 ≈ the 11× above ([W1](#the-queue-alone), [ablation](#what-each-fact-buys)) |
 | **= by hand** | on a pipeline the compiler's build is byte for byte the hand-tagged one, 1.8–1.9× the program as written ([W3](#a-pipeline)) |
-| **0 wrong** | verdicts over 43 queues in examples, workloads and two PARSEC programs ([reach](#reach)) |
+| **0 wrong** | verdicts over 48 queues in examples, workloads and two PARSEC programs, ported and lifted ([reach](#reach)) |
 | **1.65×** | compile time against the same clang, for code 0.4% larger ([cost](#cost-and-safety)) |
 
 ## Why
@@ -159,23 +159,27 @@ under [`benchmarks/results/`](benchmarks/results/), and
 ### Reach
 
 Every queue in the examples, the compiler-built workloads, and PARSEC's
-ferret and dedup in eight configurations, against the topology a reader sees
-in the source:
+ferret and dedup in nine configurations, ported to the shim and, for
+ferret, lifted from PARSEC's own sources, against the topology a reader
+sees in the source:
 
 | Queues | Exact | Conservative | Refused | Wrong |
 |:--:|:--:|:--:|:--:|:--:|
-| 43 | 31 | 10 | 2 | **0** |
+| 48 | 36 | 12 | 0 | **0** |
 
-Of the 25 that a reader would call single-producer single-consumer, 18 are
+Of the 25 that a reader would call single-producer single-consumer, 19 are
 proved so. dedup keeps its queues in arrays indexed at run time; the
 analysis counts each array as one queue, every element together, which
 holds for each element and is exact on dedup, where every element of an
-array has the same threads. What stops the 12 that are not exact: a push
-from inside a recursive directory scan (ferret's loader, 2, refused), and
-threads started from a function that only another file calls (dedup, 10,
-conservative; exact once `main` is in the same file). The table, with the
-analysis's own account of each verdict, is
-[`benchmarks/results/2026-10-26-reach/TABLE.md`](benchmarks/results/2026-10-26-reach/TABLE.md).
+array has the same threads. What stops the 12 that are not exact: threads
+started from a function that only another file calls (dedup, 10,
+conservative; exact once `main` is in the same file), and two stages of
+the lifted ferret whose counts are globals the program never changes from
+one, counted per iteration of PARSEC's thread pool's loop and chosen at
+run time (2, conservative). ferret's loader, whose push from inside a
+recursive directory scan was refused until 30 October, is now exact. The
+table, with the analysis's own account of each verdict, is
+[`benchmarks/results/2026-10-30-reach/TABLE.md`](benchmarks/results/2026-10-30-reach/TABLE.md).
 
 ### The queue alone
 
@@ -451,6 +455,27 @@ worker, 0.79–0.92×, where the library as released is at its fastest. The
 leg is untimed, on one socket of a two-socket Xeon Gold 6230, and
 reports ratios within a round
 ([`2026-10-28-pool-libs`](benchmarks/results/2026-10-28-pool-libs/NOTE.md)).
+
+The programs' own queues lifted without a source edit (docs/lifting.md)
+got their ports' verdicts on 30 October: spdlog's queue was chosen when
+its pool builds it, CTPL's is spmc with one submitter, each of ferret's
+five is chosen from the counts main passes to PARSEC's thread pool, and
+dedup's, whose batched pops several refine threads share, was spmc and
+mpsc where its port built as one unit is. Since 31 October, after a
+review of the lifting's faithfulness, the real spdlog's queue is
+general-purpose (its overflow policy is read through `std::make_shared`'s
+control block, which the analysis does not follow) and dedup's is
+refused for its assertions; the legs below are of the builds before.
+Against the same lifted source
+on the general-purpose queue, the compiler's choice adds 1.08–1.20× to
+CTPL with tasks of up to 1 µs and nothing at 10 µs, and nothing
+measurable to spdlog, whose lifted queue is the bounded ring with the
+original's exact capacity, where one consumer saves only an uncontended
+compare-and-swap, or to ferret and dedup, which are coarse-grained
+(0.97–1.03×; untimed, five rounds,
+[`2026-10-30-lift-attribution`](benchmarks/results/2026-10-30-lift-attribution/NOTE.md)).
+g3log's lifts, but its queue class serves one object per sink and is
+many to many, and ClangIR's build of it fails at run time.
 
 ### Cost and safety
 

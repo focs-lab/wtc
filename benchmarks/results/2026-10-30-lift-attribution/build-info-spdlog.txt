@@ -1,0 +1,4 @@
+compiler=tools/wtc-cc, ClangIR unknown
+wtc=eb2e7e8dab2e
+spdlog=27cb4c767086
+orig=clang++-18 -O2 header-only
