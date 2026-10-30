@@ -25,7 +25,7 @@ Every implementation carries, in its header comment:
 | `hazard.hpp` | nothing: hazard pointers for the segmented queues, one slot for pushes and one for pops | none |
 | `waiter.hpp` | nothing: how a pop that waits for an element waits (spin, park, or spin then park), and the wake-up a publish owes a sleeping consumer, shared by every queue above | none |
 | `bounded_ring.hpp` | a bounded ring a program wrote itself under a mutex (spdlog's `circular_q`), through `shim/bounded.hpp` | the ring's capacity and its answers to a full queue, read from its member functions (`docs/lifting.md`, "The bound"); with one producer or one consumer, that side is single |
-| `bounded_ring.hpp`, through `shim/c_queue.cpp` | a ring of pointers a C program wrote itself under a pthread mutex (PARSEC ferret's and dedup's `queue.c`) | the ring's capacity, read from its initialisation; with one producer or one consumer, that side is single; batches with any number of producers and consumers (`docs/lifting.md`, "C queues") |
+| `bounded_ring.hpp`, through `shim/c_queue.cpp` | a ring of pointers a C program wrote itself under a pthread mutex, with an end count (PARSEC ferret's and dedup's `queue.c`) | the ring's capacity, read from its initialisation; with one producer or one consumer, that side is single; batches with any number of producers and consumers (`docs/lifting.md`, "C queues") |
 
 `spsc_ring<Slot, kSlots>` is an unbounded wait-free ring of blocks of 128 KiB
 each. It keeps the generic queue's semantics exactly: FIFO, `push` never
@@ -169,14 +169,26 @@ on a queue built for one must be caught by `WTC_CHECK`.
 
 `c_queue_test` runs the runtime of lifted C queues through its C entry
 points: every answer of the single and batched forms, the queue's contents
-and the caller's ring indices against the original's ring, at capacities
-zero to six; producers pushing single elements and batches against one
-consumer popping batches, where every element must arrive once, in order
-per producer, and every batch pushed as adjacent elements; a batched pop
-and a batched push crossed between deciding their sizes and claiming
-their tickets (a hook compiled into `c_queue_crossing` only), whose sizes
-must be an outcome of the original's mutex. A second consumer on a queue
-built for one must be caught by `WTC_CHECK`.
+and the caller's ring indices against the original's ring with its end
+count, at capacities zero to six; producers pushing single elements and
+batches against one consumer popping batches, where every element must
+arrive once, in order per producer, and every batch pushed as adjacent
+elements; four producers against four consumers popping batches with
+random limits and room, where every batch popped must be an adjacent run
+of one order of all elements that keeps each producer's order and its
+batches adjacent; a batched pop and a batched push crossed between
+deciding their sizes and claiming their tickets (a hook compiled into
+`c_queue_crossing` only), whose sizes must be an outcome of the
+original's mutex; consumers asleep until the last producer terminates. More
+terminations than producers must end the program when the queue finishes
+at exactly that many (the program tests `==`), and change nothing when it
+finishes at at least that many (`>=`); a limit beyond any `int` is no
+limit; a batch with nothing to move, woken in place of a push or pop that
+has something to move, must pass the wake-up on; and destroy, called by a
+consumer as soon as it has seen the queue finished, must wait for the
+last termination still inside the runtime (a hook compiled into
+`c_queue_destroy` only). A second consumer on a queue built for one must
+be caught by `WTC_CHECK`.
 
 `waiter_test` runs the waiting pop through the shim's queue on every
 topology and every wait policy: the lost wake-up's window forced (the
