@@ -1394,7 +1394,7 @@ std::string QueueOwnershipAnalysisPass::openWhy(Type t) {
         }
         // A thread start's argument goes to an entry the walk follows.
         if (!callee.getBody().empty() || isLibraryFunction(callee) || isAllocator(callee) ||
-            touchesOnlyItsArguments(callee) || callee.getSymName() == "free" ||
+            touchesOnlyItsArguments(callee) || isCQueueRuntime(callee) || callee.getSymName() == "free" ||
             getSemanticKind(callee) == SemanticOpKind::ThreadSpawn)
             return WalkResult::advance();
         if (llvm::any_of(call.getOperands(), reaches))
@@ -1498,7 +1498,7 @@ void QueueOwnershipAnalysisPass::poisonEscapes() {
     auto harmless = [&](cir::FuncOp callee) {
         const llvm::StringRef n = callee.getSymName();
         return getSemanticKind(callee) != SemanticOpKind::Unknown || isLibraryFunction(callee) ||
-               isAllocator(callee) || touchesOnlyItsArguments(callee) || n == "free" ||
+               isAllocator(callee) || touchesOnlyItsArguments(callee) || isCQueueRuntime(callee) || n == "free" ||
                n.starts_with("_ZdlPv") || n.starts_with("_ZdaPv") || n == "__cxa_atexit" ||
                n == "__cxa_thread_atexit" || n == "__cxa_thread_atexit_impl" || shimOrStd(n);
     };

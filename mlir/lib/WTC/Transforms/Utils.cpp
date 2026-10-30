@@ -646,6 +646,8 @@ unsigned spawnFirstArgOperand(cir::CallOp op) {
     return spawnEntryOperand(op) + 1;
 }
 
+bool isCQueueRuntime(cir::FuncOp f) { return f && f.getSymName().starts_with("wtc_c_queue_"); }
+
 bool touchesOnlyItsArguments(cir::FuncOp f) {
     if (!f || !f.getBody().empty()) return false;
     static const llvm::StringSet<> names = {
@@ -833,8 +835,9 @@ collectQueueConstructors(ModuleOp module) {
 
 bool takesTopologyTag(cir::CallOp ctor) {
     // wtc::queue's (tag) and (tag, policy); wtc::lifted_bounded's construct
-    // (at, tag, capacity, overrun).
-    return ctor.getNumOperands() >= 2 && ctor.getNumOperands() <= 4 &&
+    // (at, tag, capacity, overrun); a lifted C queue's init (at, tag,
+    // capacity, producers, ends).
+    return ctor.getNumOperands() >= 2 && ctor.getNumOperands() <= 5 &&
            isa<cir::IntType>(ctor.getOperand(1).getType());
 }
 

@@ -161,8 +161,8 @@ def QueuePopOp : WTC_ObjectOp<"queue_pop"> {
         the calling thread's (shim/c_queue.h, the substitute for dedup's
         batched dequeue): `out` is where the ring keeps its elements, and
         the operands after it the rest of the ring and the limit; it takes
-        at one step as many as the ring has room for, and is lifted only
-        for a queue with one consumer.
+        at one step as many as the ring has room for, adjacent in the queue
+        whatever the number of consumers.
     }];
     let arguments = (ins WTC_QueueType:$queue,
         Variadic<AnyType>:$args,
