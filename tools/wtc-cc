@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 #
-# The whole pipeline, one C++ file to one executable:
+# The whole pipeline, one C++ or C file to one executable:
 #
 #   clang++ -fclangir -emit-cir        C++ -> CIR, with the shim's annotations
+#   (clang for a C file)
 #   wtc-opt                            lift, analyse ownership and borrowing,
 #                                      specialise, lower
 #   cir-translate --cir-to-llvmir      CIR -> LLVM IR
 #   clang++                            LLVM IR -> executable
 #
 #   wtc-cc [options] file.cpp -o prog
+#   wtc-cc [options] file.c -o prog
+#   wtc-cc [options] --unity a.c b.c ... -o prog
 #
 # Options of its own (everything else goes to both clang invocations):
 #   --keep DIR         keep the intermediate .cir/.ll files in DIR
@@ -20,6 +23,12 @@
 #                      wtc::lifted, whose instantiations this script adds.
 #                      A class lifts only in a whole program: not with -c,
 #                      and not when a file linked here names it
+#   --unity            compile several source files of one language as one
+#                      translation unit: a generated file that includes each
+#                      of them, in the order given, so that the analysis sees
+#                      the whole program; the files are not edited. Their
+#                      file-scope names must not clash, as in any unity
+#                      build
 #   --force-spsc SYMS  tag these global queues spsc regardless of the verdict
 #                      (negative control; pass a comma-separated list)
 #   --force-inline SYMS  tag these global queues spsc_inline regardless of
@@ -73,6 +82,7 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)
 
+SRCS=(); UNITY=0
 KEEP=""; SPECIALIZE=1; LIFT=1; TSAN=0; CENSUS=0; COMPILE_ONLY=0; FORCE=""; FORCE_INLINE=""; TOOLCHAIN=""; OUT="a.out"; SRC=""
 BATCH_COST=""; BATCH_HOST=""; BATCH_NS=""
 PASSTHRU=(); LINKARGS=(); OPTARGS=()
@@ -81,6 +91,7 @@ while [ $# -gt 0 ]; do
     --keep) KEEP=$2; shift 2 ;;
     --no-specialize) SPECIALIZE=0; shift ;;
     --no-lift) LIFT=0; shift ;;
+    --unity) UNITY=1; shift ;;
     --force-spsc) FORCE=$2; shift 2 ;;
     --force-inline) FORCE_INLINE=$2; shift 2 ;;
     --toolchain) TOOLCHAIN=$2; shift 2 ;;
@@ -92,12 +103,23 @@ while [ $# -gt 0 ]; do
     -c) COMPILE_ONLY=1; shift ;;
     --wtc-opt-arg) OPTARGS+=("$2"); shift 2 ;;
     -o) OUT=$2; shift 2 ;;
-    *.cpp|*.cc|*.cxx) SRC=$1; shift ;;
+    *.cpp|*.cc|*.cxx|*.c) SRCS+=("$1"); shift ;;
     *.o|*.a|*.so|-l*|-L*|-Wl,*) LINKARGS+=("$1"); shift ;;
     *) PASSTHRU+=("$1"); shift ;;
   esac
 done
-[ -n "$SRC" ] || { echo "wtc-cc: no source file" >&2; exit 2; }
+[ ${#SRCS[@]} -gt 0 ] || { echo "wtc-cc: no source file" >&2; exit 2; }
+if [ ${#SRCS[@]} -gt 1 ] && (( ! UNITY )); then
+  echo "wtc-cc: ${#SRCS[@]} source files: the analysis takes one translation unit; pass --unity to compile them as one" >&2
+  exit 2
+fi
+SRC=${SRCS[0]}
+LANG_C=0
+case "$SRC" in *.c) LANG_C=1 ;; esac
+for s in "${SRCS[@]}"; do
+  case "$s" in *.c) c=1 ;; *) c=0 ;; esac
+  (( c == LANG_C )) || { echo "wtc-cc: --unity takes files of one language, C or C++" >&2; exit 2; }
+done
 
 find_tool() { # name, candidates...
   local name=$1; shift
@@ -108,9 +130,10 @@ find_tool() { # name, candidates...
 # repository's build tree. WTC_OPT in the environment overrides the latter,
 # which is how the lit tests point at the build they are testing.
 if [ -n "$TOOLCHAIN" ]; then
-  CLANGXX="$TOOLCHAIN/bin/clang++"; CIRTR="$TOOLCHAIN/bin/cir-translate"
+  CLANGXX="$TOOLCHAIN/bin/clang++"; CLANGC="$TOOLCHAIN/bin/clang"; CIRTR="$TOOLCHAIN/bin/cir-translate"
 else
   CLANGXX=$(find_tool clang++ "$ROOT/build-llvm/bin/clang++" /opt/llvm/bin/clang++)
+  CLANGC=$(find_tool clang "$ROOT/build-llvm/bin/clang" /opt/llvm/bin/clang)
   CIRTR=$(find_tool cir-translate "$ROOT/build-llvm/bin/cir-translate" /opt/llvm/bin/cir-translate)
 fi
 WTCOPT=${WTC_OPT:-$(find_tool wtc-opt "$ROOT/build/bin/wtc-opt")}
@@ -119,6 +142,54 @@ WORK=${KEEP:-$(mktemp -d)}
 mkdir -p "$WORK"
 [ -n "$KEEP" ] || trap 'rm -rf "$WORK"' EXIT
 base=$(basename "${SRC%.*}")
+# A unity build: one file that includes the others, by absolute path, so
+# that each file's own quoted includes still resolve next to it. A file
+# compiled apart starts with no macros of the others: the macros a file
+# defines in its own text are undefined after it, and a file that defines
+# a feature-test macro (_GNU_SOURCE, _FILE_OFFSET_BITS and the like),
+# which configures the system's headers once for every later file, whose
+# own includes of them are then skipped, is refused. Then each file's own text, preprocessed alone and in the
+# unity, must read the same, or the build stops: something of the files
+# before it would change what it means.
+if (( UNITY )); then
+  ext=${SRC##*.}
+  if (( LANG_C )); then PP=("$CLANGC" -E "${PASSTHRU[@]}"); else PP=("$CLANGXX" -std=c++17 -I"$ROOT/shim" -E "${PASSTHRU[@]}"); fi
+  # The lines of a preprocessed file that come from FILE's own text.
+  own_text() { # file, preprocessed output
+    awk -v f="$1" '/^# [0-9]+ "/ { split($0, a, "\""); cur = a[2]; next } cur == f && NF' "$2"
+  }
+  : > "$WORK/$base.unity.$ext"
+  ABS=()
+  for s in "${SRCS[@]}"; do
+    abs="$(cd "$(dirname "$s")" && pwd)/$(basename "$s")"
+    ABS+=("$abs")
+    printf '#include "%s"\n' "$abs" >> "$WORK/$base.unity.$ext"
+    "${PP[@]}" -dD "$abs" -o "$WORK/$base.dd" 2>/dev/null ||
+      { echo "wtc-cc: --unity: cannot preprocess $s" >&2; exit 2; }
+    own=$(awk -v f="$abs" '/^# [0-9]+ "/ { split($0, a, "\""); cur = a[2]; next }
+      cur == f && $1 == "#define" { n = $2; sub(/\(.*/, "", n); d[n] = 1 }
+      cur == f && $1 == "#undef" { delete d[$2] }
+      END { for (n in d) print n }' "$WORK/$base.dd" | sort)
+    for m in $own; do
+      case "$m" in
+        _*_SOURCE|_*_SOURCE_*|_FILE_OFFSET_BITS|_TIME_BITS|_REENTRANT|_THREAD_SAFE|__STDC_*)
+          echo "wtc-cc: --unity: $s defines $m, which configures the headers of every file after it; pass it with -D instead" >&2
+          exit 2 ;;
+      esac
+      printf '#undef %s\n' "$m" >> "$WORK/$base.unity.$ext"
+    done
+  done
+  SRC="$WORK/$base.unity.$ext"
+  "${PP[@]}" "$SRC" -o "$WORK/$base.unity.i" 2>/dev/null ||
+    { echo "wtc-cc: --unity: cannot preprocess the files as one" >&2; exit 2; }
+  for i in "${!ABS[@]}"; do
+    "${PP[@]}" "${ABS[$i]}" -o "$WORK/$base.alone.i" 2>/dev/null
+    if ! cmp -s <(own_text "${ABS[$i]}" "$WORK/$base.alone.i") <(own_text "${ABS[$i]}" "$WORK/$base.unity.i"); then
+      echo "wtc-cc: --unity: ${SRCS[$i]} reads differently after the files before it (a macro of theirs changes it); compile it apart" >&2
+      exit 2
+    fi
+  done
+fi
 
 # Runs a step, and with WTC_CC_TIMES set records how long it took.
 step() { # name, command...
@@ -172,7 +243,11 @@ case "$QOA" in
   *named-elsewhere=*) LIFTOPTS="named-elsewhere=${QOA#*named-elsewhere=}" ;;
 esac
 
-step cir "$CLANGXX" -std=c++17 -I"$ROOT/shim" -fclangir -emit-cir "${PASSTHRU[@]}" "$SRC" -o "$WORK/$base.cir"
+if (( LANG_C )); then
+  step cir "$CLANGC" -fclangir -emit-cir "${PASSTHRU[@]}" "$SRC" -o "$WORK/$base.cir"
+else
+  step cir "$CLANGXX" -std=c++17 -I"$ROOT/shim" -fclangir -emit-cir "${PASSTHRU[@]}" "$SRC" -o "$WORK/$base.cir"
+fi
 
 # The program's own locked queues. The runtime that replaces them is a
 # template the program never names, so a first look lists the container
@@ -181,7 +256,7 @@ step cir "$CLANGXX" -std=c++17 -I"$ROOT/shim" -fclangir -emit-cir "${PASSTHRU[@]
 # and the second CIR is the first plus wtc::lifted<C> for each. The pass
 # itself runs in the pipeline below.
 PRE=()
-if (( LIFT )); then
+if (( LIFT && !LANG_C )); then
   step lift-scan "$WTCOPT" "$WORK/$base.cir" "--wtc-lift-locked-queues=rewrite=false instantiations=$WORK/$base.inst${LIFTOPTS:+ $LIFTOPTS}" \
     -o /dev/null 2>/dev/null
   if [ -s "$WORK/$base.inst" ]; then
@@ -217,13 +292,16 @@ step wtc-opt "$WTCOPT" --mlir-print-op-on-diagnostic=false "${OPTARGS[@]}" "$WOR
 step cir-translate "$CIRTR" --cir-to-llvmir "$WORK/$base.wtc.cir" -o "$WORK/$base.raw.ll"
 sed '/^target datalayout/d' "$WORK/$base.raw.ll" > "$WORK/$base.ll"
 
+# The flags for compiling the IR: the language's own (-std=) do not apply.
+BACKFLAGS=()
+for a in "${PASSTHRU[@]}"; do case "$a" in -std=*) ;; *) BACKFLAGS+=("$a") ;; esac; done
 if (( TSAN )); then
   LINKXX=${WTC_TSAN_CXX:-$(command -v clang++-18 || command -v clang++ || echo clang++)}
-  "$CLANGXX" "${PASSTHRU[@]}" -fsanitize=thread -mllvm -force-attribute=sanitize_thread \
+  "$CLANGXX" "${BACKFLAGS[@]}" -fsanitize=thread -mllvm -force-attribute=sanitize_thread \
     -c "$WORK/$base.ll" -o "$( (( COMPILE_ONLY )) && echo "$OUT" || echo "$WORK/$base.o")"
   (( COMPILE_ONLY )) || "$LINKXX" -fsanitize=thread "$WORK/$base.o" "${LINKARGS[@]}" -o "$OUT" -pthread
 elif (( COMPILE_ONLY )); then
-  step backend "$CLANGXX" "${PASSTHRU[@]}" -c "$WORK/$base.ll" -o "$OUT"
+  step backend "$CLANGXX" "${BACKFLAGS[@]}" -c "$WORK/$base.ll" -o "$OUT"
 else
-  step backend "$CLANGXX" "${PASSTHRU[@]}" "$WORK/$base.ll" "${LINKARGS[@]}" -o "$OUT" -pthread
+  step backend "$CLANGXX" "${BACKFLAGS[@]}" "$WORK/$base.ll" "${LINKARGS[@]}" -o "$OUT" -pthread
 fi
