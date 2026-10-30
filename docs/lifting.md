@@ -412,20 +412,22 @@ reduced. Read as written, without source edits (29 Oct 2026):
 
 | program, class | verdict | why |
 |---|---|---|
-| CTPL, `detail::Queue` (`ctpl_stl.h`) | lifts | push and try-pop; the pool's own condition variable and mutex stay, and the element, a pointer, is copied out, which is moving it. The topology is many to many (the pool's workers and the stopping thread pop), so the general-purpose queue |
-| g3log, `shared_queue` (`shared_queue.hpp`) | lifts | push and a blocking pop; shutdown is a message, so no stop flag. The queue is proved many producers to one consumer and becomes the single-consumer queue; the model runs correctly under ThreadSanitizer and `WTC_CHECK` |
+| CTPL, `detail::Queue` (`ctpl_stl.h`) | lifts | push and try-pop; the pool's own condition variable and mutex stay, and the element, a pointer, is copied out, which is moving it. The model's topology is many to many (two threads submit; the pool's workers and the stopping thread pop), so the general-purpose queue. The real library with the leg's driver (`benchmarks/apps/ctpl`), one submitter, is spmc: the workers and the stopping thread pop |
+| g3log, `shared_queue` (`shared_queue.hpp`) | lifts | push and a blocking pop; shutdown is a message, so no stop flag. In the model, with one `Active` object, the queue is proved many producers to one consumer and becomes the single-consumer queue; the model runs correctly under ThreadSanitizer and `WTC_CHECK`. The real program (`benchmarks/apps/g3log`, the logger and its performance test as one unit) builds one `Active` per sink type and one for the worker, each popped by its own thread; the queue stands for all of them, so many to many |
 | BS::thread_pool, `tasks` (`BS_thread_pool.hpp`) | refused | (c) the mutex also guards the running count, the waiting flag, the thread count and the stop flag; (b) the worker pops through `pop_task()`, which takes no lock itself; (d) `get_tasks_queued()` reads `size()`, and `wait()` sleeps until the queue is empty and nothing runs, a joint invariant of the queue and the pool |
 | Bitcoin, `CCheckQueue::queue` (`checkqueue.h`) | refused | (e) a `std::vector` taken from the back, with range insert and erase; (d) the batch size is computed from `size()`; (c) the mutex also guards the idle, total and unfinished counts and the result |
 | cpp-httplib, `ThreadPool::jobs_` (`httplib.h`) | refused | (c) the mutex also guards the idle count, the admission bound and the dynamic threads; (d) `enqueue` decides on `jobs_.size()`; dynamic workers wait with a time-out. Its shutdown flag alone would have been supported |
-| spdlog, `mpmc_blocking_queue::q_` (`mpmc_blocking_q.h`) | lifts | `circular_q` is read as a ring of capacity `max_items`; `enqueue` waits for room, `enqueue_if_have_room` may decline (its discard count stays the class's), `enqueue_nowait` overruns, `dequeue` is the blocking pop (`dequeue_for`, used by spdlog before 1.10, the pop with a time limit). The overrun cannot run in the benchmark, whose loggers are built with `block`, so it is left out. The real program, `benchmarks/apps/spdlog/bench.cpp` over spdlog's own headers, lifts as the model does and runs correctly with `WTC_CHECK` and under ThreadSanitizer; its queue is the general-purpose one (below) |
+| spdlog, `mpmc_blocking_queue::q_` (`mpmc_blocking_q.h`) | lifts | `circular_q` is read as a ring of capacity `max_items`; `enqueue` waits for room, `enqueue_if_have_room` may decline (its discard count stays the class's), `enqueue_nowait` overruns, `dequeue` is the blocking pop (`dequeue_for`, used by spdlog before 1.10, the pop with a time limit). The overrun cannot run in the model, whose loggers are built with `block`, so it is left out there, and the model's queue is chosen when the pool builds it: single-consumer with one worker, else general-purpose (below). The real program, `benchmarks/apps/spdlog/bench.cpp` over spdlog's own headers, lifts and runs correctly with `WTC_CHECK` and under ThreadSanitizer; since 31 Oct 2026 its overrun is kept (the policy is read through `std::make_shared`'s control block, which the pass does not follow), so its loggers are consumers too and its queue is general-purpose |
 
 So three of the six lift.
 
-spdlog's queue is general-purpose, many producers and many consumers,
-because the number of workers is known only when the pool is built, and
-the pool's loop over it is one call above the queue's constructor: the
-choice the port's queue gets when the pool is built ("specialised at run
-time") is not made for a queue built inside a member of the pool.
+spdlog's queue is many producers and many consumers, because the number
+of workers is known only when the pool is built; the pool knows it
+before it builds its queue object, whose constructor builds the queue.
+Since 30 Oct 2026 the model's tag is chosen there, as the port's is ("Reading
+the threads of real programs", below): the workers' pops are followed
+up through the queue object to the pool, and the queue object's
+constructor is called with the tag the pool's count selects.
 
 Bitcoin's `CCheckQueue` is not a FIFO queue to lift: its workers take
 batches from the back, and the result does not depend on the order in
@@ -435,6 +437,53 @@ and stays refused here.
 What the three refused need is not more pattern matching but semantics
 the substitutes do not have: a lock split from the program's other state
 (BS, httplib, Bitcoin), a count (all three), LIFO batches (Bitcoin).
+
+## Reading the threads of real programs
+
+A lifted queue is only as good as the topology the analysis reads for
+it, and the real programs hid their threads where the reduced models did
+not. Four changes (30 Oct 2026) let the lifted programs get the verdicts
+their hand ports get; each keeps the analysis's rule that a doubt counts
+many, and each has a test of the shapes that must stay many.
+
+- **A call of an alias is a call of its aliasee.** A constructor defined
+  out of line is called through the front end's alias of it, which has
+  no body; the call handed the object to code the analysis cannot see,
+  and every queue of its type escaped (g3log's worker). Any use of an
+  alias other than a call still takes the aliasee's address, and a weak
+  alias, which the link may replace, is not followed: a call of it is a
+  call of a function with no body here
+  (`test/Transforms/QueueOwnershipAnalysis/constructor-alias.cpp`).
+- **Recursion poisons only what it may rebind.** The walk follows a
+  recursive function's first recurrence and no deeper, so an access
+  whose queue the recursion's own parameters choose may name, deeper
+  down, a queue it never saw: that access stays unresolvable and its
+  type unknown. One whose queue is fixed below the recursion -- a
+  global, handed through functions outside the cycle -- names the same
+  queue at every depth, on the same thread, and is counted (ferret's
+  loader; `recursion-poisons-one-type.cpp`).
+- **Threads started from descriptors.** A function stored only into a
+  field that only ever reaches a spawn as its entry, in a record the
+  module keeps to itself, runs only as such a thread: it is no address
+  taken, and the spawn reads the field back from the descriptors the
+  call hands it (ferret's `tpool_create`). A field also called directly,
+  a descriptor handed to code with no body here, or one array holding
+  two entries keeps every candidate (`pool-descriptors.c`).
+- **The run-time choice one call away.** decisions/0005 reads a counted
+  loop's bound where the queue is built, in the same function. The loop
+  may now be one call down, its bound a parameter the call passes a
+  variable for (the pool's create function), and the queue's
+  constructor one call down (spdlog's queue object), in which case that
+  function is copied with the tag as a parameter for the one call the
+  loop's function makes. A loop that may stop early is counted, since it
+  starts at most one thread an iteration. Another object's queue, two
+  calls of the builder, a constructor that runs more than once (the
+  loop's function called twice builds the queue again under the first
+  run's threads), two pools feeding one side, a bound changed before
+  the loop or after the queue is built leave the static verdict
+  (`loop-nested-member.cpp`, `pool-descriptors.c`,
+  `Specialize/run-time-count-refused.cpp`,
+  `run_time_count_rebuilt.cpp`).
 
 ## Blocking forms
 
@@ -673,7 +722,7 @@ from the pinned PARSEC tree, unedited, by `benchmarks/apps/*/build.sh`
 
 | program, struct | verdict | why |
 |---|---|---|
-| ferret, `struct queue` (`src/queue.c`) | lifts | init, destroy, push, pop, terminate, with ferret's capacity (`DEPTH - 1`) and the counted close over `prod_threads`. The model, which starts its threads with `pthread_create`, gets its tags when the queues are built, from the counts in `argv`. The real program's five queues are unknown, so general: its stages start through `tpool_create`, whose descriptors hold the entry functions where the analysis does not follow them, and the loader reaches the first queue through a recursive directory scan; the port, which starts its threads directly, gets inline rings with one thread a stage |
+| ferret, `struct queue` (`src/queue.c`) | lifts | init, destroy, push, pop, terminate, with ferret's capacity (`DEPTH - 1`) and the counted close over `prod_threads`. The model, which starts its threads with `pthread_create`, gets its tags when the queues are built, from the counts in `argv`, and so does the real program since 30 Oct 2026, whose stages start through PARSEC's own thread pool and whose loader reaches the first queue through a recursive directory scan: every queue spsc at one thread a stage, its producers' or consumers' side many at more ("Reading the threads of real programs", below). Before, its five queues were unknown |
 | dedup, `queue_t` (`queue.c`, `queue.h`) | refused | "(d) queue_dequeue ends the program when (q->nProducers < q->nTerminated), a check the substitute does not make": its operations assert that no more producers terminate than there are, that nothing is pushed after the queue has finished and that no element is null, checks the substitute does not make. Otherwise its functions read as init, destroy, terminate, and the batched pop and push (`queue_dequeue`, `queue_enqueue`, through dedup's own `ringbuffer_*` helpers), with the counted close over `nProducers`; the model without the assertions lifts, as spsc with one thread a stage |
 
 So of the eight queues read from real programs, C++ and C, four lift
