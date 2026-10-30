@@ -15,6 +15,11 @@
 #                     the pool is built from its number of workers
 #   spdlog-hand       the port with the pool's queue declared mpsc by hand
 #                     (B3), which the compiler checks
+#   spdlog-lifted-generic  spdlog as released through wtc-cc --no-specialize:
+#                     its queue class lifted onto wtc::lifted_bounded
+#                     (docs/lifting.md), the general-purpose queue
+#   spdlog-lifted     the same through wtc-cc: lifted, and the compiler's
+#                     choice, made when the pool builds its queue object
 #
 #   build.sh <spdlog-dir> <out-dir>
 #
@@ -42,15 +47,17 @@ clang++-18 -O2 -std=c++17 -I"$W/include-spin" $INC "$HERE/bench.cpp" -lpthread -
 
 build() { # name, wtc-cc flags...
   local name=$1; shift
-  "$WTC/tools/wtc-cc" --toolchain "$WTC/build-llvm" -O2 -I"$W/include" $INC "$@" "$HERE/bench.cpp" -lpthread \
+  "$WTC/tools/wtc-cc" --toolchain "$WTC/build-llvm" -O2 -I"${SPDLOG_INC:-$W/include}" $INC "$@" "$HERE/bench.cpp" -lpthread \
     -o "bin/spdlog-$name" 2>"bin/spdlog-$name.log" || { echo "$name: FAILED"; tail -5 "bin/spdlog-$name.log"; return 1; }
   echo "== $name"
-  grep -oE 'wtc: (queue [^:]+: [a-z_ ]+\([^)]*\)|specialised[^;]*|queue access is unresolvable \([^)]*\)|queue [^;]* is declared [^;]*)' "bin/spdlog-$name.log" \
+  grep -oE 'wtc: (queue .*: (spsc|spmc|mpsc|mpmc|unknown) \([^)]*\)|specialised.*|queue .* is declared [^;]*|queue access is unresolvable \([^)]*\))' "bin/spdlog-$name.log" \
     | sort | uniq -c | sed 's/^/  /' || true
 }
 build generic  --no-specialize
 build compiler
 build hand     --no-specialize -DSPDLOG_WTC_HAND_MPSC
+SPDLOG_INC="$S/include" build lifted-generic --no-specialize
+SPDLOG_INC="$S/include" build lifted
 if [ "${TSAN:-0}" = 1 ]; then
   build compiler-tsan --tsan -O1 -g
 fi
