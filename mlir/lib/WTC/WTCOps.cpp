@@ -87,6 +87,9 @@ LogicalResult LockBatchEndOp::verifySymbolUses(SymbolTableCollection &symbolTabl
 }
 
 LogicalResult QueuePushOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+    if (getBatch())
+        return verifyFallbackImpl(*this, getFallbackImplAttr(), "wtc_queue_push_batch", "push_batch",
+                                  2 + getMore().size(), symbolTable);
     if (getWait())
         return verifyFallbackImpl(*this, getFallbackImplAttr(), "wtc_queue_push_wait", "push_wait", 2, symbolTable);
     if (getOverrun())
@@ -99,6 +102,9 @@ LogicalResult QueuePushOp::verifySymbolUses(SymbolTableCollection &symbolTable) 
 
 LogicalResult QueuePopOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     const unsigned expectedArgs = 1 + getArgs().size();
+    if (getBatch())
+        return verifyFallbackImpl(*this, getFallbackImplAttr(), "wtc_queue_pop_batch", "pop_batch", expectedArgs,
+                                  symbolTable);
     if (getWait())
         return verifyFallbackImpl(*this, getFallbackImplAttr(),
                                   getTimeout() ? "wtc_queue_pop_wait_for" : "wtc_queue_pop_wait",
@@ -109,6 +115,13 @@ LogicalResult QueuePopOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 LogicalResult QueuePushOp::verify() {
+    if (getBatch()) {
+        if (!getBounded() || !getWait() || getOverrun() || !getPushed())
+            return emitOpError("a batch waits while a bounded queue is full and answers how many it appended");
+        return verifySourceQueueType(*this, getQueue().getType(), getSourceQueueType());
+    }
+    if (!getMore().empty())
+        return emitOpError("takes operands after the value only as a batch");
     const int forms = (getWait() ? 1 : 0) + (getOverrun() ? 1 : 0) + (getPushed() ? 1 : 0);
     if (forms > 1)
         return emitOpError("is at most one of a waiting push, an overrunning push and a try_push");
@@ -120,7 +133,9 @@ LogicalResult QueuePushOp::verify() {
 LogicalResult QueuePopOp::verify() {
     const bool hasOut = static_cast<bool>(getOut());
     const bool hasValue = static_cast<bool>(getValue());
-    if (getArgs().size() > 2)
+    if (getBatch() && (!getWait() || !getTransfer() || !getBounded()))
+        return emitOpError("a batch is a waiting transfer from a bounded queue");
+    if (getArgs().size() > 2 && !getBatch())
         return emitOpError("takes at most an `out` operand and a `timeout`");
     if (getTimeout() && !getWait())
         return emitOpError("only a waiting pop takes a `timeout`");

@@ -84,10 +84,12 @@ struct LowerQueuePushPattern : public OpConversionPattern<QueuePushOp> {
             return failure();
         Value queue = mlir::UnrealizedConversionCastOp::create(
             rewriter, op.getLoc(), op.getSourceQueueTypeAttr().getValue(), adaptor.getQueue()).getResult(0);
-        // A try_push answers; the other pushes return nothing.
+        // A try_push and a batch answer; the other pushes return nothing.
+        llvm::SmallVector<Value, 6> operands{queue, adaptor.getValue()};
+        operands.append(adaptor.getMore().begin(), adaptor.getMore().end());
         auto call = rebuildCall(rewriter, op.getLoc(), op.getFallbackImplAttr(),
-                                op.getPushed() ? op.getPushed().getType() : Type{},
-                                ValueRange{queue, adaptor.getValue()}, op.getSourceArgAttrsAttr());
+                                op.getPushed() ? op.getPushed().getType() : Type{}, operands,
+                                op.getSourceArgAttrsAttr());
         if (op.getPushed()) rewriter.replaceOp(op, call->getResults());
         else rewriter.eraseOp(op);
         return success();

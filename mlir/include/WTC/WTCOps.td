@@ -97,8 +97,15 @@ def QueuePushOp : WTC_ObjectOp<"queue_push"> {
         overrunning push takes an item out of the queue, so its thread is
         a consumer of the queue as well as a producer, for every analysis
         that counts them.
+        `batch` marks a run of pushes from a ring of the calling thread's
+        (shim/c_queue.h, the substitute for dedup's batched enqueue): it
+        waits while the queue is full, like `wait`, then appends at one
+        step as many of the ring's elements as fit, up to a limit, and its
+        result is how many. `value` is then where the ring keeps its
+        elements, and `more` the rest of the ring and the limit, passed
+        on as the call took them.
     }];
-    let arguments = (ins WTC_QueueType:$queue, AnyType:$value,
+    let arguments = (ins WTC_QueueType:$queue, AnyType:$value, Variadic<AnyType>:$more,
         OptionalAttr<FlatSymbolRefAttr>:$fallback_impl,
         OptionalAttr<TypeAttr>:$source_queue_type,
         OptionalAttr<ArrayAttr>:$source_arg_attrs,
@@ -107,7 +114,8 @@ def QueuePushOp : WTC_ObjectOp<"queue_push"> {
         OptionalAttr<WTC_ImplAttr>:$impl,
         UnitAttr:$bounded,
         UnitAttr:$wait,
-        UnitAttr:$overrun);
+        UnitAttr:$overrun,
+        UnitAttr:$batch);
     let results = (outs Optional<AnyType>:$pushed);
     let hasVerifier = 1;
 }
@@ -149,6 +157,12 @@ def QueuePopOp : WTC_ObjectOp<"queue_pop"> {
         keeps no copy of the shared_ptr and no pointer into the element past
         the consumer's next pop of the same queue (WTCBorrowAnalysis.cpp).
         `bounded` marks a pop of a queue with a capacity, as on queue_push.
+        `batch` marks a waiting transfer of a run of elements into a ring of
+        the calling thread's (shim/c_queue.h, the substitute for dedup's
+        batched dequeue): `out` is where the ring keeps its elements, and
+        the operands after it the rest of the ring and the limit; it takes
+        at one step as many as the ring has room for, and is lifted only
+        for a queue with one consumer.
     }];
     let arguments = (ins WTC_QueueType:$queue,
         Variadic<AnyType>:$args,
@@ -161,7 +175,8 @@ def QueuePopOp : WTC_ObjectOp<"queue_pop"> {
         UnitAttr:$borrowed,
         UnitAttr:$transfer,
         UnitAttr:$wait,
-        UnitAttr:$bounded);
+        UnitAttr:$bounded,
+        UnitAttr:$batch);
     let results = (outs Optional<AnyType>:$value);
     let extraClassDeclaration = [{
         // The slot or object the item goes to, if there is one.
@@ -169,10 +184,11 @@ def QueuePopOp : WTC_ObjectOp<"queue_pop"> {
             auto a = getArgs();
             return a.empty() ? ::mlir::Value() : a.front();
         }
-        // A waiting pop's limit, if it has one.
+        // A waiting pop's limit, if it has one. A batch's operands after
+        // `out` describe the ring and how many to take.
         ::mlir::Value getTimeout() {
             auto a = getArgs();
-            return a.size() > 1 ? a[1] : ::mlir::Value();
+            return a.size() > 1 && !getBatch() ? a[1] : ::mlir::Value();
         }
     }];
     let hasVerifier = 1;

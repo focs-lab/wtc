@@ -101,6 +101,8 @@ SemanticOpKind getSemanticKind(cir::FuncOp funcOp) {
         if (name == "wtc_queue_push_wait")    return SemanticOpKind::QueuePushWait;
         if (name == "wtc_queue_try_push")     return SemanticOpKind::QueueTryPush;
         if (name == "wtc_queue_push_overrun") return SemanticOpKind::QueuePushOverrun;
+        if (name == "wtc_queue_push_batch")   return SemanticOpKind::QueuePushBatch;
+        if (name == "wtc_queue_pop_batch")    return SemanticOpKind::QueuePopBatch;
         if (name == "wtc_queue_try_pop")      return SemanticOpKind::QueueTryPop;
         if (name == "wtc_queue_try_pop_into") return SemanticOpKind::QueueTryPopInto;
         if (name == "wtc_queue_pop_wait")     return SemanticOpKind::QueuePopWait;
