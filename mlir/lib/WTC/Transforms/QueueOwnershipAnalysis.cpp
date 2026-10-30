@@ -200,6 +200,7 @@ static bool isMbufPointer(Type t) {
 
 static bool isNullPointer(Value v);
 static bool firstArgIsSret(cir::FuncOp f);
+static std::optional<int64_t> constantInteger(Value v, unsigned depth);
 
 // A queue the walk cannot place but can name by type: a member at a known
 // offset of a record, reached through a pointer the walk cannot follow --
@@ -431,19 +432,97 @@ private:
         ++remarks;
     }
 
+    // A recursive function's recurrences past the first are not expanded
+    // (ThreadInstances.h): what they reach is walked once more, on the
+    // same thread, but under one call string, and a handle that a deeper
+    // call binds through the recursion's parameters may name an object the
+    // walk never saw. Such an access is unresolvable. One whose handle is
+    // fixed below the recursion -- a global, reached through parameters of
+    // functions outside the cycle only, as ferret's loader hands
+    // `&q_load_seg` to enqueue from the file helper its recursive scan
+    // calls, or a pointer a global written once holds -- names the same
+    // queue at every depth, on the same thread,
+    // and is counted as the walk saw it. Recursion that can start a thread
+    // or call through a pointer is not scoped: everything it reaches is
+    // unresolvable, as before.
     void poisonReachable(cir::FuncOp f) {
-        llvm::DenseSet<Operation *> seen;
+        llvm::SetVector<Operation *> reach;
+        llvm::DenseMap<Operation *, llvm::SmallVector<cir::CallOp, 4>> callsIn;   // callee -> its calls in reach
+        bool spawnsOrIndirect = false;
         llvm::SmallVector<cir::FuncOp, 8> work{f};
         while (!work.empty()) {
             cir::FuncOp cur = work.pop_back_val();
-            if (!seen.insert(cur.getOperation()).second) continue;
-            cur.walk([&](Operation *op) {
-                if (isQueueOp(op) && !inLibraryBody(op)) poison(op, "reached through recursion");
-                if (auto call = dyn_cast<cir::CallOp>(op))
-                    if (auto callee = lookupCallee(call))
-                        if (!callee.getBody().empty()) work.push_back(callee);
+            if (!reach.insert(cur.getOperation())) continue;
+            cur.walk([&](cir::CallOp call) {
+                cir::FuncOp callee = lookupCallee(call);
+                if (!callee) { spawnsOrIndirect = true; return; }
+                if (getSemanticKind(callee) == SemanticOpKind::ThreadSpawn) spawnsOrIndirect = true;
+                if (callee.getBody().empty()) return;
+                callsIn[callee.getOperation()].push_back(call);
+                work.push_back(callee);
             });
         }
+        // The cycle: the functions reached that reach f back.
+        llvm::DenseSet<Operation *> cycle{f.getOperation()};
+        for (bool grew = true; grew;) {
+            grew = false;
+            for (auto &[callee, calls] : callsIn)
+                if (cycle.contains(callee))
+                    for (cir::CallOp c : calls)
+                        if (cycle.insert(c->getParentOfType<cir::FuncOp>().getOperation()).second) grew = true;
+        }
+        for (Operation *g : reach)
+            cast<cir::FuncOp>(g).walk([&](Operation *op) {
+                if (!isQueueOp(op) || inLibraryBody(op)) return;
+                if (!spawnsOrIndirect && fixedBelow(queueOf(op), cast<cir::FuncOp>(g), cycle, callsIn, 0)) return;
+                poison(op, "reached through recursion");
+            });
+    }
+    // Whether a handle in g names one object whatever the recursion above
+    // binds: member and constant element steps from a global, from a
+    // pointer loaded from a global the program writes once, or from a
+    // parameter of a function outside the cycle whose every call reached
+    // from the recursion passes such a handle.
+    bool fixedBelow(Value v, cir::FuncOp g, const llvm::DenseSet<Operation *> &cycle,
+                    const llvm::DenseMap<Operation *, llvm::SmallVector<cir::CallOp, 4>> &callsIn,
+                    unsigned depth) {
+        if (depth > 16) return false;
+        Value t = traceToRoot(v);
+        for (unsigned steps = 0; steps < 64; ++steps) {
+            if (auto gm = t.getDefiningOp<cir::GetMemberOp>()) { t = traceToRoot(gm.getAddr()); continue; }
+            Value index, base;
+            if (auto ps = t.getDefiningOp<cir::PtrStrideOp>()) { index = ps.getStride(); base = ps.getBase(); }
+            else if (auto ge = t.getDefiningOp<cir::GetElementOp>()) { index = ge.getIndex(); base = ge.getBase(); }
+            if (!base) break;
+            if (!constantInteger(index, 0)) return false;
+            t = traceToRoot(base);
+        }
+        if (t.getDefiningOp<cir::GetGlobalOp>()) return true;
+        // A pointer a global holds that the program writes once: the same
+        // object at every depth (the port of ferret's `q_load_seg`).
+        if (auto ld = t.getDefiningOp<cir::LoadOp>())
+            if (auto gg = traceToLocalRoot(ld.getAddr()).getDefiningOp<cir::GetGlobalOp>()) {
+                auto g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr());
+                return g && walk && walk->singleStoredGlobalValue(g);
+            }
+        auto arg = dyn_cast<BlockArgument>(t);
+        if (!arg || cycle.contains(g.getOperation()) || arg.getOwner() != &g.getBody().front()) return false;
+        // Reached only by direct calls: its address goes nowhere else.
+        auto uses = SymbolTable::getSymbolUses(g, module);
+        if (!uses) return false;
+        for (const SymbolTable::SymbolUse &u : *uses) {
+            auto call = dyn_cast<cir::CallOp>(u.getUser());
+            if (!call || call.getCalleeAttr() != u.getSymbolRef()) return false;
+        }
+        auto it = callsIn.find(g.getOperation());
+        if (it == callsIn.end() || it->second.empty()) return false;
+        for (cir::CallOp call : it->second) {
+            const unsigned idx = arg.getArgNumber();
+            if (idx >= call.getNumOperands()) return false;
+            if (!fixedBelow(call.getOperand(idx), call->getParentOfType<cir::FuncOp>(), cycle, callsIn, depth + 1))
+                return false;
+        }
+        return true;
     }
 
     // A queue's number is its position in discovery order, which follows
