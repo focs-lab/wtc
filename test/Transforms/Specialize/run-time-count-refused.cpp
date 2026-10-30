@@ -4,8 +4,9 @@
 // global's constructor; the loop's bound written after the queue is built;
 // written in another function; its address taken; the queue built after
 // the loop; the loop's bound declared in a scope the constructor is
-// outside of. A loop that may stop early does not start one thread per
-// iteration and is not recorded.
+// outside of. A loop that may stop early starts at most one thread per
+// iteration and is recorded, but its queue here is a global, built
+// before main.
 //
 // RUN: %clangxx -std=c++17 -I%shim -fclangir -emit-cir %s -o %t.cir
 // RUN: wtc-opt %t.cir --lift-cir-to-wtc --queue-ownership-analysis --wtc-borrow-analysis --wtc-specialize -o /dev/null 2>%t.remarks
@@ -20,7 +21,7 @@
 // CHECK-DAG: not specialised at run time: the queue is not built before the loop that starts its threads
 // CHECK-DAG: not specialised at run time: the loop's bound is a variable the queue's constructor cannot see
 // NONE-NOT: wtc: specialised at run time
-// NONE-NOT: queue @early_q: consumers: one thread per iteration
+// CHECK-DAG: queue @early_q: consumers: one thread per iteration
 
 #include "queue.hpp"
 #include "thread.hpp"
