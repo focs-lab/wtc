@@ -275,7 +275,22 @@ else()
 endif()
 add_test(NAME c_queue_model COMMAND c_queue_test model ${c_queue_n})
 add_test(NAME c_queue_stress COMMAND c_queue_test stress ${c_queue_n})
-set_tests_properties(c_queue_model c_queue_stress PROPERTIES TIMEOUT 300)
+add_test(NAME c_queue_consumers COMMAND c_queue_test consumers ${c_queue_n} 14)
+add_test(NAME c_queue_close COMMAND c_queue_test close)
+add_test(NAME c_queue_overterminate_is_caught
+         COMMAND sh -c "$<TARGET_FILE:c_queue_test> overterminate 2>&1 | grep -q 'terminated more often than the producers'")
+add_test(NAME c_queue_atleast COMMAND c_queue_test atleast)
+add_test(NAME c_queue_limit COMMAND c_queue_test limit)
+add_test(NAME c_queue_absorb COMMAND c_queue_test absorb)
+set_tests_properties(c_queue_model c_queue_stress c_queue_consumers c_queue_close PROPERTIES TIMEOUT 300)
+set_tests_properties(c_queue_atleast c_queue_limit c_queue_absorb PROPERTIES TIMEOUT 60)
+# The same with a hook where the last termination has finished the queue,
+# to destroy it from the consumer while the termination is still inside.
+add_executable(c_queue_destroy c_queue_test.cpp ../../shim/c_queue.cpp)
+target_link_libraries(c_queue_destroy PRIVATE wtc_rt_flags)
+target_compile_definitions(c_queue_destroy PRIVATE WTC_C_QUEUE_TEST_HOOK=1)
+add_test(NAME c_queue_destroy COMMAND c_queue_destroy destroy)
+set_tests_properties(c_queue_destroy PROPERTIES TIMEOUT 60)
 # The same with a hook between a batch's size and its claim, to cross two.
 add_executable(c_queue_crossing c_queue_test.cpp ../../shim/c_queue.cpp)
 target_link_libraries(c_queue_crossing PRIVATE wtc_rt_flags)
