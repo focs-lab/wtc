@@ -263,3 +263,26 @@ if(WTC_CHECK)
   add_test(NAME bounded_two_producers_is_caught
            COMMAND sh -c "$<TARGET_FILE:bounded_test> twoproducers 2>&1 | grep -q 'bounded queue contract violated: a second producer'")
 endif()
+
+# The runtime of lifted C queues (shim/c_queue.cpp), through the entry
+# points a lifted program calls.
+add_executable(c_queue_test c_queue_test.cpp ../../shim/c_queue.cpp)
+target_link_libraries(c_queue_test PRIVATE wtc_rt_flags)
+if(WTC_RT_SANITIZE)
+  set(c_queue_n 2000)
+else()
+  set(c_queue_n 20000)
+endif()
+add_test(NAME c_queue_model COMMAND c_queue_test model ${c_queue_n})
+add_test(NAME c_queue_stress COMMAND c_queue_test stress ${c_queue_n})
+set_tests_properties(c_queue_model c_queue_stress PROPERTIES TIMEOUT 300)
+# The same with a hook between a batch's size and its claim, to cross two.
+add_executable(c_queue_crossing c_queue_test.cpp ../../shim/c_queue.cpp)
+target_link_libraries(c_queue_crossing PRIVATE wtc_rt_flags)
+target_compile_definitions(c_queue_crossing PRIVATE WTC_TEST_BATCH_STEPS=1)
+add_test(NAME c_queue_crossing COMMAND c_queue_crossing crossing)
+set_tests_properties(c_queue_crossing PROPERTIES TIMEOUT 60)
+if(WTC_CHECK)
+  add_test(NAME c_queue_two_consumers_is_caught
+           COMMAND sh -c "$<TARGET_FILE:c_queue_test> twoconsumers 2>&1 | grep -q 'bounded queue contract violated: a second consumer'")
+endif()

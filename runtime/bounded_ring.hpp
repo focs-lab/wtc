@@ -73,6 +73,16 @@
 //           words a push could take the slot an overrun freed before the
 //           overrun had pushed, and the queue would be, for a moment, at
 //           capacity + 1, which a discarding push or size() would see.
+//           A batch needs it too: its size is the least of what it asks and
+//           what the other counter allows, so it must be decided at the
+//           step that claims it, not only bounded by it. With two words a
+//           batched pop reads tail, takes k by it and moves head later; a
+//           batched push in between still sees the old head, so each sees
+//           the queue before the other, and the two sizes are no outcome
+//           of the original's mutex (two elements queued, capacity four,
+//           both asking for ten: the pop takes two and the push appends
+//           two, where the original gives two and four, or four and two).
+//           Used when the queue overruns or takes batches.
 //
 // Tickets are 32-bit and wrap; every comparison is of differences, which
 // stay below 2^31 because the capacity is at most 2^30.
@@ -81,7 +91,8 @@
 // by a plain store; the compiler proves the side single before it says
 // so, and with WTC_CHECK the queue checks it, as the other queues do. The
 // packed layout takes every ticket with a compare-and-swap whatever the
-// sides, since an overrun makes every producer a consumer as well.
+// sides, since both sides write the one word (and an overrun makes every
+// producer a consumer as well).
 //
 // Elements. A push constructs its element in the cell from its argument
 // (by move or copy) only after it has its ticket, so a failed push leaves
@@ -118,6 +129,17 @@ extern "C" void wtc_test_push_step();
 #define WTC_TEST_PUSH_STEP() ((void)0)
 #endif
 
+// With WTC_TEST_BATCH_STEPS, a batch calls wtc_test_batch_step between
+// deciding its size and claiming its tickets (side 0: a push, 1: a pop),
+// where runtime/test/c_queue_test.cpp holds it to cross it with a batch of
+// the other side. Nothing otherwise.
+#ifdef WTC_TEST_BATCH_STEPS
+extern "C" void wtc_test_batch_step(int side);
+#define WTC_TEST_BATCH_STEP(side) wtc_test_batch_step(side)
+#else
+#define WTC_TEST_BATCH_STEP(side) ((void)0)
+#endif
+
 namespace wtc::rt {
 
 template <class T, unsigned kLine = 64>
@@ -127,11 +149,13 @@ public:
 
     // manyProducers / manyConsumers: whether more than one thread may push
     // / pop over the queue's life. overrun: whether push_overrun may be
-    // called, which chooses the packed layout.
-    bounded_ring(std::size_t capacity, bool manyProducers, bool manyConsumers, bool overrun)
+    // called; batches: whether try_push_n and consume_n may. Either
+    // chooses the packed layout.
+    bounded_ring(std::size_t capacity, bool manyProducers, bool manyConsumers, bool overrun, bool batches = false)
         : cap_(static_cast<std::uint32_t>(capacity)),
           mask_(ringSize(capacity) - 1),
-          packed_(overrun),
+          packed_(overrun || batches),
+          overrun_(overrun),
           mp_(manyProducers || overrun),
           mc_(manyConsumers || overrun) {
         if (capacity > kMaxCapacity) {
@@ -210,7 +234,7 @@ public:
     // dropped. Only on a queue built with overrun.
     template <class V>
     bool push_overrun(V&& v) noexcept {
-        if (!packed_) {
+        if (!overrun_) {
             std::fprintf(stderr,
                          "wtc: an overrunning push on bounded queue %p, which the compiler built without "
                          "one\n",
@@ -275,6 +299,66 @@ public:
         }
         take(h, f);
         return true;
+    }
+
+    // A run of pushes at one step: appends the first k of the n elements
+    // src(0), src(1), ... and returns k, the least of n and the room the
+    // queue had at that step; 0, and src never called, when it was full.
+    // The k elements are adjacent in the queue whatever other producers
+    // do, as a batch appended under the original's mutex is: k is decided
+    // from head and tail and the k tickets taken by one compare-and-swap
+    // of the packed word, which fails if either counter moved since it was
+    // read. src(j) is called once for each j < k, in order, after that
+    // step. Only on a queue built with batches.
+    template <class Src>
+    std::size_t try_push_n(std::size_t n, Src&& src) noexcept {
+#ifdef WTC_CHECK
+        if (!mp_) claim(producer_, "producer");
+#endif
+        if (!packed_) noBatches();
+        if (n == 0) return 0;
+        std::uint32_t t, k;
+        std::uint64_t s = state_.load(std::memory_order_seq_cst);
+        for (;;) {
+            t = tailOf(s);
+            const std::uint32_t used = t - headOf(s);
+            if (used >= cap_) return 0;
+            k = static_cast<std::uint32_t>(n < cap_ - used ? n : cap_ - used);
+            WTC_TEST_BATCH_STEP(0);
+            if (state_.compare_exchange_weak(s, pack(headOf(s), t + k), std::memory_order_seq_cst)) break;
+        }
+        for (std::uint32_t j = 0; j < k; ++j) fill(t + j, src(j));
+        return k;
+    }
+
+    // A run of pops at one step: moves the oldest k elements to f(T&&), in
+    // order, and returns k, the least of n and the number the queue held
+    // at that step; 0 when it was empty. The k elements are the adjacent
+    // ones at the head, as a batch taken under the original's mutex is,
+    // whatever other consumers do: k is decided from head and tail and the
+    // k tickets taken by one compare-and-swap of the packed word, so two
+    // consumers' batches are disjoint runs of tickets, each the run at the
+    // head at its step. Each cell is read only after its push has filled
+    // it (take). Only on a queue built with batches.
+    template <class F>
+    std::size_t consume_n(std::size_t n, F&& f) noexcept {
+#ifdef WTC_CHECK
+        if (!mc_) claim(consumer_, "consumer");
+#endif
+        if (!packed_) noBatches();
+        if (n == 0) return 0;
+        std::uint32_t h, k;
+        std::uint64_t s = state_.load(std::memory_order_seq_cst);
+        for (;;) {
+            h = headOf(s);
+            const std::uint32_t held = tailOf(s) - h;
+            if (held == 0) return 0;
+            k = static_cast<std::uint32_t>(n < held ? n : held);
+            WTC_TEST_BATCH_STEP(1);
+            if (state_.compare_exchange_weak(s, pack(h + k, tailOf(s)), std::memory_order_seq_cst)) break;
+        }
+        for (std::uint32_t j = 0; j < k; ++j) take(h + j, f);
+        return k;
     }
 
     // The number of elements at one instant: pushes taken minus pops
@@ -344,6 +428,12 @@ private:
         c.seq.store(h + mask_ + 1, std::memory_order_release);
     }
 
+    [[noreturn]] void noBatches() const noexcept {
+        std::fprintf(stderr, "wtc: a batch on bounded queue %p, which was built without batches\n",
+                     static_cast<const void*>(this));
+        std::abort();
+    }
+
 #ifdef WTC_CHECK
     void claim(std::atomic<std::uintptr_t>& side, const char* what) {
         thread_local const std::uintptr_t me = static_cast<std::uintptr_t>(pthread_self());
@@ -364,7 +454,7 @@ private:
     // Read-only after construction.
     const std::uint32_t cap_;
     const std::uint32_t mask_;
-    const bool packed_, mp_, mc_;
+    const bool packed_, overrun_, mp_, mc_;
     cell* cells_ = nullptr;
     // Split layout: the consumers' line, with tail as a consumer last read
     // it, and the producers' line. The copy only lags, and is refreshed when
