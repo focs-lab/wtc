@@ -25,6 +25,7 @@ Every implementation carries, in its header comment:
 | `hazard.hpp` | nothing: hazard pointers for the segmented queues, one slot for pushes and one for pops | none |
 | `waiter.hpp` | nothing: how a pop that waits for an element waits (spin, park, or spin then park), and the wake-up a publish owes a sleeping consumer, shared by every queue above | none |
 | `bounded_ring.hpp` | a bounded ring a program wrote itself under a mutex (spdlog's `circular_q`), through `shim/bounded.hpp` | the ring's capacity and its answers to a full queue, read from its member functions (`docs/lifting.md`, "The bound"); with one producer or one consumer, that side is single |
+| `bounded_ring.hpp`, through `shim/c_queue.cpp` | a ring of pointers a C program wrote itself under a pthread mutex (PARSEC ferret's and dedup's `queue.c`) | the ring's capacity, read from its initialisation; with one producer or one consumer, that side is single; batches with any number of producers and consumers (`docs/lifting.md`, "C queues") |
 
 `spsc_ring<Slot, kSlots>` is an unbounded wait-free ring of blocks of 128 KiB
 each. It keeps the generic queue's semantics exactly: FIFO, `push` never
@@ -99,7 +100,18 @@ its ticket and its cell does not make the queue look full, and every
 answer is the one a sequential bounded queue gives at the operation's
 compare-and-swap. A push that overruns takes the oldest element's ticket
 and its own in one compare-and-swap of head and tail packed into one
-word. The shim's `wtc::bounded<T>` puts two waiters on it, one per side:
+word. A ring built for batches keeps them in that word too: a run of
+pushes or of pops (`try_push_n`, `consume_n`) decides its size k, the
+least of what it asks for and the room or the elements there are, and
+takes its k tickets in one compare-and-swap of the word, so a batch is
+adjacent in the queue and sized as one appended or taken under a mutex
+is, whatever the other threads on either side do. With two words a batch
+would be sized by the other counter as read before its step, and a
+batched pop and a batched push crossing there would each see the queue
+before the other: two elements queued, capacity four, both asking for
+ten, the pop takes two and the push appends two, where the mutex gives
+two and four or four and two. The shim's
+`wtc::bounded<T>` puts two waiters on it, one per side:
 a pop waits while it is empty, a push while it is full, and each publish
 wakes the other side's sleeper, with the same fences as the pop's
 waiter; `close()` closes both.
@@ -154,6 +166,17 @@ discards and overruns under contention, where every push must have
 arrived, been refused or been overrun, once. Its waiters with the wake-ups
 dropped must leave a producer asleep against room, and a second producer
 on a queue built for one must be caught by `WTC_CHECK`.
+
+`c_queue_test` runs the runtime of lifted C queues through its C entry
+points: every answer of the single and batched forms, the queue's contents
+and the caller's ring indices against the original's ring, at capacities
+zero to six; producers pushing single elements and batches against one
+consumer popping batches, where every element must arrive once, in order
+per producer, and every batch pushed as adjacent elements; a batched pop
+and a batched push crossed between deciding their sizes and claiming
+their tickets (a hook compiled into `c_queue_crossing` only), whose sizes
+must be an outcome of the original's mutex. A second consumer on a queue
+built for one must be caught by `WTC_CHECK`.
 
 `waiter_test` runs the waiting pop through the shim's queue on every
 topology and every wait policy: the lost wake-up's window forced (the
