@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
-# Builds PARSEC ferret from the pinned PARSEC tree, six ways, and with
+# Builds PARSEC ferret from the pinned PARSEC tree, nine ways, and with
 # TSAN=1 four more:
 #
 #   ferret-orig          PARSEC's own pthreads build (condition-variable queues)
@@ -19,6 +19,9 @@
 #                        pipeline, the queue and the thread pool as one unit
 #                        (--unity), the queue's functions lifted
 #                        (--wtc-lift-c-queues, docs/lifting.md "C queues")
+#   ferret-lifted-generic  the same with --no-specialize: lifted, every
+#                        queue the general-purpose one, so that lifted
+#                        against it is the compiler's choice alone
 #   ferret-unlifted      the same with --no-lift: the queue as written, so
 #                        that lifted against unlifted is the queue alone
 #   ferret-lifted-tsan   (TSAN=1) the lifted build under ThreadSanitizer
@@ -96,6 +99,7 @@ lifted() { # name, wtc-cc flags...
     "bin/ferret-$name.log" | sed -E 's/lifted \(.*/lifted/' | sort | uniq -c | sed 's/^/  /' || true
 }
 lifted lifted
+lifted lifted-generic --no-specialize
 lifted unlifted --no-lift
 # TSAN=1 adds the compiler's builds under ThreadSanitizer, for the safety
 # question, and the port on the general-purpose queue and PARSEC's own

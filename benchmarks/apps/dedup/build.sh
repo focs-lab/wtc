@@ -26,6 +26,10 @@
 #                            unit (--unity), the queue's functions lifted
 #                            where the proof allows (docs/lifting.md, "C
 #                            queues"), its batches included
+#   dedup-lifted-generic     the same with --no-specialize: lifted, every
+#                            queue the general-purpose one, so that lifted
+#                            and lifted-generic differ only in the
+#                            compiler's choice (lift_attribution.sh)
 #   dedup-unlifted           the same with --no-lift
 #   dedup-lifted-tsan        (TSAN=1) the lifted build under ThreadSanitizer
 #
@@ -103,6 +107,7 @@ lifted() { # name, objects, wtc-cc flags...
     "bin/dedup-$name.log" | sed -E 's/lifted \(.*/lifted/' | sort | uniq -c | sed 's/^/  /' || true
 }
 lifted lifted "${OTHERS/obj\/dedup.o /}"
+lifted lifted-generic "${OTHERS/obj\/dedup.o /}" --no-specialize
 lifted unlifted "${OTHERS/obj\/dedup.o /}" --no-lift
 # TSAN=1 adds the compiler's builds under ThreadSanitizer, every file
 # instrumented, for the safety question: the build as written, whose
