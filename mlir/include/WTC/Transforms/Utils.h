@@ -28,6 +28,11 @@ enum class SemanticOpKind {
     QueuePushWait,
     QueueTryPush,
     QueuePushOverrun,
+    // A run of pushes from, or pops into, a ring of the calling thread's
+    // (shim/c_queue.h): what a C program's batched enqueue and dequeue
+    // become.
+    QueuePushBatch,
+    QueuePopBatch,
     QueueTryPop,
     QueueTryPopInto,
     QueuePopWait,

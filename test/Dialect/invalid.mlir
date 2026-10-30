@@ -193,3 +193,59 @@ module {
     cir.return
   }
 }
+
+// -----
+
+// A batch (shim/c_queue.h) waits on a bounded queue and answers how many it
+// moved; operands after the value belong to a batch alone.
+!s32i = !cir.int<s, 32>
+!q = !cir.struct<"q" {data !s32i}>
+module {
+  cir.func @batch_unbounded(%qp: !cir.ptr<!q>, %v: !cir.ptr<!s32i>, %n: !s32i) {
+    %h = builtin.unrealized_conversion_cast %qp : !cir.ptr<!q> to !wtc.queue<!q>
+    // expected-error @+1 {{a batch waits while a bounded queue is full and answers how many it appended}}
+    %k = "wtc.queue_push"(%h, %v, %n) {batch, wait} : (!wtc.queue<!q>, !cir.ptr<!s32i>, !s32i) -> !s32i
+    cir.return
+  }
+}
+
+// -----
+
+!s32i = !cir.int<s, 32>
+!q = !cir.struct<"q" {data !s32i}>
+module {
+  cir.func @more_without_batch(%qp: !cir.ptr<!q>, %v: !cir.ptr<!s32i>, %n: !s32i) {
+    %h = builtin.unrealized_conversion_cast %qp : !cir.ptr<!q> to !wtc.queue<!q>
+    // expected-error @+1 {{takes operands after the value only as a batch}}
+    "wtc.queue_push"(%h, %v, %n) {bounded, wait} : (!wtc.queue<!q>, !cir.ptr<!s32i>, !s32i) -> ()
+    cir.return
+  }
+}
+
+// -----
+
+!s32i = !cir.int<s, 32>
+!q = !cir.struct<"q" {data !s32i}>
+module {
+  cir.func @pop_batch_not_waiting(%qp: !cir.ptr<!q>, %v: !cir.ptr<!s32i>, %n: !s32i) {
+    %h = builtin.unrealized_conversion_cast %qp : !cir.ptr<!q> to !wtc.queue<!q>
+    // expected-error @+1 {{a batch is a waiting transfer from a bounded queue}}
+    %k = "wtc.queue_pop"(%h, %v, %n, %n) {batch, transfer, bounded} : (!wtc.queue<!q>, !cir.ptr<!s32i>, !s32i, !s32i) -> !s32i
+    cir.return
+  }
+}
+
+// -----
+
+!s32i = !cir.int<s, 32>
+!q = !cir.struct<"q" {data !s32i}>
+module {
+  cir.func private @pop_wait(!cir.ptr<!q>, !cir.ptr<!s32i>, !s32i, !s32i) -> !s32i [#cir.annotation<"wtc_queue_pop_wait">]
+  // A batched pop lowers to the runtime's batched pop.
+  cir.func @pop_batch_lowers_to_pop_wait(%qp: !cir.ptr<!q>, %v: !cir.ptr<!s32i>, %n: !s32i) {
+    %h = builtin.unrealized_conversion_cast %qp : !cir.ptr<!q> to !wtc.queue<!q>
+    // expected-error @+1 {{fallback_impl @pop_wait is not annotated wtc_queue_pop_batch or wtc_impl_*_pop_batch}}
+    %k = "wtc.queue_pop"(%h, %v, %n, %n) {fallback_impl = @pop_wait, batch, transfer, wait, bounded} : (!wtc.queue<!q>, !cir.ptr<!s32i>, !s32i, !s32i) -> !s32i
+    cir.return
+  }
+}
