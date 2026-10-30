@@ -448,3 +448,250 @@ spinning where the gaps between tasks are short, and still sleeps, as the
 original did. A class that closes must not also have a pop that waits only
 for an element: once the queue is closed and empty that pop would return,
 where the original waits on, so it is refused.
+
+## C queues
+
+C programs write the same queue as a struct and a handful of functions
+over it. PARSEC's ferret (`src/queue.c`) and dedup (`queue.c`, `queue.h`)
+keep a ring of pointers, a pthread mutex, two condition variables and a
+count of the producers that have finished:
+
+```c
+struct queue { int head, tail; void **data; int size;   /* ferret */
+               int prod_threads, end_count;
+               pthread_mutex_t mutex; pthread_cond_t empty, full; };
+int dequeue(struct queue *q, void **to) {
+    pthread_mutex_lock(&q->mutex);
+    while (q->tail == q->head && q->end_count < q->prod_threads)
+        pthread_cond_wait(&q->empty, &q->mutex);
+    if (q->tail == q->head && q->end_count == q->prod_threads) {
+        pthread_cond_broadcast(&q->empty); pthread_mutex_unlock(&q->mutex); return -1;
+    }
+    *to = q->data[q->tail];
+    if (++q->tail == q->size) q->tail = 0;
+    pthread_cond_signal(&q->full); pthread_mutex_unlock(&q->mutex); return 0;
+}
+```
+
+`--wtc-lift-c-queues` (`mlir/lib/WTC/Transforms/LiftCQueues.cpp`) lifts
+them into the runtime of `shim/c_queue.h`, built on the same bounded ring
+as the lifted C++ classes, so that the ownership analysis and the
+specialisation apply to programs never ported.
+
+### Reading the functions
+
+A candidate is a struct with a `pthread_mutex_t` and a `pthread_cond_t`
+member, and its functions are every function that takes a pointer to it.
+There are no member functions to go by, and the ring's operations may be
+helpers of the program's (dedup's `ringbuffer_*`, static inline in a
+header) that the threads also use on rings of their own; so the pass reads
+each function by evaluating its body symbolically along every path,
+calling into the helpers it calls, with the struct's members as symbols:
+the value a member had when the lock was taken, and, after a wait, a fresh
+value, since another thread held the mutex in between. Arithmetic on the
+indices is put in one form, so that `if (++i == n) i = 0`, `if (i + 1 >=
+n) i = 0` and `(i + 1) % n` are one increment, and `h == (t - 1 + n) % n`
+and `(h + 1) % n == t` one test of fullness, given that the indices stay
+below the slot count, as every function keeps them. Two paths that differ
+only in which way an `if` went and in the values it chose are merged. A
+branch that ends the program (an assertion, `abort`, `exit`) is a check
+the substitute does not make, and refuses the struct (condition (d)
+below), with one exception: init's check of its own allocation.
+
+What a path decides on is read as a truth table over four facts: the ring
+is empty, it is full, the end count has reached the producers, the batch
+moved something. So the predicates may be written either way round, and
+`while (empty && !ended)` followed by `if (empty && ended)` is the pop
+whose second test can only mean "finished".
+
+Each function is then one of:
+
+| operation | the body | becomes |
+|---|---|---|
+| init | the mutex and variables initialised; `data = malloc(sizeof(void *) * S)`; the slot count `S`, a parameter plus a constant; both indices and the end count zero; the number of producers from a parameter; nothing returned, or a constant | `wtc_c_queue_init(q, tag, S - 1, producers, ends)`, at every call of it, the constant in place of the call's value |
+| destroy | the mutex and variables destroyed, the ring freed; nothing returned, or a constant | `wtc_c_queue_destroy` |
+| push | wait while full; store at one index, advance it by one modulo `S`; wake the pops | `wtc_c_queue_push_wait` |
+| pop | wait while empty and not finished; if empty, return a constant; else take at the other index, advance it, wake the pushes, return another constant | `wtc_c_queue_pop_wait`, its answer mapped to the two constants |
+| terminate | the end count incremented; the pops woken, at least when it reaches the producers; nothing returned, or a constant | `wtc_c_queue_terminate`: the counted close |
+| batched push | wait while full; move elements from the caller's ring while it is not empty, the queue not full and fewer than the limit have moved; wake the pops if any moved; return how many | `wtc_c_queue_push_batch` |
+| batched pop | wait while empty and not finished; return a constant if finished; move elements into the caller's ring as above; wake the pushes if any moved; return how many | `wtc_c_queue_pop_batch` |
+| helper | reads members and returns a value (dedup's `queue_isTerminated`), called only by the above | left in place, unused |
+
+The construction is moved to the call sites of init, so that every queue
+has a construction of its own, whose tag the specialisation pass chooses
+for that queue; init itself is called by nothing else (its address must
+not be taken). The runtime's entry points take the queue as `void *`; each
+struct calls them through functions of its own, `wtc_c_queue_*.<struct>`,
+which take a pointer to the struct and carry the annotations the lifting
+pass raises, so that a queue's type, which the ownership analysis reads
+from the pointer its operations are handed, is the struct.
+
+### The proof
+
+As for the C++ classes, every doubt refuses, and the remark names the
+condition:
+
+- **(a) Confinement.** The module has `main` and no file linked with it
+  names the struct's functions or its objects (`named-elsewhere`, as for
+  the ownership analysis; with `-c`, other units may touch the struct, so
+  nothing lifts). Outside its functions the program only passes pointers
+  to the struct to them, compares and frees them, and stores them in a
+  local or a global of the pointer's own type (or an array of them) whose
+  address goes only to loads and stores: a member touched elsewhere, a
+  struct copied, a pointer handed to anything else or stored anywhere
+  else (a member of another struct, which other code may read) refuses.
+  A global struct initialised statically (`= { ... }`), which init never
+  builds, refuses. Each function is one of the operations or a helper
+  only they call. What init, destroy and terminate return must be a
+  constant, which the substitute returns in its place; a value computed
+  from the queue or from the allocation refuses.
+- **(b) The mutex is held** from the first touch of the struct to the last,
+  on every path, in every operation; init and destroy take no lock. A
+  wait is given the mutex held.
+- **(c) The mutex guards the queue and nothing else**: an operation writes
+  only the index it moves, or the end count, and outside the queue
+  nothing but the element a pop hands to its caller (`*out =
+  q->data[q->tail]`) on the path that takes one: a pop that also clears
+  `*out` when the queue is finished, reports through another parameter,
+  or an operation that counts in memory of the caller's, refuses, as do
+  init and destroy writing outside the struct, and an operation that
+  wakes a condition variable outside it. A batch's ring is the caller's
+  own: at every call, the address of a local of the calling function that
+  goes to nothing but direct calls (not to a thread), so no other thread
+  can reach it while the substitute fills it without a lock; the batch
+  writes nothing of it but its two indices, and those only in the loop.
+  The batch's limit is compared with the count as written: converted on
+  the way into a type that does not hold all of its values (`(int)max` of
+  a `size_t`), it refuses.
+- **(d) Waits the substitute keeps.** A push waits while the ring is full,
+  a pop while it is empty and producers remain (or while it is empty, for a
+  struct with no end count), each in a loop around `pthread_cond_wait`;
+  the push wakes the variable the pops wait on, the pop the one the pushes
+  wait on, the termination that reaches the producers the pops'. A timed
+  wait, a pop that gives up before every producer has finished, a push
+  that writes over a full ring refuse. So does a branch on which an
+  operation ends the program, whatever it reads (dedup's assertions that
+  nothing is pushed after the queue has finished and that no element is
+  null, a check of a parameter): the substitute does not make the check.
+  The one allowed is init's on its allocation (dedup's
+  `assert(!ringbuffer_init(...))`), which the substitute's own allocation
+  makes as well: it ends the program when it fails.
+- **(e) FIFO.** Elements go in at one index and leave at the other, each
+  advanced by one modulo the slot count that init set with the
+  allocation (an index wrapped at a constant of its own refuses). The ring
+  holds pointers: a ring of `long` or `double`, of a pointer's size, is
+  refused.
+
+### What the substitution keeps, and what it changes
+
+The capacity is the ring's, exactly: `S - 1`, the slots the original's
+test of fullness lets it fill (`runtime/bounded_ring.hpp`). A waiting
+thread spins briefly and then sleeps. The pop answers "finished" once the
+queue is empty and as many terminations as init was told have happened;
+elements pushed before the last termination are still popped. What a
+termination beyond the producers does depends on how the program tests
+its end count. Where every test is `<` or `>=` (`end_count >=
+prod_threads`), it changes nothing, in the original and in the
+substitute. Where one tests equality (ferret's `end_count ==
+prod_threads`), the original goes wrong after it, its pop taking from an
+empty ring or waiting for ever, and the substitute ends the program
+instead, a documented change.
+
+A batch's limit is the program's value, every value of its type: a
+`size_t` of -1 is no limit, an `int` below zero moves nothing. A batch
+with nothing to move (an empty ring of the caller's, a limit of zero)
+only waits, as the original does; a wake-up it takes is passed on, so
+that a thread with something to move, which the original's broadcast
+would wake, is not left asleep.
+
+The original's operations are done with the queue when they release the
+mutex, so a thread that has seen an operation's effect (the queue
+finished, its element) may destroy the queue at once, before joining the
+thread that made it. The substitute's operations wake sleepers after their
+effect is visible; destroy waits until no operation is still in the
+runtime, and frees the queue then.
+
+A batch is taken or appended at one step, and so are its size and its
+place in the queue. The ring's head and tail, the counts of pops and
+pushes taken, are the two halves of one word, and a batch (`try_push_n`,
+`consume_n`) reads the word, takes k as the least of what it asks for and
+what the queue allows (the elements there, or the room), and moves its
+counter by k with one compare-and-swap of the word, which fails, and the
+batch looks again, if either counter moved since the read. So the k
+tickets are adjacent, the batch's elements are the adjacent run at the
+head (or at the tail) at that step, and k is what the original would
+have moved under its mutex at that step. Two consumers' batches are then
+disjoint runs of the queue, each the run at the head at its own step:
+the batched pop is lifted whatever the number of consumers, as the
+batched push is whatever the number of producers. A batch reads a cell
+only after its push has filled it, as a single pop does.
+
+Both counters must be in the one word. With two words, as the ring keeps
+them for the C++ classes' single pushes and pops, a batched pop would
+read tail, take k by it and move head later, and a batched push between
+the two would still see the old head: each sees the queue before the
+other. With two elements queued in a queue of four, a pop and a push
+both asking for ten would take two and append two, where the original
+gives two and four or four and two (`c_queue_test crossing` holds one
+batch at that point and runs the other). A single push or pop does not
+need it: what it decides is only whether the queue is full or empty, and
+the other counter can only have moved the way that keeps the answer
+true ("What the bound guarantees", above). A queue lifted from C keeps
+every operation on the one word.
+
+Changed, as for every substitution (decisions/0003): the mutex's total
+order and its ordering of operations that pass no element; failure on
+allocation ends the program (init's own check of it, the one assertion
+allowed in the struct's functions, ends it too); a push wakes one sleeper
+when one is registered rather than signalling every time; a termination
+beyond the producers of a queue whose program tests its end count for
+equality ends the program, as above.
+
+### Several files: `--unity`
+
+The analysis takes one translation unit, and PARSEC keeps ferret's queue
+in its library and dedup's in a file of its own. `wtc-cc --unity a.c b.c
+...` compiles a generated file that includes each file, unedited, in the
+order given, as one unit; their file-scope names must not clash. Each file
+must mean what it means compiled apart: the macros a file defines in its
+own text are undefined after it, a file that defines a feature-test macro
+(`_GNU_SOURCE`, `_FILE_OFFSET_BITS`, which would configure the system's
+headers for every file after it) is refused, and if a file's own text,
+preprocessed alone and in the unit, differs (a macro of a header of an
+earlier file reaching it), the build stops. The
+benchmark scripts take the original files that hold the queue, the threads
+and `main` this way, and link the rest as PARSEC builds it (for ferret, its
+library without `queue.o` and `tpool.o`, whose functions the unit now
+defines).
+
+### ferret and dedup from PARSEC's sources
+
+Reduced models of both queues, with the programs' thread structure, are
+the tests under `test/Integration/LiftedC/`; the real programs are built
+from the pinned PARSEC tree, unedited, by `benchmarks/apps/*/build.sh`
+(`ferret-lifted`, `dedup-lifted`; 30 Oct 2026):
+
+| program, struct | verdict | why |
+|---|---|---|
+| ferret, `struct queue` (`src/queue.c`) | lifts | init, destroy, push, pop, terminate, with ferret's capacity (`DEPTH - 1`) and the counted close over `prod_threads`. The model, which starts its threads with `pthread_create`, gets its tags when the queues are built, from the counts in `argv`. The real program's five queues are unknown, so general: its stages start through `tpool_create`, whose descriptors hold the entry functions where the analysis does not follow them, and the loader reaches the first queue through a recursive directory scan; the port, which starts its threads directly, gets inline rings with one thread a stage |
+| dedup, `queue_t` (`queue.c`, `queue.h`) | refused | "(d) queue_dequeue ends the program when (q->nProducers < q->nTerminated), a check the substitute does not make": its operations assert that no more producers terminate than there are, that nothing is pushed after the queue has finished and that no element is null, checks the substitute does not make. Otherwise its functions read as init, destroy, terminate, and the batched pop and push (`queue_dequeue`, `queue_enqueue`, through dedup's own `ringbuffer_*` helpers), with the counted close over `nProducers`; the model without the assertions lifts, as spsc with one thread a stage |
+
+So of the eight queues read from real programs, C++ and C, four lift
+(CTPL, g3log, spdlog, ferret) and four are refused, each for a reason the
+remark names.
+
+The runs below are of 30 Oct 2026, when dedup's assertions were dropped
+with the replaced bodies and dedup lifted; it is refused since. Both
+lifted programs computed what PARSEC's own builds compute: ferret's
+output on simlarge byte for byte with one thread a stage and line for
+line with four; dedup's archive of the Fedora disc byte for byte at one
+and four threads. ferret lifted ran five times each with one and four
+threads a stage under `WTC_CHECK` and under ThreadSanitizer on simdev;
+every ThreadSanitizer report is on PARSEC's own progress counter
+(`cnt_enqueue`), as in PARSEC's build, none in the substituted queue.
+dedup lifted ran on the Fedora disc at one and four threads under
+`WTC_CHECK` and under ThreadSanitizer: no report, the archive PARSEC's. In
+an untimed run on a-p13 (node 1 in the container, three runs each) the
+two programs take as long as PARSEC's builds: they are coarse-grained,
+far to the right of the knee in the README's "Where the gain goes", and the queue is
+not where their time goes.
