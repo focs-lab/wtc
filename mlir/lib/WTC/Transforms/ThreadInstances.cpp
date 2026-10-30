@@ -727,12 +727,42 @@ bool ThreadInstanceWalk::isAddressTaken(cir::FuncOp f) {
         // The module's body, not the module: asked of an operation that is
         // a symbol table, getSymbolUses reads only that operation's own
         // attributes and finds nothing.
+        // An alias names its aliasee, which is no address taken: a call of
+        // the alias is a call of the aliasee (lookupCallee). Any other use
+        // of the alias takes the aliasee's address -- even one that only
+        // reaches a spawn, since a spawn whose entry is the alias, which
+        // has no body, starts nothing the walk can follow. A weak alias is
+        // none of this: lookupCallee does not follow it, since the link may
+        // replace it, and its reference to the aliasee takes the address.
+        llvm::SmallVector<std::pair<Operation *, Operation *>, 4> aliases;
+        llvm::DenseSet<Operation *> aliasTaken;
         if (auto uses = SymbolTable::getSymbolUses(&module_.getBodyRegion()))
             for (const SymbolTable::SymbolUse &use : *uses)
-                if (auto fn = symbols.lookup<cir::FuncOp>(use.getSymbolRef().getRootReference()))
+                if (auto fn = symbols.lookup<cir::FuncOp>(use.getSymbolRef().getRootReference())) {
+                    if (auto alias = dyn_cast<cir::FuncOp>(use.getUser());
+                        alias && alias.getAliasee() && *alias.getAliasee() == fn.getSymName() &&
+                        !cir::isInterposableLinkage(alias.getLinkage())) {
+                        aliases.push_back({alias.getOperation(), fn.getOperation()});
+                        continue;
+                    }
+                    if (fn.getAliasee()) {
+                        auto call = dyn_cast<cir::CallOp>(use.getUser());
+                        if (!call || call.getCalleeAttr() != use.getSymbolRef())
+                            aliasTaken.insert(fn.getOperation());
+                    }
                     if (!addressTaken_->contains(fn.getOperation()) &&
                         takesAddress(use, resolvedRuns_.contains(fn.getOperation())))
                         addressTaken_->insert(fn.getOperation());
+                }
+        for (bool changed = true; changed;) {
+            changed = false;
+            for (auto [alias, aliasee] : aliases)
+                if ((aliasTaken.contains(alias) || addressTaken_->contains(alias)) &&
+                    addressTaken_->insert(aliasee).second) {
+                    aliasTaken.insert(aliasee);
+                    changed = true;
+                }
+        }
     }
     return addressTaken_->contains(f.getOperation());
 }

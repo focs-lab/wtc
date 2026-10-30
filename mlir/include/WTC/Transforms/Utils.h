@@ -48,7 +48,8 @@ enum class SemanticOpKind {
 };
 
 // The callee of a direct call, or null for an indirect call or an
-// unresolvable symbol.
+// unresolvable symbol. A call of an alias is a call of its aliasee,
+// unless the alias is weak (interposable): the link may replace it.
 cir::FuncOp lookupCallee(cir::CallOp op);
 
 // Whether a call is part of the implementation of an operation of a
