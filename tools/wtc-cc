@@ -83,6 +83,10 @@
 # The data-layout line cir-translate prints does not match the target's
 # string byte for byte and clang refuses the module; it is dropped and clang
 # supplies the target default, which is the same layout spelled its own way.
+# A reference to a function, passed as an argument (g3log hands one to a
+# std::function constructor), is lowered as dereferenceable(0), which the
+# IR verifier rejects; the attribute promises nothing at zero bytes and is
+# dropped.
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -299,7 +303,7 @@ PASSES+=(--reconcile-unrealized-casts)
 step wtc-opt "$WTCOPT" --mlir-print-op-on-diagnostic=false "${OPTARGS[@]}" "$WORK/$base.cir" "${PASSES[@]}" -o "$WORK/$base.wtc.cir"
 
 step cir-translate "$CIRTR" --cir-to-llvmir "$WORK/$base.wtc.cir" -o "$WORK/$base.raw.ll"
-sed '/^target datalayout/d' "$WORK/$base.raw.ll" > "$WORK/$base.ll"
+sed -e '/^target datalayout/d' -e 's/ dereferenceable(0)//g' "$WORK/$base.raw.ll" > "$WORK/$base.ll"
 
 # The flags for compiling the IR: the language's own (-std=) do not apply.
 BACKFLAGS=()
