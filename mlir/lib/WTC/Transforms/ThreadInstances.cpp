@@ -2301,12 +2301,16 @@ void ThreadInstanceWalk::run(llvm::function_ref<void(Instance &)> visit,
         if (seen) {
             onRecursion(inst.func);
             inst.recurring = true;
-            inst.countLoop = nullptr;
-            inst.countLoopInst = nullptr;
-            if (inst.site && getSemanticKind(lookupCallee(inst.site)) == SemanticOpKind::ThreadSpawn)
+            // A recurrence through a spawn starts threads the loop does not
+            // count; one through a call stays on the thread the loop
+            // started, and that thread is still one per iteration.
+            if (inst.site && getSemanticKind(lookupCallee(inst.site)) == SemanticOpKind::ThreadSpawn) {
+                inst.countLoop = nullptr;
+                inst.countLoopInst = nullptr;
                 inst.threadMult = inst.execMult = Mult::Many;
-            else
+            } else {
                 inst.execMult = Mult::Many;
+            }
             // Each function's recurrence is expanded once in the whole walk:
             // unrolling every cycle once per path made the walk exponential
             // in the size of a mutually recursive group.
