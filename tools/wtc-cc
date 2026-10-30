@@ -13,16 +13,21 @@
 #   wtc-cc [options] file.c -o prog
 #   wtc-cc [options] --unity a.c b.c ... -o prog
 #
+# A C file's own queues, a ring of pointers under a pthread mutex
+# (--wtc-lift-c-queues, docs/lifting.md "C queues"), are replaced by the
+# runtime of shim/c_queue.h, which this script then compiles and links.
+#
 # Options of its own (everything else goes to both clang invocations):
 #   --keep DIR         keep the intermediate .cir/.ll files in DIR
 #   --no-specialize    run the analysis but leave every tag alone (the
 #                      "generic" build of an unmodified source)
 #   --no-lift          leave the program's own locked queues as written
-#                      (--wtc-lift-locked-queues, docs/lifting.md); without
-#                      it, a class the pass lifts is replaced by
-#                      wtc::lifted, whose instantiations this script adds.
-#                      A class lifts only in a whole program: not with -c,
-#                      and not when a file linked here names it
+#                      (--wtc-lift-locked-queues, --wtc-lift-c-queues,
+#                      docs/lifting.md); without it, a class the pass lifts
+#                      is replaced by wtc::lifted, whose instantiations this
+#                      script adds, and a C struct by shim/c_queue.h's runtime.
+#                      A class or struct lifts only in a whole program: not
+#                      with -c, and not when a file linked here names it
 #   --unity            compile several source files of one language as one
 #                      translation unit: a generated file that includes each
 #                      of them, in the order given, so that the analysis sees
@@ -52,7 +57,8 @@
 #                      analysis then lets those files name any external
 #                      symbol of this one (open-world), and object files,
 #                      archives and shared objects linked here the symbols
-#                      nm lists for them (named-elsewhere)
+#                      nm lists for them (named-elsewhere); a C struct's
+#                      queue then does not lift, other units seeing it
 #   --wtc-opt-arg ARG  pass ARG to wtc-opt (repeatable), e.g. --mlir-timing
 #   --census           call wtc_rc_note at the entry of shared_ptr's reference
 #                      counts (--wtc-census), for the thread census in
@@ -235,8 +241,8 @@ else
     fi
   fi
 fi
-# The lifting of the program's own queues sees what the analysis sees: a
-# class other files may use as written does not lift.
+# The lifting of the program's own queues, C++ or C, sees what the analysis
+# sees: a class or struct other files may use as written does not lift.
 LIFTOPTS=""
 case "$QOA" in
   *open-world*) LIFTOPTS="open-world=true" ;;
@@ -256,7 +262,9 @@ fi
 # and the second CIR is the first plus wtc::lifted<C> for each. The pass
 # itself runs in the pipeline below.
 PRE=()
-if (( LIFT && !LANG_C )); then
+if (( LIFT && LANG_C )); then
+  PRE=("--wtc-lift-c-queues${LIFTOPTS:+=$LIFTOPTS}")
+elif (( LIFT )); then
   step lift-scan "$WTCOPT" "$WORK/$base.cir" "--wtc-lift-locked-queues=rewrite=false instantiations=$WORK/$base.inst${LIFTOPTS:+ $LIFTOPTS}" \
     -o /dev/null 2>/dev/null
   if [ -s "$WORK/$base.inst" ]; then
@@ -273,7 +281,8 @@ LOCKOPTS=""
 [ -n "$BATCH_HOST" ] && LOCKOPTS="${LOCKOPTS:+$LOCKOPTS }host=$BATCH_HOST"
 [ -n "$BATCH_NS" ] && LOCKOPTS="${LOCKOPTS:+$LOCKOPTS }ns-per-unit=$BATCH_NS"
 PASSES=("${PRE[@]}" --lift-cir-to-wtc --wtc-batch-pushes "--wtc-batch-locks${LOCKOPTS:+=$LOCKOPTS}"
-        "$QOA" --wtc-borrow-analysis)
+        "$QOA")
+PASSES+=(--wtc-borrow-analysis)
 if (( SPECIALIZE )); then
   OPTS=""
   [ -n "$FORCE" ] && OPTS="force-spsc=$FORCE"
@@ -295,13 +304,25 @@ sed '/^target datalayout/d' "$WORK/$base.raw.ll" > "$WORK/$base.ll"
 # The flags for compiling the IR: the language's own (-std=) do not apply.
 BACKFLAGS=()
 for a in "${PASSTHRU[@]}"; do case "$a" in -std=*) ;; *) BACKFLAGS+=("$a") ;; esac; done
+# A lifted C queue's runtime (shim/c_queue.cpp), built with the program's
+# optimisation, debug and WTC_* flags. Never with -c: there other units
+# may touch the struct, and nothing lifts.
+RTOBJ=""
+if grep -q '@wtc_c_queue_' "$WORK/$base.wtc.cir"; then
+  RTFLAGS=()
+  for a in "${PASSTHRU[@]}"; do case "$a" in -O*|-g*|-DWTC_*) RTFLAGS+=("$a") ;; esac; done
+  (( TSAN )) && RTFLAGS+=(-fsanitize=thread)
+  RTOBJ="$WORK/c_queue.o"
+  step runtime "$CLANGXX" -std=c++17 "${RTFLAGS[@]}" -c "$ROOT/shim/c_queue.cpp" -o "$RTOBJ"
+fi
+
 if (( TSAN )); then
   LINKXX=${WTC_TSAN_CXX:-$(command -v clang++-18 || command -v clang++ || echo clang++)}
   "$CLANGXX" "${BACKFLAGS[@]}" -fsanitize=thread -mllvm -force-attribute=sanitize_thread \
     -c "$WORK/$base.ll" -o "$( (( COMPILE_ONLY )) && echo "$OUT" || echo "$WORK/$base.o")"
-  (( COMPILE_ONLY )) || "$LINKXX" -fsanitize=thread "$WORK/$base.o" "${LINKARGS[@]}" -o "$OUT" -pthread
+  (( COMPILE_ONLY )) || "$LINKXX" -fsanitize=thread "$WORK/$base.o" $RTOBJ "${LINKARGS[@]}" -o "$OUT" -pthread
 elif (( COMPILE_ONLY )); then
   step backend "$CLANGXX" "${BACKFLAGS[@]}" -c "$WORK/$base.ll" -o "$OUT"
 else
-  step backend "$CLANGXX" "${BACKFLAGS[@]}" "$WORK/$base.ll" "${LINKARGS[@]}" -o "$OUT" -pthread
+  step backend "$CLANGXX" "${BACKFLAGS[@]}" "$WORK/$base.ll" $RTOBJ "${LINKARGS[@]}" -o "$OUT" -pthread
 fi

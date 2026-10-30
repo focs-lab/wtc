@@ -19,6 +19,7 @@ int main(int argc, char **argv) {
 
   mlir::wtc::registerLiftCIRToWTCPass();
   mlir::wtc::registerLiftLockedQueuesPass();
+  mlir::wtc::registerLiftCQueuesPass();
   mlir::wtc::registerLowerWTCToCIRPass();
   mlir::wtc::registerQueueOwnershipAnalysisPass();
   mlir::wtc::registerWTCSpecializePass();

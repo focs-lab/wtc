@@ -204,6 +204,12 @@ bool isAllocator(cir::FuncOp f);
 // the program holds).
 bool touchesOnlyItsArguments(cir::FuncOp f);
 
+// A function of the runtime of lifted C queues (shim/c_queue.h), or one of
+// the typed functions through which a lifted struct calls it, by its name
+// (wtc_c_queue_*): it acts on the queue object and the rings it is handed
+// and on nothing else of the program's, so handing it a queue is no escape.
+bool isCQueueRuntime(cir::FuncOp f);
+
 // The alignment the allocator guarantees for a site's result, when the
 // call says it: aligned_alloc, memalign and posix_memalign with a constant
 // alignment operand. Nothing for malloc, calloc and new, whose guarantee is
