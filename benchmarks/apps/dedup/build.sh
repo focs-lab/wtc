@@ -21,6 +21,13 @@
 #                            threads per stage from argv, with main in the
 #                            encoder's translation unit: the arrays alone
 #   dedup-compiler-one-unity the same with one spawn per stage
+#   dedup-lifted             PARSEC's own sources through wtc-cc, unedited:
+#                            the encoder, the queue and dedup's main as one
+#                            unit (--unity), the queue's functions lifted
+#                            where the proof allows (docs/lifting.md, "C
+#                            queues"), its batches included
+#   dedup-unlifted           the same with --no-lift
+#   dedup-lifted-tsan        (TSAN=1) the lifted build under ThreadSanitizer
 #
 #   build.sh <parsec-dir> <out-dir>
 #
@@ -83,6 +90,20 @@ build compiler-flat-one  -DDEDUP_FLAT -DDEDUP_ONE
 OBJS=${OTHERS/obj\/dedup.o /} build compiler-flat-one-unity -DDEDUP_FLAT -DDEDUP_ONE -DDEDUP_UNITY
 OBJS=${OTHERS/obj\/dedup.o /} build compiler-unity -DDEDUP_UNITY
 OBJS=${OTHERS/obj\/dedup.o /} build compiler-one-unity -DDEDUP_ONE -DDEDUP_UNITY
+
+# The original sources, unedited: the files with the queues, the threads
+# and main as one unit; the others as PARSEC builds them.
+lifted() { # name, objects, wtc-cc flags...
+  local name=$1 objs=$2; shift 2
+  "$WTC/tools/wtc-cc" --toolchain "$WTC/build-llvm" -O2 -fno-strict-aliasing -fcommon $DEFS -DOPENSSL_NO_INLINE_ASM \
+    -I"$SRC" -w "$@" --unity "$SRC/encoder.c" "$SRC/queue.c" "$SRC/dedup.c" $objs -lz -lm -o "bin/dedup-$name" \
+    2>"bin/dedup-$name.log" || { echo "$name: FAILED"; tail -5 "bin/dedup-$name.log"; return 1; }
+  echo "== $name"
+  grep -oE 'wtc: (C queue [^:(]+ (lifted|not lifted: \([a-e]\) [^,;]*)|queue [^:]+: [a-z_ ]+\([^)]*\)|specialised[^;]*)' \
+    "bin/dedup-$name.log" | sed -E 's/lifted \(.*/lifted/' | sort | uniq -c | sed 's/^/  /' || true
+}
+lifted lifted "${OTHERS/obj\/dedup.o /}"
+lifted unlifted "${OTHERS/obj\/dedup.o /}" --no-lift
 # TSAN=1 adds the compiler's builds under ThreadSanitizer, every file
 # instrumented, for the safety question: the build as written, whose
 # queues stay general; the one translation unit with one thread per stage,
@@ -100,6 +121,7 @@ if [ "${TSAN:-0}" = 1 ]; then
   OBJS=$TOTHERS build compiler-tsan --tsan -O1 -g
   OBJS=${TOTHERS/obj-tsan\/dedup.o /} build compiler-flat-one-unity-tsan --tsan -O1 -g -DDEDUP_FLAT -DDEDUP_ONE -DDEDUP_UNITY
   OBJS=${TOTHERS/obj-tsan\/dedup.o /} build compiler-unity-tsan --tsan -O1 -g -DDEDUP_UNITY
+  lifted lifted-tsan "${TOTHERS/obj-tsan\/dedup.o /}" --tsan -O1 -g
 fi
 {
   echo "compiler=tools/wtc-cc, ClangIR $(echo "$SOURCE_LLVM_SHA" | cut -c1-12)"
