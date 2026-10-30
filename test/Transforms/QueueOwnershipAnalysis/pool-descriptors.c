@@ -2,12 +2,15 @@
    stages (src/tpool.c): main fills an array of {attr, entry, arg} per
    stage and hands it with its length to a function that starts one thread
    per descriptor in a loop. The entries were functions whose address is
-   taken, so each queue's sides were any number of threads.
+   taken, so each queue's sides were any number of threads, and the loop's
+   count was a parameter of a function the queues are not built in.
 
    Now (default): an entry stored only into a field that is only ever
    compared or handed to a spawn as its entry is no address taken; the
    spawn reads the field back from the array the call hands it, so each
-   stage's threads run their own entry and touch their own queues.
+   stage's threads run their own entry; and the loop's count is the value
+   main passes for it, read where the queue is built, so each queue's tag
+   is chosen there.
 
    What must not pass:
    CALLED  the field is also called directly: its functions may run on
@@ -16,13 +19,18 @@
            may start or call it.
    MIXED   one array holds two entries: each thread of that pool may run
            either, and both are counted on every queue they touch.
+   WRITTEN the count is written after the queue is built: the value at the
+           constructor is not the loop's.
+   CHANGED the pool changes its count before the loop.
+   TWO     two pools start the producers of one queue: no one call's count
+           is theirs.
 
    RUN: %clang -fclangir -emit-cir %s -o %t.cir
    RUN: wtc-opt %t.cir --mlir-print-op-on-diagnostic=false --wtc-lift-c-queues --lift-cir-to-wtc --queue-ownership-analysis --wtc-specialize -o /dev/null 2>&1 | FileCheck %s
    CHECK-NOT: address of this function is taken
-   CHECK: queue @to_work: mpmc (producers: many, consumers: many)
-   CHECK: many producers: started in a loop at pool-descriptors.c
-   CHECK-NOT: address of this function is taken
+   CHECK: queue @to_work: producers: one thread per iteration of the loop at {{.*}}, run by the call at pool-descriptors.c:{{[0-9]+}}
+   CHECK: queue @to_work: consumers: one thread per iteration of the loop at {{.*}}, run by the call at pool-descriptors.c:{{[0-9]+}}
+   CHECK: specialised at run time: spsc when the loops at {{.*}} (producers) and {{.*}} (consumers) each run at most once
 
    RUN: %clang -fclangir -emit-cir -DCALLED %s -o %t.called.cir
    RUN: wtc-opt %t.called.cir --mlir-print-op-on-diagnostic=false --wtc-lift-c-queues --lift-cir-to-wtc --queue-ownership-analysis --wtc-specialize -o /dev/null 2>&1 | FileCheck %s --check-prefix=TAKEN
@@ -35,6 +43,22 @@
    RUN: wtc-opt %t.mixed.cir --mlir-print-op-on-diagnostic=false --wtc-lift-c-queues --lift-cir-to-wtc --queue-ownership-analysis --wtc-specialize -o /dev/null 2>&1 | FileCheck %s --check-prefix=MIXED
    MIXED-NOT: address of this function is taken
    MIXED: queue @to_work: mpmc (producers: many, consumers: many)
+   MIXED-NOT: queue @to_work: producers: one thread per iteration
+
+   RUN: %clang -fclangir -emit-cir -DWRITTEN %s -o %t.written.cir
+   RUN: wtc-opt %t.written.cir --mlir-print-op-on-diagnostic=false --wtc-lift-c-queues --lift-cir-to-wtc --queue-ownership-analysis --wtc-specialize -o /dev/null 2>&1 | FileCheck %s --check-prefix=WRITTEN
+   WRITTEN: not specialised at run time: the loop's bound may be written after the queue is built
+   WRITTEN-NOT: specialised at run time: spsc
+
+   RUN: %clang -fclangir -emit-cir -DCHANGED %s -o %t.changed.cir
+   RUN: wtc-opt %t.changed.cir --mlir-print-op-on-diagnostic=false --wtc-lift-c-queues --lift-cir-to-wtc --queue-ownership-analysis --wtc-specialize -o /dev/null 2>&1 | FileCheck %s --check-prefix=CHANGED
+   CHANGED: not specialised at run time: the loop's bound is not a parameter its function keeps as it is
+   CHANGED-NOT: specialised at run time: spsc
+
+   RUN: %clang -fclangir -emit-cir -DTWO %s -o %t.two.cir
+   RUN: wtc-opt %t.two.cir --mlir-print-op-on-diagnostic=false --wtc-lift-c-queues --lift-cir-to-wtc --queue-ownership-analysis --wtc-specialize -o /dev/null 2>&1 | FileCheck %s --check-prefix=TWO
+   TWO: queue @to_work: mpmc (producers: many, consumers: many)
+   TWO-NOT: queue @to_work: producers: one thread per iteration
 */
 #include <pthread.h>
 #include <stdlib.h>
@@ -128,6 +152,9 @@ struct pool *pool_start(struct desc *d, int n) {
   if (d == NULL || n < 1) return NULL;
   for (int i = 0; i < n; i++)
     if (d[i].start == NULL) return NULL;
+#ifdef CHANGED
+  n = n * 2 - 1;
+#endif
   struct pool *p = (struct pool *)malloc(sizeof(struct pool));
   p->ids = (pthread_t *)malloc(sizeof(pthread_t) * n);
   for (int i = 0; i < n; i++)
@@ -150,6 +177,9 @@ int n_load = 1, n_work = 1;
 int main(int argc, char **argv) {
   n_work = argc > 1 ? atoi(argv[1]) : 1;
   chan_open(&to_work, 20, n_load);
+#ifdef WRITTEN
+  n_work = n_work + 1;
+#endif
   struct desc *dl = (struct desc *)calloc(n_load, sizeof(struct desc));
   struct desc *dw = (struct desc *)calloc(n_work, sizeof(struct desc));
   dl[0].attr = NULL;
@@ -166,8 +196,14 @@ int main(int argc, char **argv) {
   inspect(dw);
 #endif
   struct pool *pl = pool_start(dl, n_load);
+#ifdef TWO
+  struct pool *pl2 = pool_start(dl, n_load);
+#endif
   struct pool *pw = pool_start(dw, n_work);
   pool_join(pl);
+#ifdef TWO
+  pool_join(pl2);
+#endif
   pool_join(pw);
   free(dl);
   free(dw);
