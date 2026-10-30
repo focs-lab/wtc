@@ -1,0 +1,4 @@
+compiler=tools/wtc-cc, ClangIR unknown
+wtc=eb2e7e8dab2e
+g3log=f7014e42e48d
+orig=clang++-18 -O2 -DNDEBUG, the same sources as one unit
