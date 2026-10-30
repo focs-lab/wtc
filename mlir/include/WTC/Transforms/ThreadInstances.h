@@ -256,6 +256,16 @@ public:
     // names only its own parameter.
     cir::FuncOp resolveEntry(Value v, Instance *inst, unsigned depth = 0) const;
 
+    // Every function a spawn's entry operand may be: resolveEntry's one,
+    // or, for an entry loaded from a field that holds only spawn entries
+    // (computeEntryFields), the functions stored into that field of the
+    // object the load reads -- ferret's tpool_create starts each
+    // descriptor's start_routine, and main fills one array of descriptors
+    // per stage -- or, when that object cannot be told from others of its
+    // record, every function stored into the field anywhere. Several are
+    // several possible threads, each counted. Empty when none is known.
+    void resolveEntries(Value v, Instance *inst, llvm::SmallVectorImpl<cir::FuncOp> &out) const;
+
     // The function a std::thread starts. libstdc++'s constructor is a
     // template instantiated per callable: it allocates a
     // _State_impl<_Invoker<tuple<F, Args...>>>, moves the callable into it
@@ -392,6 +402,34 @@ private:
     // anything else, a view into part of a global included.
     bool placeConstant(Attribute a, llvm::SmallVectorImpl<Place> &out) const;
     void computeFieldStores() const;
+    // The fields that hold a thread's entry and nothing else: a field of
+    // function pointer type in a record that the module keeps to itself --
+    // never held by value in another record or a global, never handed to
+    // a function with no body but free, its pointers made only from an
+    // allocation and turned into others only for free -- whose every store
+    // stores a named function or null, and whose every load is compared
+    // or handed to a spawn as its entry. A function stored there is no
+    // address taken: it runs only as the thread such a spawn starts, which
+    // resolveEntries reads back. Computed once per module.
+    void computeEntryFields() const;
+    // The entry field an entry operand is loaded from, and every function
+    // stored into that field anywhere, appended to `out`; null when the
+    // operand is no load of an entry field.
+    cir::GetMemberOp entryFieldFunctions(Value v, llvm::SmallVectorImpl<cir::FuncOp> &out) const;
+    const llvm::DenseSet<std::pair<Type, unsigned>> &entryFieldSet() const {
+        if (!entryFields_) computeEntryFields();
+        return entryFieldKeys_;
+    }
+    struct EntryField {
+        llvm::SmallVector<cir::StoreOp, 4> stores;   // of a function or null
+    };
+    mutable std::optional<llvm::DenseMap<std::pair<Type, unsigned>, EntryField>> entryFields_;
+    mutable llvm::DenseSet<std::pair<Type, unsigned>> entryFieldKeys_;
+    // For each record with an entry field: its copies (cir.copy) and the
+    // stores of a whole value of it, which carry the field from one object
+    // to another.
+    mutable llvm::DenseMap<Type, llvm::SmallVector<cir::CopyOp, 4>> entryRecordCopies_;
+    mutable llvm::DenseMap<Type, llvm::SmallVector<cir::StoreOp, 4>> entryRecordStores_;
     // Whether `index` is the induction variable of `loop`: a slot whose
     // every store is either outside the loop or in its step region.
     // `unitStep` is set when the step region advances it by exactly one.
