@@ -22,6 +22,12 @@ enum class SemanticOpKind {
     ThreadSpawn,
     QueueConstruction,
     QueuePush,
+    // The pushes of a bounded queue (shim/bounded.hpp): one that waits while
+    // the queue is full, one that answers whether it appended, one that
+    // overruns the oldest item.
+    QueuePushWait,
+    QueueTryPush,
+    QueuePushOverrun,
     QueueTryPop,
     QueueTryPopInto,
     QueuePopWait,
@@ -274,7 +280,8 @@ bool spscWhenLoopsRunOnce(Operation *root);
 
 // Whether a call of the shim's queue constructor passes a topology tag, as
 // its second operand: queue(topology), or queue(topology, wait_policy),
-// whose policy the analyses leave alone.
+// whose policy the analyses leave alone, or wtc::lifted_bounded's
+// construct(at, topology, capacity, overrun).
 bool takesTopologyTag(cir::CallOp ctor);
 
 // The topology tag a queue's one constructor passes, if it is a constant;

@@ -17,7 +17,9 @@
 #   --no-lift          leave the program's own locked queues as written
 #                      (--wtc-lift-locked-queues, docs/lifting.md); without
 #                      it, a class the pass lifts is replaced by
-#                      wtc::lifted, whose instantiations this script adds
+#                      wtc::lifted, whose instantiations this script adds.
+#                      A class lifts only in a whole program: not with -c,
+#                      and not when a file linked here names it
 #   --force-spsc SYMS  tag these global queues spsc regardless of the verdict
 #                      (negative control; pass a comma-separated list)
 #   --force-inline SYMS  tag these global queues spsc_inline regardless of
@@ -127,31 +129,6 @@ step() { # name, command...
   awk -v n="$name" -v a="$t0" -v b="$t1" 'BEGIN { printf "%s %.6f\n", n, (b - a) / 1e9 }' >> "$WTC_CC_TIMES"
 }
 
-step cir "$CLANGXX" -std=c++17 -I"$ROOT/shim" -fclangir -emit-cir "${PASSTHRU[@]}" "$SRC" -o "$WORK/$base.cir"
-
-# The program's own locked queues. The runtime that replaces them is a
-# template the program never names, so a first look lists the container
-# types of the classes that would lift, and the file is compiled again with
-# their explicit instantiations after it: the program's text is unchanged,
-# and the second CIR is the first plus wtc::lifted<C> for each. The pass
-# itself runs in the pipeline below.
-PRE=()
-if (( LIFT )); then
-  step lift-scan "$WTCOPT" "$WORK/$base.cir" "--wtc-lift-locked-queues=rewrite=false instantiations=$WORK/$base.inst" \
-    -o /dev/null 2>/dev/null
-  if [ -s "$WORK/$base.inst" ]; then
-    abs="$(cd "$(dirname "$SRC")" && pwd)/$(basename "$SRC")"
-    { printf '#include "%s"\n#include "lifted.hpp"\n' "$abs"; cat "$WORK/$base.inst"; } > "$WORK/$base.lifted.cpp"
-    step cir "$CLANGXX" -std=c++17 -I"$ROOT/shim" -fclangir -emit-cir "${PASSTHRU[@]}" "$WORK/$base.lifted.cpp" \
-      -o "$WORK/$base.cir"
-  fi
-  PRE=(--wtc-lift-locked-queues)
-fi
-
-LOCKOPTS=""
-[ -n "$BATCH_COST" ] && LOCKOPTS="cost=$BATCH_COST"
-[ -n "$BATCH_HOST" ] && LOCKOPTS="${LOCKOPTS:+$LOCKOPTS }host=$BATCH_HOST"
-[ -n "$BATCH_NS" ] && LOCKOPTS="${LOCKOPTS:+$LOCKOPTS }ns-per-unit=$BATCH_NS"
 # What the rest of the program may name. The analysis takes a file with
 # main, linked with nothing but -l libraries, for the whole program
 # (docs/audit.md). Compiled with -c, the file is linked later with others
@@ -187,6 +164,39 @@ else
     fi
   fi
 fi
+# The lifting of the program's own queues sees what the analysis sees: a
+# class other files may use as written does not lift.
+LIFTOPTS=""
+case "$QOA" in
+  *open-world*) LIFTOPTS="open-world=true" ;;
+  *named-elsewhere=*) LIFTOPTS="named-elsewhere=${QOA#*named-elsewhere=}" ;;
+esac
+
+step cir "$CLANGXX" -std=c++17 -I"$ROOT/shim" -fclangir -emit-cir "${PASSTHRU[@]}" "$SRC" -o "$WORK/$base.cir"
+
+# The program's own locked queues. The runtime that replaces them is a
+# template the program never names, so a first look lists the container
+# types of the classes that would lift, and the file is compiled again with
+# their explicit instantiations after it: the program's text is unchanged,
+# and the second CIR is the first plus wtc::lifted<C> for each. The pass
+# itself runs in the pipeline below.
+PRE=()
+if (( LIFT )); then
+  step lift-scan "$WTCOPT" "$WORK/$base.cir" "--wtc-lift-locked-queues=rewrite=false instantiations=$WORK/$base.inst${LIFTOPTS:+ $LIFTOPTS}" \
+    -o /dev/null 2>/dev/null
+  if [ -s "$WORK/$base.inst" ]; then
+    abs="$(cd "$(dirname "$SRC")" && pwd)/$(basename "$SRC")"
+    { printf '#include "%s"\n#include "lifted.hpp"\n' "$abs"; cat "$WORK/$base.inst"; } > "$WORK/$base.lifted.cpp"
+    step cir "$CLANGXX" -std=c++17 -I"$ROOT/shim" -fclangir -emit-cir "${PASSTHRU[@]}" "$WORK/$base.lifted.cpp" \
+      -o "$WORK/$base.cir"
+  fi
+  PRE=("--wtc-lift-locked-queues${LIFTOPTS:+=$LIFTOPTS}")
+fi
+
+LOCKOPTS=""
+[ -n "$BATCH_COST" ] && LOCKOPTS="cost=$BATCH_COST"
+[ -n "$BATCH_HOST" ] && LOCKOPTS="${LOCKOPTS:+$LOCKOPTS }host=$BATCH_HOST"
+[ -n "$BATCH_NS" ] && LOCKOPTS="${LOCKOPTS:+$LOCKOPTS }ns-per-unit=$BATCH_NS"
 PASSES=("${PRE[@]}" --lift-cir-to-wtc --wtc-batch-pushes "--wtc-batch-locks${LOCKOPTS:+=$LOCKOPTS}"
         "$QOA" --wtc-borrow-analysis)
 if (( SPECIALIZE )); then

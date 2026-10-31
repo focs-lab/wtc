@@ -2437,6 +2437,17 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
                 // sight: it may hold mbufs.
                 if (l.kind == LibraryQueueKind::Mempool && !isLibraryCreate(root.first)) mbufPoolKeys.insert(root);
             }
+            // An overrunning push (shim/bounded.hpp) takes the oldest item
+            // out when the queue is full: its thread is on both sides.
+            auto push = dyn_cast<QueuePushOp>(op);
+            if (push && push.getOverrun()) {
+                SideInfo &also = info.consumers;
+                also.threads.insert(inst->thread);
+                Access b = accessOf(op, *inst);
+                b.oneOf = rs.size() > 1;
+                also.accesses.push_back(b);
+                if (inst->threadMult == Mult::Many) also.anyMany = true;
+            }
             SideInfo &side = isConsumerOp(op) ? info.consumers : info.producers;
             side.threads.insert(inst->thread);
             Access a = accessOf(op, *inst);

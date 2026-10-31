@@ -88,6 +88,15 @@ def QueuePushOp : WTC_ObjectOp<"queue_push"> {
         more is outside the contract and is not a candidate for
         substitution. `impl`, when present, is the implementation the
         queue runs.
+        `bounded` marks a push on a queue with a capacity (shim/bounded.hpp,
+        the substitute for a ring the program bounded itself), whose
+        answer to a full queue is one of three: with `wait` it waits until
+        there is room, and blocks (decisions/0004); with a result, the
+        `try` form, it appends nothing and answers false; with `overrun`
+        it removes the oldest item and appends its own at one step. An
+        overrunning push takes an item out of the queue, so its thread is
+        a consumer of the queue as well as a producer, for every analysis
+        that counts them.
     }];
     let arguments = (ins WTC_QueueType:$queue, AnyType:$value,
         OptionalAttr<FlatSymbolRefAttr>:$fallback_impl,
@@ -95,8 +104,11 @@ def QueuePushOp : WTC_ObjectOp<"queue_push"> {
         OptionalAttr<ArrayAttr>:$source_arg_attrs,
         OptionalAttr<WTC_TopologyAttr>:$topology,
         OptionalAttr<I64Attr>:$queue_id,
-        OptionalAttr<WTC_ImplAttr>:$impl);
-    let results = (outs);
+        OptionalAttr<WTC_ImplAttr>:$impl,
+        UnitAttr:$bounded,
+        UnitAttr:$wait,
+        UnitAttr:$overrun);
+    let results = (outs Optional<AnyType>:$pushed);
     let hasVerifier = 1;
 }
 
@@ -136,6 +148,7 @@ def QueuePopOp : WTC_ObjectOp<"queue_pop"> {
         `borrowed` says the program only borrows what this pop returns: it
         keeps no copy of the shared_ptr and no pointer into the element past
         the consumer's next pop of the same queue (WTCBorrowAnalysis.cpp).
+        `bounded` marks a pop of a queue with a capacity, as on queue_push.
     }];
     let arguments = (ins WTC_QueueType:$queue,
         Variadic<AnyType>:$args,
@@ -147,7 +160,8 @@ def QueuePopOp : WTC_ObjectOp<"queue_pop"> {
         OptionalAttr<WTC_ImplAttr>:$impl,
         UnitAttr:$borrowed,
         UnitAttr:$transfer,
-        UnitAttr:$wait);
+        UnitAttr:$wait,
+        UnitAttr:$bounded);
     let results = (outs Optional<AnyType>:$value);
     let extraClassDeclaration = [{
         // The slot or object the item goes to, if there is one.

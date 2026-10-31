@@ -11,7 +11,88 @@ with those of `wtc::lifted<C>` (`shim/lifted.hpp`), a thin layer over
 lifting pass raises the push and pop to `wtc.queue_push` and
 `wtc.queue_pop`, the topology and ownership analyses run unchanged, and
 `--wtc-specialize` rewrites the constant tag that `wtc::lifted<C>::construct`
-passes, as it rewrites `wtc::queue`'s.
+passes, as it rewrites `wtc::queue`'s. A class whose container is a
+bounded ring of its own, such as spdlog's, becomes `wtc::lifted_bounded<C>`
+over `wtc::bounded`, a queue with the ring's exact capacity and its
+answers to a full queue ("The bound").
+
+## The contract
+
+The claim is that lifting is faithful: every run of the lifted program is,
+in everything the contract lets a program observe, a run the original
+program allows. Nothing is claimed outside the contract, and every way in
+which a lifted program is known to differ is listed below, with the
+remark by which the pass refuses each shape it cannot keep.
+
+What the contract takes as given:
+
+- **The whole program.** The module the pass sees is the program, as far
+  as the class goes: it has `main`, it is not compiled to be linked with
+  files the pass does not see (`wtc-cc -c`), no file linked with it names
+  the class, and every member function of the class it declares has its
+  body there (condition (f) below).
+- **A race-free program.** The original has no data race and does not
+  depend on timing: how long a thread sleeps or waits, or the order in
+  which the scheduler runs threads, is not behaviour it can rely on.
+- **Observable behaviour.** What the program writes, its exit status, and
+  the values its functions compute: in particular the elements a pop
+  returns, whether a try-pop or a closable pop found one, and the order in
+  which a consumer receives them.
+- **The queue's semantics.** Under its mutex the original class is a
+  linearisable FIFO queue. The substitute is linearisable and FIFO per
+  producer, and each push happens before the pop that returns its element
+  (`decisions/0003`): the results its operations return are results the
+  original's mutex allows for the same operations.
+
+Known differences, outside the contract:
+
+- **An operation that passes no element orders nothing.** A pop that found
+  the queue empty, and a close, synchronise with nothing but the queue. A
+  program that read other state after such an operation, relying on the
+  original's mutex to have ordered it after an unrelated critical section,
+  is outside the contract; condition (c) refuses the common form of it,
+  other state guarded by the same mutex.
+- **Failure ends the program.** The original's push could throw
+  `std::bad_alloc` from the container, and an element's move or copy could
+  throw out of a push or a pop. The substitute's allocation failure, and
+  an element's move that throws, end the program (`shim/queue.hpp`).
+- **Element lifetimes.** The substitute moves an element a different
+  number of times than the container did, and frees its own memory on its
+  own schedule. A program whose element's constructors or destructor have
+  effects it observes (a count of moves, a log line per copy) can tell.
+- **Wake-ups.** The original woke a waiter on every push, or every waiter
+  at once; the substitute wakes one registered sleeper per push. Only
+  timing tells.
+- **A bounded ring's capacity above 2^30** ends the program when the queue
+  is built ("The bound", below), and its overrun count is approximate
+  while an overrun is in flight; the class's getter lifts only where the
+  count is handed back and decides nothing.
+
+Every refusal names the condition it fails, (a) to (f) below. Refusals
+added on 30 Oct 2026, after a review found shapes the first version lifted
+unfaithfully:
+
+| remark | the shape | what lifting it did |
+|---|---|---|
+| (f) the unit is compiled to be linked with files the pass does not see | `wtc-cc -c` | another file's copy of the class's inline member functions, compiled as written, used the storage that holds the substitute's pointer |
+| (f) a file linked with this one names C | an object file, archive or shared object linked by `wtc-cc` defines or references a member function of C, or a function that takes or returns C | as above: the linker keeps one copy of each inline member function for the program, the lifted one or the original |
+| (f) the module has no main | a unit that is not the program | as above |
+| (f) C::f has no body here | a member function defined in another unit | as above |
+| (a) F builds or destroys a local T, whose constructor or destructor may have effects of its own | a local object other than a lock or a duration, built inside an operation | the operation's body is replaced whole, and the object's effects went with it |
+| (d) F starts the stop flag S other than false / indeterminate | a stop flag that starts true, is computed, or is left uninitialised by a constructor | the substitute starts open: a closable pop that returned false at once waited instead |
+| (d) F notifies cv with the mutex held | a push or a close that notifies inside its critical section | a thread that saw the operation's effect under the mutex could destroy the queue while the substitute was still waking a sleeper (after the unlock, the usual form, the original itself touches the variable after that point, so a program cannot destroy it there) |
+| (e) the std::queue's underlying container is neither a std::deque nor a std::list | `std::queue<T, X>` with X a container of the program's own, even one whose name carries `std::deque` | the check read the adapter's spelling; X's `push_back` may insert anywhere |
+| (e) the element is built by emplace from an argument of another type than the container's | `q.emplace(i)` with `i` an `int` into a queue of `long` | the substitute's push received the argument as the element, and the build failed |
+
+| (d) F waits with a time limit only for an element in a class that also closes | a bounded ring's `wait_for` pop in a class with a stop flag | the substitute's timed pop gave up at `close()`, where the original's took an element pushed before its time was up |
+| "may overrun" where it said "never runs" (a member or parameter now unknown) | a policy member written by value-initialisation, `memcpy`, a pointer to member, a function with no body here, `calloc`, or a function another file calls | the overrunning push was pruned, the queue built without overruns, and the program aborted when the push ran |
+
+A move-only element (`std::unique_ptr<T>`, the common task) lifts: the
+runtime's copying push is compiled for it but never called. A push of
+the split layout (several producers, no overrun) no longer refuses as
+full when other threads push and pop past the tail it read before it
+reads the head: it refuses only once a third read finds the tail
+unchanged (`bounded_push_steps split`).
 
 ## The shape
 
@@ -60,7 +141,11 @@ and after it the test `q.empty()` and the test `stop && q.empty()` are one
 test.
 
 Constructors may build the container with its default constructor, and
-set the flag false; destructors destroy it. Those calls become
+must set the flag false, by a constant (a flag that starts true, is
+computed or is left indeterminate refuses: the substitute starts open);
+destructors destroy it. Inside an operation the only local objects built
+or destroyed are locks and durations, whose constructors and destructors
+do nothing else: the operation's body is replaced whole. Those calls become
 `lifted::construct(&q, tag)` and `lifted::destroy(&q)`. The class keeps its
 layout: the container's storage holds the pointer to the `wtc::queue`, which
 nothing else in the program touches, as the proof establishes.
@@ -90,12 +175,26 @@ prefixed by the condition it fails.
   (`wait_for`, `wait_until`), a wait outside a loop, a push that does not
   notify, a pop that returns at the stop flag while elements are still
   queued (discard on stop), a `condition_variable_any`, a count
-  (`size()`), which the lock-free queues do not keep linearisably.
-- **(e) FIFO at the two ends.** A `std::queue` over a deque or a list, a
-  `std::deque` or a `std::list`; in at the back, out at the front.
-  Refused: `back`, `pop_back`, `push_front`, `insert`, `erase`, `swap`,
-  `clear`, a `std::vector`, a `std::priority_queue`, a container that is
-  not standard.
+  (`size()`), which the lock-free queues do not keep linearisably, a
+  notification made with the mutex held. A bounded ring (below) has more
+  waits and counts of its own.
+- **(e) FIFO at the two ends.** A `std::queue` whose member is a
+  `std::deque` or a `std::list` (its type, not the adapter's spelling), a
+  `std::deque` or a `std::list`; in at the back, out at the front, the
+  element pushed of the container's own type; or a bounded ring the pass
+  reads from its member functions ("The bound", below). Refused: `back`,
+  `pop_back`, `push_front`, `insert`, `erase`, `swap`, `clear`, a
+  `std::vector`, a `std::priority_queue`, a container that is neither
+  standard nor such a ring, `emplace` from an argument of another type.
+- **(f) A closed world.** The class lifts only where the module is the
+  whole program for it (the contract above): not with `open-world` (what
+  `wtc-cc -c` passes), not in a module without `main`, not when a symbol
+  in `named-elsewhere` (what `wtc-cc` lists, with `nm`, from the object
+  files, archives and shared objects it links) mentions the class, and not
+  when a member function of the class has no body in the module. A
+  lifted member function differs from the original in what it does with
+  the object's storage, and another unit's copy of it, as written, would
+  read the substitute's pointer as a container.
 
 The pass also counts, per class, every container operation and wait form
 it saw (the "uses" remark), so that a refusal says what a class would need.
@@ -104,11 +203,13 @@ it saw (the "uses" remark), so that a refusal says what a class would need.
 
 Kept:
 
-- **The bound.** Every container lifted is unbounded, and so is every
-  substitute. A bounded container, such as spdlog's `circular_q`, is
-  refused; its port to the shim (`benchmarks/apps/spdlog`) changed the
-  bound and the overflow policy, which is what the audit criticised, and
-  the lifted form does not.
+- **The bound.** A standard container is unbounded, and so is its
+  substitute. A bounded ring, such as spdlog's `circular_q`, becomes a
+  queue with the same capacity, exactly, and the same answer to a full
+  queue: wait, decline or overrun the oldest ("The bound", below). Its
+  port to the shim (`benchmarks/apps/spdlog`) changed the bound and the
+  overflow policy, which is what the audit criticised; the lifted form
+  does not.
 - **Sleeping.** A pop that waited on a condition variable waits in
   `wtc::queue::pop_wait` with the `spin_then_park` policy: a short spin,
   then sleep; it is never turned into spinning without end. A push wakes a
@@ -121,31 +222,178 @@ Kept:
 - **The element's handling.** A push that moved its parameter moves it, one
   that copied copies; a pop moves the element out, and a pop that copied
   it out lifts only for a trivially copyable type, where the two are the
-  same.
+  same. A move-only element lifts.
 
-Changed, as decisions/0003 states for every substitution:
+Changed: the known differences listed under "The contract" above
+(ordering of an operation that passes no element, failure, element
+lifetimes, wake-ups), as decisions/0003 states for every substitution.
 
-- **Ordering.** The original's mutex totally ordered every operation on the
-  queue and ordered them against the mutex's other users. The substitute
-  is linearisable and FIFO per producer, and each push happens before the
-  pop that returns its element; an operation that passes no element orders
-  nothing. A program that read other state after a pop that found nothing,
-  relying on the mutex's hand-off from an unrelated critical section, is
-  outside the contract; condition (c) rules out the common form of it, the
-  other state guarded by the same mutex.
-- **Failure.** The original's push could throw `std::bad_alloc` from the
-  container; the substitute's allocation failure ends the program, as it
-  does for `wtc::queue`. An element's move assignment that throws in a pop
-  ends the program too (`shim/queue.hpp`).
-- **Wake-ups.** The original woke on every push (`notify_one`) or woke
-  every waiter (`notify_all`); the substitute wakes one registered sleeper
-  per push. A program cannot tell the difference except by timing.
+## The bound
+
+A class may bound its queue itself. spdlog's `mpmc_blocking_queue` keeps
+its messages in `circular_q`, a ring over a `std::vector` that is not a
+standard container; the class waits while it is full (`enqueue`), declines
+and counts a discard (`enqueue_if_have_room`) or overwrites the oldest
+message (`enqueue_nowait`), by the logger's overflow policy.
+
+### Reading a ring
+
+The pass does not know `circular_q` by name. A container that is not
+standard is read as a ring (`mlir/lib/WTC/Transforms/LiftedBounded.cpp`)
+when it is four unsigned 64-bit counts and one `std::vector`, and its
+constructor that takes the capacity sets one count to the argument plus
+one (the slots), the other three to zero and sizes the vector by the
+slots. Each member function the class calls is then evaluated
+symbolically, over the counts' values at entry, and compared with the
+operations of a ring of that many slots, head H, tail T, overrun count O
+and slots M, written as the pass canonicalises them:
+
+| operation | what the function computes |
+|---|---|
+| push | the element at T assigned from the argument; T becomes (T + 1) % M; if that equals H, H becomes (H + 1) % M and O grows by one |
+| front | a reference to the element at H |
+| pop front | H becomes (H + 1) % M |
+| empty | T == H |
+| full | (T + 1) % M == H |
+| size | T >= H ? T - H : M - (H - T) |
+| overrun count, its reset | O; O becomes 0 |
+
+A test of M > 0 is true, since the constructor made M the capacity plus
+one. Which count is the head, the tail or O is whichever assignment makes
+every function the class calls one of these. The capacity is the
+constructor's argument: the ring holds at most M - 1 elements. A function
+that computes anything else, a constructor of another form, and a ring
+built by its default constructor (spdlog's "disabled" queue) refuse.
+
+### What the class does with it
+
+| operation | the body, after the lock is taken | becomes |
+|---|---|---|
+| push that waits | wait until not full; push | `lifted_bounded::push_wait` |
+| push that may decline | `if (!q.full()) { q.push(v); pushed = true; }`, and after the lock `if (pushed) notify; else <the class's own code>` | the critical section becomes `pushed = try_push(v)`; the notification goes, the class's code for a declined push (spdlog counts a discard) stays |
+| push that overruns | the ring's push, with no test: it overwrites the oldest when full | `lifted_bounded::push_overrun` |
+| pop with a time limit | `if (!cv.wait_for(lock, d, pred)) return false;` then as the blocking pop, `return true` | `lifted_bounded::pop_wait_for_<unit>`, the duration passed as it is |
+| size, overrun count | `return q.size();`, `return q.overrun_counter();` | the runtime's |
+| reset of the count | `q.reset_overrun_counter();` | the runtime's |
+
+The pops are the unbounded ones'. Every push must notify the variable the
+pops wait on, and every pop the variable the waiting pushes wait on. A
+push that waits only for room in a class that also closes is refused:
+the substitute's would give up at `close()` while the queue is full,
+where the original waits on.
+
+### What the bound guarantees
+
+The substitute is `wtc::bounded<T>` (`shim/bounded.hpp`) over
+`runtime/bounded_ring.hpp`. Its capacity is exact: the queue never holds
+more than the capacity, and a push is refused (or waits, or overruns) only
+when it holds exactly the capacity at a point inside the call. Not
+"capacity plus the operations in flight", and not less.
+
+The argument. Pushes and pops take tickets from two counters, tail and
+head; the element of a push with ticket i is the one the pop with ticket i
+returns. A push takes its ticket with a compare-and-swap of tail, made only
+when tail - head, read in that order, is below the capacity; a pop takes
+its ticket only when head < tail, read in that order. At the moment of a
+successful compare-and-swap the other counter can only have moved in the
+direction that keeps the test true (head only grows, so tail - head only
+shrinks), so the step is legal for a sequential bounded queue in the state
+the counters describe at that moment; a refusal is decided by the second
+read, at which moment the first counter can only have moved the same way,
+so the queue was full (or empty) then. Each operation therefore takes
+effect at one atomic step on the counters, inside its call, and the
+sequence of those steps is a run of the sequential bounded queue: the
+answers are linearisable, with FIFO over all producers, not only per
+producer. After its ticket, a push may wait for the pop of the previous
+lap to finish moving its element out of the cell, and a pop for the push
+of its ticket to finish moving its element in: waits on operations
+already in progress, as a thread waits for the original's mutex.
+
+A queue whose push may overrun keeps head and tail in one 64-bit word: an
+overrun takes the oldest element's ticket and its own in one
+compare-and-swap, so it is one step, as under the original's mutex, and
+two overruns drop two elements, never three. With two words a push could
+take the slot an overrun had just freed before the overrun had pushed,
+and for a moment the queue would hold the capacity plus one, which a
+declining push or a size would see.
+
+The test `bounded_test exact` (`runtime/test`) holds a pop between its
+ticket and its cell and checks that pushes see the room its ticket made,
+which is the case a ring that decides fullness by its cells (Vyukov's
+bounded queue) gets wrong: there a stalled pop makes the queue look full
+to every producer, so a declining push would discard where the original
+had room. `bounded_test model` checks every answer and every size against
+a sequential ring.
+
+### What a program may still see differently
+
+- **The overrun count.** It is incremented just after the step that
+  overran, so a reader can see the queue after an overrun and the count
+  before it; it is exact once the pushes in flight have returned. The
+  class's getter is lifted only when its value is handed back by its
+  callers and nothing else (returned, through every caller, or dropped):
+  approximate counts for the user, never a decision in the program. A
+  class that decides on it is refused. The size is exact: the counters at
+  one instant. The discard count is the class's own, incremented after a
+  declined push, as before.
+- **The elements' lifetimes.** The original's vector holds capacity + 1
+  default-constructed elements from construction to destruction, keeps a
+  popped element's moved-from remains until its slot is written again, and
+  an overrun element until a later push assigns over it. The substitute
+  builds no placeholders, destroys a popped element's remains in the pop
+  and an overrun element in the push that overruns it. Only the element
+  type's constructor and destructor can tell.
+- **Large capacities.** A capacity above 2^30 ends the program when the
+  queue is built; the original allocates capacity + 1 elements up front.
+  (Listed with the contract's known differences above.)
+- **Failure and wake-ups.** As for every lifted queue (above): a throwing
+  move ends the program; one registered sleeper is woken per push, and one
+  per pop on the side of the waiting pushes.
+
+### Producers that overrun are consumers
+
+An overrunning push takes an element out: its thread is a consumer as well
+as a producer, and the dialect's `wtc.queue_push` carries `overrun` so
+that the ownership analysis counts it on both sides. Where that path
+cannot run, it would cost the producers their single-consumer queue for
+nothing, so the pass asks first whether any call of the overrunning push
+can run. A call guarded by conditions on integers whose values the pass
+can resolve (`ValueSets`, `LiftedBounded.h`) through parameters, locals,
+members, `std::move`/`std::forward` and reference parameters that are
+only read, in a module that has `main`, never runs when every value makes
+the guard false. A member's values are the values stored into it member
+by member, anywhere in the module, and that is all it can hold only while
+nothing reaches an object of its record another way: the member is
+unknown when an object holding the record is written whole other than
+from another (value-initialised to zero), copied into as bytes or reached
+through a pointer of another type (`memcpy`, `memset`, a pointer to
+member), handed to a function with no body here, made from raw memory
+without a constructor (`calloc`; a record with a destructor begins every
+life in a constructor), initialised by a global's initialiser, or named
+by a file linked with this one; a parameter is unknown when such a file
+names its function. In spdlog's reduced model
+(`test/Integration/Lifted/spdlog_mpmc.cpp`) the policy is the logger's
+member `overflow_policy_`, set by its constructor from the argument
+`async_factory` passes through `std::make_shared`, the constant `block`;
+`thread_pool::post_async_msg_` calls `enqueue_nowait` only when the policy
+is `overrun_oldest`, so the pass leaves the overrun out, the queue is
+built without it, and the loggers stay producers only. In the real
+program, built from spdlog's headers, `std::make_shared`'s control block
+also hands the logger's address out as `void *` (`_M_get_deleter`),
+which the pass does not follow: since 31 Oct 2026 the member is unknown
+there, the overrun stays, and the loggers count as consumers too. The remark says
+which: "never runs, so its overrun is left out (...)" or "may overrun, so
+its callers are consumers too (...)", with the first value it could not
+resolve. A queue built without the overrun aborts if an overrunning push
+reaches it anyway, rather than let a producer consume from a queue proved
+to have one consumer.
 
 ## How the runtime gets into the module
 
 `wtc::lifted<C>` is a template the program never names. `tools/wtc-cc`
 runs the pass once with `rewrite=false instantiations=FILE`, which lists
-`template struct wtc::lifted<C>;` for each class that would lift, and, when
+`template struct wtc::lifted<C>;` (`wtc::lifted_bounded<C>` for a ring)
+for each class that would lift, and, when
 the list is not empty, compiles the file again with those lines after it:
 the program's text is unchanged. The functions of `wtc::lifted<C>` carry
 both the shim's annotations (`wtc_queue_push`, `wtc_queue_try_pop_into`,
@@ -169,19 +417,24 @@ reduced. Read as written, without source edits (29 Oct 2026):
 | BS::thread_pool, `tasks` (`BS_thread_pool.hpp`) | refused | (c) the mutex also guards the running count, the waiting flag, the thread count and the stop flag; (b) the worker pops through `pop_task()`, which takes no lock itself; (d) `get_tasks_queued()` reads `size()`, and `wait()` sleeps until the queue is empty and nothing runs, a joint invariant of the queue and the pool |
 | Bitcoin, `CCheckQueue::queue` (`checkqueue.h`) | refused | (e) a `std::vector` taken from the back, with range insert and erase; (d) the batch size is computed from `size()`; (c) the mutex also guards the idle, total and unfinished counts and the result |
 | cpp-httplib, `ThreadPool::jobs_` (`httplib.h`) | refused | (c) the mutex also guards the idle count, the admission bound and the dynamic threads; (d) `enqueue` decides on `jobs_.size()`; dynamic workers wait with a time-out. Its shutdown flag alone would have been supported |
-| spdlog, `mpmc_blocking_queue::q_` (`mpmc_blocking_q.h`) | refused | (e) `circular_q` is spdlog's own bounded ring; `enqueue` waits while it is full, `enqueue_nowait` overwrites the oldest message, and the overrun and discard counters are read: a bound and an overrun the unbounded substitutes cannot keep |
+| spdlog, `mpmc_blocking_queue::q_` (`mpmc_blocking_q.h`) | lifts | `circular_q` is read as a ring of capacity `max_items`; `enqueue` waits for room, `enqueue_if_have_room` may decline (its discard count stays the class's), `enqueue_nowait` overruns, `dequeue` is the blocking pop (`dequeue_for`, used by spdlog before 1.10, the pop with a time limit). The overrun cannot run in the benchmark, whose loggers are built with `block`, so it is left out. The real program, `benchmarks/apps/spdlog/bench.cpp` over spdlog's own headers, lifts as the model does and runs correctly with `WTC_CHECK` and under ThreadSanitizer; its queue is the general-purpose one (below) |
 
-So two of the six lift.
+So three of the six lift.
+
+spdlog's queue is general-purpose, many producers and many consumers,
+because the number of workers is known only when the pool is built, and
+the pool's loop over it is one call above the queue's constructor: the
+choice the port's queue gets when the pool is built ("specialised at run
+time") is not made for a queue built inside a member of the pool.
 
 Bitcoin's `CCheckQueue` is not a FIFO queue to lift: its workers take
 batches from the back, and the result does not depend on the order in
 which checks run ("first failure wins"). It is a candidate for the work on
 relaxing order (a bag of tasks rather than a queue), not for this pass,
 and stays refused here.
-What the four refused need is not more pattern matching but semantics
+What the three refused need is not more pattern matching but semantics
 the substitutes do not have: a lock split from the program's other state
-(BS, httplib, Bitcoin), a count (all three), a bound and an overrun
-(spdlog), LIFO batches (Bitcoin).
+(BS, httplib, Bitcoin), a count (all three), LIFO batches (Bitcoin).
 
 ## Blocking forms
 
