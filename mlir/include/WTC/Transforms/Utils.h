@@ -40,6 +40,13 @@ enum class SemanticOpKind {
 // unresolvable symbol.
 cir::FuncOp lookupCallee(cir::CallOp op);
 
+// Whether a call is part of the implementation of an operation of a
+// lifted queue (shim/lifted.hpp): it sits in a function annotated
+// wtc_lifted_* and calls a function that is not one. wtc::lifted's own
+// functions are the queue's operations; the wtc::queue calls inside them
+// implement those and are neither raised nor counted again.
+bool insideLiftedRuntime(cir::CallOp op);
+
 bool hasAnnotation(cir::FuncOp funcOp, StringRef annotation);
 
 bool isWTCAnnotatedCall(cir::CallOp op, StringRef annotation);

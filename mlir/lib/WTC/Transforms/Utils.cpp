@@ -23,6 +23,19 @@ cir::FuncOp lookupCallee(cir::CallOp op) {
     return mlir::dyn_cast_or_null<cir::FuncOp>(callee);
 }
 
+static bool liftedRuntimeFunction(cir::FuncOp f) {
+    auto annotations = f ? f.getAnnotationsAttr() : ArrayAttr();
+    if (!annotations) return false;
+    return llvm::any_of(annotations, [](Attribute a) {
+        auto an = mlir::dyn_cast<cir::AnnotationAttr>(a);
+        return an && an.getName().getValue().starts_with("wtc_lifted_");
+    });
+}
+
+bool insideLiftedRuntime(cir::CallOp op) {
+    return liftedRuntimeFunction(op->getParentOfType<cir::FuncOp>()) && !liftedRuntimeFunction(lookupCallee(op));
+}
+
 bool hasAnnotation(cir::FuncOp funcOp, StringRef annotation) {
     if (!funcOp)
         return false;
@@ -801,6 +814,7 @@ collectQueueConstructors(ModuleOp module) {
     module.walk([&](cir::CallOp call) {
         if (getSemanticKind(lookupCallee(call)) != SemanticOpKind::QueueConstruction) return;
         if (call.getNumOperands() == 0 || firstRealOperand(call) != 0) return;
+        if (insideLiftedRuntime(call)) return;
         Value t = traceToRoot(call.getOperand(0));
         Operation *root = nullptr;
         if (auto gg = t.getDefiningOp<cir::GetGlobalOp>())

@@ -30,6 +30,7 @@ struct CirToWTCConversionTarget : public ConversionTarget {
         addLegalOp<mlir::UnrealizedConversionCastOp>();
 
         addDynamicallyLegalOp<cir::CallOp>([](cir::CallOp op) {
+            if (insideLiftedRuntime(op)) return true;
             switch (getSemanticKind(lookupCallee(op))) {
             case SemanticOpKind::MutexLock:
             case SemanticOpKind::MutexUnlock:

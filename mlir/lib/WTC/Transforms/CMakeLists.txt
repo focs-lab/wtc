@@ -1,6 +1,7 @@
 add_mlir_library(MLIRWTCTransforms
   Blocking.cpp
   LiftCIRToWTC.cpp
+  LiftLockedQueues.cpp
   LowerWTCToCIR.cpp
   QueueOwnershipAnalysis.cpp
   ThreadInstances.cpp
