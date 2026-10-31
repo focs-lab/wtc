@@ -16,11 +16,13 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Demangle/Demangle.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <map>
 #include <optional>
 #include <string>
+#include <vector>
 
 using namespace mlir;
 using namespace mlir::wtc;
@@ -46,7 +48,10 @@ using namespace mlir::wtc;
 //
 //   (a) the container member is touched only by the constructor, the
 //       destructor and member functions that each match one operation:
-//       push, try-pop, blocking pop, closable blocking pop, close;
+//       push, try-pop, blocking pop, closable blocking pop, close; and
+//       those functions do nothing else the program could see, since the
+//       rewrite replaces their bodies whole (a local object is built only
+//       if it is a lock or a duration);
 //   (b) every touch of it in those functions is with the class's mutex
 //       held, all of one function's in one critical section;
 //   (c) the mutex and the condition variables are used only by those
@@ -58,10 +63,19 @@ using namespace mlir::wtc;
 //       such a loop, a push that does not notify the variable a pop waits
 //       on, and a pop that gives up at the stop flag with elements still
 //       queued are refused;
-//   (e) the order is FIFO: the container is a std::queue over a deque or a
-//       list, a std::deque or a std::list, elements go in at the back and
-//       come out at the front; anything else (back, pop_back, insert,
-//       erase, swap, clear, size, a container of another kind) refuses.
+//   (e) the order is FIFO: the container is a std::queue whose member is a
+//       std::deque or a std::list, a std::deque or a std::list, elements
+//       of its own type go in at the back and come out at the front;
+//       anything else (back, pop_back, insert, erase, swap, clear, size, a
+//       container of another kind, emplace from another type) refuses;
+//   (f) the world is closed: the module has main, is not linked later with
+//       files the pass does not see, none of the files linked with it
+//       names the class, and every member function of the class has its
+//       body here. A lifted member function treats the object's storage
+//       differently, and another unit's copy of it, as written, would not.
+//
+// A stop flag must start false, by a constant, in every constructor: the
+// substitute starts open.
 //
 // The predicates and the conditions around them are compared by truth
 // table over the two facts they may read, "the container is empty" and
@@ -133,6 +147,46 @@ Kind containerKind(StringRef name) {
     return Kind::Other;
 }
 
+// The template arguments of a record's name, split at the commas of its
+// outermost angle brackets: {"int", "std::allocator<int>"} for
+// "std::deque<int, std::allocator<int>>". None for a name of another form.
+std::optional<llvm::SmallVector<std::string, 4>> templateArgs(StringRef name) {
+    const size_t open = name.find('<');
+    if (open == StringRef::npos || !name.ends_with(">")) return std::nullopt;
+    llvm::SmallVector<std::string, 4> out;
+    std::string cur;
+    int depth = 0;
+    for (char ch : name.drop_front(open + 1).drop_back()) {
+        if (ch == '<' || ch == '(' || ch == '[') ++depth;
+        if (ch == '>' || ch == ')' || ch == ']') --depth;
+        if (depth < 0) return std::nullopt;
+        if (ch == ',' && depth == 0) {
+            out.push_back(StringRef(cur).trim().str());
+            cur.clear();
+            continue;
+        }
+        cur += ch;
+    }
+    if (depth != 0) return std::nullopt;
+    out.push_back(StringRef(cur).trim().str());
+    return out;
+}
+
+// Whether a std::deque or std::list allocates with std::allocator of its
+// element: an allocator of the program's own may bound the container
+// (throw once it has handed out so much) or count what it allocates, and
+// the substitute allocates with neither.
+bool standardAllocator(StringRef name) {
+    auto args = templateArgs(name);
+    if (!args || args->size() != 2) return false;
+    auto squash = [](StringRef x) {
+        std::string out;
+        for (char ch : x)
+            if (ch != ' ') out += ch;
+        return out;
+    };
+    return squash((*args)[1]) == squash("std::allocator<" + (*args)[0] + ">");
+}
 
 bool isStopType(Type t) { return isa<cir::BoolType>(t) || recordName(t) == "std::atomic<bool>"; }
 
@@ -195,10 +249,15 @@ struct Candidate {
     llvm::SmallVector<unsigned, 2> cvs;
     std::optional<unsigned> stop;
     Kind kind = Kind::Unknown;
-    Type elem;  // the element's CIR type, from the container's calls
+    Type elem;       // the element's CIR type, from the container's calls
+    Type frontElem;  // the container's value_type, from what front() refers to
+    bool emplaces = false;
     llvm::SmallVector<Method, 4> methods;
     llvm::SmallVector<cir::FuncOp, 2> ctors, dtors;
     llvm::SmallVector<cir::FuncOp, 2> preds;  // wait predicates read
+    // What each constructor stores into each flag-typed member: the
+    // constant, or none when it is computed or left indeterminate.
+    llvm::DenseMap<Operation *, llvm::SmallVector<std::pair<unsigned, std::optional<bool>>, 2>> flagInits;
     llvm::SmallVector<std::string, 4> reasons;
     std::map<std::string, unsigned> features;
     Location loc;
@@ -282,15 +341,37 @@ cir::AllocaOp localSlot(Value addr) {
 // the record's name, spaces aside (the demangler writes "> >" and "T*",
 // CIR's record names ">>" and "T *"). A lambda's call operator is scoped
 // to the function it is written in, and a free function to a namespace.
+std::string squashSpaces(StringRef x) {
+    std::string out;
+    for (char ch : x)
+        if (ch != ' ') out += ch;
+    return out;
+}
+
 bool isMemberOf(cir::FuncOp f, cir::RecordType rec) {
     Name n = nameOf(f.getSymName());
-    auto squash = [](StringRef x) {
-        std::string out;
-        for (char ch : x)
-            if (ch != ' ') out += ch;
-        return out;
-    };
-    return n.ok && squash(n.context) == squash(recordName(rec));
+    return n.ok && squashSpaces(n.context) == squashSpaces(recordName(rec));
+}
+
+// Whether a demangled name, spaces removed, mentions the class: its name
+// as a whole word, as the scope of a member ("LQ<int>::pending()") or in a
+// parameter ("report(LQ<int>&)").
+bool mentions(StringRef name, StringRef cls) {
+    auto word = [](char ch) { return llvm::isAlnum(ch) || ch == '_'; };
+    for (size_t at = name.find(cls); at != StringRef::npos; at = name.find(cls, at + 1)) {
+        const size_t end = at + cls.size();
+        if ((at == 0 || !word(name[at - 1])) && (end == name.size() || !word(name[end]))) return true;
+    }
+    return false;
+}
+
+// The local objects a lifted function may build and destroy: those whose
+// constructors and destructors touch nothing but the object itself.
+bool effectFreeLocal(StringRef type) {
+    for (StringRef known : {"std::lock_guard<std::mutex>", "std::unique_lock<std::mutex>",
+                            "std::scoped_lock<std::mutex>", "std::chrono::duration<", "std::chrono::time_point<"})
+        if (known.ends_with("<") ? type.starts_with(known) : type == known) return true;
+    return false;
 }
 
 // The parameter a value is, through the slot it was stored in at entry.
@@ -606,13 +687,20 @@ private:
         // The predicate object's own constructor, and std::move, touch
         // only locals.
         if (n.base == "move" && n.context == "std") return;
-        // A local object built or destroyed from constants and locals: a
-        // duration for a timed wait, the predicate object.
+        // A local object built or destroyed from constants and locals,
+        // of a type whose constructors and destructor are known to do
+        // nothing else: a lock, a duration for a timed wait. The rewrite
+        // replaces the whole body, so a constructor or destructor of any
+        // other type, which may have effects of its own, refuses.
         if ((n.ctor || n.dtor) && localSlot(call.getOperand(0)) &&
             llvm::all_of(call.getOperands().drop_front(), [&](Value v) {
                 return v.getDefiningOp<cir::ConstantOp>() || localSlot(v);
-            }))
+            })) {
+            if (effectFreeLocal(n.context)) return;
+            fail("builds or destroys a local " + n.context + ", whose constructor or destructor may have effects "
+                 "of its own");
             return;
+        }
         if (m) {
             if (held) {
                 c.refuse("(c) the mutex " + c.memberName(*c.mutex) + " also guards " + c.memberName(*m) +
@@ -639,6 +727,7 @@ private:
             Stmt s(Stmt::Front);
             s.op = call;
             s.front = call.getResult();
+            if (auto pt = dyn_cast<cir::PointerType>(call.getResult().getType())) c.frontElem = pt.getPointee();
             push(s);
             return;
         }
@@ -663,6 +752,7 @@ private:
                 return (void)fail("pushes another type");
             }
             c.elem = pt.getPointee();
+            if (b == "emplace" || b == "emplace_back") c.emplaces = true;
             Stmt s(Stmt::Push);
             s.op = call;
             s.move = StringRef(n.params).ends_with("&&)");
@@ -1046,6 +1136,13 @@ public:
         *this, "instantiations", llvm::cl::init(""),
         llvm::cl::desc("Write here, one per line, the explicit instantiation of wtc::lifted for the "
                        "container type of every class that lifts and whose runtime this module lacks")};
+    Option<bool> openWorld{*this, "open-world", llvm::cl::init(false),
+                           llvm::cl::desc("The module is linked later with files the pass does not see, "
+                                          "which may use any class as written: nothing lifts")};
+    Option<std::string> namedElsewhereFile{
+        *this, "named-elsewhere", llvm::cl::init(""),
+        llvm::cl::desc("A file listing, one per line, the symbols the other files linked with this module "
+                       "define or reference: a class any of them names does not lift")};
 
     void runOnOperation() override;
 
@@ -1053,7 +1150,13 @@ private:
     ModuleOp module;
     llvm::DenseMap<std::pair<Type, unsigned>, std::string> memberNames;
 
+    // What the rest of the program may see: whether this module has main,
+    // and the demangled names, spaces removed, the other files name.
+    bool hasMain = false;
+    std::vector<std::string> elsewhere;
+
     void analyse(Candidate &c);
+    void closedWorld(Candidate &c);
     void decide(Candidate &c, Reader &r, cir::FuncOp f, bool explained);
     bool constructorOk(Candidate &c, cir::FuncOp f, bool dtor);
     llvm::StringMap<cir::FuncOp> runtimeFor(Candidate &c);
@@ -1064,6 +1167,21 @@ private:
 void LiftLockedQueuesPass::runOnOperation() {
     module = getOperation();
     gMemberNames = &memberNames;
+
+    auto mainFn = module.lookupSymbol<cir::FuncOp>("main");
+    hasMain = mainFn && !mainFn.getBody().empty();
+    elsewhere.clear();
+    if (!namedElsewhereFile.empty()) {
+        auto buf = llvm::MemoryBuffer::getFile(namedElsewhereFile.getValue());
+        if (!buf) {
+            module.emitError() << "wtc: cannot read the symbols named elsewhere from " << namedElsewhereFile.getValue();
+            return signalPassFailure();
+        }
+        llvm::SmallVector<StringRef, 64> lines;
+        (*buf)->getBuffer().split(lines, '\n', -1, false);
+        for (StringRef l : lines)
+            if (!(l = l.trim()).empty()) elsewhere.push_back(squashSpaces(llvm::demangle(l.str())));
+    }
 
     // Member names, and the records that hold a std::mutex.
     llvm::SetVector<Type> withMutex;
@@ -1135,6 +1253,7 @@ void LiftLockedQueuesPass::runOnOperation() {
         c.rec = cast<cir::RecordType>(key.first);
         c.q = key.second;
         analyse(c);
+        closedWorld(c);
 
         if (!c.features.empty()) {
             InFlightDiagnostic fd = emitRemark(c.loc) << "wtc: locked queue " << c.label() << " uses ";
@@ -1197,13 +1316,28 @@ void LiftLockedQueuesPass::analyse(Candidate &c) {
     StringRef qType = recordName(members[c.q]);
     c.kind = containerKind(qType);
     switch (c.kind) {
-    case Kind::StdQueue:
-        if (!qType.contains(", std::deque<") && !qType.contains(", std::list<") &&
-            !qType.contains(", std::__cxx11::list<"))
-            c.refuse("(e) the std::queue's underlying container is neither a deque nor a list");
+    case Kind::StdQueue: {
+        // The adapter's one member, the container it pushes at the back of
+        // and pops at the front of; its type, not the adapter's spelling,
+        // which a container of the program's own may mimic.
+        auto adapter = dyn_cast<cir::RecordType>(members[c.q]);
+        StringRef under;
+        if (adapter && !adapter.isIncomplete() && adapter.getMembers().size() == 1)
+            under = recordName(adapter.getMembers().front());
+        const Kind k = containerKind(under);
+        if (k != Kind::StdDeque && k != Kind::StdList)
+            c.refuse("(e) the std::queue's underlying container is neither a std::deque nor a std::list" +
+                     (under.empty() ? std::string() : (" (" + under + ")").str()));
+        else if (!standardAllocator(under))
+            c.refuse("(e) the container allocates with an allocator other than std::allocator of its element (" +
+                     under + ")");
         break;
+    }
     case Kind::StdDeque:
     case Kind::StdList:
+        if (!standardAllocator(qType))
+            c.refuse("(e) the container allocates with an allocator other than std::allocator of its element (" +
+                     qType + ")");
         break;
     case Kind::StdVector:
         c.refuse("(e) the container is a std::vector, which the class may use as a stack or a batch");
@@ -1273,6 +1407,25 @@ void LiftLockedQueuesPass::analyse(Candidate &c) {
             c.refuse("(c) the mutex " + c.memberName(*c.mutex) + " also guards " + c.memberName(m.flag) + " in " +
                      shortName(m.f));
 
+    // emplace builds the element from its argument, which may be of
+    // another type than the element; the substitute's push takes the
+    // element itself.
+    if (c.elem && (c.frontElem ? c.elem != c.frontElem : c.emplaces))
+        c.refuse("(e) the element is built by emplace from an argument of another type than the container's");
+
+    // The substitute starts open: every constructor must start the flag
+    // the waits read as false, by a constant, and nothing else.
+    if (c.stop)
+        for (cir::FuncOp f : c.ctors) {
+            auto inits = c.flagInits.lookup(f);
+            bool set = false, other = false;
+            for (auto &[m, v] : inits)
+                if (m == *c.stop) (v && !*v ? set : other) = true;
+            if (other || !set)
+                c.refuse("(d) " + shortName(f) + " starts the stop flag " + c.memberName(*c.stop) +
+                         (other ? " other than false" : " indeterminate") + ": the substitute starts open");
+        }
+
     // A pop that waits must be woken by every push.
     std::optional<unsigned> dataCv;
     bool waits = false;
@@ -1308,6 +1461,180 @@ void LiftLockedQueuesPass::analyse(Candidate &c) {
         c.refuse("(a) no constructor of " + recordName(c.rec) + " builds the container here");
 }
 
+// (f) The class is this module's alone. Lifting changes what its member
+// functions do with the object's storage; a copy of them compiled in
+// another unit, as written, would read the same storage as the container
+// it no longer holds, and the linker keeps one copy of an inline member
+// function for the whole program, which may be either. So the class lifts
+// only when the module is the whole program as far as the class goes: it
+// has main, it is not compiled to be linked with files the pass does not
+// see, none of the files it is linked with names the class (a member
+// function, or a function that takes or returns the class), and every
+// member function of the class this module declares has its body here.
+//
+// Symbols alone cannot show that a linked file leaves the class alone: its
+// copy of an inline member function may be inlined where it is called,
+// leaving no symbol that names the class. So, with any file linked, the
+// object must also be out of its reach, by a rule on this module's own
+// code: no global another file may name (not internal, or only declared
+// here) holds the class or points to it, at any depth; no call hands
+// something that holds or points to it to a function with no body here,
+// to an indirect call or to a function a linked file names; no function
+// of this module that a linked file names takes or returns such a thing;
+// and no pointer to such a thing is converted to a type that is not one,
+// which the pass could no longer follow (to `void *`, to an integer, to a
+// base class), other than to free it.
+void LiftLockedQueuesPass::closedWorld(Candidate &c) {
+    const std::string cls = recordName(c.rec).str();
+    if (openWorld) {
+        c.refuse("(f) the unit is compiled to be linked with files the pass does not see, which may use " + cls +
+                 " as written");
+        return;
+    }
+    if (!hasMain) {
+        c.refuse("(f) the module has no main: the rest of the program, elsewhere, may use " + cls +
+                 " as written");
+        return;
+    }
+    for (cir::FuncOp f : module.getOps<cir::FuncOp>())
+        if (f.getBody().empty() && isMemberOf(f, c.rec))
+            c.refuse("(f) " + shortName(f) + " has no body here: another unit defines it");
+    const std::string want = squashSpaces(cls);
+    for (const std::string &s : elsewhere)
+        if (mentions(s, want)) {
+            c.refuse("(f) a file linked with this one names " + cls + " (" + s + ")");
+            return;
+        }
+    if (namedElsewhereFile.empty()) return;
+
+    // Whether a type is the class, holds it or points to something that
+    // does, at any depth: a search of the types it is made of.
+    llvm::DenseMap<Type, bool> memo;
+    auto reaches = [&](Type root) {
+        auto [it, fresh] = memo.try_emplace(root, false);
+        if (!fresh) return it->second;
+        llvm::SmallVector<Type, 16> work{root};
+        llvm::DenseSet<Type> seen{root};
+        bool found = false;
+        while (!work.empty() && !found) {
+            Type t = work.pop_back_val();
+            if (t == Type(c.rec)) {
+                found = true;
+                break;
+            }
+            llvm::SmallVector<Type, 8> next;
+            if (auto p = dyn_cast<cir::PointerType>(t)) next.push_back(p.getPointee());
+            else if (auto a = dyn_cast<cir::ArrayType>(t)) next.push_back(a.getElementType());
+            else if (auto r = dyn_cast<cir::RecordType>(t); r && !r.isIncomplete())
+                next.append(r.getMembers().begin(), r.getMembers().end());
+            for (Type n : next)
+                if (seen.insert(n).second) work.push_back(n);
+        }
+        memo[root] = found;
+        return found;
+    };
+    auto namedThere = [&](cir::FuncOp f) {
+        return llvm::is_contained(elsewhere, squashSpaces(llvm::demangle(f.getSymName().str())));
+    };
+    auto where = [](Operation *op) {
+        auto f = op->getParentOfType<cir::FuncOp>();
+        return f ? shortName(f) : std::string("a global's initialiser");
+    };
+    auto deallocates = [](cir::FuncOp g) {
+        StringRef n = g ? g.getSymName() : StringRef();
+        return n.starts_with("_ZdlPv") || n.starts_with("_ZdaPv");
+    };
+    auto typeName = [](Type t) -> std::string {
+        if (auto p = dyn_cast<cir::PointerType>(t)) {
+            if (isa<cir::VoidType>(p.getPointee())) return "void *";
+            if (StringRef n = recordName(p.getPointee()); !n.empty()) return (n + " *").str();
+            return "a pointer of another type";
+        }
+        if (isa<cir::IntType>(t)) return "an integer";
+        return "another type";
+    };
+    std::string bad;
+    for (cir::GlobalOp g : module.getOps<cir::GlobalOp>())
+        if ((!cir::isLocalLinkage(g.getLinkage()) || g.isDeclaration()) && reaches(g.getSymType())) {
+            bad = "the global " + g.getSymName().str() + ", which a file linked with this one may name, holds or "
+                  "points to " + cls;
+            break;
+        }
+    for (cir::FuncOp f : module.getOps<cir::FuncOp>()) {
+        if (!bad.empty()) break;
+        if (f.getBody().empty() || !namedThere(f)) continue;
+        auto types = f.getFunctionType();
+        if (llvm::any_of(types.getInputs(), reaches) || llvm::any_of(types.getReturnTypes(), reaches))
+            bad = "a file linked with this one names " + pretty(f.getSymName()) + ", which takes or returns " + cls +
+                  " or a pointer to it";
+    }
+    if (bad.empty())
+        module.walk([&](Operation *op) {
+            if (auto call = dyn_cast<cir::CallOp>(op)) {
+                cir::FuncOp g = call.isIndirect() ? cir::FuncOp() : lookupCallee(call);
+                const bool foreign = !g || g.getBody().empty() || namedThere(g);
+                if (foreign && llvm::any_of(call.getArgOperands(), [&](Value v) { return reaches(v.getType()); })) {
+                    bad = where(op) + " hands " + cls + ", or what holds or points to it, to " +
+                          (g ? pretty(g.getSymName()) : std::string("an indirect call")) +
+                          (!g ? std::string() : g.getBody().empty() ? ", which has no body here"
+                                                                    : ", which a file linked with this one names");
+                    return WalkResult::interrupt();
+                }
+            }
+            Value from, to;
+            if (auto cast = dyn_cast<cir::CastOp>(op); cast && cast.getKind() != cir::CastKind::ptr_to_bool) {
+                from = cast.getSrc();
+                to = cast.getResult();
+            } else if (auto base = dyn_cast<cir::BaseClassAddrOp>(op)) {
+                from = base.getDerivedAddr();
+                to = base.getResult();
+            }
+            // The argument's own memory read as another type, to pass an
+            // object in registers (a lambda that captures `this`), to a
+            // function of this module that the files do not name, or to
+            // return it from one: the bits stay in this module's code.
+            auto coerced = [&](Operation *u) {
+                if (auto st = dyn_cast<cir::StoreOp>(u)) return st.getAddr() == to && st.getValue() != to;
+                auto ld = dyn_cast<cir::LoadOp>(u);
+                if (!ld) return false;
+                return llvm::all_of(ld->getUses(), [&](OpOperand &lu) {
+                    if (auto r = dyn_cast<cir::ReturnOp>(lu.getOwner())) {
+                        auto f = r->getParentOfType<cir::FuncOp>();
+                        return f && !namedThere(f);
+                    }
+                    auto call = dyn_cast<cir::CallOp>(lu.getOwner());
+                    cir::FuncOp g = call && !call.isIndirect() ? lookupCallee(call) : cir::FuncOp();
+                    return g && !g.getBody().empty() && !namedThere(g);
+                });
+            };
+            // A global's destructor registered with __cxa_atexit, which
+            // hands the object back to it, a function of this module.
+            auto atExit = [&](OpOperand &use) {
+                auto call = dyn_cast<cir::CallOp>(use.getOwner());
+                cir::FuncOp g = call ? lookupCallee(call) : cir::FuncOp();
+                if (!g || g.getSymName() != "__cxa_atexit" || use.getOperandNumber() != 1 ||
+                    call.getArgOperands().size() < 2)
+                    return false;
+                Value fn = call.getArgOperands()[0];
+                while (auto cv = fn.getDefiningOp<cir::CastOp>()) fn = cv.getSrc();
+                auto gg = fn.getDefiningOp<cir::GetGlobalOp>();
+                auto dtor = gg ? module.lookupSymbol<cir::FuncOp>(gg.getName()) : cir::FuncOp();
+                return dtor && !dtor.getBody().empty() && !namedThere(dtor);
+            };
+            if (from && reaches(from.getType()) && !reaches(to.getType()) &&
+                !llvm::all_of(to.getUses(), [&](OpOperand &use) {
+                    auto call = dyn_cast<cir::CallOp>(use.getOwner());
+                    return (call && deallocates(lookupCallee(call))) || coerced(use.getOwner()) || atExit(use);
+                })) {
+                bad = where(op) + " converts a pointer to " + cls + ", or to what holds or points to it, to " +
+                      typeName(to.getType()) + ", which the pass does not follow";
+                return WalkResult::interrupt();
+            }
+            return WalkResult::advance();
+        });
+    if (!bad.empty()) c.refuse("(f) " + bad);
+}
+
 // Constructors build the container with its default constructor and set
 // the stop flag false; destructors destroy it. Nothing else of the queue's.
 bool LiftLockedQueuesPass::constructorOk(Candidate &c, cir::FuncOp f, bool dtor) {
@@ -1324,13 +1651,20 @@ bool LiftLockedQueuesPass::constructorOk(Candidate &c, cir::FuncOp f, bool dtor)
                 cir::FuncOp callee = lookupCallee(call);
                 Name n = callee ? nameOf(callee.getSymName()) : Name();
                 if (call.getNumOperands() == 1 && call.getOperand(0) == gm.getResult() && (n.ctor || n.dtor)) {
-                    if (*m == c.q && n.ctor && dtor) ok = false;
+                    if (*m == c.q && n.ctor && dtor) {
+                        c.refuse("(a) " + shortName(f) + " builds " + c.memberName(*m) + " in a destructor");
+                        ok = false;
+                    }
+                    // std::atomic<bool>'s default constructor leaves the
+                    // value indeterminate before C++20.
+                    if (isStopType(members[*m]) && n.ctor && !dtor) c.flagInits[f].push_back({*m, std::nullopt});
                     continue;
                 }
                 if (isStopType(members[*m]) && n.ctor && call.getNumOperands() == 2) {
                     auto k = call.getOperand(1).getDefiningOp<cir::ConstantOp>();
                     auto b = k ? dyn_cast<cir::BoolAttr>(k.getValue()) : cir::BoolAttr();
-                    if (b && !b.getValue()) continue;
+                    if (!dtor) c.flagInits[f].push_back({*m, b ? std::optional<bool>(b.getValue()) : std::nullopt});
+                    continue;
                 }
                 if (isStopType(members[*m])) continue;  // judged only if it turns out to be the flag
                 c.refuse("(a) " + shortName(f) + " calls " + (callee ? pretty(callee.getSymName()) : "something") +
@@ -1342,7 +1676,7 @@ bool LiftLockedQueuesPass::constructorOk(Candidate &c, cir::FuncOp f, bool dtor)
                                                       isStopType(members[*m])) {
                 auto k = st.getValue().getDefiningOp<cir::ConstantOp>();
                 auto b = k ? dyn_cast<cir::BoolAttr>(k.getValue()) : cir::BoolAttr();
-                if (!b || b.getValue()) c.features["flag initialised true or computed"]++;
+                c.flagInits[f].push_back({*m, b ? std::optional<bool>(b.getValue()) : std::nullopt});
                 continue;
             }
             if (isStopType(members[*m])) continue;
@@ -1366,6 +1700,19 @@ void LiftLockedQueuesPass::decide(Candidate &c, Reader &r, cir::FuncOp f, bool e
     const Stmt *lastReturn = nullptr;
     for (const Stmt &s : r.stmts) {
         if (s.k == Stmt::Notify) {
+            // Under the original's mutex, a thread that sees what the
+            // operation did (takes the element, finds the queue closed)
+            // sees it only after the notification has returned, and may
+            // destroy the queue at once. The substitute wakes its sleepers
+            // after the element is visible, so such a thread could destroy
+            // it while the wake-up still runs. Notified after the unlock,
+            // as usual, the original already touches the condition variable
+            // after that point, and a program may not destroy it there.
+            if (s.held) {
+                c.refuse("(d) " + fn + " notifies " + c.memberName(s.cv) + " with the mutex held: a thread that sees "
+                         "its effect may destroy the queue while the substitute is still waking a sleeper");
+                return;
+            }
             m.notifies.push_back({s.cv, s.all});
             continue;
         }
