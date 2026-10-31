@@ -4,6 +4,7 @@
 namespace mlir::wtc {
     void registerLiftCIRToWTCPass();
     void registerLiftLockedQueuesPass();
+    void registerLiftCQueuesPass();
     void registerLowerWTCToCIRPass();
     void registerQueueOwnershipAnalysisPass();
     void registerWTCSpecializePass();

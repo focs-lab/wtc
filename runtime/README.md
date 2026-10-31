@@ -24,6 +24,8 @@ Every implementation carries, in its header comment:
 | `stream_gate.hpp` | nothing: whether a single consumer waits for a batch, shared by the ring and the single-consumer form | none |
 | `hazard.hpp` | nothing: hazard pointers for the segmented queues, one slot for pushes and one for pops | none |
 | `waiter.hpp` | nothing: how a pop that waits for an element waits (spin, park, or spin then park), and the wake-up a publish owes a sleeping consumer, shared by every queue above | none |
+| `bounded_ring.hpp` | a bounded ring a program wrote itself under a mutex (spdlog's `circular_q`), through `shim/bounded.hpp` | the ring's capacity and its answers to a full queue, read from its member functions (`docs/lifting.md`, "The bound"); with one producer or one consumer, that side is single |
+| `bounded_ring.hpp`, through `shim/c_queue.cpp` | a ring of pointers a C program wrote itself under a pthread mutex, with an end count (PARSEC ferret's and dedup's `queue.c`) | the ring's capacity, read from its initialisation; with one producer or one consumer, that side is single; batches with any number of producers and consumers (`docs/lifting.md`, "C queues") |
 
 `spsc_ring<Slot, kSlots>` is an unbounded wait-free ring of blocks of 128 KiB
 each. It keeps the generic queue's semantics exactly: FIFO, `push` never
@@ -88,6 +90,32 @@ therefore `spin`. `close()` wakes every sleeper, and from then on a
 waiting pop that finds the queue empty returns false; elements pushed
 before it are still popped.
 
+`bounded_ring<T>` is a bounded linearisable FIFO queue whose capacity is
+exact. Pushes and pops take tickets from two counters, and ticket i is
+cell i mod R, R a power of two at or above the capacity, each cell with a
+sequence number as in Vyukov's bounded queue; but fullness and emptiness
+are decided by the counters (tail - head against the capacity, the second
+counter read after the first), not by the cells, so a pop stalled between
+its ticket and its cell does not make the queue look full, and every
+answer is the one a sequential bounded queue gives at the operation's
+compare-and-swap. A push that overruns takes the oldest element's ticket
+and its own in one compare-and-swap of head and tail packed into one
+word. A ring built for batches keeps them in that word too: a run of
+pushes or of pops (`try_push_n`, `consume_n`) decides its size k, the
+least of what it asks for and the room or the elements there are, and
+takes its k tickets in one compare-and-swap of the word, so a batch is
+adjacent in the queue and sized as one appended or taken under a mutex
+is, whatever the other threads on either side do. With two words a batch
+would be sized by the other counter as read before its step, and a
+batched pop and a batched push crossing there would each see the queue
+before the other: two elements queued, capacity four, both asking for
+ten, the pop takes two and the push appends two, where the mutex gives
+two and four or four and two. The shim's
+`wtc::bounded<T>` puts two waiters on it, one per side:
+a pop waits while it is empty, a push while it is full, and each publish
+wakes the other side's sleeper, with the same fences as the pop's
+waiter; `close()` closes both.
+
 A queue may be destroyed only after every push to it has returned (its
 producers joined, or otherwise ordered before the destructor), not as
 soon as its last element has been popped: a push wakes sleepers after its
@@ -125,6 +153,42 @@ two-producer run of the spmc queue, which TSan has to report and
 `WTC_CHECK` has to abort; and a waiter that drops its wake-ups, which the
 waiting pop's test has to catch asleep. A suite that cannot fail proves
 nothing, which is a lesson this project has already paid for once.
+
+`bounded_test` runs the bounded queue through `wtc::bounded`: every
+answer and every size against a sequential ring, on both layouts and
+every topology; a pop held between its ticket and its cell while pushes
+take the room it made (the exactness of the bound); producers that wait
+for room and consumers that wait for elements at capacities one to three,
+on every topology and policy; one producer kept against a full queue of
+one, so that a pop lands in every phase of its going to sleep; `close()`
+with producers asleep on a full queue and consumers on an empty one; and
+discards and overruns under contention, where every push must have
+arrived, been refused or been overrun, once. Its waiters with the wake-ups
+dropped must leave a producer asleep against room, and a second producer
+on a queue built for one must be caught by `WTC_CHECK`.
+
+`c_queue_test` runs the runtime of lifted C queues through its C entry
+points: every answer of the single and batched forms, the queue's contents
+and the caller's ring indices against the original's ring with its end
+count, at capacities zero to six; producers pushing single elements and
+batches against one consumer popping batches, where every element must
+arrive once, in order per producer, and every batch pushed as adjacent
+elements; four producers against four consumers popping batches with
+random limits and room, where every batch popped must be an adjacent run
+of one order of all elements that keeps each producer's order and its
+batches adjacent; a batched pop and a batched push crossed between
+deciding their sizes and claiming their tickets (a hook compiled into
+`c_queue_crossing` only), whose sizes must be an outcome of the
+original's mutex; consumers asleep until the last producer terminates. More
+terminations than producers must end the program when the queue finishes
+at exactly that many (the program tests `==`), and change nothing when it
+finishes at at least that many (`>=`); a limit beyond any `int` is no
+limit; a batch with nothing to move, woken in place of a push or pop that
+has something to move, must pass the wake-up on; and destroy, called by a
+consumer as soon as it has seen the queue finished, must wait for the
+last termination still inside the runtime (a hook compiled into
+`c_queue_destroy` only). A second consumer on a queue built for one must
+be caught by `WTC_CHECK`.
 
 `waiter_test` runs the waiting pop through the shim's queue on every
 topology and every wait policy: the lost wake-up's window forced (the

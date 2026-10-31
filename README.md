@@ -28,7 +28,7 @@ Whatever it cannot prove keeps the general implementation.
 | **11×** | the compiler's queue against the program as written, one producer and one consumer, geometric mean over sizes and allocators (5–27×); within 16% of the expert rings ([W1](#the-queue-alone)) |
 | **6.6× · 1.7×** | what each fact buys through the shim: the topology 6.6× (one producer and one consumer instead of the general queue), and on top of it the proof that the consumer only borrows 1.7× in code written against the `shared_ptr` API (a loss at 256 bytes); 6.6 × 1.7 ≈ the 11× above ([W1](#the-queue-alone), [ablation](#what-each-fact-buys)) |
 | **= by hand** | on a pipeline the compiler's build is byte for byte the hand-tagged one, 1.8–1.9× the program as written ([W3](#a-pipeline)) |
-| **0 wrong** | verdicts over 43 queues in examples, workloads and two PARSEC programs ([reach](#reach)) |
+| **0 wrong** | verdicts over 48 queues in examples, workloads and two PARSEC programs, ported and lifted ([reach](#reach)) |
 | **1.65×** | compile time against the same clang, for code 0.4% larger ([cost](#cost-and-safety)) |
 
 ## Why
@@ -159,23 +159,27 @@ under [`benchmarks/results/`](benchmarks/results/), and
 ### Reach
 
 Every queue in the examples, the compiler-built workloads, and PARSEC's
-ferret and dedup in eight configurations, against the topology a reader sees
-in the source:
+ferret and dedup in nine configurations, ported to the shim and, for
+ferret, lifted from PARSEC's own sources, against the topology a reader
+sees in the source:
 
 | Queues | Exact | Conservative | Refused | Wrong |
 |:--:|:--:|:--:|:--:|:--:|
-| 43 | 31 | 10 | 2 | **0** |
+| 48 | 36 | 12 | 0 | **0** |
 
-Of the 25 that a reader would call single-producer single-consumer, 18 are
+Of the 25 that a reader would call single-producer single-consumer, 19 are
 proved so. dedup keeps its queues in arrays indexed at run time; the
 analysis counts each array as one queue, every element together, which
 holds for each element and is exact on dedup, where every element of an
-array has the same threads. What stops the 12 that are not exact: a push
-from inside a recursive directory scan (ferret's loader, 2, refused), and
-threads started from a function that only another file calls (dedup, 10,
-conservative; exact once `main` is in the same file). The table, with the
-analysis's own account of each verdict, is
-[`benchmarks/results/2026-10-26-reach/TABLE.md`](benchmarks/results/2026-10-26-reach/TABLE.md).
+array has the same threads. What stops the 12 that are not exact: threads
+started from a function that only another file calls (dedup, 10,
+conservative; exact once `main` is in the same file), and two stages of
+the lifted ferret whose counts are globals the program never changes from
+one, counted per iteration of PARSEC's thread pool's loop and chosen at
+run time (2, conservative). ferret's loader, whose push from inside a
+recursive directory scan was refused until 30 October, is now exact. The
+table, with the analysis's own account of each verdict, is
+[`benchmarks/results/2026-10-30-reach/TABLE.md`](benchmarks/results/2026-10-30-reach/TABLE.md).
 
 ### The queue alone
 
@@ -452,13 +456,34 @@ leg is untimed, on one socket of a two-socket Xeon Gold 6230, and
 reports ratios within a round
 ([`2026-10-28-pool-libs`](benchmarks/results/2026-10-28-pool-libs/NOTE.md)).
 
+The programs' own queues lifted without a source edit (docs/lifting.md)
+got their ports' verdicts on 30 October: spdlog's queue was chosen when
+its pool builds it, CTPL's is spmc with one submitter, each of ferret's
+five is chosen from the counts main passes to PARSEC's thread pool, and
+dedup's, whose batched pops several refine threads share, was spmc and
+mpsc where its port built as one unit is. Since 31 October, after a
+review of the lifting's faithfulness, the real spdlog's queue is
+general-purpose (its overflow policy is read through `std::make_shared`'s
+control block, which the analysis does not follow) and dedup's is
+refused for its assertions; the legs below are of the builds before.
+Against the same lifted source
+on the general-purpose queue, the compiler's choice adds 1.08–1.20× to
+CTPL with tasks of up to 1 µs and nothing at 10 µs, and nothing
+measurable to spdlog, whose lifted queue is the bounded ring with the
+original's exact capacity, where one consumer saves only an uncontended
+compare-and-swap, or to ferret and dedup, which are coarse-grained
+(0.97–1.03×; untimed, five rounds,
+[`2026-10-30-lift-attribution`](benchmarks/results/2026-10-30-lift-attribution/NOTE.md)).
+g3log's lifts, but its queue class serves one object per sink and is
+many to many, and ClangIR's build of it fails at run time.
+
 ### Cost and safety
 
 | | |
 |:--|:--|
 | Compile time | 1.65× the same clang on the workloads; of `wtc-cc`'s 4.9 s, emitting ClangIR takes 2.2 and `wtc-opt` 1.0 |
 | Code size | `.text` 81–175 bytes larger than the general build, 0.4% on the workloads |
-| Tests | 341 lit tests, passing at every commit; the runtime's own tests in CI, plain, under ThreadSanitizer and with the contract checks |
+| Tests | 374 lit tests, passing at every commit; the runtime's own tests in CI, plain, under ThreadSanitizer and with the contract checks |
 | Races | ThreadSanitizer on the compiler's own output, every positive test, the W3 and W7 builds, and on the current runtime dedup, ferret and spdlog, 30 runs of each configuration ([`2026-10-28-tsan-apps`](benchmarks/results/2026-10-28-tsan-apps/NOTE.md)): no report from a substituted queue (inline rings, the single-consumer queue with up to eight producers, the lock-free queue for one producer with up to four consumers), every output the original's; ferret's one report is PARSEC's own race on a progress counter, which its own build shows too; the ports of ThreadPool and BS::thread_pool, 30 runs of each of 16 configurations on spsc, the lock-free queue for one producer, the single-consumer queue and the general queue, no report and every check passed ([`2026-10-28-pool-libs`](benchmarks/results/2026-10-28-pool-libs/NOTE.md)); planted races are reported |
 | Output | ferret and dedup as PARSEC's own build computes them, at 1, 2 and 4 threads a stage |
 | Contracts | eight planted violations, each caught: a second producer on the spsc ring and on the spmc queue, a second consumer on the single-consumer queue (each under `WTC_CHECK` and ThreadSanitizer), spsc forced on a queue with two producers and two consumers, a plain race, and a borrowed element kept past the next pop |
@@ -474,14 +499,14 @@ reports ratios within a round
 | --- | --- |
 | `wtc` dialect: `mutex` and `queue<T>` types, ten operations (lock and unlock, push and pop, and three batch operations each for the mutex and for pushes), topology and implementation attributes; a pop may wait for an element (`pop_wait`, `pop_wait_for`, until the queue is closed), which blocks on every implementation | each operation is verified against the call it lowers to, carries the contract of `decisions/0003`, and answers what it guarantees about progress under its implementation (`decisions/0004`); no memory-ordering attribute yet |
 | Lifting CIR calls into the dialect | reads operands through the calling convention, including calls with a hidden return slot; driven from C++ source by the tests |
-| Lifting the program's own locked queues | a class that wraps a `std::queue`, `std::deque` or `std::list` under a `std::mutex`, with condition variables, is recognised from its member functions and replaced by `wtc::lifted<C>` over `wtc::queue`, so that the analyses and the specialisation apply to code never ported to the shim; the legality proof is conservative and names the reason for every refusal ([`docs/lifting.md`](docs/lifting.md)). Of six real queue classes modelled in the tests, CTPL's and g3log's lift; BS::thread_pool, Bitcoin's CCheckQueue, cpp-httplib's ThreadPool and spdlog's bounded queue are refused, each for state its mutex guards besides the queue, a count, a time-out, or a bound |
+| Lifting the program's own locked queues | a class that wraps a `std::queue`, `std::deque` or `std::list` under a `std::mutex`, with condition variables, is recognised from its member functions and replaced by `wtc::lifted<C>` over `wtc::queue`, so that the analyses and the specialisation apply to code never ported to the shim; the legality proof is conservative and names the reason for every refusal ([`docs/lifting.md`](docs/lifting.md)). A class whose container is a bounded ring of its own, read from the ring's member functions, becomes a queue with the ring's exact capacity and its answers to a full queue (wait, decline, overrun the oldest), and an overrun that cannot run, by the values the overflow policy can take, is left out of the topology. Of six real queue classes modelled in the tests, CTPL's, g3log's and spdlog's lift (spdlog's also as the real program, from its own headers); BS::thread_pool, Bitcoin's CCheckQueue and cpp-httplib's ThreadPool are refused, each for state its mutex guards besides the queue, a count or a time-out. A C struct that keeps a ring of pointers under a pthread mutex is read by evaluating its functions symbolically, the program's own ring helpers included, and becomes the runtime of `shim/c_queue.h`: the ring's exact capacity, the counted close (finished once as many producers as its initialisation names have terminated) and batches moved at one step, a batch's size and its place in the queue decided by one compare-and-swap, so that several consumers' batches are disjoint adjacent runs, as under the mutex. PARSEC's ferret lifts from its unedited sources (`wtc-cc --unity`); dedup's queue is refused for its assertions, checks the substitute does not make. The lifted real programs get their hand ports' verdicts (30 Oct 2026): each of ferret's five queues is chosen when built, from the stage's thread count, read through PARSEC's own thread pool, through ferret's recursive loader and one call from the loop (`docs/lifting.md`, "Reading the threads of real programs"), and spdlog's model's from the pool's; CTPL's, with one submitter, is proved spmc; the real spdlog's queue is general-purpose since 31 Oct, its overflow policy read through `std::make_shared`'s control block, which the analysis does not follow; g3log's is many to many, since one queue class serves one `Active` object per sink |
 | Queue ownership analysis | thread instances by call string; a spawn in a loop is many threads, and a counted loop's are recorded as one per iteration, `main` is a thread, parameters resolve by index; a queue pointer loaded from a field, or from a slot or global written more than once, is resolved from every write of it, and an operation that may act on one of several queues counts on each; a queue may be a global, a local, a member of a struct or a heap object, whose verdict is kept on the one constructor call that builds it, or a member of an object the walk cannot place, identified by its record type and offset as that member of every object the one constructor call builds; a thread started with `std::thread` runs the function the constructor was handed, a lambda, a function or a member function, found through the state object the constructor builds, and a thread started below a counted loop through calls that each start exactly one (a vector's `emplace_back`) is one per iteration; an array of queues is one queue, every element together; a record built field by field and copied whole (a compound literal) keeps its fields' values; threads started on the two arms of one branch, never both alive, count as one, unless the function or one of its callers can return twice (`setjmp` and its kind) or jumps with `goto`; whatever it cannot resolve is `unknown`. A topology the program declares is checked: certainly broken fails the build, naming the threads. Declarations are read from the shim's tag, from a DPDK ring's flags and its `sp`/`sc` calls, from a DPDK mempool's flags or ops (an mbuf's free counted on its pool when its allocation is in sight, and on every pool that may hold mbufs when not), and from the type of four libraries' single-producer single-consumer queues |
 | Borrow analysis | proves, for each pop of an spsc queue, that the program keeps neither the returned `shared_ptr` nor a pointer into the element past its next pop |
 | Specialisation | rewrites the topology tag of every queue proved SPSC (to inline storage when its consumer borrows and the element type allows it), of every queue proved to have one consumer and many producers to the segmented queue's single-consumer form, and of every queue proved to have one producer and many consumers to the queue whose consumers claim cells with a compare-and-swap; where a side's threads are all started by one counted loop whose bound is settled before the queue is built, the tag is chosen when the queue is built, from whether that loop will run at most once (`decisions/0005`); anything unclear keeps the general-purpose implementation |
 | Batching | in a function marked `WTC_BATCH`, a loop of pushes in which nothing can wait for an unpublished element becomes one batched run, and a loop that takes and lets go of one mutex on every iteration, with nothing in it that can wait for another thread, holds the mutex across its sections, letting it go every 64, where the work between sections is estimated under the crossover measured for the class of host and the number of threads that take the mutex (`decisions/0006`) |
 | Progress check | a function marked `WTC_LOCK_FREE` that can reach a blocking operation fails the build with the call chain |
 | Lowering back to CIR | faithful, restores the original argument attributes, and leaves no attribute of ours behind |
-| Specialised implementations | `runtime/spsc_ring.hpp`, an unbounded wait-free ring holding elements in raw storage, popped by moving or by borrowing, published per element or per run; `runtime/segment_queue.hpp`, the general-purpose queue, linearisable, its cells taken with one fetch-and-add and its segments freed through hazard pointers (`runtime/hazard.hpp`), and in its single-consumer form the queue for many producers and one consumer; `runtime/spmc_queue.hpp`, the queue for one producer and many consumers, segments the producer fills and publishes alone and whose cells the consumers claim with a compare-and-swap, lock-free; `runtime/waiter.hpp`, how a waiting pop waits on any of them, chosen when the queue is built (spin, sleep in the kernel, or spin for a few microseconds and then sleep), an eventcount whose publish wakes a consumer only when one is asleep; all tested plain, under ThreadSanitizer and with their contract checks, in CI |
+| Specialised implementations | `runtime/spsc_ring.hpp`, an unbounded wait-free ring holding elements in raw storage, popped by moving or by borrowing, published per element or per run; `runtime/segment_queue.hpp`, the general-purpose queue, linearisable, its cells taken with one fetch-and-add and its segments freed through hazard pointers (`runtime/hazard.hpp`), and in its single-consumer form the queue for many producers and one consumer; `runtime/spmc_queue.hpp`, the queue for one producer and many consumers, segments the producer fills and publishes alone and whose cells the consumers claim with a compare-and-swap, lock-free; `runtime/waiter.hpp`, how a waiting pop waits on any of them, chosen when the queue is built (spin, sleep in the kernel, or spin for a few microseconds and then sleep), an eventcount whose publish wakes a consumer only when one is asleep; `runtime/bounded_ring.hpp`, a bounded queue whose capacity is exact, its fullness decided by ticket counters rather than by its cells, for the bounded queues programs write themselves; all tested plain, under ThreadSanitizer and with their contract checks, in CI |
 | Measurements | the harness, eleven workloads (W10 is the ablation: the runtime's queues used directly, synchronisation strength and element ownership alone and together; W11 a thread pool; W12 a pipeline against the same stages fused) and the baselines above in `benchmarks/`; the evaluation's timed legs in `benchmarks/scripts/campaign.sh`, their results, summaries and notes under `benchmarks/results/`, and the PARSEC ports, ferret and dedup, in `benchmarks/apps/` |
 | False-sharing diagnosis | the same thread walk over field accesses; `definite`, `possible` and `cold` verdicts, each a claim with a test; arrays and heap objects are counted as unidentified, not guessed at |
 | Alignment by owner | raises a global a different thread repeatedly touches to a line of its own; kept as a measurement, since on memcached it is close to a build flag |

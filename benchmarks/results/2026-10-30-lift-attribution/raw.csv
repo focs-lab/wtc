@@ -1,0 +1,401 @@
+program,config,variant,rep,value,unit
+spdlog,threads=1,orig,1,0.86,Mmsg/s
+spdlog,threads=1,generic,1,1.18,Mmsg/s
+spdlog,threads=1,compiler,1,1.14,Mmsg/s
+spdlog,threads=1,port,1,1.11,Mmsg/s
+spdlog,threads=1,orig,2,1.02,Mmsg/s
+spdlog,threads=1,generic,2,1.35,Mmsg/s
+spdlog,threads=1,compiler,2,1.28,Mmsg/s
+spdlog,threads=1,port,2,1.12,Mmsg/s
+spdlog,threads=1,orig,3,0.98,Mmsg/s
+spdlog,threads=1,generic,3,1.33,Mmsg/s
+spdlog,threads=1,compiler,3,1.42,Mmsg/s
+spdlog,threads=1,port,3,1.12,Mmsg/s
+spdlog,threads=1,orig,4,1.01,Mmsg/s
+spdlog,threads=1,generic,4,1.35,Mmsg/s
+spdlog,threads=1,compiler,4,1.36,Mmsg/s
+spdlog,threads=1,port,4,1.06,Mmsg/s
+spdlog,threads=1,orig,5,0.95,Mmsg/s
+spdlog,threads=1,generic,5,1.35,Mmsg/s
+spdlog,threads=1,compiler,5,1.37,Mmsg/s
+spdlog,threads=1,port,5,1.09,Mmsg/s
+spdlog,threads=2,orig,1,0.99,Mmsg/s
+spdlog,threads=2,generic,1,2.31,Mmsg/s
+spdlog,threads=2,compiler,1,2.36,Mmsg/s
+spdlog,threads=2,port,1,1.69,Mmsg/s
+spdlog,threads=2,orig,2,1.04,Mmsg/s
+spdlog,threads=2,generic,2,2.29,Mmsg/s
+spdlog,threads=2,compiler,2,2.22,Mmsg/s
+spdlog,threads=2,port,2,1.71,Mmsg/s
+spdlog,threads=2,orig,3,1.04,Mmsg/s
+spdlog,threads=2,generic,3,2.30,Mmsg/s
+spdlog,threads=2,compiler,3,2.34,Mmsg/s
+spdlog,threads=2,port,3,1.74,Mmsg/s
+spdlog,threads=2,orig,4,1.02,Mmsg/s
+spdlog,threads=2,generic,4,2.15,Mmsg/s
+spdlog,threads=2,compiler,4,2.17,Mmsg/s
+spdlog,threads=2,port,4,1.70,Mmsg/s
+spdlog,threads=2,orig,5,0.99,Mmsg/s
+spdlog,threads=2,generic,5,2.27,Mmsg/s
+spdlog,threads=2,compiler,5,2.31,Mmsg/s
+spdlog,threads=2,port,5,1.72,Mmsg/s
+spdlog,threads=4,orig,1,0.50,Mmsg/s
+spdlog,threads=4,generic,1,1.34,Mmsg/s
+spdlog,threads=4,compiler,1,1.30,Mmsg/s
+spdlog,threads=4,port,1,2.06,Mmsg/s
+spdlog,threads=4,orig,2,0.50,Mmsg/s
+spdlog,threads=4,generic,2,1.31,Mmsg/s
+spdlog,threads=4,compiler,2,1.17,Mmsg/s
+spdlog,threads=4,port,2,2.50,Mmsg/s
+spdlog,threads=4,orig,3,0.51,Mmsg/s
+spdlog,threads=4,generic,3,1.30,Mmsg/s
+spdlog,threads=4,compiler,3,1.24,Mmsg/s
+spdlog,threads=4,port,3,2.54,Mmsg/s
+spdlog,threads=4,orig,4,0.52,Mmsg/s
+spdlog,threads=4,generic,4,1.34,Mmsg/s
+spdlog,threads=4,compiler,4,1.17,Mmsg/s
+spdlog,threads=4,port,4,2.55,Mmsg/s
+spdlog,threads=4,orig,5,0.51,Mmsg/s
+spdlog,threads=4,generic,5,1.32,Mmsg/s
+spdlog,threads=4,compiler,5,1.32,Mmsg/s
+spdlog,threads=4,port,5,2.51,Mmsg/s
+spdlog,threads=8,orig,1,0.33,Mmsg/s
+spdlog,threads=8,generic,1,0.88,Mmsg/s
+spdlog,threads=8,compiler,1,0.94,Mmsg/s
+spdlog,threads=8,port,1,2.47,Mmsg/s
+spdlog,threads=8,orig,2,0.35,Mmsg/s
+spdlog,threads=8,generic,2,0.92,Mmsg/s
+spdlog,threads=8,compiler,2,0.89,Mmsg/s
+spdlog,threads=8,port,2,2.46,Mmsg/s
+spdlog,threads=8,orig,3,0.35,Mmsg/s
+spdlog,threads=8,generic,3,0.88,Mmsg/s
+spdlog,threads=8,compiler,3,0.90,Mmsg/s
+spdlog,threads=8,port,3,2.52,Mmsg/s
+spdlog,threads=8,orig,4,0.36,Mmsg/s
+spdlog,threads=8,generic,4,0.92,Mmsg/s
+spdlog,threads=8,compiler,4,0.94,Mmsg/s
+spdlog,threads=8,port,4,2.44,Mmsg/s
+spdlog,threads=8,orig,5,0.36,Mmsg/s
+spdlog,threads=8,generic,5,0.92,Mmsg/s
+spdlog,threads=8,compiler,5,0.86,Mmsg/s
+spdlog,threads=8,port,5,2.44,Mmsg/s
+ctpl,workers=1 work_ns=0,orig,1,1.124,Mtasks/s
+ctpl,workers=1 work_ns=0,generic,1,1.515,Mtasks/s
+ctpl,workers=1 work_ns=0,compiler,1,1.705,Mtasks/s
+ctpl,workers=1 work_ns=0,port,1,1.737,Mtasks/s
+ctpl,workers=1 work_ns=0,orig,2,1.430,Mtasks/s
+ctpl,workers=1 work_ns=0,generic,2,1.532,Mtasks/s
+ctpl,workers=1 work_ns=0,compiler,2,1.654,Mtasks/s
+ctpl,workers=1 work_ns=0,port,2,1.678,Mtasks/s
+ctpl,workers=1 work_ns=0,orig,3,1.313,Mtasks/s
+ctpl,workers=1 work_ns=0,generic,3,1.551,Mtasks/s
+ctpl,workers=1 work_ns=0,compiler,3,1.727,Mtasks/s
+ctpl,workers=1 work_ns=0,port,3,1.685,Mtasks/s
+ctpl,workers=1 work_ns=0,orig,4,1.188,Mtasks/s
+ctpl,workers=1 work_ns=0,generic,4,1.505,Mtasks/s
+ctpl,workers=1 work_ns=0,compiler,4,1.748,Mtasks/s
+ctpl,workers=1 work_ns=0,port,4,1.647,Mtasks/s
+ctpl,workers=1 work_ns=0,orig,5,1.167,Mtasks/s
+ctpl,workers=1 work_ns=0,generic,5,1.478,Mtasks/s
+ctpl,workers=1 work_ns=0,compiler,5,1.627,Mtasks/s
+ctpl,workers=1 work_ns=0,port,5,1.811,Mtasks/s
+ctpl,workers=1 work_ns=1000,orig,1,0.529,Mtasks/s
+ctpl,workers=1 work_ns=1000,generic,1,0.658,Mtasks/s
+ctpl,workers=1 work_ns=1000,compiler,1,0.631,Mtasks/s
+ctpl,workers=1 work_ns=1000,port,1,0.649,Mtasks/s
+ctpl,workers=1 work_ns=1000,orig,2,0.508,Mtasks/s
+ctpl,workers=1 work_ns=1000,generic,2,0.650,Mtasks/s
+ctpl,workers=1 work_ns=1000,compiler,2,0.646,Mtasks/s
+ctpl,workers=1 work_ns=1000,port,2,0.545,Mtasks/s
+ctpl,workers=1 work_ns=1000,orig,3,0.618,Mtasks/s
+ctpl,workers=1 work_ns=1000,generic,3,0.653,Mtasks/s
+ctpl,workers=1 work_ns=1000,compiler,3,0.643,Mtasks/s
+ctpl,workers=1 work_ns=1000,port,3,0.565,Mtasks/s
+ctpl,workers=1 work_ns=1000,orig,4,0.585,Mtasks/s
+ctpl,workers=1 work_ns=1000,generic,4,0.668,Mtasks/s
+ctpl,workers=1 work_ns=1000,compiler,4,0.664,Mtasks/s
+ctpl,workers=1 work_ns=1000,port,4,0.662,Mtasks/s
+ctpl,workers=1 work_ns=1000,orig,5,0.516,Mtasks/s
+ctpl,workers=1 work_ns=1000,generic,5,0.611,Mtasks/s
+ctpl,workers=1 work_ns=1000,compiler,5,0.541,Mtasks/s
+ctpl,workers=1 work_ns=1000,port,5,0.541,Mtasks/s
+ctpl,workers=1 work_ns=10000,orig,1,0.117,Mtasks/s
+ctpl,workers=1 work_ns=10000,generic,1,0.111,Mtasks/s
+ctpl,workers=1 work_ns=10000,compiler,1,0.113,Mtasks/s
+ctpl,workers=1 work_ns=10000,port,1,0.116,Mtasks/s
+ctpl,workers=1 work_ns=10000,orig,2,0.113,Mtasks/s
+ctpl,workers=1 work_ns=10000,generic,2,0.087,Mtasks/s
+ctpl,workers=1 work_ns=10000,compiler,2,0.112,Mtasks/s
+ctpl,workers=1 work_ns=10000,port,2,0.112,Mtasks/s
+ctpl,workers=1 work_ns=10000,orig,3,0.112,Mtasks/s
+ctpl,workers=1 work_ns=10000,generic,3,0.106,Mtasks/s
+ctpl,workers=1 work_ns=10000,compiler,3,0.116,Mtasks/s
+ctpl,workers=1 work_ns=10000,port,3,0.116,Mtasks/s
+ctpl,workers=1 work_ns=10000,orig,4,0.115,Mtasks/s
+ctpl,workers=1 work_ns=10000,generic,4,0.113,Mtasks/s
+ctpl,workers=1 work_ns=10000,compiler,4,0.110,Mtasks/s
+ctpl,workers=1 work_ns=10000,port,4,0.116,Mtasks/s
+ctpl,workers=1 work_ns=10000,orig,5,0.091,Mtasks/s
+ctpl,workers=1 work_ns=10000,generic,5,0.110,Mtasks/s
+ctpl,workers=1 work_ns=10000,compiler,5,0.111,Mtasks/s
+ctpl,workers=1 work_ns=10000,port,5,0.116,Mtasks/s
+ctpl,workers=2 work_ns=0,orig,1,0.573,Mtasks/s
+ctpl,workers=2 work_ns=0,generic,1,0.789,Mtasks/s
+ctpl,workers=2 work_ns=0,compiler,1,0.863,Mtasks/s
+ctpl,workers=2 work_ns=0,port,1,0.895,Mtasks/s
+ctpl,workers=2 work_ns=0,orig,2,0.593,Mtasks/s
+ctpl,workers=2 work_ns=0,generic,2,0.801,Mtasks/s
+ctpl,workers=2 work_ns=0,compiler,2,0.879,Mtasks/s
+ctpl,workers=2 work_ns=0,port,2,0.898,Mtasks/s
+ctpl,workers=2 work_ns=0,orig,3,0.595,Mtasks/s
+ctpl,workers=2 work_ns=0,generic,3,0.774,Mtasks/s
+ctpl,workers=2 work_ns=0,compiler,3,0.931,Mtasks/s
+ctpl,workers=2 work_ns=0,port,3,0.908,Mtasks/s
+ctpl,workers=2 work_ns=0,orig,4,0.650,Mtasks/s
+ctpl,workers=2 work_ns=0,generic,4,0.794,Mtasks/s
+ctpl,workers=2 work_ns=0,compiler,4,0.874,Mtasks/s
+ctpl,workers=2 work_ns=0,port,4,0.893,Mtasks/s
+ctpl,workers=2 work_ns=0,orig,5,0.607,Mtasks/s
+ctpl,workers=2 work_ns=0,generic,5,0.794,Mtasks/s
+ctpl,workers=2 work_ns=0,compiler,5,0.888,Mtasks/s
+ctpl,workers=2 work_ns=0,port,5,0.891,Mtasks/s
+ctpl,workers=2 work_ns=1000,orig,1,1.253,Mtasks/s
+ctpl,workers=2 work_ns=1000,generic,1,1.485,Mtasks/s
+ctpl,workers=2 work_ns=1000,compiler,1,1.170,Mtasks/s
+ctpl,workers=2 work_ns=1000,port,1,1.429,Mtasks/s
+ctpl,workers=2 work_ns=1000,orig,2,1.241,Mtasks/s
+ctpl,workers=2 work_ns=1000,generic,2,1.152,Mtasks/s
+ctpl,workers=2 work_ns=1000,compiler,2,1.435,Mtasks/s
+ctpl,workers=2 work_ns=1000,port,2,1.462,Mtasks/s
+ctpl,workers=2 work_ns=1000,orig,3,1.207,Mtasks/s
+ctpl,workers=2 work_ns=1000,generic,3,1.179,Mtasks/s
+ctpl,workers=2 work_ns=1000,compiler,3,1.133,Mtasks/s
+ctpl,workers=2 work_ns=1000,port,3,1.415,Mtasks/s
+ctpl,workers=2 work_ns=1000,orig,4,1.276,Mtasks/s
+ctpl,workers=2 work_ns=1000,generic,4,1.154,Mtasks/s
+ctpl,workers=2 work_ns=1000,compiler,4,1.414,Mtasks/s
+ctpl,workers=2 work_ns=1000,port,4,1.230,Mtasks/s
+ctpl,workers=2 work_ns=1000,orig,5,1.139,Mtasks/s
+ctpl,workers=2 work_ns=1000,generic,5,1.489,Mtasks/s
+ctpl,workers=2 work_ns=1000,compiler,5,1.438,Mtasks/s
+ctpl,workers=2 work_ns=1000,port,5,1.372,Mtasks/s
+ctpl,workers=2 work_ns=10000,orig,1,0.188,Mtasks/s
+ctpl,workers=2 work_ns=10000,generic,1,0.201,Mtasks/s
+ctpl,workers=2 work_ns=10000,compiler,1,0.187,Mtasks/s
+ctpl,workers=2 work_ns=10000,port,1,0.183,Mtasks/s
+ctpl,workers=2 work_ns=10000,orig,2,0.184,Mtasks/s
+ctpl,workers=2 work_ns=10000,generic,2,0.235,Mtasks/s
+ctpl,workers=2 work_ns=10000,compiler,2,0.236,Mtasks/s
+ctpl,workers=2 work_ns=10000,port,2,0.192,Mtasks/s
+ctpl,workers=2 work_ns=10000,orig,3,0.232,Mtasks/s
+ctpl,workers=2 work_ns=10000,generic,3,0.238,Mtasks/s
+ctpl,workers=2 work_ns=10000,compiler,3,0.237,Mtasks/s
+ctpl,workers=2 work_ns=10000,port,3,0.240,Mtasks/s
+ctpl,workers=2 work_ns=10000,orig,4,0.240,Mtasks/s
+ctpl,workers=2 work_ns=10000,generic,4,0.184,Mtasks/s
+ctpl,workers=2 work_ns=10000,compiler,4,0.242,Mtasks/s
+ctpl,workers=2 work_ns=10000,port,4,0.178,Mtasks/s
+ctpl,workers=2 work_ns=10000,orig,5,0.199,Mtasks/s
+ctpl,workers=2 work_ns=10000,generic,5,0.203,Mtasks/s
+ctpl,workers=2 work_ns=10000,compiler,5,0.175,Mtasks/s
+ctpl,workers=2 work_ns=10000,port,5,0.205,Mtasks/s
+ctpl,workers=4 work_ns=0,orig,1,0.370,Mtasks/s
+ctpl,workers=4 work_ns=0,generic,1,0.440,Mtasks/s
+ctpl,workers=4 work_ns=0,compiler,1,0.466,Mtasks/s
+ctpl,workers=4 work_ns=0,port,1,0.469,Mtasks/s
+ctpl,workers=4 work_ns=0,orig,2,0.356,Mtasks/s
+ctpl,workers=4 work_ns=0,generic,2,0.415,Mtasks/s
+ctpl,workers=4 work_ns=0,compiler,2,0.463,Mtasks/s
+ctpl,workers=4 work_ns=0,port,2,0.483,Mtasks/s
+ctpl,workers=4 work_ns=0,orig,3,0.360,Mtasks/s
+ctpl,workers=4 work_ns=0,generic,3,0.427,Mtasks/s
+ctpl,workers=4 work_ns=0,compiler,3,0.458,Mtasks/s
+ctpl,workers=4 work_ns=0,port,3,0.472,Mtasks/s
+ctpl,workers=4 work_ns=0,orig,4,0.359,Mtasks/s
+ctpl,workers=4 work_ns=0,generic,4,0.426,Mtasks/s
+ctpl,workers=4 work_ns=0,compiler,4,0.459,Mtasks/s
+ctpl,workers=4 work_ns=0,port,4,0.476,Mtasks/s
+ctpl,workers=4 work_ns=0,orig,5,0.376,Mtasks/s
+ctpl,workers=4 work_ns=0,generic,5,0.428,Mtasks/s
+ctpl,workers=4 work_ns=0,compiler,5,0.463,Mtasks/s
+ctpl,workers=4 work_ns=0,port,5,0.479,Mtasks/s
+ctpl,workers=4 work_ns=1000,orig,1,0.401,Mtasks/s
+ctpl,workers=4 work_ns=1000,generic,1,0.494,Mtasks/s
+ctpl,workers=4 work_ns=1000,compiler,1,0.592,Mtasks/s
+ctpl,workers=4 work_ns=1000,port,1,0.571,Mtasks/s
+ctpl,workers=4 work_ns=1000,orig,2,0.375,Mtasks/s
+ctpl,workers=4 work_ns=1000,generic,2,0.451,Mtasks/s
+ctpl,workers=4 work_ns=1000,compiler,2,0.569,Mtasks/s
+ctpl,workers=4 work_ns=1000,port,2,0.553,Mtasks/s
+ctpl,workers=4 work_ns=1000,orig,3,0.406,Mtasks/s
+ctpl,workers=4 work_ns=1000,generic,3,0.484,Mtasks/s
+ctpl,workers=4 work_ns=1000,compiler,3,0.538,Mtasks/s
+ctpl,workers=4 work_ns=1000,port,3,0.545,Mtasks/s
+ctpl,workers=4 work_ns=1000,orig,4,0.404,Mtasks/s
+ctpl,workers=4 work_ns=1000,generic,4,0.486,Mtasks/s
+ctpl,workers=4 work_ns=1000,compiler,4,0.538,Mtasks/s
+ctpl,workers=4 work_ns=1000,port,4,0.542,Mtasks/s
+ctpl,workers=4 work_ns=1000,orig,5,0.378,Mtasks/s
+ctpl,workers=4 work_ns=1000,generic,5,0.502,Mtasks/s
+ctpl,workers=4 work_ns=1000,compiler,5,0.590,Mtasks/s
+ctpl,workers=4 work_ns=1000,port,5,0.586,Mtasks/s
+ctpl,workers=4 work_ns=10000,orig,1,0.467,Mtasks/s
+ctpl,workers=4 work_ns=10000,generic,1,0.465,Mtasks/s
+ctpl,workers=4 work_ns=10000,compiler,1,0.452,Mtasks/s
+ctpl,workers=4 work_ns=10000,port,1,0.451,Mtasks/s
+ctpl,workers=4 work_ns=10000,orig,2,0.454,Mtasks/s
+ctpl,workers=4 work_ns=10000,generic,2,0.471,Mtasks/s
+ctpl,workers=4 work_ns=10000,compiler,2,0.448,Mtasks/s
+ctpl,workers=4 work_ns=10000,port,2,0.457,Mtasks/s
+ctpl,workers=4 work_ns=10000,orig,3,0.346,Mtasks/s
+ctpl,workers=4 work_ns=10000,generic,3,0.465,Mtasks/s
+ctpl,workers=4 work_ns=10000,compiler,3,0.452,Mtasks/s
+ctpl,workers=4 work_ns=10000,port,3,0.366,Mtasks/s
+ctpl,workers=4 work_ns=10000,orig,4,0.444,Mtasks/s
+ctpl,workers=4 work_ns=10000,generic,4,0.393,Mtasks/s
+ctpl,workers=4 work_ns=10000,compiler,4,0.471,Mtasks/s
+ctpl,workers=4 work_ns=10000,port,4,0.467,Mtasks/s
+ctpl,workers=4 work_ns=10000,orig,5,0.448,Mtasks/s
+ctpl,workers=4 work_ns=10000,generic,5,0.447,Mtasks/s
+ctpl,workers=4 work_ns=10000,compiler,5,0.369,Mtasks/s
+ctpl,workers=4 work_ns=10000,port,5,0.383,Mtasks/s
+ctpl,workers=8 work_ns=0,orig,1,0.200,Mtasks/s
+ctpl,workers=8 work_ns=0,generic,1,0.254,Mtasks/s
+ctpl,workers=8 work_ns=0,compiler,1,0.287,Mtasks/s
+ctpl,workers=8 work_ns=0,port,1,0.280,Mtasks/s
+ctpl,workers=8 work_ns=0,orig,2,0.167,Mtasks/s
+ctpl,workers=8 work_ns=0,generic,2,0.243,Mtasks/s
+ctpl,workers=8 work_ns=0,compiler,2,0.285,Mtasks/s
+ctpl,workers=8 work_ns=0,port,2,0.289,Mtasks/s
+ctpl,workers=8 work_ns=0,orig,3,0.195,Mtasks/s
+ctpl,workers=8 work_ns=0,generic,3,0.242,Mtasks/s
+ctpl,workers=8 work_ns=0,compiler,3,0.275,Mtasks/s
+ctpl,workers=8 work_ns=0,port,3,0.275,Mtasks/s
+ctpl,workers=8 work_ns=0,orig,4,0.177,Mtasks/s
+ctpl,workers=8 work_ns=0,generic,4,0.256,Mtasks/s
+ctpl,workers=8 work_ns=0,compiler,4,0.279,Mtasks/s
+ctpl,workers=8 work_ns=0,port,4,0.279,Mtasks/s
+ctpl,workers=8 work_ns=0,orig,5,0.186,Mtasks/s
+ctpl,workers=8 work_ns=0,generic,5,0.262,Mtasks/s
+ctpl,workers=8 work_ns=0,compiler,5,0.294,Mtasks/s
+ctpl,workers=8 work_ns=0,port,5,0.282,Mtasks/s
+ctpl,workers=8 work_ns=1000,orig,1,0.240,Mtasks/s
+ctpl,workers=8 work_ns=1000,generic,1,0.289,Mtasks/s
+ctpl,workers=8 work_ns=1000,compiler,1,0.318,Mtasks/s
+ctpl,workers=8 work_ns=1000,port,1,0.308,Mtasks/s
+ctpl,workers=8 work_ns=1000,orig,2,0.256,Mtasks/s
+ctpl,workers=8 work_ns=1000,generic,2,0.275,Mtasks/s
+ctpl,workers=8 work_ns=1000,compiler,2,0.342,Mtasks/s
+ctpl,workers=8 work_ns=1000,port,2,0.325,Mtasks/s
+ctpl,workers=8 work_ns=1000,orig,3,0.229,Mtasks/s
+ctpl,workers=8 work_ns=1000,generic,3,0.294,Mtasks/s
+ctpl,workers=8 work_ns=1000,compiler,3,0.310,Mtasks/s
+ctpl,workers=8 work_ns=1000,port,3,0.342,Mtasks/s
+ctpl,workers=8 work_ns=1000,orig,4,0.259,Mtasks/s
+ctpl,workers=8 work_ns=1000,generic,4,0.279,Mtasks/s
+ctpl,workers=8 work_ns=1000,compiler,4,0.327,Mtasks/s
+ctpl,workers=8 work_ns=1000,port,4,0.319,Mtasks/s
+ctpl,workers=8 work_ns=1000,orig,5,0.249,Mtasks/s
+ctpl,workers=8 work_ns=1000,generic,5,0.291,Mtasks/s
+ctpl,workers=8 work_ns=1000,compiler,5,0.324,Mtasks/s
+ctpl,workers=8 work_ns=1000,port,5,0.325,Mtasks/s
+ctpl,workers=8 work_ns=10000,orig,1,0.802,Mtasks/s
+ctpl,workers=8 work_ns=10000,generic,1,0.676,Mtasks/s
+ctpl,workers=8 work_ns=10000,compiler,1,0.685,Mtasks/s
+ctpl,workers=8 work_ns=10000,port,1,0.679,Mtasks/s
+ctpl,workers=8 work_ns=10000,orig,2,0.650,Mtasks/s
+ctpl,workers=8 work_ns=10000,generic,2,0.680,Mtasks/s
+ctpl,workers=8 work_ns=10000,compiler,2,0.866,Mtasks/s
+ctpl,workers=8 work_ns=10000,port,2,0.687,Mtasks/s
+ctpl,workers=8 work_ns=10000,orig,3,0.857,Mtasks/s
+ctpl,workers=8 work_ns=10000,generic,3,0.752,Mtasks/s
+ctpl,workers=8 work_ns=10000,compiler,3,0.675,Mtasks/s
+ctpl,workers=8 work_ns=10000,port,3,0.870,Mtasks/s
+ctpl,workers=8 work_ns=10000,orig,4,0.678,Mtasks/s
+ctpl,workers=8 work_ns=10000,generic,4,0.741,Mtasks/s
+ctpl,workers=8 work_ns=10000,compiler,4,0.672,Mtasks/s
+ctpl,workers=8 work_ns=10000,port,4,0.674,Mtasks/s
+ctpl,workers=8 work_ns=10000,orig,5,0.701,Mtasks/s
+ctpl,workers=8 work_ns=10000,generic,5,0.644,Mtasks/s
+ctpl,workers=8 work_ns=10000,compiler,5,0.684,Mtasks/s
+ctpl,workers=8 work_ns=10000,port,5,0.871,Mtasks/s
+ferret,threads=1,orig,1,2.576088352,s
+ferret,threads=1,generic,1,2.568094063,s
+ferret,threads=1,compiler,1,2.525805240,s
+ferret,threads=1,port,1,2.513580581,s
+ferret,threads=1,orig,2,2.546967854,s
+ferret,threads=1,generic,2,2.674840092,s
+ferret,threads=1,compiler,2,2.551852712,s
+ferret,threads=1,port,2,2.562832667,s
+ferret,threads=1,orig,3,2.564684052,s
+ferret,threads=1,generic,3,2.590006410,s
+ferret,threads=1,compiler,3,2.571297466,s
+ferret,threads=1,port,3,2.591420070,s
+ferret,threads=1,orig,4,2.626837363,s
+ferret,threads=1,generic,4,2.618096360,s
+ferret,threads=1,compiler,4,2.544939253,s
+ferret,threads=1,port,4,2.524139237,s
+ferret,threads=1,orig,5,2.572349355,s
+ferret,threads=1,generic,5,2.622376823,s
+ferret,threads=1,compiler,5,2.558943853,s
+ferret,threads=1,port,5,2.565641906,s
+ferret,threads=4,orig,1,.855588329,s
+ferret,threads=4,generic,1,.883046795,s
+ferret,threads=4,compiler,1,.865574074,s
+ferret,threads=4,port,1,.873492691,s
+ferret,threads=4,orig,2,.905661262,s
+ferret,threads=4,generic,2,.869559391,s
+ferret,threads=4,compiler,2,.867034656,s
+ferret,threads=4,port,2,.862744904,s
+ferret,threads=4,orig,3,.880670846,s
+ferret,threads=4,generic,3,.857871396,s
+ferret,threads=4,compiler,3,.851104123,s
+ferret,threads=4,port,3,.873914292,s
+ferret,threads=4,orig,4,.870602549,s
+ferret,threads=4,generic,4,.862331468,s
+ferret,threads=4,compiler,4,.883503375,s
+ferret,threads=4,port,4,.894539381,s
+ferret,threads=4,orig,5,.873701413,s
+ferret,threads=4,generic,5,.882966628,s
+ferret,threads=4,compiler,5,.861491828,s
+ferret,threads=4,port,5,.930417716,s
+dedup,threads=1,orig,1,13.012,s
+dedup,threads=1,generic,1,13.819,s
+dedup,threads=1,compiler,1,13.344,s
+dedup,threads=1,port,1,13.229,s
+dedup,threads=1,orig,2,12.834,s
+dedup,threads=1,generic,2,13.745,s
+dedup,threads=1,compiler,2,13.017,s
+dedup,threads=1,port,2,13.937,s
+dedup,threads=1,orig,3,13.813,s
+dedup,threads=1,generic,3,14.510,s
+dedup,threads=1,compiler,3,14.375,s
+dedup,threads=1,port,3,14.389,s
+dedup,threads=1,orig,4,14.190,s
+dedup,threads=1,generic,4,13.750,s
+dedup,threads=1,compiler,4,14.149,s
+dedup,threads=1,port,4,13.279,s
+dedup,threads=1,orig,5,13.458,s
+dedup,threads=1,generic,5,12.981,s
+dedup,threads=1,compiler,5,13.299,s
+dedup,threads=1,port,5,12.909,s
+dedup,threads=4,orig,1,4.678,s
+dedup,threads=4,generic,1,5.111,s
+dedup,threads=4,compiler,1,4.943,s
+dedup,threads=4,port,1,4.328,s
+dedup,threads=4,orig,2,4.770,s
+dedup,threads=4,generic,2,4.719,s
+dedup,threads=4,compiler,2,4.893,s
+dedup,threads=4,port,2,4.927,s
+dedup,threads=4,orig,3,5.082,s
+dedup,threads=4,generic,3,4.009,s
+dedup,threads=4,compiler,3,4.823,s
+dedup,threads=4,port,3,4.927,s
+dedup,threads=4,orig,4,4.760,s
+dedup,threads=4,generic,4,4.934,s
+dedup,threads=4,compiler,4,4.766,s
+dedup,threads=4,port,4,4.993,s
+dedup,threads=4,orig,5,5.037,s
+dedup,threads=4,generic,5,4.559,s
+dedup,threads=4,compiler,5,4.866,s
+dedup,threads=4,port,5,4.926,s

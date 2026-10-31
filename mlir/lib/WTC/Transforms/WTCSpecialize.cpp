@@ -14,6 +14,8 @@ using namespace mlir::wtc;
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dominance.h"
+#include "mlir/IR/IRMapping.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/Pass/Pass.h"
 
 #include "llvm/Support/Path.h"
@@ -57,6 +59,18 @@ using namespace mlir::wtc;
 // the constructor -- every store to it precedes the constructor in that
 // function, and its address goes nowhere else. Otherwise the remark says
 // which of these failed, and the static verdict decides as before.
+//
+// Either end may be one call away from that function. The loop may be in
+// a function called from it, its bound a parameter that function never
+// writes, passed a variable at the call the analysis recorded (ferret's
+// tpool_create(desc, NTHREAD_SEG)): the bound is then that variable, read
+// at the call, and the rules above apply to the call in place of the
+// loop. The constructor may be in a function called from it, once, before
+// the loop (spdlog's pool builds its queue object, which builds the lifted
+// queue): that function is copied with the tag as one more parameter, the
+// constructor in the copy passes it, and the one call is redirected to the
+// copy with the tag chosen just before it. Other callers keep the original
+// and its static tag.
 //
 // Afterwards every queue operation records, as `impl`, the implementation
 // its queue runs, so that later passes need not find the constructor
@@ -223,13 +237,57 @@ public:
         return Order::Before;
     }
 
-    // Why the bound the loop reads might not be, at the constructor, the
-    // value the loop will read; null when it must be.
-    static const char *boundUnsettled(cir::CallOp ctor, CountedLoop l, ModuleOp module) {
+    // Where a side's count is read in the function that builds the queue:
+    // the loop's bound, at the loop; or, for a loop one call down (`via`),
+    // the variable the call passes for the bound, at the call.
+    struct SideBound {
+        CountedLoop l;
+        Value addr;       // the variable read: a slot or a global
+        Operation *at;    // the loop, or the call that runs it
+        Operation *via = nullptr;
+    };
+
+    // The bound of a loop reached through `via`, a call of the loop's
+    // function: a parameter of that function, kept in its slot and never
+    // written there again, its address going nowhere, and passed at the
+    // call as a variable's value, as it is, of the parameter's own type.
+    static const char *boundThrough(CountedLoop l, Operation *via, SideBound &out) {
+        auto call = dyn_cast<cir::CallOp>(via);
+        auto loopFn = l.loop->getParentOfType<cir::FuncOp>();
+        if (!call || lookupCallee(call) != loopFn) return "the call recorded for the loop does not call its function";
+        auto slot = l.bound.getAddr().getDefiningOp<cir::AllocaOp>();
+        if (!slot) return "the loop's bound is not a parameter of its function";
+        BlockArgument param;
+        for (Operation *u : slot->getUsers()) {
+            if (auto ld = dyn_cast<cir::LoadOp>(u); ld && ld.getAddr() == slot.getResult()) continue;
+            if (isa<cir::LifetimeStartOp, cir::LifetimeEndOp>(u)) continue;
+            auto st = dyn_cast<cir::StoreOp>(u);
+            auto arg = st ? dyn_cast<BlockArgument>(st.getValue()) : BlockArgument();
+            if (!st || st.getAddr() != slot.getResult() || !arg || param ||
+                arg.getOwner() != &loopFn.getBody().front() || st->getBlock() != &loopFn.getBody().front())
+                return "the loop's bound is not a parameter its function keeps as it is";
+            param = arg;
+        }
+        if (!param) return "the loop's bound is not a parameter of its function";
+        if (param.getArgNumber() >= call.getNumOperands()) return "the call passes no value for the loop's bound";
+        auto ld = call.getOperand(param.getArgNumber()).getDefiningOp<cir::LoadOp>();
+        if (!ld || ld.getType() != param.getType())
+            return "the call passes the loop's bound as something other than a variable";
+        out.l = l;
+        out.addr = ld.getAddr();
+        out.at = via;
+        out.via = via;
+        return nullptr;
+    }
+
+    // Why the bound the loop reads might not be, at the constructor (or
+    // the call that builds the queue, `ctor`), the value the loop will
+    // read; null when it must be.
+    static const char *boundUnsettled(Operation *ctor, const SideBound &b, ModuleOp module) {
         auto f = ctor->getParentOfType<cir::FuncOp>();
-        if (l.loop->getParentOfType<cir::FuncOp>() != f)
+        if (b.at->getParentOfType<cir::FuncOp>() != f)
             return "the queue is built outside the function whose loop starts its threads";
-        switch (order(ctor, l.loop, f)) {
+        switch (order(ctor, b.at, f)) {
         case Order::Before: break;
         case Order::NotBefore: return "the queue is not built before the loop that starts its threads";
         case Order::InLoop: return "the queue is built in a loop around the loop that starts its threads";
@@ -247,10 +305,10 @@ public:
             }
             return nullptr;
         };
-        Value addr = l.bound.getAddr();
+        Value addr = b.addr;
         if (auto slot = addr.getDefiningOp<cir::AllocaOp>()) {
             DominanceInfo dom(f);
-            if (!dom.properlyDominates(slot.getOperation(), ctor.getOperation()))
+            if (!dom.properlyDominates(slot.getOperation(), ctor))
                 return "the loop's bound is a variable the queue's constructor cannot see";
             return storesSettled(addr);
         }
@@ -278,12 +336,12 @@ public:
 
     // `bound <= first + 1` (`bound <= first` for an inclusive loop), read
     // just before the constructor: whether the loop will run at most once.
-    static Value atMostOnce(OpBuilder &b, Location loc, CountedLoop l) {
-        Value addr = l.bound.getAddr();
+    static Value atMostOnce(OpBuilder &b, Location loc, const SideBound &sb) {
+        Value addr = sb.addr;
         if (auto gg = addr.getDefiningOp<cir::GetGlobalOp>()) addr = b.clone(*gg)->getResult(0);
         auto n = cir::LoadOp::create(b, loc, addr);
         auto lim = cir::ConstantOp::create(
-            b, loc, n.getType(), cir::IntAttr::get(n.getType(), l.first + (l.inclusive ? 0 : 1)));
+            b, loc, n.getType(), cir::IntAttr::get(n.getType(), sb.l.first + (sb.l.inclusive ? 0 : 1)));
         return cir::CmpOp::create(b, loc, cir::CmpOpKind::le, n, lim);
     }
 
@@ -295,6 +353,84 @@ public:
                 found = f;
         });
         return found;
+    }
+    static Operation *viaNumbered(ModuleOp module, IntegerAttr id) {
+        Operation *found = nullptr;
+        if (!id) return found;
+        module.walk([&](cir::CallOp c) {
+            if (auto a = c->getAttrOfType<IntegerAttr>(kSpawnViaAttrName); a && a.getInt() == id.getInt())
+                found = c.getOperation();
+        });
+        return found;
+    }
+
+    // The one call, in `anchor`, of the function that holds the queue's
+    // constructor, when that function builds the queue at most once per
+    // call: the constructor in no loop, the function calling nothing that
+    // could call it again. Null with the reason otherwise.
+    static cir::CallOp builderCall(cir::CallOp ctor, cir::FuncOp anchor, const char *&why) {
+        auto inner = ctor->getParentOfType<cir::FuncOp>();
+        cir::CallOp found;
+        unsigned n = 0;
+        anchor.walk([&](cir::CallOp c) {
+            if (lookupCallee(c) == inner) { found = c; ++n; }
+        });
+        if (n == 0) { why = "the queue is built outside the function whose loop starts its threads"; return {}; }
+        if (n != 1) {
+            why = "the function that builds the queue is called more than once by the one whose loop starts its threads";
+            return {};
+        }
+        for (Operation *p = ctor->getParentOp(); p && p != inner.getOperation(); p = p->getParentOp())
+            if (isa<cir::LoopOpInterface>(p)) { why = "the queue is built in a loop of the function that builds it"; return {}; }
+        bool recursive = false;
+        inner.walk([&](cir::CallOp c) { if (lookupCallee(c) == inner) recursive = true; });
+        if (recursive) { why = "the function that builds the queue calls itself"; return {}; }
+        if (inner.getAliasee() || inner.getBody().empty()) { why = "the function that builds the queue has no body here"; return {}; }
+        return found;
+    }
+
+    // A copy of the function holding `ctor`, with the tag as one more
+    // parameter that its copy of the constructor passes; `call`, its one
+    // caller that counts, is redirected to the copy, passing `tag`. The
+    // copy's constructor is no queue's root: the original stays the
+    // queue's, with its tag, for every other caller.
+    static void passTagThrough(cir::CallOp ctor, cir::CallOp call, Value tag) {
+        auto inner = ctor->getParentOfType<cir::FuncOp>();
+        auto module = inner->getParentOfType<ModuleOp>();
+        IRMapping map;
+        auto copy = cast<cir::FuncOp>(inner->clone(map));
+        SymbolTable symbols(module);
+        copy.setSymName((inner.getSymName() + ".wtc_tag").str());
+        symbols.insert(copy, std::next(Block::iterator(inner.getOperation())));   // renames on a clash
+        copy.setLinkage(cir::GlobalLinkageKind::InternalLinkage);
+        copy.setComdat(false);
+        copy->removeAttr("func_info");
+        copy->removeAttr("sym_visibility");
+        Type tagTy = tag.getType();
+        llvm::SmallVector<Type, 8> inputs(copy.getFunctionType().getInputs());
+        inputs.push_back(tagTy);
+        cir::FuncType ft = copy.getFunctionType();
+        copy.setFunctionType(cir::FuncType::get(copy.getContext(), inputs, ft.getOptionalReturnType(), ft.isVarArg()));
+        if (ArrayAttr args = copy.getArgAttrsAttr()) {
+            llvm::SmallVector<Attribute, 8> all(args.begin(), args.end());
+            all.push_back(DictionaryAttr::get(copy.getContext()));
+            copy.setArgAttrsAttr(ArrayAttr::get(copy.getContext(), all));
+        }
+        BlockArgument param = copy.getBody().front().addArgument(tagTy, ctor.getLoc());
+        auto copied = cast<cir::CallOp>(map.lookup(ctor.getOperation()));
+        copied->setOperand(1, param);
+        for (llvm::StringRef a : {kTopologyAttrName.data(), kQueueIdAttrName.data(), kQueueNameAttrName.data(),
+                                  kProducersLoopAttrName.data(), kConsumersLoopAttrName.data(),
+                                  kProducersViaAttrName.data(), kConsumersViaAttrName.data(),
+                                  kBorrowedAttrName.data(), kSpecializedAttrName.data()})
+            copied->removeAttr(a);
+        call.setCalleeAttr(FlatSymbolRefAttr::get(copy.getSymNameAttr()));
+        call->insertOperands(call->getNumOperands(), {tag});
+        if (ArrayAttr args = call.getArgAttrsAttr()) {
+            llvm::SmallVector<Attribute, 8> all(args.begin(), args.end());
+            all.push_back(DictionaryAttr::get(call.getContext()));
+            call.setArgAttrsAttr(ArrayAttr::get(call.getContext(), all));
+        }
     }
 
     // The tag chosen when the queue is built, for a queue with a side whose
@@ -313,12 +449,46 @@ public:
         auto tagVal = tagConst ? dyn_cast<cir::IntAttr>(tagConst.getValue()) : cir::IntAttr();
         if (!tagVal || tagVal.getSInt() != 0) return false;
 
-        std::optional<CountedLoop> pl, cl;
-        for (auto [id, out] : {std::pair{pId, &pl}, std::pair{cId, &cl}}) {
+        std::optional<SideBound> pl, cl;
+        for (auto [id, viaAttr, out] :
+             {std::tuple{pId, kProducersViaAttrName, &pl}, std::tuple{cId, kConsumersViaAttrName, &cl}}) {
             if (!id) continue;
             cir::ForOp loop = loopNumbered(module, id);
-            if (!loop || !(*out = countedLoop(loop))) return false;
-            if (const char *why = boundUnsettled(ctor, **out, module)) {
+            std::optional<CountedLoop> l = loop ? countedLoop(loop) : std::nullopt;
+            if (!l) return false;
+            SideBound b{*l, l->bound.getAddr(), loop.getOperation()};
+            if (auto viaId = root->getAttrOfType<IntegerAttr>(viaAttr)) {
+                Operation *via = viaNumbered(module, viaId);
+                if (!via) return false;
+                if (const char *why = boundThrough(*l, via, b)) {
+                    ctor.emitRemark() << "wtc: not specialised at run time: " << why;
+                    return false;
+                }
+            }
+            *out = b;
+        }
+        // Where the choice is made: the constructor, or the one call of the
+        // function holding it from the function that runs the loops.
+        auto anchor = (pl ? pl->at : cl->at)->getParentOfType<cir::FuncOp>();
+        if (pl && cl && cl->at->getParentOfType<cir::FuncOp>() != anchor) {
+            ctor.emitRemark() << "wtc: not specialised at run time: the loops that start its threads are run "
+                                 "by different functions";
+            return false;
+        }
+        Operation *site = ctor.getOperation();
+        cir::CallOp builder;
+        if (ctor->getParentOfType<cir::FuncOp>() != anchor) {
+            const char *why = nullptr;
+            builder = builderCall(ctor, anchor, why);
+            if (!builder) {
+                ctor.emitRemark() << "wtc: not specialised at run time: " << why;
+                return false;
+            }
+            site = builder.getOperation();
+        }
+        for (const std::optional<SideBound> *b : {&pl, &cl}) {
+            if (!*b) continue;
+            if (const char *why = boundUnsettled(site, **b, module)) {
                 ctor.emitRemark() << "wtc: not specialised at run time: " << why;
                 return false;
             }
@@ -327,8 +497,8 @@ public:
         const bool manyC = verdict == Topology::spmc || verdict == Topology::mpmc;
         const bool inlineOk = root->hasAttr(kBorrowedAttrName) && marksInlineOk(lookupCallee(ctor));
 
-        OpBuilder b(ctor);
-        const Location loc = ctor.getLoc();
+        OpBuilder b(site);
+        const Location loc = site->getLoc();
         Value oneP = pl ? atMostOnce(b, loc, *pl) : Value();
         Value oneC = cl ? atMostOnce(b, loc, *cl) : Value();
         auto k = [&](Impl i) -> Value {
@@ -352,11 +522,16 @@ public:
         } else {
             tag = forProducers(!manyP);
         }
-        ctor->setOperand(1, tag);
+        if (builder) passTagThrough(ctor, builder, tag);
+        else ctor->setOperand(1, tag);
         root->setAttr(kSpecializedAttrName, TopologyAttr::get(&getContext(), verdict));
 
         // What each count gives, in the remark.
-        auto where = [](const std::optional<CountedLoop> &l) { return whereOf(l->loop->getLoc()); };
+        auto where = [](const std::optional<SideBound> &l) {
+            std::string w = whereOf(l->l.loop->getLoc());
+            if (l->via) w += " (run by the call at " + whereOf(l->via->getLoc()) + ")";
+            return w;
+        };
         auto at = [&](bool oneProducer, bool oneConsumer) {
             return stringifyImpl(implAt(oneProducer, oneConsumer, inlineOk));
         };
@@ -372,6 +547,7 @@ public:
             d << stringifyImpl(once) << " when the loop at " << where(pl ? pl : cl) << " ("
               << (pl ? "producers" : "consumers") << ") runs at most once, else " << stringifyImpl(more);
         }
+        if (builder) d << "; chosen at the call at " << whereOf(builder.getLoc()) << ", which builds it";
         return true;
     }
 

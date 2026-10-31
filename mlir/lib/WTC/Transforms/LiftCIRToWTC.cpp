@@ -38,6 +38,11 @@ struct CirToWTCConversionTarget : public ConversionTarget {
             case SemanticOpKind::MutexBatchStep:
             case SemanticOpKind::MutexBatchEnd:
             case SemanticOpKind::QueuePush:
+            case SemanticOpKind::QueuePushWait:
+            case SemanticOpKind::QueueTryPush:
+            case SemanticOpKind::QueuePushOverrun:
+            case SemanticOpKind::QueuePushBatch:
+            case SemanticOpKind::QueuePopBatch:
             case SemanticOpKind::QueueTryPop:
             case SemanticOpKind::QueueTryPopInto:
             case SemanticOpKind::QueuePopWait:
@@ -116,9 +121,17 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
                              kind == SemanticOpKind::QueuePushDeferred ||
                              kind == SemanticOpKind::QueueBatchEnd;
         const bool waitOp = kind == SemanticOpKind::QueuePopWait || kind == SemanticOpKind::QueuePopWaitFor;
-        if (kind != SemanticOpKind::QueuePush && kind != SemanticOpKind::QueueTryPop &&
-            kind != SemanticOpKind::QueueTryPopInto && !waitOp && !batchOp)
+        const bool pushBatch = kind == SemanticOpKind::QueuePushBatch;
+        const bool popBatch = kind == SemanticOpKind::QueuePopBatch;
+        const bool pushOp = kind == SemanticOpKind::QueuePush || kind == SemanticOpKind::QueuePushWait ||
+                            kind == SemanticOpKind::QueueTryPush || kind == SemanticOpKind::QueuePushOverrun;
+        if (!pushOp && kind != SemanticOpKind::QueueTryPop && kind != SemanticOpKind::QueueTryPopInto && !waitOp &&
+            !batchOp && !pushBatch && !popBatch)
             return failure();
+        // A bounded queue's operations (shim/lifted.hpp, lifted_bounded):
+        // their progress differs from the unbounded queues'.
+        const UnitAttr bounded =
+            hasAnnotation(lookupCallee(op), "wtc_queue_bounded") ? rewriter.getUnitAttr() : UnitAttr();
 
         const unsigned k = firstRealOperand(op);
         auto queuePtrTy = mlir::dyn_cast<cir::PointerType>(op.getOperand(k).getType());
@@ -157,12 +170,44 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
             return success();
         }
 
-        if (kind == SemanticOpKind::QueuePush) {
+        // A run of pushes from the calling thread's own ring
+        // (shim/c_queue.h): the queue, where the ring keeps its elements,
+        // and the rest of the ring and the limit; the result is how many
+        // were appended. A run of pops into such a ring is a waiting
+        // transfer with the same operands after the queue.
+        if (pushBatch || popBatch) {
+            if (k != 0 || op.getNumOperands() < 3 || op.getNumResults() != 1)
+                return op.emitError("wtc: a batch takes the queue and the caller's ring, and answers how many");
+            if (pushBatch) {
+                rewriter.replaceOpWithNewOp<QueuePushOp>(
+                    op, op.getResult().getType(), queue, adaptor.getOperands()[1],
+                    adaptor.getOperands().drop_front(2), fallback, sourceType, argAttrs, TopologyAttr(),
+                    IntegerAttr(), ImplAttr(), rewriter.getUnitAttr(), rewriter.getUnitAttr(), UnitAttr(),
+                    rewriter.getUnitAttr());
+                return success();
+            }
+            rewriter.replaceOpWithNewOp<QueuePopOp>(op, op.getResultTypes(), queue,
+                                                    adaptor.getOperands().drop_front(1), fallback, sourceType,
+                                                    argAttrs, TopologyAttr(), IntegerAttr(), ImplAttr(), UnitAttr(),
+                                                    rewriter.getUnitAttr(), rewriter.getUnitAttr(),
+                                                    rewriter.getUnitAttr(), rewriter.getUnitAttr());
+            return success();
+        }
+
+        if (pushOp) {
             if (op.getNumOperands() != k + 2)
                 return op.emitError("wtc: push takes the queue and one value; this call has ")
                        << op.getNumOperands() << " operand(s)";
-            rewriter.replaceOpWithNewOp<QueuePushOp>(op, queue, adaptor.getOperands()[k + 1],
-                                                     fallback, sourceType, argAttrs, TopologyAttr(), IntegerAttr(), ImplAttr());
+            // Only the try form answers; the others return nothing.
+            const bool tryForm = kind == SemanticOpKind::QueueTryPush;
+            if (tryForm != (op.getNumResults() == 1))
+                return op.emitError(tryForm ? "wtc: a try_push answers whether it appended"
+                                            : "wtc: a push returns nothing");
+            rewriter.replaceOpWithNewOp<QueuePushOp>(
+                op, tryForm ? op.getResult().getType() : Type(), queue, adaptor.getOperands()[k + 1], ValueRange{},
+                fallback, sourceType, argAttrs, TopologyAttr(), IntegerAttr(), ImplAttr(), bounded,
+                kind == SemanticOpKind::QueuePushWait ? rewriter.getUnitAttr() : UnitAttr(),
+                kind == SemanticOpKind::QueuePushOverrun ? rewriter.getUnitAttr() : UnitAttr(), UnitAttr());
             return success();
         }
 
@@ -174,7 +219,7 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
             rewriter.replaceOpWithNewOp<QueuePopOp>(op, op.getResultTypes(),
                                                     queue, ValueRange{adaptor.getOperands()[1]},
                                                     fallback, sourceType, argAttrs, TopologyAttr(), IntegerAttr(), ImplAttr(),
-                                                    UnitAttr(), rewriter.getUnitAttr(), UnitAttr());
+                                                    UnitAttr(), rewriter.getUnitAttr(), UnitAttr(), bounded, UnitAttr());
             return success();
         }
 
@@ -189,7 +234,8 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
             rewriter.replaceOpWithNewOp<QueuePopOp>(op, op.getResultTypes(), queue,
                                                     adaptor.getOperands().drop_front(1), fallback, sourceType,
                                                     argAttrs, TopologyAttr(), IntegerAttr(), ImplAttr(),
-                                                    UnitAttr(), rewriter.getUnitAttr(), rewriter.getUnitAttr());
+                                                    UnitAttr(), rewriter.getUnitAttr(), rewriter.getUnitAttr(),
+                                                    bounded, UnitAttr());
             return success();
         }
 
@@ -201,7 +247,7 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
             rewriter.replaceOpWithNewOp<QueuePopOp>(op, /*resultTypes=*/TypeRange{},
                                                     queue, ValueRange{adaptor.getOperands()[0]},
                                                     fallback, sourceType, argAttrs, TopologyAttr(), IntegerAttr(), ImplAttr(),
-                                                    UnitAttr(), UnitAttr(), UnitAttr());
+                                                    UnitAttr(), UnitAttr(), UnitAttr(), bounded, UnitAttr());
             return success();
         }
         if (op.getNumOperands() != 1 || op.getNumResults() != 1)
@@ -209,7 +255,7 @@ struct LiftQueueCallPattern : public OpConversionPattern<cir::CallOp> {
         rewriter.replaceOpWithNewOp<QueuePopOp>(op, TypeRange{op.getResult().getType()},
                                                 queue, /*args=*/ValueRange{},
                                                 fallback, sourceType, argAttrs, TopologyAttr(), IntegerAttr(), ImplAttr(),
-                                                UnitAttr(), UnitAttr(), UnitAttr());
+                                                UnitAttr(), UnitAttr(), UnitAttr(), bounded, UnitAttr());
         return success();
     }
 };

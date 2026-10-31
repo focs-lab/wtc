@@ -1,0 +1,2 @@
+wtc: pushes in this loop not batched: the loop acts on queues or mutexes other than through one push
+wtc: critical sections in this loop batched: the mutex is let go every WTC_LOCK_BATCH_K sections and at the end; work between sections estimated at 0.9 ns (6 units), under the 180 ns threshold that holds for any number of threads

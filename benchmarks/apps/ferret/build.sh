@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
-# Builds PARSEC ferret from the pinned PARSEC tree, six ways, and with
+# Builds PARSEC ferret from the pinned PARSEC tree, nine ways, and with
 # TSAN=1 four more:
 #
 #   ferret-orig          PARSEC's own pthreads build (condition-variable queues)
@@ -15,6 +15,16 @@
 #   ferret-generic-tsan  the port, n threads per middle stage,
 #                        --no-specialize, under ThreadSanitizer
 #   ferret-orig-tsan     PARSEC's own pthreads build under ThreadSanitizer
+#   ferret-lifted        PARSEC's own sources through wtc-cc, unedited: the
+#                        pipeline, the queue and the thread pool as one unit
+#                        (--unity), the queue's functions lifted
+#                        (--wtc-lift-c-queues, docs/lifting.md "C queues")
+#   ferret-lifted-generic  the same with --no-specialize: lifted, every
+#                        queue the general-purpose one, so that lifted
+#                        against it is the compiler's choice alone
+#   ferret-unlifted      the same with --no-lift: the queue as written, so
+#                        that lifted against unlifted is the queue alone
+#   ferret-lifted-tsan   (TSAN=1) the lifted build under ThreadSanitizer
 #
 #   build.sh <parsec-dir> <out-dir>
 #
@@ -73,6 +83,24 @@ build compiler-one -DFERRET_ONE
 build hand-one     --no-specialize -DFERRET_ONE -DFERRET_HAND_TAG
 build generic      --no-specialize
 build compiler
+
+# The original sources, unedited. The unit defines the queue's and the
+# pool's functions itself, so the library goes without queue.o and tpool.o.
+cp ferret-src/parsec/lib/libcass.a libcass-unity.a && ar d libcass-unity.a queue.o tpool.o
+ULIBS="$W/libcass-unity.a $W/ferret-src/parsec/lib/libcassimage.a $W/gsl/lib/libgsl.a $W/gsl/lib/libgslcblas.a -ljpeg -lm -lrt"
+FSRC="$P/pkgs/apps/ferret/src"
+UNIT="$FSRC/benchmark/ferret-pthreads.c $FSRC/src/queue.c $FSRC/src/tpool.c"
+lifted() { # name, wtc-cc flags...
+  local name=$1; shift
+  "$WTC/tools/wtc-cc" --toolchain "$WTC/build-llvm" $OLDC $INC -I"$W/gsl/include" "$@" --unity $UNIT $ULIBS \
+    -o "bin/ferret-$name" 2>"bin/ferret-$name.log" || { echo "$name: FAILED"; tail -5 "bin/ferret-$name.log"; return 1; }
+  echo "== $name"
+  grep -oE 'wtc: (C queue [^:(]+ (lifted|not lifted: .*)|queue @[a-z_]+[^:]*: [a-z_ ]+\([^)]*\)|specialised[^;]*)' \
+    "bin/ferret-$name.log" | sed -E 's/lifted \(.*/lifted/' | sort | uniq -c | sed 's/^/  /' || true
+}
+lifted lifted
+lifted lifted-generic --no-specialize
+lifted unlifted --no-lift
 # TSAN=1 adds the compiler's builds under ThreadSanitizer, for the safety
 # question, and the port on the general-purpose queue and PARSEC's own
 # build the same way, so that a report can be told apart as the program's
@@ -84,6 +112,7 @@ if [ "${TSAN:-0}" = 1 ]; then
   build compiler-one-tsan -DFERRET_ONE --tsan -O1 -g
   build compiler-tsan --tsan -O1 -g
   build generic-tsan --no-specialize --tsan -O1 -g
+  lifted lifted-tsan --tsan -O1 -g
   $CC $OLDC -O1 -g -fsanitize=thread -I"$W/ferret-src/include" -I"$W/ferret-src/image" -I"$W/gsl/include" \
       -c ferret-src/benchmark/ferret-pthreads.c -o ferret-orig-tsan.o
   clang++-18 -fsanitize=thread ferret-orig-tsan.o $LIBS -lpthread -o bin/ferret-orig-tsan

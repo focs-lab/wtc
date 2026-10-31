@@ -1,0 +1,87 @@
+== spdlog-lifted-generic
+wtc: locked queue q_ in spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg> lifted
+wtc: queue q_ in any spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>: mpmc (producers: many, consumers: many)
+== spdlog-lifted
+wtc: locked queue q_ in spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg> lifted
+wtc: queue q_ in any spdlog::details::mpmc_blocking_queue<spdlog::details::async_msg>: mpmc (producers: many, consumers: many)
+wtc: specialised at run time: mpsc when the loop at thread_pool-inl.h:26:5 (consumers) runs at most once, else generic; chosen at the call at thread_pool-inl.h:20:7, which builds it
+== spdlog-compiler
+wtc: queue q_ in any spdlog::details::thread_pool: mpmc (producers: many, consumers: many)
+wtc: specialised at run time: mpsc when the loop at thread_pool-inl.h:26:5 (consumers) runs at most once, else generic
+== ctpl-generic
+wtc: locked queue q in ctpl::detail::Queue<std::function<void (int)> *> lifted
+wtc: queue q in any ctpl::detail::Queue<std::function<void (int)> *>: spmc (producers: 1, consumers: many)
+== ctpl-compiler
+wtc: locked queue q in ctpl::detail::Queue<std::function<void (int)> *> lifted
+wtc: queue q in any ctpl::detail::Queue<std::function<void (int)> *>: spmc (producers: 1, consumers: many)
+wtc: specialised: constructor tag rewritten to spmc
+== ctpl-port
+wtc: locked queue q in ctpl::thread_pool not lifted
+wtc: queue q in any ctpl::detail::Queue<std::function<void (int)> *>: spmc (producers: 1, consumers: many)
+wtc: specialised: constructor tag rewritten to spmc
+== g3log-generic
+wtc: locked queue queue_ in shared_queue<std::function<void ()>> lifted
+wtc: queue queue_ in any shared_queue<std::function<void ()>>: mpmc (producers: many, consumers: many)
+== g3log-compiler
+wtc: locked queue queue_ in shared_queue<std::function<void ()>> lifted
+wtc: queue queue_ in any shared_queue<std::function<void ()>>: mpmc (producers: many, consumers: many)
+== g3log-port
+wtc: queue queue_ in any shared_queue<std::function<void ()>>: mpmc (producers: many, consumers: many)
+== g3log-port-mpsc
+wtc: queue queue_ in any shared_queue<std::function<void ()>> is declared mpsc
+wtc: queue queue_ in any shared_queue<std::function<void ()>>: mpmc (producers: many, consumers: many)
+compiler=tools/wtc-cc, ClangIR 1ebf89d8c5e6
+wtc=9bee652bade1
+parsec=2e492f771c67
+libraries=clang-18 -O2 -std=gnu89 -DHUGE=HUGE_VAL -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types; gsl by gcc
+== ferret-lifted-generic
+wtc: C queue struct queue lifted
+wtc: queue @q_extract_vec: mpmc (producers: many, consumers: many)
+wtc: queue @q_load_seg: mpmc (producers: many, consumers: many)
+wtc: queue @q_rank_out: mpmc (producers: many, consumers: many)
+wtc: queue @q_seg_extract: mpmc (producers: many, consumers: many)
+wtc: queue @q_vec_rank: mpmc (producers: many, consumers: many)
+== ferret-lifted
+wtc: C queue struct queue lifted
+wtc: queue @q_extract_vec: mpmc (producers: many, consumers: many)
+wtc: queue @q_load_seg: mpmc (producers: many, consumers: many)
+wtc: queue @q_rank_out: mpmc (producers: many, consumers: many)
+wtc: queue @q_seg_extract: mpmc (producers: many, consumers: many)
+wtc: queue @q_vec_rank: mpmc (producers: many, consumers: many)
+wtc: specialised at run time: spsc when the loops at tpool.c:71:5 (run by the call at ferret-pthreads.c:550:11) (producers) and tpool.c:71:5 (run by the call at ferret-pthreads.c:551:10) (consumers) each run at most once, mpsc when only the second does, spmc when only the first does, else generic
+wtc: specialised at run time: spsc when the loops at tpool.c:71:5 (run by the call at ferret-pthreads.c:551:10) (producers) and tpool.c:71:5 (run by the call at ferret-pthreads.c:552:14) (consumers) each run at most once, mpsc when only the second does, spmc when only the first does, else generic
+wtc: specialised at run time: spsc when the loops at tpool.c:71:5 (run by the call at ferret-pthreads.c:552:14) (producers) and tpool.c:71:5 (run by the call at ferret-pthreads.c:553:10) (consumers) each run at most once, mpsc when only the second does, spmc when only the first does, else generic
+wtc: specialised at run time: spsc when the loops at tpool.c:71:5 (run by the call at ferret-pthreads.c:553:10) (producers) and tpool.c:71:5 (run by the call at ferret-pthreads.c:554:11) (consumers) each run at most once, mpsc when only the second does, spmc when only the first does, else generic
+wtc: specialised at run time: spsc when the loops at tpool.c:71:5 (run by the call at ferret-pthreads.c:554:11) (producers) and tpool.c:71:5 (run by the call at ferret-pthreads.c:555:10) (consumers) each run at most once, mpsc when only the second does, spmc when only the first does, else generic
+== ferret-compiler
+wtc: queue *@q_extract_vec: mpmc (producers: many, consumers: many)
+wtc: queue *@q_load_seg: spmc (producers: 1, consumers: many)
+wtc: queue *@q_rank_out: mpsc (producers: many, consumers: 1)
+wtc: queue *@q_seg_extract: mpmc (producers: many, consumers: many)
+wtc: queue *@q_vec_rank: mpmc (producers: many, consumers: many)
+wtc: specialised at run time: spsc_inline when the loop at ferret-wtc.cpp:547:2 (consumers) runs at most once, else spmc
+wtc: specialised at run time: spsc_inline when the loop at ferret-wtc.cpp:550:2 (producers) runs at most once, else mpsc
+wtc: specialised at run time: spsc_inline when the loops at ferret-wtc.cpp:547:2 (producers) and ferret-wtc.cpp:548:2 (consumers) each run at most once, mpsc when only the second does, spmc when only the first does, else generic
+wtc: specialised at run time: spsc_inline when the loops at ferret-wtc.cpp:548:2 (producers) and ferret-wtc.cpp:549:2 (consumers) each run at most once, mpsc when only the second does, spmc when only the first does, else generic
+wtc: specialised at run time: spsc_inline when the loops at ferret-wtc.cpp:549:2 (producers) and ferret-wtc.cpp:550:2 (consumers) each run at most once, mpsc when only the second does, spmc when only the first does, else generic
+== dedup-lifted-generic
+wtc: C queue struct _queue_t lifted
+wtc: queue *@compress_que[*]: mpmc (producers: many, consumers: many)
+wtc: queue *@deduplicate_que[*]: mpmc (producers: many, consumers: many)
+wtc: queue *@refine_que[*]: spmc (producers: 1, consumers: many)
+wtc: queue *@reorder_que[*]: mpsc (producers: many, consumers: 1)
+== dedup-lifted
+wtc: C queue struct _queue_t lifted
+wtc: queue *@compress_que[*]: mpmc (producers: many, consumers: many)
+wtc: queue *@deduplicate_que[*]: mpmc (producers: many, consumers: many)
+wtc: queue *@refine_que[*]: spmc (producers: 1, consumers: many)
+wtc: queue *@reorder_que[*]: mpsc (producers: many, consumers: 1)
+wtc: specialised: constructor tag rewritten to mpsc
+wtc: specialised: constructor tag rewritten to spmc
+== dedup-compiler-unity
+wtc: queue *@compress_que[*]: mpmc (producers: many, consumers: many)
+wtc: queue *@deduplicate_que[*]: mpmc (producers: many, consumers: many)
+wtc: queue *@refine_que[*]: spmc (producers: 1, consumers: many)
+wtc: queue *@reorder_que[*]: mpsc (producers: many, consumers: 1)
+wtc: specialised: constructor tag rewritten to mpsc
+wtc: specialised: constructor tag rewritten to spmc

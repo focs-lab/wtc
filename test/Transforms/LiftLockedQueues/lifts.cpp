@@ -44,8 +44,10 @@ private:
 class Pred {
 public:
     void push(std::string&& v) {
-        std::lock_guard<std::mutex> l(m_);
-        q_.emplace_back(std::move(v));
+        {
+            std::lock_guard<std::mutex> l(m_);
+            q_.emplace_back(std::move(v));
+        }
         cv_.notify_all();
     }
     void pop(std::string& out) {
@@ -88,8 +90,7 @@ private:
 class ClosableLoop {
 public:
     void push(const std::string& v) {
-        std::lock_guard<std::mutex> l(m_);
-        q_.push_back(v);
+        { std::lock_guard<std::mutex> l(m_); q_.push_back(v); }
         cv_.notify_one();
     }
     bool pop(std::string& out) {
@@ -101,8 +102,7 @@ public:
         return true;
     }
     void close() {
-        std::lock_guard<std::mutex> l(m_);
-        stop_ = true;
+        { std::lock_guard<std::mutex> l(m_); stop_ = true; }
         cv_.notify_all();
     }
 private:

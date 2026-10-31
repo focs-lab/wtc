@@ -95,6 +95,9 @@ struct Access {
     // the thread was started some other way, or by the loop of another
     // object's constructor.
     Operation *countLoop = nullptr;
+    // With countLoop, when the loop is in a function that the run building
+    // the queue calls: that call, at which the loop's count is read.
+    Operation *countVia = nullptr;
     // For a put into some pool the analysis does not name -- a free of an
     // mbuf whose pool is its `pool` field, unresolved -- why; counted on
     // every pool that may hold mbufs, as one of several (oneOf).
@@ -110,9 +113,9 @@ struct SideInfo {
         if (threads.empty()) return 0;
         return (anyMany || threads.size() >= 2) ? 2 : 1;
     }
-    // The counted loop that starts every thread on this side, one per
-    // iteration, when there is one: the side then has one thread exactly
-    // when the loop runs at most once. The walk may tell several threads
+    // The counted loop that starts every thread on this side, at most one
+    // per iteration, when there is one: the side then has one thread at
+    // most when the loop runs at most once. The walk may tell several threads
     // apart under one such loop -- a vector's emplace_back constructs the
     // thread on one of two paths -- and together they are still one per
     // iteration, which the loop's record on each instance vouches for.
@@ -125,15 +128,22 @@ struct SideInfo {
     // twice while its own ran not at all. Null when any access is not so
     // credited, is on a thread the module cannot account for, or may be
     // to another queue.
+    //
+    // A loop one call down from the run that built the queue (a pool's
+    // create function) is the same loop for every call of that function:
+    // the run is told by the call (countVia), and every access must name
+    // the same one.
     Operation *countLoop() const {
-        Operation *loop = nullptr;
+        Operation *loop = nullptr, *via = nullptr;
         for (const Access &a : accesses) {
             if (!a.countLoop || a.speculative || a.oneOf) return nullptr;
-            if (loop && loop != a.countLoop) return nullptr;
+            if (loop && (loop != a.countLoop || via != a.countVia)) return nullptr;
             loop = a.countLoop;
+            via = a.countVia;
         }
         return loop;
     }
+    Operation *countVia() const { return countLoop() ? accesses.front().countVia : nullptr; }
 };
 
 struct RootInfo {
@@ -200,6 +210,7 @@ static bool isMbufPointer(Type t) {
 
 static bool isNullPointer(Value v);
 static bool firstArgIsSret(cir::FuncOp f);
+static std::optional<int64_t> constantInteger(Value v, unsigned depth);
 
 // A queue the walk cannot place but can name by type: a member at a known
 // offset of a record, reached through a pointer the walk cannot follow --
@@ -252,6 +263,7 @@ private:
     llvm::DenseSet<Operation *> ctorUnplaced;
     llvm::DenseMap<Key, Type> keyType;             // the queue type its constructor builds
     llvm::DenseMap<Operation *, int64_t> loopIds;  // the counted spawn loops recorded, numbered
+    llvm::DenseMap<Operation *, int64_t> viaIds;   // the calls that run them, when one call down
     // (record, offset) -> the queue constructor calls that build that
     // member of the record, and the abstract keys in use.
     llvm::DenseMap<std::pair<Type, uint64_t>, llvm::SmallVector<Operation *, 2>> memberCtors;
@@ -264,6 +276,9 @@ private:
     // placed one key, which is then nobody's own object.
     static const Instance *const kAmbiguous;
     llvm::DenseMap<Key, const Instance *> keyCtorInst;
+    // The instance in which each queue constructor call ran, kAmbiguous
+    // when it ran in several: the function holding it runs more than once.
+    llvm::DenseMap<Operation *, const Instance *> ctorOpInst;
     // (closure type, field) -> every store into that field in the module;
     // empty when the field's address goes anywhere but a load or a store.
     llvm::DenseMap<std::pair<Type, unsigned>, llvm::SmallVector<cir::StoreOp, 2>> captureStores;
@@ -404,7 +419,18 @@ private:
     // followed through the parameters of the chain, is a load of a
     // closure's captured `this`, and every store into that capture in the
     // module stores the `this` of holder's function.
-    bool sameObject(Operation *op, Instance *inst, const Instance *holder);
+    bool sameObject(Operation *op, Instance *inst, const Instance *holder, Operation *ctor);
+    // Whether `ctor`, run under holderFn -- in it, or in the function it
+    // calls once -- builds the queue `offset` bytes into holderFn's
+    // object (`this`).
+    bool ctorBuildsAt(Operation *ctor, cir::FuncOp holderFn, uint64_t offset);
+    // Whether the constructor call `ctor` ran once in the whole walk, and
+    // in `holder` itself or in the run of the function holder's function
+    // calls exactly once (the call the specialisation pass redirects): a
+    // function that runs twice builds the queue twice, the second time
+    // under the threads the first run's loop started, and the count read
+    // at the second build is not theirs.
+    bool ctorRunBy(Operation *ctor, const Instance *holder);
     // The abstract key for an access the walk could not place, when its
     // handle names a member one constructor call builds; registered as a
     // queue of that constructor on first use.
@@ -431,19 +457,97 @@ private:
         ++remarks;
     }
 
+    // A recursive function's recurrences past the first are not expanded
+    // (ThreadInstances.h): what they reach is walked once more, on the
+    // same thread, but under one call string, and a handle that a deeper
+    // call binds through the recursion's parameters may name an object the
+    // walk never saw. Such an access is unresolvable. One whose handle is
+    // fixed below the recursion -- a global, reached through parameters of
+    // functions outside the cycle only, as ferret's loader hands
+    // `&q_load_seg` to enqueue from the file helper its recursive scan
+    // calls, or a pointer a global written once holds -- names the same
+    // queue at every depth, on the same thread,
+    // and is counted as the walk saw it. Recursion that can start a thread
+    // or call through a pointer is not scoped: everything it reaches is
+    // unresolvable, as before.
     void poisonReachable(cir::FuncOp f) {
-        llvm::DenseSet<Operation *> seen;
+        llvm::SetVector<Operation *> reach;
+        llvm::DenseMap<Operation *, llvm::SmallVector<cir::CallOp, 4>> callsIn;   // callee -> its calls in reach
+        bool spawnsOrIndirect = false;
         llvm::SmallVector<cir::FuncOp, 8> work{f};
         while (!work.empty()) {
             cir::FuncOp cur = work.pop_back_val();
-            if (!seen.insert(cur.getOperation()).second) continue;
-            cur.walk([&](Operation *op) {
-                if (isQueueOp(op) && !inLibraryBody(op)) poison(op, "reached through recursion");
-                if (auto call = dyn_cast<cir::CallOp>(op))
-                    if (auto callee = lookupCallee(call))
-                        if (!callee.getBody().empty()) work.push_back(callee);
+            if (!reach.insert(cur.getOperation())) continue;
+            cur.walk([&](cir::CallOp call) {
+                cir::FuncOp callee = lookupCallee(call);
+                if (!callee) { spawnsOrIndirect = true; return; }
+                if (getSemanticKind(callee) == SemanticOpKind::ThreadSpawn) spawnsOrIndirect = true;
+                if (callee.getBody().empty()) return;
+                callsIn[callee.getOperation()].push_back(call);
+                work.push_back(callee);
             });
         }
+        // The cycle: the functions reached that reach f back.
+        llvm::DenseSet<Operation *> cycle{f.getOperation()};
+        for (bool grew = true; grew;) {
+            grew = false;
+            for (auto &[callee, calls] : callsIn)
+                if (cycle.contains(callee))
+                    for (cir::CallOp c : calls)
+                        if (cycle.insert(c->getParentOfType<cir::FuncOp>().getOperation()).second) grew = true;
+        }
+        for (Operation *g : reach)
+            cast<cir::FuncOp>(g).walk([&](Operation *op) {
+                if (!isQueueOp(op) || inLibraryBody(op)) return;
+                if (!spawnsOrIndirect && fixedBelow(queueOf(op), cast<cir::FuncOp>(g), cycle, callsIn, 0)) return;
+                poison(op, "reached through recursion");
+            });
+    }
+    // Whether a handle in g names one object whatever the recursion above
+    // binds: member and constant element steps from a global, from a
+    // pointer loaded from a global the program writes once, or from a
+    // parameter of a function outside the cycle whose every call reached
+    // from the recursion passes such a handle.
+    bool fixedBelow(Value v, cir::FuncOp g, const llvm::DenseSet<Operation *> &cycle,
+                    const llvm::DenseMap<Operation *, llvm::SmallVector<cir::CallOp, 4>> &callsIn,
+                    unsigned depth) {
+        if (depth > 16) return false;
+        Value t = traceToRoot(v);
+        for (unsigned steps = 0; steps < 64; ++steps) {
+            if (auto gm = t.getDefiningOp<cir::GetMemberOp>()) { t = traceToRoot(gm.getAddr()); continue; }
+            Value index, base;
+            if (auto ps = t.getDefiningOp<cir::PtrStrideOp>()) { index = ps.getStride(); base = ps.getBase(); }
+            else if (auto ge = t.getDefiningOp<cir::GetElementOp>()) { index = ge.getIndex(); base = ge.getBase(); }
+            if (!base) break;
+            if (!constantInteger(index, 0)) return false;
+            t = traceToRoot(base);
+        }
+        if (t.getDefiningOp<cir::GetGlobalOp>()) return true;
+        // A pointer a global holds that the program writes once: the same
+        // object at every depth (the port of ferret's `q_load_seg`).
+        if (auto ld = t.getDefiningOp<cir::LoadOp>())
+            if (auto gg = traceToLocalRoot(ld.getAddr()).getDefiningOp<cir::GetGlobalOp>()) {
+                auto g = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr());
+                return g && walk && walk->singleStoredGlobalValue(g);
+            }
+        auto arg = dyn_cast<BlockArgument>(t);
+        if (!arg || cycle.contains(g.getOperation()) || arg.getOwner() != &g.getBody().front()) return false;
+        // Reached only by direct calls: its address goes nowhere else.
+        auto uses = SymbolTable::getSymbolUses(g, module);
+        if (!uses) return false;
+        for (const SymbolTable::SymbolUse &u : *uses) {
+            auto call = dyn_cast<cir::CallOp>(u.getUser());
+            if (!call || call.getCalleeAttr() != u.getSymbolRef()) return false;
+        }
+        auto it = callsIn.find(g.getOperation());
+        if (it == callsIn.end() || it->second.empty()) return false;
+        for (cir::CallOp call : it->second) {
+            const unsigned idx = arg.getArgNumber();
+            if (idx >= call.getNumOperands()) return false;
+            if (!fixedBelow(call.getOperand(idx), call->getParentOfType<cir::FuncOp>(), cycle, callsIn, depth + 1))
+                return false;
+        }
+        return true;
     }
 
     // A queue's number is its position in discovery order, which follows
@@ -931,16 +1035,93 @@ std::optional<AbstractQueue> QueueOwnershipAnalysisPass::memberOf(Value handle, 
     return a;
 }
 
-bool QueueOwnershipAnalysisPass::sameObject(Operation *op, Instance *inst, const Instance *holder) {
+// How many bytes into the object `this` of `f` points to the object a
+// handle in f names: member steps from f's first parameter, read through
+// its slot. None when the handle is anything else.
+static std::optional<uint64_t> offsetFromThis(Value handle, cir::FuncOp f, const DataLayout &layout) {
+    uint64_t offset = 0;
+    Value t = traceToRoot(handle);
+    for (unsigned steps = 0; steps < 16; ++steps) {
+        auto gm = t.getDefiningOp<cir::GetMemberOp>();
+        if (!gm) break;
+        auto pt = dyn_cast<cir::PointerType>(gm.getAddr().getType());
+        auto rec = pt ? dyn_cast<cir::RecordType>(pt.getPointee()) : cir::RecordType();
+        if (!rec || rec.isIncomplete()) return std::nullopt;
+        offset += rec.getElementOffset(layout, gm.getIndex());
+        t = traceToRoot(gm.getAddr());
+    }
+    auto arg = dyn_cast<BlockArgument>(t);
+    if (!arg || arg.getArgNumber() != 0 || f.getBody().empty() || arg.getOwner() != &f.getBody().front())
+        return std::nullopt;
+    return offset;
+}
+
+bool QueueOwnershipAnalysisPass::ctorBuildsAt(Operation *ctor, cir::FuncOp holderFn, uint64_t offset) {
+    auto call = dyn_cast<cir::CallOp>(ctor);
+    if (!call || call.getNumOperands() == 0) return false;
+    auto inner = ctor->getParentOfType<cir::FuncOp>();
+    std::optional<uint64_t> in = offsetFromThis(call.getOperand(0), inner, *layout);
+    if (!in) return false;
+    if (inner == holderFn) return *in == offset;
+    // One call down: the holder calls the function that builds the queue
+    // once, on a member of its own object, and that function builds it
+    // on a member of the object it is handed (spdlog's pool and the queue
+    // object it holds, whose constructor builds the lifted queue).
+    cir::CallOp only;
+    unsigned n = 0;
+    holderFn.walk([&](cir::CallOp c) {
+        if (lookupCallee(c) == inner) { only = c; ++n; }
+    });
+    if (n != 1 || only.getNumOperands() == 0) return false;
+    std::optional<uint64_t> out = offsetFromThis(only.getOperand(0), holderFn, *layout);
+    return out && *out + *in == offset;
+}
+
+bool QueueOwnershipAnalysisPass::ctorRunBy(Operation *ctor, const Instance *holder) {
+    const Instance *ci = ctorOpInst.lookup(ctor);
+    if (!ci || ci == kAmbiguous || !holder || holder == kAmbiguous) return false;
+    if (ci == holder) return true;
+    if (ci->parent != holder || !ci->site) return false;
+    cir::CallOp only;
+    unsigned n = 0;
+    cir::FuncOp(holder->func).walk([&](cir::CallOp c) {
+        if (lookupCallee(c) == ci->func) { only = c; ++n; }
+    });
+    return n == 1 && only == ci->site;
+}
+
+bool QueueOwnershipAnalysisPass::sameObject(Operation *op, Instance *inst, const Instance *holder, Operation *ctor) {
     if (!holder || holder == kAmbiguous) return false;
     Value base;
     Instance *at = nullptr;
-    if (!memberOf(queueOf(op), inst, &base, &at)) return false;
+    std::optional<AbstractQueue> m = memberOf(queueOf(op), inst, &base, &at);
+    if (!m) return false;
     // The base is `this` of some method, handed down the chain from the
-    // closure that captured it.
-    base = throughParameters(base, at);
+    // closure that captured it, through the members of the objects on the
+    // way: spdlog's worker pops `this->q_.q_`, the queue object's member
+    // of the pool's member, one method of each.
+    uint64_t offset = m->offset;
+    for (unsigned hops = 0; hops < 16; ++hops) {
+        base = throughParameters(base, at);
+        auto gm = base ? base.getDefiningOp<cir::GetMemberOp>() : cir::GetMemberOp();
+        if (!gm) break;
+        auto pt = dyn_cast<cir::PointerType>(gm.getAddr().getType());
+        auto rec = pt ? dyn_cast<cir::RecordType>(pt.getPointee()) : cir::RecordType();
+        if (!rec || rec.isIncomplete()) return false;
+        offset += rec.getElementOffset(*layout, gm.getIndex());
+        base = traceToRoot(gm.getAddr());
+    }
     auto ld = base ? base.getDefiningOp<cir::LoadOp>() : cir::LoadOp();
     if (!ld) return false;
+    // ... and the constructor run by the holder builds that member of
+    // the holder's object, not another object's.
+    if (!ctorBuildsAt(ctor, holder->func, offset)) return false;
+    // A constructor runs once per object, so the queue it builds is built
+    // once under the threads its loop starts, however many objects there
+    // are. Any other holder may run twice on one object, building the
+    // queue again under the first run's threads: the queue's constructor
+    // must then have run once in the whole walk, in that holder.
+    if (!cir::FuncOp(holder->func).isCxxConstructor() && !ctorRunBy(ctor, holder)) return false;
     auto gm = traceToLocalRoot(ld.getAddr()).getDefiningOp<cir::GetMemberOp>();
     if (!gm) return false;
     auto pt = dyn_cast<cir::PointerType>(gm.getAddr().getType());
@@ -1394,7 +1575,7 @@ std::string QueueOwnershipAnalysisPass::openWhy(Type t) {
         }
         // A thread start's argument goes to an entry the walk follows.
         if (!callee.getBody().empty() || isLibraryFunction(callee) || isAllocator(callee) ||
-            touchesOnlyItsArguments(callee) || callee.getSymName() == "free" ||
+            touchesOnlyItsArguments(callee) || isCQueueRuntime(callee) || callee.getSymName() == "free" ||
             getSemanticKind(callee) == SemanticOpKind::ThreadSpawn)
             return WalkResult::advance();
         if (llvm::any_of(call.getOperands(), reaches))
@@ -1498,7 +1679,7 @@ void QueueOwnershipAnalysisPass::poisonEscapes() {
     auto harmless = [&](cir::FuncOp callee) {
         const llvm::StringRef n = callee.getSymName();
         return getSemanticKind(callee) != SemanticOpKind::Unknown || isLibraryFunction(callee) ||
-               isAllocator(callee) || touchesOnlyItsArguments(callee) || n == "free" ||
+               isAllocator(callee) || touchesOnlyItsArguments(callee) || isCQueueRuntime(callee) || n == "free" ||
                n.starts_with("_ZdlPv") || n.starts_with("_ZdaPv") || n == "__cxa_atexit" ||
                n == "__cxa_thread_atexit" || n == "__cxa_thread_atexit_impl" || shimOrStd(n);
     };
@@ -2025,19 +2206,27 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
         // program knows before the loop runs: the loop is recorded for the
         // specialisation pass, which can choose the implementation then.
         if (carrier && t != Topology::unknown)
-            for (auto [n, side, what, attr] :
-                 {std::tuple{p, &info.producers, "producers", kProducersLoopAttrName},
-                  std::tuple{c, &info.consumers, "consumers", kConsumersLoopAttrName}}) {
+            for (auto [n, side, what, attr, viaAttr] :
+                 {std::tuple{p, &info.producers, "producers", kProducersLoopAttrName, kProducersViaAttrName},
+                  std::tuple{c, &info.consumers, "consumers", kConsumersLoopAttrName, kConsumersViaAttrName}}) {
                 Operation *loop = n == 2 ? side->countLoop() : nullptr;
                 if (!loop) continue;
                 auto [it, fresh] = loopIds.try_emplace(loop, static_cast<int64_t>(loopIds.size()));
                 if (fresh)
                     loop->setAttr(kSpawnLoopAttrName, IntegerAttr::get(IntegerType::get(ctx, 64), it->second));
                 carrier->setAttr(attr, IntegerAttr::get(IntegerType::get(ctx, 64), it->second));
-                root->emitRemark() << "wtc: queue " << label << ": " << what
-                                   << ": one thread per iteration of the loop at "
-                                   << whereOf(loop->getLoc(), /*fileOnly=*/true)
-                                   << ", so one when it runs at most once";
+                InFlightDiagnostic d = root->emitRemark()
+                                       << "wtc: queue " << label << ": " << what
+                                       << ": one thread per iteration of the loop at "
+                                       << whereOf(loop->getLoc(), /*fileOnly=*/true);
+                if (Operation *via = side->countVia()) {
+                    auto [vt, vfresh] = viaIds.try_emplace(via, static_cast<int64_t>(viaIds.size()));
+                    if (vfresh)
+                        via->setAttr(kSpawnViaAttrName, IntegerAttr::get(IntegerType::get(ctx, 64), vt->second));
+                    carrier->setAttr(viaAttr, IntegerAttr::get(IntegerType::get(ctx, 64), vt->second));
+                    d << ", run by the call at " << whereOf(via->getLoc(), /*fileOnly=*/true);
+                }
+                d << ", so one when it runs at most once";
                 ++remarks;
             }
         if (!carrier && !library && t == Topology::spsc) {
@@ -2103,7 +2292,8 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
     roots.clear(); poisonedTypes.clear(); poisonWhy.clear(); opRoots.clear();
     ctorKeys.clear(); keyCtors.clear(); ctorUnplaced.clear(); keyType.clear();
     memberCtors.clear(); abstractKeys.clear(); elementKeys.clear(); layout.reset();
-    keyCtorInst.clear(); captureStores.clear(); libraryKeys.clear(); openWhyCache.clear();
+    keyCtorInst.clear(); ctorOpInst.clear(); captureStores.clear(); libraryKeys.clear(); openWhyCache.clear();
+    loopIds.clear(); viaIds.clear();
     libraryFunctions.clear(); unresolvedPuts.clear(); mbufPoolKeys.clear(); mbufLink.reset();
     defaultOpsSet.reset(); objectPools.clear(); singleForm.clear();
     globalPoison = false; remarks = 0;
@@ -2187,6 +2377,8 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
     // object; a heap queue by the call after its allocation.
     for (auto [op, inst] : ctorVisits) {
         auto call = cast<cir::CallOp>(op);
+        if (auto [ci, first] = ctorOpInst.try_emplace(op, inst); !first && ci->second != inst)
+            ci->second = kAmbiguous;
         // rte_ring_create is the allocation and the constructor in one: the
         // ring is the object the call hands back, which the walk places at
         // the call itself.
@@ -2437,6 +2629,17 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
                 // sight: it may hold mbufs.
                 if (l.kind == LibraryQueueKind::Mempool && !isLibraryCreate(root.first)) mbufPoolKeys.insert(root);
             }
+            // An overrunning push (shim/bounded.hpp) takes the oldest item
+            // out when the queue is full: its thread is on both sides.
+            auto push = dyn_cast<QueuePushOp>(op);
+            if (push && push.getOverrun()) {
+                SideInfo &also = info.consumers;
+                also.threads.insert(inst->thread);
+                Access b = accessOf(op, *inst);
+                b.oneOf = rs.size() > 1;
+                also.accesses.push_back(b);
+                if (inst->threadMult == Mult::Many) also.anyMany = true;
+            }
             SideInfo &side = isConsumerOp(op) ? info.consumers : info.producers;
             side.threads.insert(inst->thread);
             Access a = accessOf(op, *inst);
@@ -2445,13 +2648,16 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
             // belongs to the constructor of the object it touches: for an
             // abstract queue, the captured `this` is that run's; for a
             // placed one, the run is the one that built the queue, or the
-            // loop is not in the constructor's function at all, where no
-            // choice is made at construction.
+            // run that built it called the loop's function (countVia), or
+            // the constructor is in a function the loop's function calls
+            // and ran once, in the one call of it there (ctorRunBy), or
+            // neither function calls the other, where no choice is made at
+            // construction.
             if (Operation *loop = inst->countLoop) {
                 const Instance *holder = inst->countLoopInst;
                 bool credited = false;
                 if (abstractKeys.count(root)) {
-                    credited = sameObject(op, inst, holder);
+                    credited = sameObject(op, inst, holder, root.first);
                 } else {
                     auto loopFn = loop->getParentOfType<cir::FuncOp>();
                     bool ctorInLoopFn = false;
@@ -2459,7 +2665,33 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
                         for (Operation *c : kc->second)
                             if (c->getParentOfType<cir::FuncOp>() == loopFn) ctorInLoopFn = true;
                     const Instance *built = keyCtorInst.lookup(root);
-                    credited = !ctorInLoopFn || (built && built != kAmbiguous && built == holder);
+                    const bool builtOnce = built && built != kAmbiguous;
+                    // A constructor in a function the loop's function calls.
+                    Operation *below = nullptr;
+                    unsigned ctors = 0;
+                    if (auto kc = keyCtors.find(root); kc != keyCtors.end())
+                        for (Operation *c : kc->second) {
+                            ++ctors;
+                            auto cf = c->getParentOfType<cir::FuncOp>();
+                            loopFn.walk([&](cir::CallOp call) {
+                                if (cf != loopFn && lookupCallee(call) == cf) below = c;
+                            });
+                        }
+                    if (ctorInLoopFn) {
+                        credited = builtOnce && built == holder;
+                    } else if (builtOnce && holder && holder->site && built == holder->parent) {
+                        // The loop one call down from the run that built
+                        // the queue: the count is what that call passes.
+                        credited = true;
+                        a.countVia = cir::CallOp(holder->site).getOperation();
+                    } else if (below) {
+                        // The queue built one call down from the loop's
+                        // function: by the one constructor, run once, in
+                        // the call the specialisation pass redirects.
+                        credited = ctors == 1 && builtOnce && ctorRunBy(below, holder);
+                    } else {
+                        credited = true;
+                    }
                 }
                 if (credited) a.countLoop = loop;
             }
