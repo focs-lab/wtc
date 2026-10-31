@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdlib>
 #include <new>
 #include <type_traits>
 #include <utility>
@@ -70,8 +71,14 @@ struct lifted {
     [[clang::annotate("wtc_queue_push"), clang::annotate("wtc_lifted_push_move")]]
     static void push(C* at, T&& v) { get(at)->push(std::move(v)); }
 
+    // A class that copies its element in. Instantiated with the rest for
+    // every C, also for an element that cannot be copied, whose class
+    // never copies it in and never calls this.
     [[clang::annotate("wtc_queue_push"), clang::annotate("wtc_lifted_push_copy")]]
-    static void push_copy(C* at, const T& v) { get(at)->push(v); }
+    static void push_copy(C* at, const T& v) {
+        if constexpr (std::is_copy_constructible_v<T>) get(at)->push(v);
+        else std::abort();
+    }
 
     // The element is moved out. Used for a class that copies it out only
     // when copy_ok(), where the two are the same.
