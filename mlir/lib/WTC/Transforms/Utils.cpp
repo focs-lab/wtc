@@ -98,6 +98,11 @@ SemanticOpKind getSemanticKind(cir::FuncOp funcOp) {
         if (name == "wtc_thread_spawn")       return SemanticOpKind::ThreadSpawn;
         if (name == "wtc_queue_construction") return SemanticOpKind::QueueConstruction;
         if (name == "wtc_queue_push")         return SemanticOpKind::QueuePush;
+        if (name == "wtc_queue_push_wait")    return SemanticOpKind::QueuePushWait;
+        if (name == "wtc_queue_try_push")     return SemanticOpKind::QueueTryPush;
+        if (name == "wtc_queue_push_overrun") return SemanticOpKind::QueuePushOverrun;
+        if (name == "wtc_queue_push_batch")   return SemanticOpKind::QueuePushBatch;
+        if (name == "wtc_queue_pop_batch")    return SemanticOpKind::QueuePopBatch;
         if (name == "wtc_queue_try_pop")      return SemanticOpKind::QueueTryPop;
         if (name == "wtc_queue_try_pop_into") return SemanticOpKind::QueueTryPopInto;
         if (name == "wtc_queue_pop_wait")     return SemanticOpKind::QueuePopWait;
@@ -641,6 +646,8 @@ unsigned spawnFirstArgOperand(cir::CallOp op) {
     return spawnEntryOperand(op) + 1;
 }
 
+bool isCQueueRuntime(cir::FuncOp f) { return f && f.getSymName().starts_with("wtc_c_queue_"); }
+
 bool touchesOnlyItsArguments(cir::FuncOp f) {
     if (!f || !f.getBody().empty()) return false;
     static const llvm::StringSet<> names = {
@@ -827,7 +834,11 @@ collectQueueConstructors(ModuleOp module) {
 }
 
 bool takesTopologyTag(cir::CallOp ctor) {
-    return ctor.getNumOperands() == 2 || ctor.getNumOperands() == 3;
+    // wtc::queue's (tag) and (tag, policy); wtc::lifted_bounded's construct
+    // (at, tag, capacity, overrun); a lifted C queue's init (at, tag,
+    // capacity, producers, ends).
+    return ctor.getNumOperands() >= 2 && ctor.getNumOperands() <= 5 &&
+           isa<cir::IntType>(ctor.getOperand(1).getType());
 }
 
 std::optional<int64_t> constructorTag(llvm::ArrayRef<cir::CallOp> ctors) {

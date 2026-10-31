@@ -45,6 +45,25 @@ every stage calls, is checked as a pop of each queue it may act on, and
 every stage copies its element out before the next pop. The reorder queue,
 two stages into one, becomes the shim's list for many producers.
 
+## The original, lifted
+
+`build.sh` also builds PARSEC's own sources, unedited, through `wtc-cc`:
+the encoder, the queue and `dedup.c`'s main as one unit (`--unity`), the
+other files as PARSEC builds them. The queue is read as a C queue
+(`--wtc-lift-c-queues`, docs/lifting.md "C queues") whose pops and
+pushes are batched, and is refused: its operations assert on the queue's
+state and on the elements (no more terminations than producers, no push
+after the queue has finished, no null element), checks the substitute
+does not make, so `dedup-lifted` keeps PARSEC's queue, as
+`dedup-unlifted` does. Without the assertions it would lift (the model,
+test/Integration/LiftedC/dedup.c): a batch taken or appended at one step
+of the runtime, so the refine threads popping one queue get disjoint
+adjacent runs, as under the mutex, with the verdicts of the port built
+as one unit with the arrays kept (`dedup-compiler-unity`): the refine
+queues spmc (one fragmenting thread, the refine threads a loop over the
+thread count starts), the reorder queue mpsc (two stages into one),
+deduplicate and compress mpmc.
+
 ## Building and running
 
     benchmarks/apps/dedup/fetch-inputs.sh <parsec-dir> <inputs-dir>

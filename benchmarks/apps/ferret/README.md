@@ -41,6 +41,22 @@ once, as with one thread per stage; with more, the last queue, from the
 rank stage's threads into the one output thread, becomes the shim's list
 for many producers, and the others keep the general implementation.
 
+## The original, lifted
+
+`build.sh` also builds PARSEC's own sources, unedited, through `wtc-cc`:
+`ferret-pthreads.c`, the queue (`src/queue.c`) and the thread pool
+(`src/tpool.c`) as one unit (`--unity`), the rest from ferret's
+libraries. The queue lifts (`--wtc-lift-c-queues`, docs/lifting.md "C
+queues"): the five queues run on the bounded ring with ferret's capacity
+and the counted close. Their verdicts are unknown, so they keep the
+general implementation: the stages start through `tpool_create`, whose
+descriptors hold the entry functions in memory the analysis does not
+follow, so every stage's function is one whose address is taken, which
+may run on any thread; and the loader's recursive directory scan reaches
+the first queue through recursion, which makes every queue of the type
+unknown. The port starts its threads directly and gets inline rings with
+one thread a stage. `ferret-unlifted` is the same unit with `--no-lift`.
+
 ## Building and running
 
     benchmarks/apps/ferret/fetch-inputs.sh <parsec-dir> <inputs-dir>
