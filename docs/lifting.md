@@ -13,6 +13,73 @@ lifting pass raises the push and pop to `wtc.queue_push` and
 `--wtc-specialize` rewrites the constant tag that `wtc::lifted<C>::construct`
 passes, as it rewrites `wtc::queue`'s.
 
+## The contract
+
+The claim is that lifting is faithful: every run of the lifted program is,
+in everything the contract lets a program observe, a run the original
+program allows. Nothing is claimed outside the contract, and every way in
+which a lifted program is known to differ is listed below, with the
+remark by which the pass refuses each shape it cannot keep.
+
+What the contract takes as given:
+
+- **The whole program.** The module the pass sees is the program, as far
+  as the class goes: it has `main`, it is not compiled to be linked with
+  files the pass does not see (`wtc-cc -c`), no file linked with it names
+  the class, and every member function of the class it declares has its
+  body there (condition (f) below).
+- **A race-free program.** The original has no data race and does not
+  depend on timing: how long a thread sleeps or waits, or the order in
+  which the scheduler runs threads, is not behaviour it can rely on.
+- **Observable behaviour.** What the program writes, its exit status, and
+  the values its functions compute: in particular the elements a pop
+  returns, whether a try-pop or a closable pop found one, and the order in
+  which a consumer receives them.
+- **The queue's semantics.** Under its mutex the original class is a
+  linearisable FIFO queue. The substitute is linearisable and FIFO per
+  producer, and each push happens before the pop that returns its element
+  (`decisions/0003`): the results its operations return are results the
+  original's mutex allows for the same operations.
+
+Known differences, outside the contract:
+
+- **An operation that passes no element orders nothing.** A pop that found
+  the queue empty, and a close, synchronise with nothing but the queue. A
+  program that read other state after such an operation, relying on the
+  original's mutex to have ordered it after an unrelated critical section,
+  is outside the contract; condition (c) refuses the common form of it,
+  other state guarded by the same mutex.
+- **Failure ends the program.** The original's push could throw
+  `std::bad_alloc` from the container, and an element's move or copy could
+  throw out of a push or a pop. The substitute's allocation failure, and
+  an element's move that throws, end the program (`shim/queue.hpp`).
+- **Element lifetimes.** The substitute moves an element a different
+  number of times than the container did, and frees its own memory on its
+  own schedule. A program whose element's constructors or destructor have
+  effects it observes (a count of moves, a log line per copy) can tell.
+- **Wake-ups.** The original woke a waiter on every push, or every waiter
+  at once; the substitute wakes one registered sleeper per push. Only
+  timing tells.
+
+Every refusal names the condition it fails, (a) to (f) below. Refusals
+added on 30 Oct 2026, after a review found shapes the first version lifted
+unfaithfully:
+
+| remark | the shape | what lifting it did |
+|---|---|---|
+| (f) the unit is compiled to be linked with files the pass does not see | `wtc-cc -c` | another file's copy of the class's inline member functions, compiled as written, used the storage that holds the substitute's pointer |
+| (f) a file linked with this one names C | an object file, archive or shared object linked by `wtc-cc` defines or references a member function of C, or a function that takes or returns C | as above: the linker keeps one copy of each inline member function for the program, the lifted one or the original |
+| (f) the module has no main | a unit that is not the program | as above |
+| (f) C::f has no body here | a member function defined in another unit | as above |
+| (a) F builds or destroys a local T, whose constructor or destructor may have effects of its own | a local object other than a lock or a duration, built inside an operation | the operation's body is replaced whole, and the object's effects went with it |
+| (d) F starts the stop flag S other than false / indeterminate | a stop flag that starts true, is computed, or is left uninitialised by a constructor | the substitute starts open: a closable pop that returned false at once waited instead |
+| (d) F notifies cv with the mutex held | a push or a close that notifies inside its critical section | a thread that saw the operation's effect under the mutex could destroy the queue while the substitute was still waking a sleeper (after the unlock, the usual form, the original itself touches the variable after that point, so a program cannot destroy it there) |
+| (e) the std::queue's underlying container is neither a std::deque nor a std::list | `std::queue<T, X>` with X a container of the program's own, even one whose name carries `std::deque` | the check read the adapter's spelling; X's `push_back` may insert anywhere |
+| (e) the element is built by emplace from an argument of another type than the container's | `q.emplace(i)` with `i` an `int` into a queue of `long` | the substitute's push received the argument as the element, and the build failed |
+
+A move-only element (`std::unique_ptr<T>`, the common task) lifts: the
+runtime's copying push is compiled for it but never called.
+
 ## The shape
 
 ```cpp
@@ -60,7 +127,11 @@ and after it the test `q.empty()` and the test `stop && q.empty()` are one
 test.
 
 Constructors may build the container with its default constructor, and
-set the flag false; destructors destroy it. Those calls become
+must set the flag false, by a constant (a flag that starts true, is
+computed or is left indeterminate refuses: the substitute starts open);
+destructors destroy it. Inside an operation the only local objects built
+or destroyed are locks and durations, whose constructors and destructors
+do nothing else: the operation's body is replaced whole. Those calls become
 `lifted::construct(&q, tag)` and `lifted::destroy(&q)`. The class keeps its
 layout: the container's storage holds the pointer to the `wtc::queue`, which
 nothing else in the program touches, as the proof establishes.
@@ -90,12 +161,24 @@ prefixed by the condition it fails.
   (`wait_for`, `wait_until`), a wait outside a loop, a push that does not
   notify, a pop that returns at the stop flag while elements are still
   queued (discard on stop), a `condition_variable_any`, a count
-  (`size()`), which the lock-free queues do not keep linearisably.
-- **(e) FIFO at the two ends.** A `std::queue` over a deque or a list, a
-  `std::deque` or a `std::list`; in at the back, out at the front.
-  Refused: `back`, `pop_back`, `push_front`, `insert`, `erase`, `swap`,
-  `clear`, a `std::vector`, a `std::priority_queue`, a container that is
-  not standard.
+  (`size()`), which the lock-free queues do not keep linearisably, a
+  notification made with the mutex held.
+- **(e) FIFO at the two ends.** A `std::queue` whose member is a
+  `std::deque` or a `std::list` (its type, not the adapter's spelling), a
+  `std::deque` or a `std::list`; in at the back, out at the front, the
+  element pushed of the container's own type. Refused: `back`,
+  `pop_back`, `push_front`, `insert`, `erase`, `swap`, `clear`, a
+  `std::vector`, a `std::priority_queue`, a container that is not
+  standard, `emplace` from an argument of another type.
+- **(f) A closed world.** The class lifts only where the module is the
+  whole program for it (the contract above): not with `open-world` (what
+  `wtc-cc -c` passes), not in a module without `main`, not when a symbol
+  in `named-elsewhere` (what `wtc-cc` lists, with `nm`, from the object
+  files, archives and shared objects it links) mentions the class, and not
+  when a member function of the class has no body in the module. A
+  lifted member function differs from the original in what it does with
+  the object's storage, and another unit's copy of it, as written, would
+  read the substitute's pointer as a container.
 
 The pass also counts, per class, every container operation and wait form
 it saw (the "uses" remark), so that a refusal says what a class would need.
@@ -121,25 +204,11 @@ Kept:
 - **The element's handling.** A push that moved its parameter moves it, one
   that copied copies; a pop moves the element out, and a pop that copied
   it out lifts only for a trivially copyable type, where the two are the
-  same.
+  same. A move-only element lifts.
 
-Changed, as decisions/0003 states for every substitution:
-
-- **Ordering.** The original's mutex totally ordered every operation on the
-  queue and ordered them against the mutex's other users. The substitute
-  is linearisable and FIFO per producer, and each push happens before the
-  pop that returns its element; an operation that passes no element orders
-  nothing. A program that read other state after a pop that found nothing,
-  relying on the mutex's hand-off from an unrelated critical section, is
-  outside the contract; condition (c) rules out the common form of it, the
-  other state guarded by the same mutex.
-- **Failure.** The original's push could throw `std::bad_alloc` from the
-  container; the substitute's allocation failure ends the program, as it
-  does for `wtc::queue`. An element's move assignment that throws in a pop
-  ends the program too (`shim/queue.hpp`).
-- **Wake-ups.** The original woke on every push (`notify_one`) or woke
-  every waiter (`notify_all`); the substitute wakes one registered sleeper
-  per push. A program cannot tell the difference except by timing.
+Changed: the known differences listed under "The contract" above
+(ordering of an operation that passes no element, failure, element
+lifetimes, wake-ups), as decisions/0003 states for every substitution.
 
 ## How the runtime gets into the module
 
