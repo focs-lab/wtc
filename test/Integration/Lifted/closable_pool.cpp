@@ -6,10 +6,10 @@
 // one worker and with several. One producer and many consumers: the
 // queue whose consumers claim cells.
 //
-// RUN: %wtc_cc -DWTC_CHECK %s -o %t.exe 2>&1 | FileCheck %s
+// RUN: %wtc_cc --lift -DWTC_CHECK %s -o %t.exe 2>&1 | FileCheck %s
 // RUN: %t.exe 1 | FileCheck %s --check-prefix=OUT
 // RUN: %t.exe 4 | FileCheck %s --check-prefix=OUT
-// RUN: %if tsan %{ %wtc_cc --tsan -O1 -g %s -o %t.tsan.exe %}
+// RUN: %if tsan %{ %wtc_cc --lift --tsan -O1 -g %s -o %t.tsan.exe %}
 // RUN: %if tsan %{ env TSAN_OPTIONS=halt_on_error=1:symbolize=0 %t.tsan.exe 1 2>&1 | FileCheck %s --check-prefixes=TSAN,OUT %}
 // RUN: %if tsan %{ env TSAN_OPTIONS=halt_on_error=1:symbolize=0 %t.tsan.exe 4 2>&1 | FileCheck %s --check-prefixes=TSAN,OUT %}
 //

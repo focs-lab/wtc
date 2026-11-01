@@ -17,10 +17,10 @@
 //
 // The code kept is the upstream code, reduced; CTPL is under the Apache License 2.0.
 //
-// RUN: %wtc_cc -DWTC_CHECK %s -o %t.exe 2>&1 | FileCheck %s
+// RUN: %wtc_cc --lift -DWTC_CHECK %s -o %t.exe 2>&1 | FileCheck %s
 // RUN: %t.exe 1 | FileCheck %s --check-prefix=OUT
 // RUN: %t.exe 4 | FileCheck %s --check-prefix=OUT
-// RUN: %if tsan %{ %wtc_cc --tsan -O1 -g %s -o %t.tsan.exe 2>&1 | FileCheck %s %}
+// RUN: %if tsan %{ %wtc_cc --lift --tsan -O1 -g %s -o %t.tsan.exe 2>&1 | FileCheck %s %}
 // RUN: %if tsan %{ env TSAN_OPTIONS=halt_on_error=1:symbolize=0 %t.tsan.exe 4 2>&1 | FileCheck %s --check-prefixes=TSAN,OUT %}
 //
 // CHECK: locked queue q in ctpl::detail::Queue<std::function<void (int)> *> lifted (ctpl::detail::Queue<std::function<void (int)>*>::pop: try-pop, ctpl::detail::Queue<std::function<void (int)>*>::push: push)

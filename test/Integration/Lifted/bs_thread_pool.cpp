@@ -17,7 +17,7 @@
 //
 // The code kept is the upstream code, reduced; BS::thread_pool is under the MIT licence.
 //
-// RUN: %wtc_cc -DWTC_CHECK %s -o %t.exe 2>&1 | FileCheck %s
+// RUN: %wtc_cc --lift -DWTC_CHECK %s -o %t.exe 2>&1 | FileCheck %s
 // RUN: %t.exe | FileCheck %s --check-prefix=OUT
 //
 // CHECK-DAG: locked queue tasks in BS::thread_pool not lifted: (c) the mutex tasks_mutex also guards tasks_running in BS::thread_pool::worker

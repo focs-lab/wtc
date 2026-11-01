@@ -16,7 +16,7 @@
 //
 // The code kept is the upstream code, reduced; cpp-httplib is under the MIT licence.
 //
-// RUN: %wtc_cc -DWTC_CHECK %s -o %t.exe 2>&1 | FileCheck %s
+// RUN: %wtc_cc --lift -DWTC_CHECK %s -o %t.exe 2>&1 | FileCheck %s
 // RUN: %t.exe | FileCheck %s --check-prefix=OUT
 //
 // CHECK-DAG: locked queue jobs_ in ThreadPool not lifted: (c) the mutex mutex_ also guards idle_thread_count_ in ThreadPool::worker

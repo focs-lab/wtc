@@ -13,6 +13,26 @@ lifting pass raises the push and pop to `wtc.queue_push` and
 `--wtc-specialize` rewrites the constant tag that `wtc::lifted<C>::construct`
 passes, as it rewrites `wtc::queue`'s.
 
+## Opt-in
+
+Since 1 Nov 2026 the substitution runs only when a build asks for it:
+`wtc-cc --lift`. Without it, `wtc-cc` compiles the program's own queues
+as written; `--no-lift`, which turned the substitution off while it was
+the default, is still accepted and is now the default. `wtc-opt` runs the
+pass only when `--wtc-lift-locked-queues` is given, as before.
+
+The reason is how the proof decides that nothing outside the class touches
+the container. It decides by the program's types, taking the module for
+the whole program as far as the class goes, a closed-world rule, not by
+following where the object itself goes. Reviews of the substitution's
+faithfulness kept finding programs that reach the object by a path the
+types do not show: a pointer made an integer, a pointer to a function that
+returns the object, storage another file hands over. Each finding was
+closed by another refusal, and the next review found more of the same
+kind. The rule is to be replaced by an escape analysis that follows the
+object's address; until then the substitution is a choice a build makes,
+and the tests that exercise it pass `--lift`.
+
 ## The shape
 
 ```cpp
@@ -153,8 +173,8 @@ both the shim's annotations (`wtc_queue_push`, `wtc_queue_try_pop_into`,
 finds them; the `wtc::queue` calls inside them are their implementation and
 are not raised to the dialect again (`insideLiftedRuntime`, `Utils.h`). A
 container type that cannot be spelled at the end of the file (a lambda's,
-one in an anonymous namespace) is refused. `--no-lift` builds the program
-as written.
+one in an anonymous namespace) is refused. Without `--lift` the program is
+built as written.
 
 ## Six real queue classes
 

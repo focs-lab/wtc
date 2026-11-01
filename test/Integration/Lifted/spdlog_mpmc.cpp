@@ -16,7 +16,7 @@
 //
 // The code kept is the upstream code, reduced; spdlog is under the MIT licence.
 //
-// RUN: %wtc_cc -DWTC_CHECK %s -o %t.exe 2>&1 | FileCheck %s
+// RUN: %wtc_cc --lift -DWTC_CHECK %s -o %t.exe 2>&1 | FileCheck %s
 // RUN: %t.exe | FileCheck %s --check-prefix=OUT
 //
 // CHECK-DAG: locked queue q_ in spdlog::details::mpmc_blocking_queue<async_msg> not lifted: (e) the container spdlog::details::circular_q<async_msg> is not a standard container

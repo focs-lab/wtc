@@ -13,7 +13,7 @@
 //
 // The code kept is the upstream code, reduced; Bitcoin Core is under the MIT licence.
 //
-// RUN: %wtc_cc -DWTC_CHECK %s -o %t.exe 2>&1 | FileCheck %s
+// RUN: %wtc_cc --lift -DWTC_CHECK %s -o %t.exe 2>&1 | FileCheck %s
 // RUN: %t.exe | FileCheck %s --check-prefix=OUT
 //
 // CHECK-DAG: locked queue queue in CCheckQueue<Check, bool> not lifted: (e) the container is a std::vector, which the class may use as a stack or a batch

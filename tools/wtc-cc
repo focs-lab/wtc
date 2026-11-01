@@ -14,10 +14,15 @@
 #   --keep DIR         keep the intermediate .cir/.ll files in DIR
 #   --no-specialize    run the analysis but leave every tag alone (the
 #                      "generic" build of an unmodified source)
-#   --no-lift          leave the program's own locked queues as written
-#                      (--wtc-lift-locked-queues, docs/lifting.md); without
-#                      it, a class the pass lifts is replaced by
-#                      wtc::lifted, whose instantiations this script adds
+#   --lift             lift the program's own locked queues
+#                      (--wtc-lift-locked-queues, docs/lifting.md): a class
+#                      the pass lifts is replaced by wtc::lifted, whose
+#                      instantiations this script adds. Off by default: the
+#                      check that nothing else in the program touches the
+#                      queue is a type-based closed-world rule, to be
+#                      replaced by an escape analysis (docs/lifting.md,
+#                      "Opt-in")
+#   --no-lift          leave those queues as written (the default)
 #   --force-spsc SYMS  tag these global queues spsc regardless of the verdict
 #                      (negative control; pass a comma-separated list)
 #   --force-inline SYMS  tag these global queues spsc_inline regardless of
@@ -71,13 +76,14 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)
 
-KEEP=""; SPECIALIZE=1; LIFT=1; TSAN=0; CENSUS=0; COMPILE_ONLY=0; FORCE=""; FORCE_INLINE=""; TOOLCHAIN=""; OUT="a.out"; SRC=""
+KEEP=""; SPECIALIZE=1; LIFT=0; TSAN=0; CENSUS=0; COMPILE_ONLY=0; FORCE=""; FORCE_INLINE=""; TOOLCHAIN=""; OUT="a.out"; SRC=""
 BATCH_COST=""; BATCH_HOST=""; BATCH_NS=""
 PASSTHRU=(); LINKARGS=(); OPTARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --keep) KEEP=$2; shift 2 ;;
     --no-specialize) SPECIALIZE=0; shift ;;
+    --lift) LIFT=1; shift ;;
     --no-lift) LIFT=0; shift ;;
     --force-spsc) FORCE=$2; shift 2 ;;
     --force-inline) FORCE_INLINE=$2; shift 2 ;;
