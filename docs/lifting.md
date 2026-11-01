@@ -34,7 +34,8 @@ returns the object, storage another file hands over. Each finding was
 closed by another refusal, and the next review found more of the same
 kind. The rule is to be replaced by an escape analysis that follows the
 object's address; until then the substitution is a choice a build makes,
-and the tests that exercise it pass `--lift`.
+and the tests that exercise it pass `--lift`. The findings still open
+are listed under "Known open findings", below.
 
 ## The contract
 
@@ -126,6 +127,31 @@ the split layout (several producers, no overrun) no longer refuses as
 full when other threads push and pop past the tail it read before it
 reads the head: it refuses only once a third read finds the tail
 unchanged (`bounded_push_steps split`).
+
+## Known open findings
+
+The review of 1 Nov 2026 confirmed the findings below, which are not
+fixed: each of these programs, built with `--lift` (the last, with
+`--unity`), behaves otherwise than as written. Each is a test under
+`test/Integration/` marked `XFAIL: *`, which states the program's output
+as written and passes once the hole is closed, whether the class or struct
+is then refused or lifted faithfully (or the unit refused); the suite then
+reports an unexpected pass, and the mark comes off. The first six are
+holes in the closed-world rule of conditions (f) and, for C, (a), the rule
+that the escape analysis is to replace ("Opt-in").
+
+| finding | the shape | what lifting it does | test |
+|---|---|---|---|
+| closed world: an integer through the coerced exception | with a file linked, the object's address leaves as an integer through `__builtin_bit_cast` (`std::bit_cast`'s body), the bits of a pointer slot loaded as an integer, which the "coerced" exception admits when the load goes to a function of this module; that function keeps it in a global, and `main` hands it to the other file | the other file, built at `-O2` with no symbol naming the class, turns the integer back into the class and reads the substitute's pointer as the container | `Lifted/open_bits_cast.cpp` |
+| closed world: pointers to functions in globals | a global another file may name holds a pointer to a function that returns the object, which is itself static; the search for the class in such globals' types does not enter function types | as above, through the pointer | `Lifted/open_function_pointer_global.cpp` |
+| closed world: call results, placement new into foreign storage | the object is built by placement new in storage that another file hands over as the result of a call with no body here (a call's arguments are checked, not its result), and that file reads it by its own pointer (`void *` to `C *` is a conversion into the types the pass follows, not out of them) | the other file reads the substitute's pointer as the container | `Lifted/open_foreign_storage.cpp` |
+| closed world: `__cxa_atexit` forwarding | the object's address, made `void *`, registered with `__cxa_atexit` for a function with a body here, which the exception for a global's destructor admits; that function hands it on to another file | the other file reads the substitute's pointer as the container at exit | `Lifted/open_atexit_forwarding.cpp` |
+| closed world, C: a pointer to a function that returns a static holder | a static struct that holds the queue, and a global another file names holding a pointer to a function that returns the struct's address | the other file reads the substitute's pointer as the queue's index | `LiftedC/open_function_pointer.c` |
+| closed world, C: storage from a call with no body here | the queue, or a struct that holds it, is another file's, reached here only through a function with no body here; its uses here are only the queue's functions | as above | `LiftedC/open_storage_from_call.c` |
+| (e) `std::allocator` specialised by the program | `std::allocator<Item>` specialised for the program's own element type, which bounds the queue as `allocator_bound.cpp`'s allocator does; the name the check reads is `std::allocator` of the element | the substitute allocates without it and refuses no push | `Lifted/open_allocator_specialisation.cpp` |
+| C: a union that holds the queue | a queue inside a union, read through the union's other member; the step to that member is not a step to the queue | the other member reads the substitute's pointer | `LiftedC/open_union_holder.c` |
+| C: a ring's narrow index | a ring whose indices are `unsigned char`, wrapping at 256 before the slot count, by `++` or by the `int` result of `(put + 1) % nslots` converted back; the C ring's evaluator takes the increment, and a conversion that loses values, for the identity | the substitute keeps every element the original overwrote | `LiftedC/open_narrow_index.c` |
+| `wtc-cc --unity`: header statics and tentative definitions | a header with an include guard and a static of its own (C or C++), whose second include the unit skips, so that the files share the static; or `static int x;` in two files, tentative definitions of one internal object in the unit (C11 6.9.2) | the files share state that each has its own of compiled apart; the check that each file means in the unit what it means alone does not catch it | `LiftedC/open_unity_header_static.c`, `LiftedC/open_unity_tentative.c` |
 
 ## The shape
 
