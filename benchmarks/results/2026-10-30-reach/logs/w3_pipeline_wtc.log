@@ -1,0 +1,6 @@
+wtc: queue @_ZN12_GLOBAL__N_16stage1E: spsc (producers: 1, consumers: 1)
+wtc: queue @_ZN12_GLOBAL__N_16stage2E: spsc (producers: 1, consumers: 1)
+wtc: queue @_ZN12_GLOBAL__N_16stage1E: every pop only borrows its element (1 pop)
+wtc: queue @_ZN12_GLOBAL__N_16stage2E: every pop only borrows its element (1 pop)
+wtc: specialised: constructor tag rewritten to spsc_inline
+wtc: specialised: constructor tag rewritten to spsc_inline

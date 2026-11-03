@@ -1,0 +1,1 @@
+wtc: C queue struct _queue_t not lifted: (d) queue_dequeue takes a batch of adjacent elements at one step, and it may act on *@refine_que[*] (spmc), which may have several consumers; a batched pop is lifted only for a queue proved to have one, so that its batches stay contiguous

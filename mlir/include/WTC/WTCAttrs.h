@@ -43,6 +43,14 @@ inline constexpr llvm::StringLiteral kBorrowedAttrName = "wtc.borrowed";
 inline constexpr llvm::StringLiteral kProducersLoopAttrName = "wtc.producers_loop";
 inline constexpr llvm::StringLiteral kConsumersLoopAttrName = "wtc.consumers_loop";
 inline constexpr llvm::StringLiteral kSpawnLoopAttrName = "wtc.spawn_loop";
+// For such a side whose loop is in a function the one that builds the
+// queue calls (a thread pool's create function), on the root: the number
+// of that call, which carries the same number in kSpawnViaAttrName. The
+// loop's bound is a parameter of its function, and the count is the value
+// the call passes for it.
+inline constexpr llvm::StringLiteral kProducersViaAttrName = "wtc.producers_via";
+inline constexpr llvm::StringLiteral kConsumersViaAttrName = "wtc.consumers_via";
+inline constexpr llvm::StringLiteral kSpawnViaAttrName = "wtc.spawn_via";
 
 } // namespace mlir::wtc
 

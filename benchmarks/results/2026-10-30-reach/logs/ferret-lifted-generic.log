@@ -1,0 +1,31 @@
+wtc: C queue struct queue lifted (enqueue: push, queue_signal_terminate: terminate, dequeue: pop, queue_init: init, queue_destroy: destroy); capacity: parameter 1 - 1; finished after as many terminations as parameter 2 of init
+wtc: queue @q_load_seg: mpmc (producers: many, consumers: many)
+wtc: queue @q_load_seg: many producers: started in a loop at tpool.c:83:14
+wtc: queue @q_load_seg: many consumers: started in a loop at tpool.c:83:14
+wtc: queue @q_load_seg: producers: one thread per iteration of the loop at tpool.c:71:5, run by the call at ferret-pthreads.c:550:11, so one when it runs at most once
+wtc: queue @q_load_seg: consumers: one thread per iteration of the loop at tpool.c:71:5, run by the call at ferret-pthreads.c:551:10, so one when it runs at most once
+wtc: queue @q_seg_extract: mpmc (producers: many, consumers: many)
+wtc: queue @q_seg_extract: many producers: started in a loop at tpool.c:83:14
+wtc: queue @q_seg_extract: many consumers: started in a loop at tpool.c:83:14
+wtc: queue @q_seg_extract: producers: one thread per iteration of the loop at tpool.c:71:5, run by the call at ferret-pthreads.c:551:10, so one when it runs at most once
+wtc: queue @q_seg_extract: consumers: one thread per iteration of the loop at tpool.c:71:5, run by the call at ferret-pthreads.c:552:14, so one when it runs at most once
+wtc: queue @q_extract_vec: mpmc (producers: many, consumers: many)
+wtc: queue @q_extract_vec: many producers: started in a loop at tpool.c:83:14
+wtc: queue @q_extract_vec: many consumers: started in a loop at tpool.c:83:14
+wtc: queue @q_extract_vec: producers: one thread per iteration of the loop at tpool.c:71:5, run by the call at ferret-pthreads.c:552:14, so one when it runs at most once
+wtc: queue @q_extract_vec: consumers: one thread per iteration of the loop at tpool.c:71:5, run by the call at ferret-pthreads.c:553:10, so one when it runs at most once
+wtc: queue @q_vec_rank: mpmc (producers: many, consumers: many)
+wtc: queue @q_vec_rank: many producers: started in a loop at tpool.c:83:14
+wtc: queue @q_vec_rank: many consumers: started in a loop at tpool.c:83:14
+wtc: queue @q_vec_rank: producers: one thread per iteration of the loop at tpool.c:71:5, run by the call at ferret-pthreads.c:553:10, so one when it runs at most once
+wtc: queue @q_vec_rank: consumers: one thread per iteration of the loop at tpool.c:71:5, run by the call at ferret-pthreads.c:554:11, so one when it runs at most once
+wtc: queue @q_rank_out: mpmc (producers: many, consumers: many)
+wtc: queue @q_rank_out: many producers: started in a loop at tpool.c:83:14
+wtc: queue @q_rank_out: many consumers: started in a loop at tpool.c:83:14
+wtc: queue @q_rank_out: producers: one thread per iteration of the loop at tpool.c:71:5, run by the call at ferret-pthreads.c:554:11, so one when it runs at most once
+wtc: queue @q_rank_out: consumers: one thread per iteration of the loop at tpool.c:71:5, run by the call at ferret-pthreads.c:555:10, so one when it runs at most once
+wtc: queue @q_load_seg: every pop moves its element out or only borrows it (1 pop)
+wtc: queue @q_seg_extract: every pop moves its element out or only borrows it (1 pop)
+wtc: queue @q_extract_vec: every pop moves its element out or only borrows it (1 pop)
+wtc: queue @q_vec_rank: every pop moves its element out or only borrows it (1 pop)
+wtc: queue @q_rank_out: every pop moves its element out or only borrows it (1 pop)

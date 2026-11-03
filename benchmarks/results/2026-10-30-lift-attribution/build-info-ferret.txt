@@ -1,0 +1,4 @@
+compiler=tools/wtc-cc, ClangIR 1ebf89d8c5e6
+wtc=9bee652bade1
+parsec=2e492f771c67
+libraries=clang-18 -O2 -std=gnu89 -DHUGE=HUGE_VAL -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types; gsl by gcc

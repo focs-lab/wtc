@@ -1,0 +1,12 @@
+wtc: queue *@refine_que[*]: spsc (producers: 1, consumers: 1)
+wtc: queue *@deduplicate_que[*]: spsc (producers: 1, consumers: 1)
+wtc: queue *@compress_que[*]: spsc (producers: 1, consumers: 1)
+wtc: queue *@reorder_que[*]: mpsc (producers: many, consumers: 1)
+wtc: queue *@reorder_que[*]: many producers: 2 threads: Deduplicate_t(void*) started at encoder-wtc.cpp:1602:31, Compress_t(void*) started at encoder-wtc.cpp:1603:34
+wtc: queue *@deduplicate_que[*]: every pop only borrows its element (2 pops)
+wtc: queue *@refine_que[*]: every pop only borrows its element (2 pops)
+wtc: queue *@compress_que[*]: every pop only borrows its element (2 pops)
+wtc: specialised: constructor tag rewritten to spsc_inline
+wtc: specialised: constructor tag rewritten to spsc_inline
+wtc: specialised: constructor tag rewritten to mpsc
+wtc: specialised: constructor tag rewritten to spsc_inline

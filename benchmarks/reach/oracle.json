@@ -22,20 +22,28 @@
 
     {"program": "PARSEC ferret, one thread per stage", "log": "ferret-compiler-one.log",
      "queues": [
-       {"queue": "q_load_seg", "producers": "1", "consumers": "1",
-        "cause": "the loader pushes from inside its recursive directory scan"},
+       {"queue": "q_load_seg", "producers": "1", "consumers": "1"},
        {"queue": "q_seg_extract", "producers": "1", "consumers": "1"},
        {"queue": "q_extract_vec", "producers": "1", "consumers": "1"},
        {"queue": "q_vec_rank", "producers": "1", "consumers": "1"},
        {"queue": "q_rank_out", "producers": "1", "consumers": "1"}]},
     {"program": "PARSEC ferret, threads per middle stage from argv", "log": "ferret-compiler.log",
      "queues": [
-       {"queue": "q_load_seg", "producers": "1", "consumers": "many",
-        "cause": "the loader pushes from inside its recursive directory scan"},
+       {"queue": "q_load_seg", "producers": "1", "consumers": "many"},
        {"queue": "q_seg_extract", "producers": "many", "consumers": "many"},
        {"queue": "q_extract_vec", "producers": "many", "consumers": "many"},
        {"queue": "q_vec_rank", "producers": "many", "consumers": "many"},
        {"queue": "q_rank_out", "producers": "many", "consumers": "1"}]},
+    {"program": "PARSEC ferret from its own sources, its queue lifted (--unity of ferret-pthreads.c, queue.c, tpool.c), threads per middle stage from argv",
+     "log": "ferret-lifted.log",
+     "queues": [
+       {"queue": "q_load_seg", "producers": "1", "consumers": "many",
+        "cause": "the loader's stage is started by the thread pool's loop over NTHREAD_LOAD, which the program never changes from 1"},
+       {"queue": "q_seg_extract", "producers": "many", "consumers": "many"},
+       {"queue": "q_extract_vec", "producers": "many", "consumers": "many"},
+       {"queue": "q_vec_rank", "producers": "many", "consumers": "many"},
+       {"queue": "q_rank_out", "producers": "many", "consumers": "1",
+        "cause": "the output stage is started by the thread pool's loop over NTHREAD_OUT, which the program never changes from 1"}]},
 
     {"program": "PARSEC dedup as written, threads per stage from argv", "log": "dedup-compiler.log",
      "queues": [

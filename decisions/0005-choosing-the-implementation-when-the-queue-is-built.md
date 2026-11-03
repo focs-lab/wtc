@@ -37,12 +37,35 @@ comparison and a select per queue, once. Every operation on such a queue
 records the general-purpose implementation, which is what every later
 check may assume of any queue.
 
+## Amended 30 Oct 2026: one call away
+
+The lifted programs put the loop or the constructor one call from the
+other: ferret's stages start in its thread pool's loop over a count main
+passes, and spdlog's pool builds the queue object whose constructor
+builds the queue. Either may now be one call away. A loop one call down
+is read through the call: its bound must be a parameter the function
+keeps as it is, and the call must pass a variable for it, which is then
+the bound, held to the rules above at the call in place of the loop; a
+side counts only when all its threads come through the same call. A
+constructor one call down is reached through the one call of its
+function that the loop's function makes, and only when that
+constructor runs once in the whole program, in that call: a loop's
+function that runs twice builds the queue twice, the second time under
+the threads the first run's loop started, and the second run's count is
+not theirs. The same holds for a constructor in the loop's own function
+and for the object whose member it builds. That function is copied with
+the tag as one more parameter, and the call is redirected to the copy,
+so that other callers keep the static tag. A loop that may leave early
+(a return, break or continue around the spawn) is counted as well: it
+starts at most one thread per iteration, so at most one when it runs at
+most once, which is all the choice reads.
+
 ## What it costs
 
-- **Only one shape of count.** A loop with an early exit, a stride, or a
-  bound computed in the condition is not counted, and neither is a pool
-  whose size reaches the loop through a member written in another
-  function. Each would need its own proof that the count read at the
+- **Only one shape of count.** A loop with a stride, or a bound computed
+  in the condition, is not counted, and neither is a pool whose size
+  reaches the loop through a member written in another function, or
+  through more than one call. Each would need its own proof that the count read at the
   constructor is the count the loop runs.
 - **The queue must be built after the count is known.** A queue built by
   a global's constructor, before `main` reads the count, cannot choose.

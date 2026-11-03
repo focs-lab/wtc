@@ -473,8 +473,13 @@ bool ThreadInstanceWalk::reachesOp(cir::FuncOp f, llvm::function_ref<bool(Operat
                     // was lost without a word.
                     cir::FuncOp entry = resolveFunctionOperand(call.getOperand(k));
                     if (!entry) entry = resolveFunctionOperand(traceToRoot(call.getOperand(k)));
+                    llvm::SmallVector<cir::FuncOp, 4> fromField;
                     if (entry) {
                         callers[entry.getOperation()].push_back(fn.getOperation());
+                    } else if (entryFieldFunctions(call.getOperand(k), fromField)) {
+                        // Any function stored into the descriptor field the
+                        // entry is loaded from (resolveEntries).
+                        for (cir::FuncOp e : fromField) callers[e.getOperation()].push_back(fn.getOperation());
                     } else if (entryComesFromParameter(call.getOperand(k))) {
                         // Which thread starts here depends on the caller.
                         // Assume it may reach: the cost is an instance, and
@@ -676,7 +681,12 @@ bool ThreadInstanceWalk::canSpawn(cir::FuncOp f) {
     return spawnsCache_.lookup(f.getOperation());
 }
 
-static bool flowsOnlyToSpawnEntry(Value v, unsigned depth, Operation *skip = nullptr);
+// (record, field) pairs that hold a thread's entry and nothing else reads
+// (ThreadInstanceWalk::computeEntryFields): storing a function there hands
+// it to a spawn.
+using EntryFieldSet = llvm::DenseSet<std::pair<Type, unsigned>>;
+static bool flowsOnlyToSpawnEntry(Value v, unsigned depth, Operation *skip = nullptr,
+                                  const EntryFieldSet *entryFields = nullptr);
 
 // Whether a use of a function's symbol takes its address, so that the
 // function may run somewhere the call graph does not show -- not a direct
@@ -685,13 +695,13 @@ static bool flowsOnlyToSpawnEntry(Value v, unsigned depth, Operation *skip = nul
 // as an address taken, so any worker that itself started a thread made
 // every indirect call in the module a possible spawn, and main's start-up
 // loop before its first function pointer paired against that worker.
-static bool takesAddress(const SymbolTable::SymbolUse &use, bool resolvedRun) {
+static bool takesAddress(const SymbolTable::SymbolUse &use, bool resolvedRun, const EntryFieldSet *entryFields) {
     Operation *user = use.getUser();
     if (auto call = dyn_cast<cir::CallOp>(user))
         return call.getCalleeAttr() != use.getSymbolRef();               // not a direct call
     if (isa<QueuePushOp, QueuePopOp, LockOp, UnlockOp>(user)) return false;   // fallback_impl
     if (auto gg = dyn_cast<cir::GetGlobalOp>(user))
-        if (flowsOnlyToSpawnEntry(gg.getResult(), 0)) return false;
+        if (flowsOnlyToSpawnEntry(gg.getResult(), 0, nullptr, entryFields)) return false;
     if (auto g = dyn_cast<cir::GlobalOp>(user)) {
         // A std::thread state's vtable names its _M_run, which runs only as
         // the thread that state starts, and the walk reaches it through the
@@ -727,12 +737,42 @@ bool ThreadInstanceWalk::isAddressTaken(cir::FuncOp f) {
         // The module's body, not the module: asked of an operation that is
         // a symbol table, getSymbolUses reads only that operation's own
         // attributes and finds nothing.
+        // An alias names its aliasee, which is no address taken: a call of
+        // the alias is a call of the aliasee (lookupCallee). Any other use
+        // of the alias takes the aliasee's address -- even one that only
+        // reaches a spawn, since a spawn whose entry is the alias, which
+        // has no body, starts nothing the walk can follow. A weak alias is
+        // none of this: lookupCallee does not follow it, since the link may
+        // replace it, and its reference to the aliasee takes the address.
+        llvm::SmallVector<std::pair<Operation *, Operation *>, 4> aliases;
+        llvm::DenseSet<Operation *> aliasTaken;
         if (auto uses = SymbolTable::getSymbolUses(&module_.getBodyRegion()))
             for (const SymbolTable::SymbolUse &use : *uses)
-                if (auto fn = symbols.lookup<cir::FuncOp>(use.getSymbolRef().getRootReference()))
+                if (auto fn = symbols.lookup<cir::FuncOp>(use.getSymbolRef().getRootReference())) {
+                    if (auto alias = dyn_cast<cir::FuncOp>(use.getUser());
+                        alias && alias.getAliasee() && *alias.getAliasee() == fn.getSymName() &&
+                        !cir::isInterposableLinkage(alias.getLinkage())) {
+                        aliases.push_back({alias.getOperation(), fn.getOperation()});
+                        continue;
+                    }
+                    if (fn.getAliasee()) {
+                        auto call = dyn_cast<cir::CallOp>(use.getUser());
+                        if (!call || call.getCalleeAttr() != use.getSymbolRef())
+                            aliasTaken.insert(fn.getOperation());
+                    }
                     if (!addressTaken_->contains(fn.getOperation()) &&
-                        takesAddress(use, resolvedRuns_.contains(fn.getOperation())))
+                        takesAddress(use, resolvedRuns_.contains(fn.getOperation()), &entryFieldSet()))
                         addressTaken_->insert(fn.getOperation());
+                }
+        for (bool changed = true; changed;) {
+            changed = false;
+            for (auto [alias, aliasee] : aliases)
+                if ((aliasTaken.contains(alias) || addressTaken_->contains(alias)) &&
+                    addressTaken_->insert(aliasee).second) {
+                    aliasTaken.insert(aliasee);
+                    changed = true;
+                }
+        }
     }
     return addressTaken_->contains(f.getOperation());
 }
@@ -976,7 +1016,9 @@ bool ThreadInstanceWalk::isInductionOf(Value index, Operation *loop, bool &unitS
 // destructors of what it declares; a lambda that captures a std::function
 // gets one around the spawn -- and the body has no early exit or jump
 // that could skip it on some iterations.
-static bool unconditionalInBody(Operation *op, cir::ForOp loop) {
+// `exits` admits a return, break or continue elsewhere in the body: the
+// operation then runs at most once per iteration, not exactly once.
+static bool unconditionalInBody(Operation *op, cir::ForOp loop, bool exits = false) {
     Operation *child = op;
     for (Operation *p = op->getParentOp(); p != loop.getOperation(); child = p, p = p->getParentOp()) {
         if (!p) return false;
@@ -987,7 +1029,7 @@ static bool unconditionalInBody(Operation *op, cir::ForOp loop) {
     if (!loop.getBody().isAncestor(op->getParentRegion())) return false;
     bool jumps = false;
     loop.getBody().walk([&](Operation *o) {
-        if (isa<cir::ContinueOp, cir::BreakOp, cir::GotoOp, cir::ReturnOp>(o)) jumps = true;
+        if (isa<cir::GotoOp>(o) || (!exits && isa<cir::ContinueOp, cir::BreakOp, cir::ReturnOp>(o))) jumps = true;
     });
     return !jumps;
 }
@@ -1012,15 +1054,18 @@ bool ThreadInstanceWalk::canSpawnIn(Region &r) {
     return false;
 }
 
-// Exactly one thread per run of the region: among its operations exactly
-// one starts a thread, and that one does so on every path -- a spawn, a
-// call to a function that starts exactly one per call, a scope or a try
+// At most one thread per run of the region: among its operations exactly
+// one starts a thread, and that one does so at most once -- a spawn, a
+// call to a function that starts at most one per call, a scope or a try
 // whose body does, or an `if` both of whose arms do. Anything that can
-// leave early (a return, a jump) or repeat (a loop) around it, and anything
-// else that can spawn, makes the count something other than one.
-// `std::vector::emplace_back` is the shape this is for: it constructs the
-// thread in place when there is room, else through a reallocation that
-// constructs it inside a `try`.
+// repeat (a loop) around it, and anything else that can spawn, makes the
+// count possibly more than one. A part that cannot spawn may leave early
+// (a return, a break, a continue): that only starts fewer, which is all
+// the reading of a counted loop needs -- one thread at most when the loop
+// runs at most once. ferret's tpool_create returns from its loop when a
+// spawn fails. `std::vector::emplace_back` is the shape this was first
+// for: it constructs the thread in place when there is room, else through
+// a reallocation that constructs it inside a `try`.
 bool ThreadInstanceWalk::spawnsOnce(Region &r, unsigned depth) {
     if (depth > 8 || !r.hasOneBlock()) return false;
     unsigned found = 0;
@@ -1041,7 +1086,7 @@ bool ThreadInstanceWalk::spawnsOnce(Region &r, unsigned depth) {
         if (!canSpawnIn(&op)) {
             bool jumps = false;
             op.walk([&](Operation *o) {
-                if (isa<cir::ReturnOp, cir::GotoOp, cir::BreakOp, cir::ContinueOp>(o)) jumps = true;
+                if (isa<cir::GotoOp>(o)) jumps = true;
             });
             if (jumps) return false;
             continue;
@@ -1076,14 +1121,15 @@ bool ThreadInstanceWalk::spawnsOncePerCall(cir::FuncOp f, unsigned depth) {
     return once;
 }
 
-// One thread per iteration, and the iterations counted: the spawn runs
-// unconditionally in the loop's body, no other loop encloses the loop, the
-// function's control flow is structured, and the instance that holds the
-// loop runs once on a thread the module accounts for. The loop may be in a
-// caller: then every call on the way down to the spawn sits outside any
-// loop of its function, and the loop's body starts exactly one thread per
-// iteration, through whichever calls it makes -- the spawn seen here is
-// then one of the ways it does.
+// At most one thread per iteration, and the iterations counted: the spawn
+// sits in the loop's body under nothing but scopes, no other loop encloses
+// the loop, the function's control flow is structured, and the instance
+// that holds the loop runs once on a thread the module accounts for. The
+// loop may be in a caller: then every call on the way down to the spawn
+// sits outside any loop of its function, and the loop's body starts at
+// most one thread per iteration, through whichever calls it makes -- the
+// spawn seen here is then one of the ways it does. An iteration may leave
+// early, before or after its spawn: that starts fewer.
 Operation *ThreadInstanceWalk::countingLoop(Operation *spawn, const Instance &inst, const Instance **holder) {
     Operation *site = spawn;
     const Instance *cur = &inst;
@@ -1095,7 +1141,8 @@ Operation *ThreadInstanceWalk::countingLoop(Operation *spawn, const Instance &in
         if (Operation *loop = enclosingLoop(site, cur->func)) {
             auto forOp = dyn_cast<cir::ForOp>(loop);
             if (!forOp || cur->execMult != Mult::One || enclosingLoop(forOp, cur->func) ||
-                !unconditionalInBody(site, forOp) || !countedLoop(forOp) || !spawnsOnce(forOp.getBody(), 0))
+                !unconditionalInBody(site, forOp, /*exits=*/true) || !countedLoop(forOp) ||
+                !spawnsOnce(forOp.getBody(), 0))
                 return nullptr;
             *holder = cur;
             return forOp.getOperation();
@@ -1959,16 +2006,254 @@ cir::FuncOp ThreadInstanceWalk::resolveEntry(Value v, Instance *inst, unsigned d
     return resolveEntry(site.getOperand(idx), inst->parent, depth + 1);
 }
 
+void ThreadInstanceWalk::computeEntryFields() const {
+    entryFields_.emplace();
+    entryFieldKeys_.clear();
+    ModuleOp module = module_;
+    auto recordAt = [](Value p) -> cir::RecordType {
+        auto pt = dyn_cast<cir::PointerType>(p.getType());
+        return pt ? dyn_cast<cir::RecordType>(pt.getPointee()) : cir::RecordType();
+    };
+    // The candidates: a member of function pointer type some get_member
+    // names, in a record that is not a union.
+    llvm::DenseMap<std::pair<Type, unsigned>, EntryField> cands;
+    llvm::DenseSet<Type> records;
+    module.walk([&](cir::GetMemberOp gm) {
+        cir::RecordType rec = recordAt(gm.getAddr());
+        if (!rec || rec.isIncomplete() || rec.isUnion() || gm.getIndex() >= rec.getMembers().size()) return;
+        auto pt = dyn_cast<cir::PointerType>(rec.getMembers()[gm.getIndex()]);
+        if (!pt || !isa<cir::FuncType>(pt.getPointee())) return;
+        cands.try_emplace({rec, gm.getIndex()});
+        records.insert(rec);
+    });
+    if (cands.empty()) return;
+    // Whether t is one of the records, or a chain of pointers and arrays
+    // to one; and whether it holds one by value (itself, or an array).
+    auto mentioned = [&](Type t) -> Type {
+        for (unsigned i = 0; i < 16 && t; ++i) {
+            if (records.contains(t)) return t;
+            if (auto p = dyn_cast<cir::PointerType>(t)) t = p.getPointee();
+            else if (auto a = dyn_cast<cir::ArrayType>(t)) t = a.getElementType();
+            else return Type();
+        }
+        return Type();
+    };
+    auto held = [&](Type t) -> Type {
+        while (auto a = dyn_cast_or_null<cir::ArrayType>(t)) t = a.getElementType();
+        return t && records.contains(t) ? t : Type();
+    };
+    auto pointerTo = [&](Type t) -> Type {
+        auto p = dyn_cast<cir::PointerType>(t);
+        return p && records.contains(p.getPointee()) ? p.getPointee() : Type();
+    };
+    llvm::DenseSet<Type> rejected;
+    // Held by value in another record, or in a global: the object is then
+    // reached, copied or initialised as part of something else.
+    llvm::DenseSet<Type> seenTypes;
+    std::function<void(Type)> visitType = [&](Type t) {
+        if (!t || !seenTypes.insert(t).second) return;
+        if (auto p = dyn_cast<cir::PointerType>(t)) return visitType(p.getPointee());
+        if (auto a = dyn_cast<cir::ArrayType>(t)) return visitType(a.getElementType());
+        auto rec = dyn_cast<cir::RecordType>(t);
+        if (!rec || rec.isIncomplete()) return;
+        for (Type m : rec.getMembers()) {
+            if (Type r = held(m)) rejected.insert(r);
+            visitType(m);
+        }
+    };
+    module.walk([&](Operation *op) {
+        for (Type t : op->getResultTypes()) visitType(t);
+        if (auto g = dyn_cast<cir::GlobalOp>(op)) {
+            visitType(g.getSymType());
+            if (Type r = held(g.getSymType())) rejected.insert(r);
+        }
+        if (auto a = dyn_cast<cir::AllocaOp>(op)) visitType(a.getAllocaType());
+    });
+    module.walk([&](Operation *op) {
+        if (auto c = dyn_cast<cir::CastOp>(op)) {
+            // A pointer to the record made from anything but an allocation
+            // or null names memory some other type may read; turned into
+            // anything, it may only go to free.
+            if (Type r = pointerTo(c.getResult().getType())) {
+                Value src = traceToLocalRoot(c.getSrc());
+                auto call = src.getDefiningOp<cir::CallOp>();
+                const bool fresh = (call && isAllocator(lookupCallee(call))) || isNullPointer(src);
+                if (c.getKind() != cir::CastKind::bitcast || !fresh) rejected.insert(r);
+            } else if (Type r = mentioned(c.getResult().getType())) {
+                rejected.insert(r);
+            }
+            if (Type r = mentioned(c.getSrc().getType())) {
+                bool onlyFree = c.getKind() == cir::CastKind::bitcast && pointerTo(c.getSrc().getType());
+                for (Operation *u : c.getResult().getUsers()) {
+                    auto call = dyn_cast<cir::CallOp>(u);
+                    cir::FuncOp callee = call ? lookupCallee(call) : cir::FuncOp();
+                    if (!callee || callee.getSymName() != "free") onlyFree = false;
+                }
+                if (!onlyFree) rejected.insert(r);
+            }
+            return;
+        }
+        if (auto call = dyn_cast<cir::CallOp>(op)) {
+            // Handed to code the module does not show.
+            cir::FuncOp callee = lookupCallee(call);
+            const bool shown = callee && !callee.getBody().empty();
+            const bool spawn = callee && getSemanticKind(callee) == SemanticOpKind::ThreadSpawn;
+            if (shown || spawn || (callee && callee.getSymName() == "free")) return;
+            for (Value o : call.getOperands())
+                if (Type r = mentioned(o.getType())) rejected.insert(r);
+            for (Type t : call->getResultTypes())
+                if (Type r = mentioned(t)) rejected.insert(r);
+            return;
+        }
+        if (auto ld = dyn_cast<cir::LoadOp>(op)) {
+            // A whole value of the record goes only into another of them.
+            if (Type r = held(ld.getType()); r && ld.getType() == r) {
+                for (Operation *u : ld->getUsers()) {
+                    auto st = dyn_cast<cir::StoreOp>(u);
+                    if (!st || st.getValue() != ld.getResult() || pointerTo(st.getAddr().getType()) != r)
+                        rejected.insert(r);
+                }
+            }
+            return;
+        }
+        if (auto st = dyn_cast<cir::StoreOp>(op)) {
+            if (Type r = held(st.getValue().getType()); r && st.getValue().getType() == r)
+                entryRecordStores_[r].push_back(st);
+            return;
+        }
+        if (auto cp = dyn_cast<cir::CopyOp>(op)) {
+            if (Type r = pointerTo(cp.getDst().getType())) entryRecordCopies_[r].push_back(cp);
+            return;
+        }
+    });
+    // The field itself: stored with a named function or null, loaded only
+    // to compare or to hand to a spawn as its entry, its address going
+    // nowhere else.
+    std::function<bool(Value, unsigned)> loadedForSpawn = [&](Value v, unsigned depth) -> bool {
+        if (depth > 4) return false;
+        for (OpOperand &use : v.getUses()) {
+            Operation *u = use.getOwner();
+            if (isa<cir::CmpOp>(u)) continue;
+            if (auto c = dyn_cast<cir::CastOp>(u)) {
+                if (c.getKind() != cir::CastKind::bitcast || !loadedForSpawn(c.getResult(), depth + 1)) return false;
+                continue;
+            }
+            auto call = dyn_cast<cir::CallOp>(u);
+            cir::FuncOp callee = call ? lookupCallee(call) : cir::FuncOp();
+            if (!callee || getSemanticKind(callee) != SemanticOpKind::ThreadSpawn || isStdThreadStart(callee) ||
+                use.getOperandNumber() != spawnEntryOperand(call))
+                return false;
+        }
+        return true;
+    };
+    llvm::DenseSet<std::pair<Type, unsigned>> bad;
+    module.walk([&](cir::GetMemberOp gm) {
+        cir::RecordType rec = recordAt(gm.getAddr());
+        auto it = rec ? cands.find({rec, gm.getIndex()}) : cands.end();
+        if (it == cands.end()) return;
+        for (OpOperand &use : gm.getResult().getUses()) {
+            Operation *u = use.getOwner();
+            if (auto ld = dyn_cast<cir::LoadOp>(u)) {
+                if (!loadedForSpawn(ld.getResult(), 0)) bad.insert(it->first);
+                continue;
+            }
+            if (auto st = dyn_cast<cir::StoreOp>(u); st && st.getAddr() == gm.getResult()) {
+                if (resolveFunctionOperand(st.getValue()) || isNullPointer(st.getValue()))
+                    it->second.stores.push_back(st);
+                else
+                    bad.insert(it->first);
+                continue;
+            }
+            bad.insert(it->first);
+        }
+    });
+    for (auto &[key, field] : cands) {
+        if (rejected.contains(key.first) || bad.contains(key)) continue;
+        entryFieldKeys_.insert(key);
+        (*entryFields_)[key] = std::move(field);
+    }
+}
+
+cir::GetMemberOp ThreadInstanceWalk::entryFieldFunctions(Value v, llvm::SmallVectorImpl<cir::FuncOp> &out) const {
+    auto ld = traceToRoot(v).getDefiningOp<cir::LoadOp>();
+    auto gm = ld ? traceToLocalRoot(ld.getAddr()).getDefiningOp<cir::GetMemberOp>() : cir::GetMemberOp();
+    auto pt = gm ? dyn_cast<cir::PointerType>(gm.getAddr().getType()) : cir::PointerType();
+    if (!pt) return {};
+    if (!entryFields_) computeEntryFields();
+    auto it = entryFields_->find({pt.getPointee(), gm.getIndex()});
+    if (it == entryFields_->end()) return {};
+    for (cir::StoreOp st : it->second.stores)
+        if (cir::FuncOp f = resolveFunctionOperand(st.getValue()); f && !llvm::is_contained(out, f))
+            out.push_back(f);
+    return gm;
+}
+
+void ThreadInstanceWalk::resolveEntries(Value v, Instance *inst, llvm::SmallVectorImpl<cir::FuncOp> &out) const {
+    if (cir::FuncOp f = resolveEntry(v, inst)) {
+        out.push_back(f);
+        return;
+    }
+    llvm::SmallVector<cir::FuncOp, 4> all, mine;
+    cir::GetMemberOp gm = entryFieldFunctions(v, all);
+    if (!gm) return;
+    const std::pair<Type, unsigned> key{cast<cir::PointerType>(gm.getAddr().getType()).getPointee(), gm.getIndex()};
+    auto it = entryFields_->find(key);
+    auto add = [](llvm::SmallVectorImpl<cir::FuncOp> &to, cir::FuncOp f) {
+        if (f && !llvm::is_contained(to, f)) to.push_back(f);
+    };
+    // The object the spawn reads, and every store into that field of it,
+    // read without a call string: an allocation or a slot is one root
+    // whoever stores. A copy into it carries what is already there, when
+    // it copies from the same object; from another, or from somewhere
+    // the walk cannot place, the object is not told apart.
+    auto rootOf = [&](Value p, Instance *at) -> Operation * {
+        llvm::SmallVector<Place, 4> pls = resolvePlaces(p, at);
+        return pls.size() == 1 ? pls.front().root : nullptr;
+    };
+    Operation *here = rootOf(gm.getAddr(), inst);
+    bool told = here != nullptr;
+    for (cir::StoreOp st : it->second.stores) {
+        if (!told) break;
+        auto sg = traceToLocalRoot(st.getAddr()).getDefiningOp<cir::GetMemberOp>();
+        Operation *r = sg ? rootOf(sg.getAddr(), nullptr) : nullptr;
+        if (!r) told = false;
+        else if (r == here) add(mine, resolveFunctionOperand(st.getValue()));
+    }
+    for (cir::CopyOp cp : entryRecordCopies_.lookup(key.first)) {
+        if (!told) break;
+        Operation *d = rootOf(cp.getDst(), nullptr);
+        if (!d) told = false;
+        else if (d == here && rootOf(cp.getSrc(), nullptr) != here) told = false;
+    }
+    for (cir::StoreOp st : entryRecordStores_.lookup(key.first)) {
+        if (!told) break;
+        Operation *d = rootOf(st.getAddr(), nullptr);
+        auto src = st.getValue().getDefiningOp<cir::LoadOp>();
+        if (!d) told = false;
+        else if (d == here && (!src || rootOf(src.getAddr(), nullptr) != here)) told = false;
+    }
+    for (cir::FuncOp f : (told && !mine.empty()) ? mine : all) out.push_back(f);
+}
+
 // Whether a function's address, once taken, goes nowhere but into the entry
 // operand of a spawn -- directly, or through parameters of functions that
 // pass it on, as memcached's create_worker(func, arg) does. Such a function
 // runs as the thread that spawn starts, which the walk resolves through the
 // call chain; it is not a function that may run anywhere.
-static bool flowsOnlyToSpawnEntry(Value v, unsigned depth, Operation *skip) {
+static bool flowsOnlyToSpawnEntry(Value v, unsigned depth, Operation *skip, const EntryFieldSet *entryFields) {
     if (depth > 8) return false;
     for (OpOperand &use : v.getUses()) {
         Operation *user = use.getOwner();
         if (user == skip) continue;
+        // Stored into a field that only ever reaches a spawn as its entry:
+        // ferret's thread pool takes `{attr, start_routine, arg}`
+        // descriptors and starts each start_routine. resolveEntries reads
+        // the field back at every such spawn.
+        if (auto st = dyn_cast<cir::StoreOp>(user); st && entryFields && st.getValue() == v)
+            if (auto gm = traceToLocalRoot(st.getAddr()).getDefiningOp<cir::GetMemberOp>()) {
+                auto pt = dyn_cast<cir::PointerType>(gm.getAddr().getType());
+                if (pt && entryFields->contains({pt.getPointee(), gm.getIndex()})) continue;
+            }
         if (auto c = dyn_cast<cir::CastOp>(user)) {
             // The same casts traceToLocalRoot follows backwards: through an
             // integer round trip the entry can no longer be resolved at the
@@ -1976,7 +2261,7 @@ static bool flowsOnlyToSpawnEntry(Value v, unsigned depth, Operation *skip) {
             // lost on both sides.
             if (c.getKind() != cir::CastKind::bitcast && c.getKind() != cir::CastKind::array_to_ptrdecay)
                 return false;
-            if (!flowsOnlyToSpawnEntry(user->getResult(0), depth + 1)) return false;
+            if (!flowsOnlyToSpawnEntry(user->getResult(0), depth + 1, nullptr, entryFields)) return false;
             continue;
         }
         if (auto call = dyn_cast<cir::CallOp>(user)) {
@@ -1998,7 +2283,7 @@ static bool flowsOnlyToSpawnEntry(Value v, unsigned depth, Operation *skip) {
             if (getSemanticKind(callee) != SemanticOpKind::Unknown || callee.getBody().empty() ||
                 idx >= callee.getNumArguments())
                 return false;
-            if (!flowsOnlyToSpawnEntry(callee.getArgument(idx), depth + 1)) return false;
+            if (!flowsOnlyToSpawnEntry(callee.getArgument(idx), depth + 1, nullptr, entryFields)) return false;
             continue;
         }
         // A member-pointer constant copied into a temporary: the temporary
@@ -2157,47 +2442,49 @@ void ThreadInstanceWalk::expand(Instance &inst) {
         }
         const SemanticOpKind kind = getSemanticKind(callee);
         if (kind == SemanticOpKind::ThreadSpawn) {
-            cir::FuncOp entry;
+            llvm::SmallVector<cir::FuncOp, 2> entries;
             if (isStdThreadStart(callee)) {
-                entry = stdThreadEntry(call);
+                if (cir::FuncOp e = stdThreadEntry(call)) entries.push_back(e);
             } else {
                 const unsigned k = spawnEntryOperand(call);
                 if (k >= call.getNumOperands()) return;
-                entry = resolveEntry(call.getOperand(k), &inst);
+                resolveEntries(call.getOperand(k), &inst, entries);
             }
-            if (!entry || entry.getBody().empty()) {
+            if (entries.empty() || llvm::any_of(entries, [](cir::FuncOp e) { return e.getBody().empty(); })) {
                 noteRemark(call, "wtc: spawn target could not be resolved to a function in this module");
                 return;
             }
-            if (!relevant_(entry)) return;
-            // A site whose multiplicity is a guess (a goto in this function,
-            // no loop around the site) makes the child's count unknown rather
-            // than many: an earlier version took the guess, so one spawn
-            // below a goto in main stood for many threads and every store
-            // they made was "repeated".
-            // The multiplicity keeps the guess -- a client that must assume
-            // the worst, such as the queue analysis, reads Many -- and the
-            // instance records that it is one, so a client that would turn
-            // Many into a claim can decline to.
-            bool known;
-            const Mult site = siteMult(call.getOperation(), f, known);
-            const Mult m = join(inst.execMult, site);
-            const bool certainlyMany = (inst.execMult == Mult::Many && !inst.execUnknown) ||
-                                       (known && site == Mult::Many);
-            if (Instance *child = addIfRoom({entry, nextThread_++, m, m, call, &inst,
-                                             inst.speculative, false})) {
-                child->execUnknown = !certainlyMany && (!known || inst.execUnknown);
-                child->countLoop = countingLoop(call.getOperation(), inst, &child->countLoopInst);
-            }
-            // rte_eal_mp_remote_launch(f, arg, CALL_MAIN) also runs f on the
-            // calling lcore once the workers are started; SKIP_MAIN (0) does
-            // not, and a flag that is not a constant is read as CALL_MAIN.
-            if (callee.getSymName() == "rte_eal_mp_remote_launch") {
-                const unsigned c = firstRealOperand(call) + 2;
-                auto k = c < call.getNumOperands() ? call.getOperand(c).getDefiningOp<cir::ConstantOp>()
-                                                   : cir::ConstantOp();
-                auto v = k ? dyn_cast<cir::IntAttr>(k.getValue()) : cir::IntAttr();
-                if (!v || v.getSInt() != 0) addCallee(call, entry);
+            for (cir::FuncOp entry : entries) {
+                if (!relevant_(entry)) continue;
+                // A site whose multiplicity is a guess (a goto in this function,
+                // no loop around the site) makes the child's count unknown rather
+                // than many: an earlier version took the guess, so one spawn
+                // below a goto in main stood for many threads and every store
+                // they made was "repeated".
+                // The multiplicity keeps the guess -- a client that must assume
+                // the worst, such as the queue analysis, reads Many -- and the
+                // instance records that it is one, so a client that would turn
+                // Many into a claim can decline to.
+                bool known;
+                const Mult site = siteMult(call.getOperation(), f, known);
+                const Mult m = join(inst.execMult, site);
+                const bool certainlyMany = (inst.execMult == Mult::Many && !inst.execUnknown) ||
+                                           (known && site == Mult::Many);
+                if (Instance *child = addIfRoom({entry, nextThread_++, m, m, call, &inst,
+                                                 inst.speculative, false})) {
+                    child->execUnknown = !certainlyMany && (!known || inst.execUnknown);
+                    child->countLoop = countingLoop(call.getOperation(), inst, &child->countLoopInst);
+                }
+                // rte_eal_mp_remote_launch(f, arg, CALL_MAIN) also runs f on the
+                // calling lcore once the workers are started; SKIP_MAIN (0) does
+                // not, and a flag that is not a constant is read as CALL_MAIN.
+                if (callee.getSymName() == "rte_eal_mp_remote_launch") {
+                    const unsigned c = firstRealOperand(call) + 2;
+                    auto k = c < call.getNumOperands() ? call.getOperand(c).getDefiningOp<cir::ConstantOp>()
+                                                       : cir::ConstantOp();
+                    auto v = k ? dyn_cast<cir::IntAttr>(k.getValue()) : cir::IntAttr();
+                    if (!v || v.getSInt() != 0) addCallee(call, entry);
+                }
             }
             return;
         }
@@ -2271,12 +2558,16 @@ void ThreadInstanceWalk::run(llvm::function_ref<void(Instance &)> visit,
         if (seen) {
             onRecursion(inst.func);
             inst.recurring = true;
-            inst.countLoop = nullptr;
-            inst.countLoopInst = nullptr;
-            if (inst.site && getSemanticKind(lookupCallee(inst.site)) == SemanticOpKind::ThreadSpawn)
+            // A recurrence through a spawn starts threads the loop does not
+            // count; one through a call stays on the thread the loop
+            // started, and that thread is still one per iteration.
+            if (inst.site && getSemanticKind(lookupCallee(inst.site)) == SemanticOpKind::ThreadSpawn) {
+                inst.countLoop = nullptr;
+                inst.countLoopInst = nullptr;
                 inst.threadMult = inst.execMult = Mult::Many;
-            else
+            } else {
                 inst.execMult = Mult::Many;
+            }
             // Each function's recurrence is expanded once in the whole walk:
             // unrolling every cycle once per path made the walk exponential
             // in the size of a mutually recursive group.
