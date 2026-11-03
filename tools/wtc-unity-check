@@ -1,0 +1,170 @@
+#!/usr/bin/env python3
+"""Whether each file of a unity build means there what it means alone.
+
+    wtc-unity-check UNITY.ll FILE1.ll [FILE2.ll ...]
+
+UNITY.ll is the LLVM IR of the generated file that includes every file,
+each FILEi.ll the IR of one file compiled alone with the same flags, both
+straight from the front end (no optimisation passes). A file reads the same
+in the unity when everything it defines is defined there identically, and
+every symbol it uses without defining it is, in the unity, not one another
+file keeps to itself (a static of an earlier file with the same name):
+
+  - each function and global variable FILEi.ll defines is defined in
+    UNITY.ll under the same name, with the same text, after names that
+    carry no meaning are put in one form: string constants and other
+    private globals are replaced by their contents, structure types by
+    their bodies, attribute groups by their attributes, and metadata,
+    which carries debug information and optimisation hints, is dropped;
+  - each global FILEi.ll declares and does not define is, in UNITY.ll,
+    declared, or defined with a linkage other than internal or private.
+
+So a declaration of an earlier file that wins an overload resolution, a
+static of an earlier file that a later file's name binds to, a pragma
+left open (#pragma pack changes the layout of a later file's structures
+and the sizes it computes), an implicit declaration that an earlier file's
+prototype replaces, each changes the text of something the file defines,
+or binds one of its names to another file's static, and is reported. The
+check is conservative: a difference that changes nothing (a C++ file's
+dynamic initialisation, whose functions the unity numbers and names after
+itself) is reported too.
+
+Exit status 0 when every file reads the same, 1 with the first difference
+on standard error, 2 when an input cannot be read.
+"""
+import re
+import sys
+
+GLOBAL = re.compile(r'^(@[-\w.$"\\]+|@"[^"]*")\s*=\s*(.*)$')
+DEFINE = re.compile(r'^define\b[^@]*(@[-\w.$]+|@"[^"]*")\(')
+DECLARE = re.compile(r'^declare\b[^@]*(@[-\w.$]+|@"[^"]*")\(')
+TYPEDEF = re.compile(r'^(%[-\w.$]+|%"[^"]*")\s*=\s*type\s+(.*)$')
+ATTRS = re.compile(r'^attributes\s+(#\d+)\s*=\s*(.*)$')
+SYMBOL = re.compile(r'@[-\w.$]+|@"[^"]*"')
+TYPENAME = re.compile(r'%(?:struct|union|class)\.[-\w.$]+|%"[^"]*"')
+LOCAL_LINKAGE = ('private', 'internal')
+
+
+class Module:
+    def __init__(self, path):
+        self.path = path
+        self.funcs = {}      # name -> body text lines
+        self.globals = {}    # name -> definition text
+        self.declared = set()
+        self.types = {}
+        self.attrs = {}
+        self.linkage = {}    # defined name -> linkage word
+        lines = open(path, encoding='utf-8', errors='replace').read().split('\n')
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            m = DEFINE.match(line)
+            if m:
+                name, body = m.group(1), [line]
+                while not lines[i].startswith('}'):
+                    i += 1
+                    body.append(lines[i])
+                self.funcs[name] = body
+                self.linkage[name] = linkage_of(line[len('define'):])
+            elif DECLARE.match(line):
+                self.declared.add(DECLARE.match(line).group(1))
+            elif TYPEDEF.match(line):
+                m = TYPEDEF.match(line)
+                self.types[m.group(1)] = m.group(2)
+            elif ATTRS.match(line):
+                m = ATTRS.match(line)
+                self.attrs[m.group(1)] = m.group(2)
+            elif GLOBAL.match(line):
+                m = GLOBAL.match(line)
+                rest = m.group(2)
+                if re.match(r'(external\s|extern_weak\s)', rest) and ' alias ' not in rest:
+                    self.declared.add(m.group(1))
+                else:
+                    self.globals[m.group(1)] = rest
+                    self.linkage[m.group(1)] = linkage_of(rest)
+            i += 1
+        self.private = {n for n, l in self.linkage.items() if l == 'private'}
+        self._type_memo = {}
+
+    def type_body(self, name, depth=0):
+        if name in self._type_memo:
+            return self._type_memo[name]
+        body = self.types.get(name)
+        if body is None or depth > 32:
+            return name
+        out = TYPENAME.sub(lambda m: self.type_body(m.group(0), depth + 1), body)
+        self._type_memo[name] = '%{' + out + '}'
+        return self._type_memo[name]
+
+    def norm(self, text, depth=0):
+        """The text with every meaningless name put in one form."""
+        text = re.sub(r',?\s*!(?:[A-Za-z_][-\w.]*)\s+!\d+', '', text)   # attachments
+        text = re.sub(r'!\d+', '!', text)                                 # other metadata
+        text = re.sub(r'#\d+', lambda m: '#{' + self.attrs.get(m.group(0), m.group(0)) + '}', text)
+        text = TYPENAME.sub(lambda m: self.type_body(m.group(0)), text)
+
+        def sym(m):
+            n = m.group(0)
+            if n in self.private and depth < 4:
+                return '@<' + self.norm(strip_linkage(self.globals.get(n, '')), depth + 1) + '>'
+            return n
+        return SYMBOL.sub(sym, text)
+
+
+def linkage_of(text):
+    for w in text.split():
+        if w in ('private', 'internal', 'available_externally', 'linkonce', 'weak', 'common', 'appending',
+                 'extern_weak', 'linkonce_odr', 'weak_odr', 'external'):
+            return w
+        if w in ('global', 'constant', 'alias', 'ifunc') or w.startswith('@'):
+            return 'external'
+    return 'external'
+
+
+def strip_linkage(text):
+    return re.sub(r'^(private|internal)\s+', '', text)
+
+
+def main(argv):
+    if len(argv) < 3:
+        print(__doc__, file=sys.stderr)
+        return 2
+    try:
+        unity = Module(argv[1])
+        files = [Module(p) for p in argv[2:]]
+    except (OSError, IndexError) as e:
+        print(f'wtc-unity-check: {e}', file=sys.stderr)
+        return 2
+    for f in files:
+        for name, body in f.funcs.items():
+            if name not in unity.funcs:
+                print(f'{f.path}: {name} is defined there but not in the unity', file=sys.stderr)
+                return 1
+            a = [f.norm(l) for l in body]
+            b = [unity.norm(l) for l in unity.funcs[name]]
+            if a != b:
+                for la, lb in zip(a, b):
+                    if la != lb:
+                        print(f'{f.path}: {name} reads differently in the unity:\n  alone: {la.strip()[:300]}\n'
+                              f'  unity: {lb.strip()[:300]}', file=sys.stderr)
+                        return 1
+                print(f'{f.path}: {name} reads differently in the unity', file=sys.stderr)
+                return 1
+        for name, text in f.globals.items():
+            if name in f.private:
+                continue  # compared by content where it is used
+            if name.startswith('@llvm.'):
+                continue  # llvm.used and the like: each file's entries are its own definitions
+            if name not in unity.globals or f.norm(text) != unity.norm(unity.globals[name]):
+                print(f'{f.path}: the global {name} is defined differently in the unity', file=sys.stderr)
+                return 1
+        for name in f.declared:
+            if unity.linkage.get(name) in LOCAL_LINKAGE:
+                print(f'{f.path}: {name}, which it only declares, is a static of another file in the unity',
+                      file=sys.stderr)
+                return 1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv))

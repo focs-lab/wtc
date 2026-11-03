@@ -1394,7 +1394,7 @@ std::string QueueOwnershipAnalysisPass::openWhy(Type t) {
         }
         // A thread start's argument goes to an entry the walk follows.
         if (!callee.getBody().empty() || isLibraryFunction(callee) || isAllocator(callee) ||
-            touchesOnlyItsArguments(callee) || callee.getSymName() == "free" ||
+            touchesOnlyItsArguments(callee) || isCQueueRuntime(callee) || callee.getSymName() == "free" ||
             getSemanticKind(callee) == SemanticOpKind::ThreadSpawn)
             return WalkResult::advance();
         if (llvm::any_of(call.getOperands(), reaches))
@@ -1498,7 +1498,7 @@ void QueueOwnershipAnalysisPass::poisonEscapes() {
     auto harmless = [&](cir::FuncOp callee) {
         const llvm::StringRef n = callee.getSymName();
         return getSemanticKind(callee) != SemanticOpKind::Unknown || isLibraryFunction(callee) ||
-               isAllocator(callee) || touchesOnlyItsArguments(callee) || n == "free" ||
+               isAllocator(callee) || touchesOnlyItsArguments(callee) || isCQueueRuntime(callee) || n == "free" ||
                n.starts_with("_ZdlPv") || n.starts_with("_ZdaPv") || n == "__cxa_atexit" ||
                n == "__cxa_thread_atexit" || n == "__cxa_thread_atexit_impl" || shimOrStd(n);
     };
@@ -2436,6 +2436,17 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
                 // A pool the walk places but whose creation is not in
                 // sight: it may hold mbufs.
                 if (l.kind == LibraryQueueKind::Mempool && !isLibraryCreate(root.first)) mbufPoolKeys.insert(root);
+            }
+            // An overrunning push (shim/bounded.hpp) takes the oldest item
+            // out when the queue is full: its thread is on both sides.
+            auto push = dyn_cast<QueuePushOp>(op);
+            if (push && push.getOverrun()) {
+                SideInfo &also = info.consumers;
+                also.threads.insert(inst->thread);
+                Access b = accessOf(op, *inst);
+                b.oneOf = rs.size() > 1;
+                also.accesses.push_back(b);
+                if (inst->threadMult == Mult::Many) also.anyMany = true;
             }
             SideInfo &side = isConsumerOp(op) ? info.consumers : info.producers;
             side.threads.insert(inst->thread);

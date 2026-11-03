@@ -301,6 +301,9 @@ private:
             return Refusal{wtcOps.size() == 1 ? wtcOps.front() : wtcOps[1],
                            "the loop acts on queues or mutexes other than through one push"};
         auto push = cast<QueuePushOp>(wtcOps.front());
+        // A bounded queue has no runs: its pushes answer to a full queue
+        // one at a time (shim/bounded.hpp).
+        if (push.getBounded()) return Refusal{push, "the queue is bounded, and a run of pushes is not"};
         // On every iteration: only scopes between the push and the body.
         for (Operation *p = push->getParentOp(); p != loop.getOperation(); p = p->getParentOp())
             if (!isa<cir::ScopeOp, cir::CleanupScopeOp>(p))

@@ -22,6 +22,17 @@ enum class SemanticOpKind {
     ThreadSpawn,
     QueueConstruction,
     QueuePush,
+    // The pushes of a bounded queue (shim/bounded.hpp): one that waits while
+    // the queue is full, one that answers whether it appended, one that
+    // overruns the oldest item.
+    QueuePushWait,
+    QueueTryPush,
+    QueuePushOverrun,
+    // A run of pushes from, or pops into, a ring of the calling thread's
+    // (shim/c_queue.h): what a C program's batched enqueue and dequeue
+    // become.
+    QueuePushBatch,
+    QueuePopBatch,
     QueueTryPop,
     QueueTryPopInto,
     QueuePopWait,
@@ -193,6 +204,12 @@ bool isAllocator(cir::FuncOp f);
 // the program holds).
 bool touchesOnlyItsArguments(cir::FuncOp f);
 
+// A function of the runtime of lifted C queues (shim/c_queue.h), or one of
+// the typed functions through which a lifted struct calls it, by its name
+// (wtc_c_queue_*): it acts on the queue object and the rings it is handed
+// and on nothing else of the program's, so handing it a queue is no escape.
+bool isCQueueRuntime(cir::FuncOp f);
+
 // The alignment the allocator guarantees for a site's result, when the
 // call says it: aligned_alloc, memalign and posix_memalign with a constant
 // alignment operand. Nothing for malloc, calloc and new, whose guarantee is
@@ -274,7 +291,8 @@ bool spscWhenLoopsRunOnce(Operation *root);
 
 // Whether a call of the shim's queue constructor passes a topology tag, as
 // its second operand: queue(topology), or queue(topology, wait_policy),
-// whose policy the analyses leave alone.
+// whose policy the analyses leave alone, or wtc::lifted_bounded's
+// construct(at, topology, capacity, overrun).
 bool takesTopologyTag(cir::CallOp ctor);
 
 // The topology tag a queue's one constructor passes, if it is a constant;
