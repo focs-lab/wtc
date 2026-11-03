@@ -1,3 +1,4 @@
+#include "WTC/Transforms/LiftedBounded.h"
 #include "WTC/Transforms/Passes.h"
 #include "WTC/Transforms/Utils.h"
 
@@ -16,11 +17,14 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Demangle/Demangle.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 using namespace mlir;
 using namespace mlir::wtc;
@@ -46,7 +50,10 @@ using namespace mlir::wtc;
 //
 //   (a) the container member is touched only by the constructor, the
 //       destructor and member functions that each match one operation:
-//       push, try-pop, blocking pop, closable blocking pop, close;
+//       push, try-pop, blocking pop, closable blocking pop, close; and
+//       those functions do nothing else the program could see, since the
+//       rewrite replaces their bodies whole (a local object is built only
+//       if it is a lock or a duration);
 //   (b) every touch of it in those functions is with the class's mutex
 //       held, all of one function's in one critical section;
 //   (c) the mutex and the condition variables are used only by those
@@ -58,15 +65,33 @@ using namespace mlir::wtc;
 //       such a loop, a push that does not notify the variable a pop waits
 //       on, and a pop that gives up at the stop flag with elements still
 //       queued are refused;
-//   (e) the order is FIFO: the container is a std::queue over a deque or a
-//       list, a std::deque or a std::list, elements go in at the back and
-//       come out at the front; anything else (back, pop_back, insert,
-//       erase, swap, clear, size, a container of another kind) refuses.
+//   (e) the order is FIFO: the container is a std::queue whose member is a
+//       std::deque or a std::list, a std::deque or a std::list, elements
+//       of its own type go in at the back and come out at the front;
+//       anything else (back, pop_back, insert, erase, swap, clear, size, a
+//       container of another kind, emplace from another type) refuses;
+//   (f) the world is closed: the module has main, is not linked later with
+//       files the pass does not see, none of the files linked with it
+//       names the class, and every member function of the class has its
+//       body here. A lifted member function treats the object's storage
+//       differently, and another unit's copy of it, as written, would not.
+//
+// A stop flag must start false, by a constant, in every constructor: the
+// substitute starts open.
 //
 // The predicates and the conditions around them are compared by truth
 // table over the two facts they may read, "the container is empty" and
 // "the stop flag is set", so that `!q.empty() || stop`, `stop ||
 // !q.empty()` and `while (q.empty() && !stop)` are one predicate.
+//
+// A container that is not standard may still be a bounded ring the class
+// wrote itself (spdlog's circular_q): LiftedBounded.cpp reads its member
+// functions symbolically, and the class's pushes then also wait for room,
+// decline or overrun the oldest, its pops may wait with a time limit, and
+// its size and overrun count may be read. Such a class becomes
+// wtc::lifted_bounded<C> over wtc::bounded, whose capacity is exact. An
+// overrunning push makes its callers consumers too, unless no call of it
+// can run by the values the overflow policy may take (ValueSets).
 //
 // The runtime is a template the program never instantiates. In the first
 // of its two runs per file, wtc-cc runs this pass with `instantiations=`,
@@ -122,7 +147,8 @@ std::string shortName(cir::FuncOp f) {
     return n.context.empty() ? n.base : n.context + "::" + n.base;
 }
 
-enum class Kind { Unknown, StdQueue, StdDeque, StdList, StdVector, StdPriorityQueue, Other };
+// Ring: a record the pass reads as a bounded FIFO ring (LiftedBounded.h).
+enum class Kind { Unknown, StdQueue, StdDeque, StdList, StdVector, StdPriorityQueue, Ring, Other };
 
 Kind containerKind(StringRef name) {
     if (name.starts_with("std::queue<")) return Kind::StdQueue;
@@ -133,20 +159,73 @@ Kind containerKind(StringRef name) {
     return Kind::Other;
 }
 
+// The template arguments of a record's name, split at the commas of its
+// outermost angle brackets: {"int", "std::allocator<int>"} for
+// "std::deque<int, std::allocator<int>>". None for a name of another form.
+std::optional<llvm::SmallVector<std::string, 4>> templateArgs(StringRef name) {
+    const size_t open = name.find('<');
+    if (open == StringRef::npos || !name.ends_with(">")) return std::nullopt;
+    llvm::SmallVector<std::string, 4> out;
+    std::string cur;
+    int depth = 0;
+    for (char ch : name.drop_front(open + 1).drop_back()) {
+        if (ch == '<' || ch == '(' || ch == '[') ++depth;
+        if (ch == '>' || ch == ')' || ch == ']') --depth;
+        if (depth < 0) return std::nullopt;
+        if (ch == ',' && depth == 0) {
+            out.push_back(StringRef(cur).trim().str());
+            cur.clear();
+            continue;
+        }
+        cur += ch;
+    }
+    if (depth != 0) return std::nullopt;
+    out.push_back(StringRef(cur).trim().str());
+    return out;
+}
+
+// Whether a std::deque or std::list allocates with std::allocator of its
+// element: an allocator of the program's own may bound the container
+// (throw once it has handed out so much) or count what it allocates, and
+// the substitute allocates with neither.
+bool standardAllocator(StringRef name) {
+    auto args = templateArgs(name);
+    if (!args || args->size() != 2) return false;
+    auto squash = [](StringRef x) {
+        std::string out;
+        for (char ch : x)
+            if (ch != ' ') out += ch;
+        return out;
+    };
+    return squash((*args)[1]) == squash("std::allocator<" + (*args)[0] + ">");
+}
 
 bool isStopType(Type t) { return isa<cir::BoolType>(t) || recordName(t) == "std::atomic<bool>"; }
 
-// Truth tables over (empty, stopped): bit 2*e + s.
+// Truth tables over (empty, stopped, full): bit 4*f + 2*e + s. A table
+// that does not read "full" is the same in both halves; only a bounded
+// ring answers full().
 using Table = unsigned;
-constexpr Table bitOf(bool e, bool s) { return 1u << (2 * e + s); }
+constexpr Table kAll = 0xFF;
+constexpr Table bitOf(bool e, bool s, bool f) { return 1u << (4 * f + 2 * e + s); }
+constexpr Table eitherFull(Table t) { return t | (t << 4); }
+constexpr Table bitOf(bool e, bool s) { return eitherFull(bitOf(e, s, false)); }
 constexpr Table kNotEmpty = bitOf(false, false) | bitOf(false, true);
 constexpr Table kNotEmptyOrStop = kNotEmpty | bitOf(true, true);
 constexpr Table kEmpty = bitOf(true, false) | bitOf(true, true);
+// Not full, whatever else: the wait of a push into a bounded ring.
+constexpr Table kNotFull = 0x0F;
 // States in which a wait for "not empty or stopped" has ended.
 constexpr Table kAfterClosableWait = kNotEmptyOrStop;
 
 struct Stmt {
-    enum K { Push, Front, Out, PopFront, Wait, Guard, Notify, SetStop, Return } k;
+    // GuardedPush: `if (!full) { push; flag = true; }`; FlagIf, after the
+    // critical section: `if (flag) notify; else <the program's own code>`;
+    // TimedWait: `wait_for(lock, d, pred)`, then TimedOut: `if (!that)
+    // return false;`; Getter: the ring's size or overrun count, returned;
+    // Reset: the ring's overrun count set to zero.
+    enum K { Push, Front, Out, PopFront, Wait, Guard, Notify, SetStop, Return, GuardedPush, FlagIf, TimedWait,
+             TimedOut, Getter, Reset } k;
     explicit Stmt(K k) : k(k) {}
     Operation *op = nullptr;
     bool held = false;
@@ -160,12 +239,28 @@ struct Stmt {
     bool all = false;             // Notify
     std::optional<bool> value;    // Guard, Return: the constant returned, none for void
     bool returnsSomething = false;
+    bool fromGetter = false;      // Return: what a Getter read
+    Value flag;                   // GuardedPush, FlagIf: the local slot of the flag
+    Operation *section = nullptr; // GuardedPush: the scope that is the critical section
+    unsigned durationParam = 0;   // TimedWait
+    std::string unit;             // TimedWait: ns, us, ms or s
+    RingOp getter = RingOp::None; // Getter
 };
 
-enum class Role { None, Push, TryPop, PopWait, PopWaitClosed, Close };
+// PushWait, TryPush, PushOverrun, PopWaitFor and the counters exist only
+// for a bounded ring.
+enum class Role { None, Push, TryPop, PopWait, PopWaitClosed, Close, PushWait, TryPush, PushOverrun, PopWaitFor,
+                  Size, OverrunCounter, ResetOverrun };
 
 const char *roleName(Role r) {
     switch (r) {
+    case Role::PushWait: return "push that waits while full";
+    case Role::TryPush: return "push that discards when full";
+    case Role::PushOverrun: return "push that overruns the oldest when full";
+    case Role::PopWaitFor: return "blocking pop with a time limit";
+    case Role::Size: return "size";
+    case Role::OverrunCounter: return "overrun count";
+    case Role::ResetOverrun: return "reset of the overrun count";
     case Role::Push: return "push";
     case Role::TryPop: return "try-pop";
     case Role::PopWait: return "blocking pop";
@@ -186,6 +281,14 @@ struct Method {
     unsigned waitCv = 0;
     unsigned flag = 0;  // Close: the member it sets
     llvm::SmallVector<std::pair<unsigned, bool>, 2> notifies;  // cv, all
+    // TryPush: the critical section to replace, the flag it sets, and the
+    // notifications after it, which the runtime does.
+    Operation *section = nullptr;
+    Value pushedFlag;
+    llvm::SmallVector<Operation *, 2> notifyOps;
+    // PopWaitFor: the duration's parameter and unit.
+    unsigned durationParam = 0;
+    std::string unit;
 };
 
 struct Candidate {
@@ -195,13 +298,21 @@ struct Candidate {
     llvm::SmallVector<unsigned, 2> cvs;
     std::optional<unsigned> stop;
     Kind kind = Kind::Unknown;
-    Type elem;  // the element's CIR type, from the container's calls
+    Type elem;       // the element's CIR type, from the container's calls
+    Type frontElem;  // the container's value_type, from what front() refers to
+    bool emplaces = false;
     llvm::SmallVector<Method, 4> methods;
     llvm::SmallVector<cir::FuncOp, 2> ctors, dtors;
     llvm::SmallVector<cir::FuncOp, 2> preds;  // wait predicates read
+    // What each constructor stores into each flag-typed member: the
+    // constant, or none when it is computed or left indeterminate.
+    llvm::DenseMap<Operation *, llvm::SmallVector<std::pair<unsigned, std::optional<bool>>, 2>> flagInits;
     llvm::SmallVector<std::string, 4> reasons;
     std::map<std::string, unsigned> features;
     Location loc;
+    // A bounded ring: its reading, and whether a push may overrun.
+    std::shared_ptr<RingModel> ring;
+    bool overrunReachable = false;
 
     explicit Candidate(Location l) : loc(l) {}
 
@@ -282,15 +393,37 @@ cir::AllocaOp localSlot(Value addr) {
 // the record's name, spaces aside (the demangler writes "> >" and "T*",
 // CIR's record names ">>" and "T *"). A lambda's call operator is scoped
 // to the function it is written in, and a free function to a namespace.
+std::string squashSpaces(StringRef x) {
+    std::string out;
+    for (char ch : x)
+        if (ch != ' ') out += ch;
+    return out;
+}
+
 bool isMemberOf(cir::FuncOp f, cir::RecordType rec) {
     Name n = nameOf(f.getSymName());
-    auto squash = [](StringRef x) {
-        std::string out;
-        for (char ch : x)
-            if (ch != ' ') out += ch;
-        return out;
-    };
-    return n.ok && squash(n.context) == squash(recordName(rec));
+    return n.ok && squashSpaces(n.context) == squashSpaces(recordName(rec));
+}
+
+// Whether a demangled name, spaces removed, mentions the class: its name
+// as a whole word, as the scope of a member ("LQ<int>::pending()") or in a
+// parameter ("report(LQ<int>&)").
+bool mentions(StringRef name, StringRef cls) {
+    auto word = [](char ch) { return llvm::isAlnum(ch) || ch == '_'; };
+    for (size_t at = name.find(cls); at != StringRef::npos; at = name.find(cls, at + 1)) {
+        const size_t end = at + cls.size();
+        if ((at == 0 || !word(name[at - 1])) && (end == name.size() || !word(name[end]))) return true;
+    }
+    return false;
+}
+
+// The local objects a lifted function may build and destroy: those whose
+// constructors and destructors touch nothing but the object itself.
+bool effectFreeLocal(StringRef type) {
+    for (StringRef known : {"std::lock_guard<std::mutex>", "std::unique_lock<std::mutex>",
+                            "std::scoped_lock<std::mutex>", "std::chrono::duration<", "std::chrono::time_point<"})
+        if (known.ends_with("<") ? type.starts_with(known) : type == known) return true;
+    return false;
 }
 
 // The parameter a value is, through the slot it was stored in at entry.
@@ -342,7 +475,33 @@ private:
     bool held = false;
     unsigned cs = 0, nextCs = 0;
     Value lockSlot;
+    Operation *lockCall = nullptr;
     llvm::DenseMap<Value, std::optional<bool>> retval;  // slot -> the constant last stored
+    llvm::DenseMap<Value, Value> storedIn;              // slot -> the value last stored
+    llvm::DenseSet<Value> getterResults;                // a ring's size or overrun count, read
+    llvm::DenseSet<Value> pushedFlags;                  // slots a guarded push sets
+    Value timedResult;                                  // what the timed wait answered
+
+    // What a call on the container does: its name for a standard container,
+    // what its body computes for a ring (LiftedBounded.h), "" for a ring's
+    // function that computes none of a ring's operations.
+    std::string opName(cir::FuncOp callee) {
+        if (c.kind != Kind::Ring || !c.ring) return nameOf(callee.getSymName()).base;
+        std::string reason;
+        switch (c.ring->classify(callee, reason)) {
+        case RingOp::Push: return "push_back";
+        case RingOp::Front: return "front";
+        case RingOp::PopFront: return "pop_front";
+        case RingOp::Empty: return "empty";
+        case RingOp::Full: return "full";
+        case RingOp::Size: return "size";
+        case RingOp::OverrunCounter: return "overrun_counter";
+        case RingOp::ResetOverrunCounter: return "reset_overrun_counter";
+        case RingOp::None: break;
+        }
+        c.refuse("(e) the ring's " + shortName(callee) + " " + reason);
+        return "";
+    }
 
     bool fail(const Twine &w) {
         if (why.empty()) why = w.str();
@@ -439,6 +598,7 @@ private:
             auto k = st.getValue().getDefiningOp<cir::ConstantOp>();
             auto b = k ? dyn_cast<cir::BoolAttr>(k.getValue()) : cir::BoolAttr();
             retval[slot.getResult()] = b ? std::optional<bool>(b.getValue()) : std::nullopt;
+            storedIn[slot.getResult()] = st.getValue();
             return;
         }
         // A store through the destination parameter: a scalar element
@@ -480,7 +640,7 @@ private:
         auto m = member(call.getOperand(0));
         if (!m || *m != c.q) return false;
         cir::FuncOp callee = lookupCallee(call);
-        return callee && nameOf(callee.getSymName()).base == "front";
+        return callee && opName(callee) == "front";
     }
 
     void cleanup(cir::CleanupScopeOp cl) {
@@ -538,6 +698,7 @@ private:
         held = true;
         cs = ++nextCs;
         lockSlot = traceToLocalRoot(call.getOperand(0));
+        lockCall = call;
         return true;
     }
 
@@ -606,13 +767,20 @@ private:
         // The predicate object's own constructor, and std::move, touch
         // only locals.
         if (n.base == "move" && n.context == "std") return;
-        // A local object built or destroyed from constants and locals: a
-        // duration for a timed wait, the predicate object.
+        // A local object built or destroyed from constants and locals,
+        // of a type whose constructors and destructor are known to do
+        // nothing else: a lock, a duration for a timed wait. The rewrite
+        // replaces the whole body, so a constructor or destructor of any
+        // other type, which may have effects of its own, refuses.
         if ((n.ctor || n.dtor) && localSlot(call.getOperand(0)) &&
             llvm::all_of(call.getOperands().drop_front(), [&](Value v) {
                 return v.getDefiningOp<cir::ConstantOp>() || localSlot(v);
-            }))
+            })) {
+            if (effectFreeLocal(n.context)) return;
+            fail("builds or destroys a local " + n.context + ", whose constructor or destructor may have effects "
+                 "of its own");
             return;
+        }
         if (m) {
             if (held) {
                 c.refuse("(c) the mutex " + c.memberName(*c.mutex) + " also guards " + c.memberName(*m) +
@@ -625,7 +793,9 @@ private:
     }
 
     void containerCall(cir::CallOp call, const Name &n) {
-        StringRef b = n.base;
+        const std::string bs = opName(lookupCallee(call));
+        if (bs.empty()) return (void)fail("calls " + n.base + ", which the pass cannot read, on the ring");
+        StringRef b = bs;
         c.features[b.str()]++;
         if (!held) {
             if (why.empty())
@@ -634,11 +804,29 @@ private:
             return;
         }
         if (b == "empty") return;  // judged where the answer is used
+        if (c.kind == Kind::Ring) {
+            if (b == "full") return;  // judged where the answer is used
+            if (b == "size" || b == "overrun_counter") {
+                Stmt s(Stmt::Getter);
+                s.op = call;
+                s.getter = b == "size" ? RingOp::Size : RingOp::OverrunCounter;
+                getterResults.insert(call.getResult());
+                push(s);
+                return;
+            }
+            if (b == "reset_overrun_counter") {
+                Stmt s(Stmt::Reset);
+                s.op = call;
+                push(s);
+                return;
+            }
+        }
         if (b == "front") {
             if (call.getNumOperands() != 1) return (void)fail("calls front with arguments");
             Stmt s(Stmt::Front);
             s.op = call;
             s.front = call.getResult();
+            if (auto pt = dyn_cast<cir::PointerType>(call.getResult().getType())) c.frontElem = pt.getPointee();
             push(s);
             return;
         }
@@ -663,6 +851,7 @@ private:
                 return (void)fail("pushes another type");
             }
             c.elem = pt.getPointee();
+            if (b == "emplace" || b == "emplace_back") c.emplaces = true;
             Stmt s(Stmt::Push);
             s.op = call;
             s.move = StringRef(n.params).ends_with("&&)");
@@ -703,6 +892,10 @@ private:
             s.all = b == "notify_all";
             push(s);
             return;
+        }
+        if (b == "wait_for" && call.getNumOperands() == 4 && c.kind == Kind::Ring) {
+            c.features["timed wait"]++;
+            return timedWait(call, cv);
         }
         if (b == "wait_for" || b == "wait_until") {
             c.features["timed wait"]++;
@@ -789,12 +982,239 @@ private:
         Stmt s(Stmt::Wait);
         s.op = w;
         s.cv = *cv;
-        s.table = ~*stay & 0xF;
+        s.table = ~*stay & kAll;
+        push(s);
+    }
+
+    // The scope that is the critical section the lock taken last guards:
+    // the one that holds the lock's own slot.
+    Operation *sectionOfLock() {
+        if (!lockCall || !lockSlot) return nullptr;
+        Operation *slot = lockSlot.getDefiningOp();
+        for (Operation *p = lockCall->getParentOp(); p && p != f.getOperation(); p = p->getParentOp())
+            if (isa<cir::ScopeOp>(p) && slot && p->isAncestor(slot)) return p;
+        return nullptr;
+    }
+
+    // Whether a region touches the queue's members: the container, the
+    // mutex, a condition variable or the flag.
+    bool touchesQueue(Region &r) {
+        bool touches = false;
+        r.walk([&](cir::GetMemberOp gm) {
+            auto m = member(gm.getResult());
+            if (m && (*m == c.q || (c.mutex && *m == *c.mutex) || isCv(*m) || (c.stop && *m == *c.stop) ||
+                      isStopType(c.rec.getElementType(*m))))
+                touches = true;
+        });
+        return touches;
+    }
+
+    // After the critical section of a push that may decline: `if (pushed)
+    // cv.notify_one(); else <the program's own code>`.
+    bool flagIf(cir::IfOp i) {
+        if (held) return false;
+        auto ld = traceToLocalRoot(i.getCondition()).getDefiningOp<cir::LoadOp>();
+        Value slot = ld ? traceToLocalRoot(ld.getAddr()) : Value();
+        if (!slot || !pushedFlags.contains(slot)) return false;
+        Stmt s(Stmt::FlagIf);
+        s.op = i;
+        s.flag = slot;
+        for (Operation &op : i.getThenRegion().front()) {
+            if (isa<cir::YieldOp, cir::GetMemberOp>(op)) continue;
+            auto call = dyn_cast<cir::CallOp>(op);
+            cir::FuncOp callee = call ? lookupCallee(call) : cir::FuncOp();
+            auto m = call && call.getNumOperands() == 1 ? member(call.getOperand(0)) : std::nullopt;
+            const std::string b = callee ? nameOf(callee.getSymName()).base : "";
+            if (m && isCv(*m) && (b == "notify_one" || b == "notify_all")) {
+                Stmt n(Stmt::Notify);
+                n.op = call;
+                n.cv = *m;
+                n.all = b == "notify_all";
+                push(n);
+                continue;
+            }
+            fail("does more than notify after a push that may decline");
+            return true;
+        }
+        if (!i.getElseRegion().empty() && touchesQueue(i.getElseRegion())) {
+            fail("touches the queue where a push has declined");
+            return true;
+        }
+        push(s);
+        return true;
+    }
+
+    // `if (!cv.wait_for(lock, d, pred)) return false;`
+    bool timedOut(cir::IfOp i) {
+        if (!timedResult) return false;
+        auto n = traceToLocalRoot(i.getCondition()).getDefiningOp<cir::NotOp>();
+        if (!n || traceToLocalRoot(n.getInput()) != timedResult) return false;
+        timedResult = Value();
+        std::optional<bool> value;
+        auto saved = retval;
+        for (Operation &op : i.getThenRegion().front()) {
+            if (isa<cir::ConstantOp, cir::YieldOp, cir::LoadOp>(op)) continue;
+            if (auto st = dyn_cast<cir::StoreOp>(op)) {
+                auto slot = traceToLocalRoot(st.getAddr()).getDefiningOp<cir::AllocaOp>();
+                auto k = st.getValue().getDefiningOp<cir::ConstantOp>();
+                auto b = k ? dyn_cast<cir::BoolAttr>(k.getValue()) : cir::BoolAttr();
+                if (!slot || !b) break;
+                retval[slot.getResult()] = b.getValue();
+                continue;
+            }
+            if (auto ret = dyn_cast<cir::ReturnOp>(op); ret && ret.getNumOperands() == 1) {
+                value = constantReturned(ret.getOperand(0));
+                break;
+            }
+            break;
+        }
+        retval = saved;
+        if (!value || *value || !i.getElseRegion().empty()) {
+            fail("does something other than return false when its timed wait ends without an element");
+            return true;
+        }
+        Stmt s(Stmt::TimedOut);
+        s.op = i;
+        s.value = false;
+        push(s);
+        return true;
+    }
+
+    // Inside the critical section: `if (!q.full()) { q.push_back(v);
+    // pushed = true; }`.
+    bool guardedPush(cir::IfOp i) {
+        if (!held || c.kind != Kind::Ring || i.getThenRegion().empty()) return false;
+        cir::CallOp pushCall;
+        for (Operation &op : i.getThenRegion().front())
+            if (auto call = dyn_cast<cir::CallOp>(op); call && call.getNumOperands() == 2) {
+                auto m = member(call.getOperand(0));
+                cir::FuncOp callee = lookupCallee(call);
+                if (m && *m == c.q && callee && opName(callee) == "push_back") pushCall = call;
+            }
+        if (!pushCall) return false;
+        c.features["push_back"]++;
+        Stmt s(Stmt::GuardedPush);
+        s.op = i;
+        if (!i.getElseRegion().empty()) return fail("has an else beside a push that may decline"), true;
+        std::optional<Table> t = table(i.getCondition());
+        if (!t) return true;
+        s.table = *t;
+        for (Operation &op : i.getThenRegion().front()) {
+            if (isa<cir::YieldOp, cir::ConstantOp, cir::LoadOp, cir::LifetimeStartOp, cir::LifetimeEndOp>(op) ||
+                &op == pushCall.getOperation())
+                continue;
+            // std::move of the parameter.
+            if (auto call = dyn_cast<cir::CallOp>(op); call && lookupCallee(call) &&
+                                                     nameOf(lookupCallee(call).getSymName()).base == "move" &&
+                                                     nameOf(lookupCallee(call).getSymName()).context == "std")
+                continue;
+            if (auto gm = dyn_cast<cir::GetMemberOp>(op); gm && member(gm.getResult()) == c.q) continue;
+            if (auto st = dyn_cast<cir::StoreOp>(op)) {
+                auto slot = localSlot(st.getAddr());
+                auto k = st.getValue().getDefiningOp<cir::ConstantOp>();
+                auto b = k ? dyn_cast<cir::BoolAttr>(k.getValue()) : cir::BoolAttr();
+                if (slot && b && b.getValue() && !s.flag && slot.getResult() != lockSlot) {
+                    s.flag = slot.getResult();
+                    continue;
+                }
+            }
+            return fail("does more than push and note it where there is room (" + op.getName().getStringRef() + ")"),
+                   true;
+        }
+        Value v = pushCall.getOperand(1);
+        auto pt = dyn_cast<cir::PointerType>(v.getType());
+        if (!pt) return fail("pushes a value that is not passed by reference"), true;
+        if (c.elem && c.elem != pt.getPointee()) {
+            c.refuse("(e) " + fname() + " constructs the element from another type");
+            return fail("pushes another type"), true;
+        }
+        c.elem = pt.getPointee();
+        cir::FuncOp callee = lookupCallee(pushCall);
+        s.move = StringRef(nameOf(callee.getSymName()).params).ends_with("&&)");
+        if (auto p = paramOf(v, f)) {
+            s.param = *p;
+        } else if (auto p = slotOfParam(v, f)) {
+            s.param = *p;
+            s.byValueSlot = true;
+        } else {
+            return fail("pushes something other than its parameter"), true;
+        }
+        s.section = sectionOfLock();
+        if (!s.section) return fail("takes its lock for the whole function around a push that may decline"), true;
+        if (s.flag) pushedFlags.insert(s.flag);
+        push(s);
+        return true;
+    }
+
+    // `cv.wait_for(lock, d, pred)` on a ring, d the function's parameter.
+    void timedWait(cir::CallOp call, unsigned cv) {
+        if (!held || traceToLocalRoot(call.getOperand(1)) != lockSlot)
+            return (void)fail("waits with a lock other than the one it holds");
+        // The predicate's call operator, inside wait_for or what it calls.
+        cir::FuncOp pred;
+        llvm::SmallVector<std::pair<cir::FuncOp, unsigned>, 4> work{{lookupCallee(call), 0}};
+        llvm::DenseSet<Operation *> seen;
+        while (!work.empty() && !pred) {
+            auto [g, dd] = work.pop_back_val();
+            const unsigned d = dd;
+            if (!g || g.getBody().empty() || !seen.insert(g).second || d > 3) continue;
+            g.walk([&](cir::CallOp inner) {
+                cir::FuncOp h = lookupCallee(inner);
+                if (!h || pred) return;
+                if (nameOf(h.getSymName()).base == "operator()" && StringRef(pretty(h.getSymName())).contains("lambda"))
+                    pred = h;
+                else
+                    work.push_back({h, d + 1});
+            });
+        }
+        if (!pred) return (void)fail("waits on a predicate the pass cannot read");
+        std::optional<Table> t = predicate(pred);
+        if (!t) return;
+        Value d = traceToLocalRoot(call.getOperand(2));
+        auto slot = d.getDefiningOp<cir::AllocaOp>();
+        std::optional<unsigned> p = slot ? slotOfParam(d, f) : std::nullopt;
+        // A duration arrives coerced to an integer: the argument is stored
+        // into a slot of its own, read back as the duration, and that is
+        // stored into the parameter's slot.
+        if (slot && !p) {
+            cir::StoreOp only;
+            for (Operation *u : slot->getUsers())
+                if (auto st = dyn_cast<cir::StoreOp>(u); st && st.getAddr() == slot.getResult())
+                    only = only ? cir::StoreOp() : st;
+            auto ld = only ? only.getValue().getDefiningOp<cir::LoadOp>() : cir::LoadOp();
+            Value coerce = ld ? traceToLocalRoot(ld.getAddr()) : Value();
+            if (coerce && coerce.getDefiningOp<cir::AllocaOp>()) p = slotOfParam(coerce, f);
+        }
+        if (!p) return (void)fail("waits for a time other than its parameter");
+        StringRef ty = recordName(slot.getAllocaType());
+        // CIR spells the ratio's arguments with their suffix: 1000L.
+        std::string norm;
+        for (size_t i = 0; i < ty.size(); ++i)
+            if (!(ty[i] == 'L' && i > 0 && llvm::isDigit(ty[i - 1]))) norm += ty[i];
+        StringRef n(norm);
+        std::string unit;
+        if (n.ends_with("std::ratio<1, 1000000000>>")) unit = "ns";
+        else if (n.ends_with("std::ratio<1, 1000000>>")) unit = "us";
+        else if (n.ends_with("std::ratio<1, 1000>>")) unit = "ms";
+        else if (n == "std::chrono::duration<long>" || n.ends_with("std::ratio<1, 1>>")) unit = "s";
+        if (unit.empty()) {
+            c.refuse("(d) " + fname() + " waits for a " + ty + ", a unit the runtime does not take");
+            return (void)fail("waits for a time in another unit");
+        }
+        Stmt s(Stmt::TimedWait);
+        s.op = call;
+        s.cv = cv;
+        s.table = *t;
+        s.durationParam = *p;
+        s.unit = unit;
+        timedResult = call.getResult();
+        preds.push_back(pred);
         push(s);
     }
 
     // `if (cond) return <constant>;`
     void guard(cir::IfOp i) {
+        if (flagIf(i) || timedOut(i) || guardedPush(i)) return;
         // `if (empty) cv.wait(lock);`: a wait that a spurious wake-up
         // leaves with the queue still empty.
         bool waits = false;
@@ -869,6 +1289,17 @@ private:
         s.op = ret;
         if (ret.getNumOperands() == 1) {
             s.returnsSomething = true;
+            // A ring's size or overrun count, returned as read.
+            Value v = ret.getOperand(0);
+            if (auto ld = v.getDefiningOp<cir::LoadOp>()) {
+                auto it = storedIn.find(traceToLocalRoot(ld.getAddr()));
+                if (it != storedIn.end()) v = it->second;
+            }
+            if (getterResults.contains(v)) {
+                s.fromGetter = true;
+                push(s);
+                return;
+            }
             s.value = constantReturned(ret.getOperand(0));
             if (!s.value) return (void)fail("returns something other than a constant");
         }
@@ -886,7 +1317,7 @@ private:
             if (auto call = dyn_cast<cir::CallOp>(op)) {
                 cir::FuncOp callee = lookupCallee(call);
                 auto m = call.getNumOperands() ? member(call.getOperand(0)) : std::nullopt;
-                if (callee && m && *m == c.q && nameOf(callee.getSymName()).base == "empty") return;
+                if (callee && m && *m == c.q && (opName(callee) == "empty" || opName(callee) == "full")) return;
                 if (callee && m && c.stop && *m == *c.stop) return;  // std::atomic<bool>'s load
                 if (callee && m && isStopType(c.rec.getElementType(*m))) return;
             }
@@ -899,16 +1330,17 @@ private:
     // reason when it reads anything else.
     std::optional<Table> table(Value v) {
         Table t = 0;
-        for (bool e : {false, true})
-            for (bool s : {false, true}) {
-                std::optional<bool> r = eval(v, e, s, 0);
-                if (!r) return std::nullopt;
-                if (*r) t |= bitOf(e, s);
-            }
+        for (bool full : {false, true})
+            for (bool e : {false, true})
+                for (bool s : {false, true}) {
+                    std::optional<bool> r = eval(v, e, s, full, 0);
+                    if (!r) return std::nullopt;
+                    if (*r) t |= bitOf(e, s, full);
+                }
         return t;
     }
 
-    std::optional<bool> eval(Value v, bool e, bool s, unsigned depth) {
+    std::optional<bool> eval(Value v, bool e, bool s, bool full, unsigned depth) {
         if (depth > 32) return fail("has a condition too deep to read"), std::nullopt;
         Operation *d = v.getDefiningOp();
         if (!d) return fail("has a condition the pass cannot read"), std::nullopt;
@@ -917,32 +1349,33 @@ private:
             return fail("has a condition the pass cannot read"), std::nullopt;
         }
         if (auto n = dyn_cast<cir::NotOp>(d)) {
-            auto r = eval(n.getInput(), e, s, depth + 1);
+            auto r = eval(n.getInput(), e, s, full, depth + 1);
             return r ? std::optional<bool>(!*r) : std::nullopt;
         }
         if (auto cast = dyn_cast<cir::CastOp>(d)) {
             if (cast.getKind() == cir::CastKind::int_to_bool || cast.getKind() == cir::CastKind::bool_to_int)
-                return eval(cast.getSrc(), e, s, depth + 1);
+                return eval(cast.getSrc(), e, s, full, depth + 1);
             return fail("has a condition the pass cannot read"), std::nullopt;
         }
         if (auto t = dyn_cast<cir::TernaryOp>(d)) {
-            auto c0 = eval(t.getCond(), e, s, depth + 1);
+            auto c0 = eval(t.getCond(), e, s, full, depth + 1);
             if (!c0) return std::nullopt;
             Region &r = *c0 ? t.getTrueRegion() : t.getFalseRegion();
             auto y = dyn_cast<cir::YieldOp>(r.front().getTerminator());
             if (!y || y.getNumOperands() != 1) return fail("has a condition the pass cannot read"), std::nullopt;
-            return eval(y.getOperand(0), e, s, depth + 1);
+            return eval(y.getOperand(0), e, s, full, depth + 1);
         }
         if (auto call = dyn_cast<cir::CallOp>(d)) {
             cir::FuncOp callee = lookupCallee(call);
             auto m = call.getNumOperands() == 1 ? member(call.getOperand(0)) : std::nullopt;
-            if (callee && m && *m == c.q && nameOf(callee.getSymName()).base == "empty") return e;
+            if (callee && m && *m == c.q && opName(callee) == "empty") return e;
+            if (callee && m && *m == c.q && c.kind == Kind::Ring && opName(callee) == "full") return full;
             if (callee && m && isStopType(c.rec.getElementType(*m))) {
                 if (!stopAt(*m)) return std::nullopt;
                 return s;  // std::atomic<bool>'s conversion or load
             }
             if (callee && m && *m == c.q) {
-                const std::string b = nameOf(callee.getSymName()).base;
+                const std::string b = opName(callee);
                 c.features[b]++;
                 if (b == "size")
                     c.refuse("(d) " + fname() + " reads size(): the substitutes keep no linearisable count");
@@ -1046,6 +1479,13 @@ public:
         *this, "instantiations", llvm::cl::init(""),
         llvm::cl::desc("Write here, one per line, the explicit instantiation of wtc::lifted for the "
                        "container type of every class that lifts and whose runtime this module lacks")};
+    Option<bool> openWorld{*this, "open-world", llvm::cl::init(false),
+                           llvm::cl::desc("The module is linked later with files the pass does not see, "
+                                          "which may use any class as written: nothing lifts")};
+    Option<std::string> namedElsewhereFile{
+        *this, "named-elsewhere", llvm::cl::init(""),
+        llvm::cl::desc("A file listing, one per line, the symbols the other files linked with this module "
+                       "define or reference: a class any of them names does not lift")};
 
     void runOnOperation() override;
 
@@ -1053,7 +1493,16 @@ private:
     ModuleOp module;
     llvm::DenseMap<std::pair<Type, unsigned>, std::string> memberNames;
 
+    // What the rest of the program may see: whether this module has main,
+    // and the demangled names, spaces removed, the other files name.
+    bool hasMain = false;
+    std::vector<std::string> elsewhere;
+
     void analyse(Candidate &c);
+    void closedWorld(Candidate &c);
+    void boundedChecks(Candidate &c);
+    bool onlyReturned(cir::FuncOp f, unsigned depth, llvm::DenseSet<Operation *> &seen);
+    bool onlyDirectCalls(cir::FuncOp f, llvm::SmallVectorImpl<cir::CallOp> &calls);
     void decide(Candidate &c, Reader &r, cir::FuncOp f, bool explained);
     bool constructorOk(Candidate &c, cir::FuncOp f, bool dtor);
     llvm::StringMap<cir::FuncOp> runtimeFor(Candidate &c);
@@ -1064,6 +1513,21 @@ private:
 void LiftLockedQueuesPass::runOnOperation() {
     module = getOperation();
     gMemberNames = &memberNames;
+
+    auto mainFn = module.lookupSymbol<cir::FuncOp>("main");
+    hasMain = mainFn && !mainFn.getBody().empty();
+    elsewhere.clear();
+    if (!namedElsewhereFile.empty()) {
+        auto buf = llvm::MemoryBuffer::getFile(namedElsewhereFile.getValue());
+        if (!buf) {
+            module.emitError() << "wtc: cannot read the symbols named elsewhere from " << namedElsewhereFile.getValue();
+            return signalPassFailure();
+        }
+        llvm::SmallVector<StringRef, 64> lines;
+        (*buf)->getBuffer().split(lines, '\n', -1, false);
+        for (StringRef l : lines)
+            if (!(l = l.trim()).empty()) elsewhere.push_back(squashSpaces(llvm::demangle(l.str())));
+    }
 
     // Member names, and the records that hold a std::mutex.
     llvm::SetVector<Type> withMutex;
@@ -1135,6 +1599,7 @@ void LiftLockedQueuesPass::runOnOperation() {
         c.rec = cast<cir::RecordType>(key.first);
         c.q = key.second;
         analyse(c);
+        closedWorld(c);
 
         if (!c.features.empty()) {
             InFlightDiagnostic fd = emitRemark(c.loc) << "wtc: locked queue " << c.label() << " uses ";
@@ -1154,7 +1619,9 @@ void LiftLockedQueuesPass::runOnOperation() {
                                   << " not lifted: its container type cannot be named outside the file";
                 continue;
             }
-            lines += ("template struct wtc::lifted<" + ty + ">;\n").str();
+            lines += ("template struct wtc::lifted" + Twine(c.kind == Kind::Ring ? "_bounded" : "") + "<" + ty +
+                      ">;\n")
+                         .str();
             if (rewrite)
                 emitRemark(c.loc) << "wtc: locked queue " << c.label()
                                   << " not lifted: wtc::lifted<" << ty
@@ -1197,13 +1664,28 @@ void LiftLockedQueuesPass::analyse(Candidate &c) {
     StringRef qType = recordName(members[c.q]);
     c.kind = containerKind(qType);
     switch (c.kind) {
-    case Kind::StdQueue:
-        if (!qType.contains(", std::deque<") && !qType.contains(", std::list<") &&
-            !qType.contains(", std::__cxx11::list<"))
-            c.refuse("(e) the std::queue's underlying container is neither a deque nor a list");
+    case Kind::StdQueue: {
+        // The adapter's one member, the container it pushes at the back of
+        // and pops at the front of; its type, not the adapter's spelling,
+        // which a container of the program's own may mimic.
+        auto adapter = dyn_cast<cir::RecordType>(members[c.q]);
+        StringRef under;
+        if (adapter && !adapter.isIncomplete() && adapter.getMembers().size() == 1)
+            under = recordName(adapter.getMembers().front());
+        const Kind k = containerKind(under);
+        if (k != Kind::StdDeque && k != Kind::StdList)
+            c.refuse("(e) the std::queue's underlying container is neither a std::deque nor a std::list" +
+                     (under.empty() ? std::string() : (" (" + under + ")").str()));
+        else if (!standardAllocator(under))
+            c.refuse("(e) the container allocates with an allocator other than std::allocator of its element (" +
+                     under + ")");
         break;
+    }
     case Kind::StdDeque:
     case Kind::StdList:
+        if (!standardAllocator(qType))
+            c.refuse("(e) the container allocates with an allocator other than std::allocator of its element (" +
+                     qType + ")");
         break;
     case Kind::StdVector:
         c.refuse("(e) the container is a std::vector, which the class may use as a stack or a batch");
@@ -1211,9 +1693,18 @@ void LiftLockedQueuesPass::analyse(Candidate &c) {
     case Kind::StdPriorityQueue:
         c.refuse("(e) the container is a std::priority_queue: priority order, not FIFO");
         break;
-    default:
-        c.refuse("(e) the container " + qType + " is not a standard container");
+    default: {
+        // A ring the class bounds itself: read from its member functions.
+        auto ring = std::make_shared<RingModel>(module, cast<cir::RecordType>(members[c.q]));
+        if (!ring->why().empty()) {
+            c.refuse("(e) the container " + qType + " is neither a standard container nor a bounded ring: " +
+                     ring->why());
+            break;
+        }
+        c.kind = Kind::Ring;
+        c.ring = ring;
         break;
+    }
     }
 
     // Every function that touches the container, the mutex, a condition
@@ -1273,22 +1764,56 @@ void LiftLockedQueuesPass::analyse(Candidate &c) {
             c.refuse("(c) the mutex " + c.memberName(*c.mutex) + " also guards " + c.memberName(m.flag) + " in " +
                      shortName(m.f));
 
-    // A pop that waits must be woken by every push.
-    std::optional<unsigned> dataCv;
+    // emplace builds the element from its argument, which may be of
+    // another type than the element; the substitute's push takes the
+    // element itself.
+    if (c.elem && (c.frontElem ? c.elem != c.frontElem : c.emplaces))
+        c.refuse("(e) the element is built by emplace from an argument of another type than the container's");
+
+    // The substitute starts open: every constructor must start the flag
+    // the waits read as false, by a constant, and nothing else.
+    if (c.stop)
+        for (cir::FuncOp f : c.ctors) {
+            auto inits = c.flagInits.lookup(f);
+            bool set = false, other = false;
+            for (auto &[m, v] : inits)
+                if (m == *c.stop) (v && !*v ? set : other) = true;
+            if (other || !set)
+                c.refuse("(d) " + shortName(f) + " starts the stop flag " + c.memberName(*c.stop) +
+                         (other ? " other than false" : " indeterminate") + ": the substitute starts open");
+        }
+
+    // A pop that waits must be woken by every push, and a push that waits
+    // for room by every pop.
+    auto isPush = [](Role r) {
+        return r == Role::Push || r == Role::PushWait || r == Role::TryPush || r == Role::PushOverrun;
+    };
+    auto isPop = [](Role r) {
+        return r == Role::TryPop || r == Role::PopWait || r == Role::PopWaitClosed || r == Role::PopWaitFor;
+    };
+    std::optional<unsigned> dataCv, spaceCv;
     bool waits = false;
     for (const Method &m : c.methods)
-        if (m.role == Role::PopWait || m.role == Role::PopWaitClosed) {
+        if (m.role == Role::PopWait || m.role == Role::PopWaitClosed || m.role == Role::PopWaitFor) {
             waits = true;
             if (dataCv && *dataCv != m.waitCv)
                 c.refuse("(d) the pops wait on two condition variables");
             dataCv = m.waitCv;
+        } else if (m.role == Role::PushWait) {
+            if (spaceCv && *spaceCv != m.waitCv)
+                c.refuse("(d) the pushes wait on two condition variables");
+            spaceCv = m.waitCv;
         }
     for (const Method &m : c.methods) {
         if (!c.reasons.empty()) break;
-        if (m.role == Role::Push && waits &&
+        if (isPush(m.role) && waits &&
             llvm::none_of(m.notifies, [&](auto n) { return n.first == *dataCv; }))
             c.refuse("(d) " + shortName(m.f) + " does not notify " + c.memberName(*dataCv) +
                      ", which a pop waits on");
+        if (isPop(m.role) && spaceCv &&
+            llvm::none_of(m.notifies, [&](auto n) { return n.first == *spaceCv; }))
+            c.refuse("(d) " + shortName(m.f) + " does not notify " + c.memberName(*spaceCv) +
+                     ", which a push waits on for room");
         if (m.role == Role::Close) {
             if (waits && llvm::none_of(m.notifies, [&](auto n) { return n.first == *dataCv && n.second; }))
                 c.refuse("(d) " + shortName(m.f) + " sets the stop flag but does not wake every waiter on " +
@@ -1300,16 +1825,300 @@ void LiftLockedQueuesPass::analyse(Candidate &c) {
     // A pop that ignores the flag would return, once the queue is closed
     // and empty, where the original waits on.
     const bool closes = llvm::any_of(c.methods, [](const Method &m) { return m.role == Role::Close; });
-    for (const Method &m : c.methods)
+    for (const Method &m : c.methods) {
         if (closes && m.role == Role::PopWait)
             c.refuse("(d) " + shortName(m.f) + " waits only for an element in a class that also closes");
+        // The substitute's timed pop gives up at close() as well; the
+        // original's waits for an element until its time is up.
+        if (closes && m.role == Role::PopWaitFor)
+            c.refuse("(d) " + shortName(m.f) + " waits with a time limit only for an element in a class that also "
+                     "closes");
+        // The substitute's waiting push gives up at close() while the queue
+        // is full; one that ignores the flag would wait on.
+        if (closes && m.role == Role::PushWait)
+            c.refuse("(d) " + shortName(m.f) + " waits only for room in a class that also closes");
+    }
+    if (c.kind == Kind::Ring && c.reasons.empty()) boundedChecks(c);
     if (c.methods.empty() && c.reasons.empty()) c.refuse("(a) no member function pushes or pops");
     if (c.ctors.empty() && c.reasons.empty())
         c.refuse("(a) no constructor of " + recordName(c.rec) + " builds the container here");
 }
 
+// (f) The class is this module's alone. Lifting changes what its member
+// functions do with the object's storage; a copy of them compiled in
+// another unit, as written, would read the same storage as the container
+// it no longer holds, and the linker keeps one copy of an inline member
+// function for the whole program, which may be either. So the class lifts
+// only when the module is the whole program as far as the class goes: it
+// has main, it is not compiled to be linked with files the pass does not
+// see, none of the files it is linked with names the class (a member
+// function, or a function that takes or returns the class), and every
+// member function of the class this module declares has its body here.
+//
+// Symbols alone cannot show that a linked file leaves the class alone: its
+// copy of an inline member function may be inlined where it is called,
+// leaving no symbol that names the class. So, with any file linked, the
+// object must also be out of its reach, by a rule on this module's own
+// code: no global another file may name (not internal, or only declared
+// here) holds the class or points to it, at any depth; no call hands
+// something that holds or points to it to a function with no body here,
+// to an indirect call or to a function a linked file names; no function
+// of this module that a linked file names takes or returns such a thing;
+// and no pointer to such a thing is converted to a type that is not one,
+// which the pass could no longer follow (to `void *`, to an integer, to a
+// base class), other than to free it.
+void LiftLockedQueuesPass::closedWorld(Candidate &c) {
+    const std::string cls = recordName(c.rec).str();
+    if (openWorld) {
+        c.refuse("(f) the unit is compiled to be linked with files the pass does not see, which may use " + cls +
+                 " as written");
+        return;
+    }
+    if (!hasMain) {
+        c.refuse("(f) the module has no main: the rest of the program, elsewhere, may use " + cls +
+                 " as written");
+        return;
+    }
+    for (cir::FuncOp f : module.getOps<cir::FuncOp>())
+        if (f.getBody().empty() && isMemberOf(f, c.rec))
+            c.refuse("(f) " + shortName(f) + " has no body here: another unit defines it");
+    const std::string want = squashSpaces(cls);
+    for (const std::string &s : elsewhere)
+        if (mentions(s, want)) {
+            c.refuse("(f) a file linked with this one names " + cls + " (" + s + ")");
+            return;
+        }
+    if (namedElsewhereFile.empty()) return;
+
+    // Whether a type is the class, holds it or points to something that
+    // does, at any depth: a search of the types it is made of.
+    llvm::DenseMap<Type, bool> memo;
+    auto reaches = [&](Type root) {
+        auto [it, fresh] = memo.try_emplace(root, false);
+        if (!fresh) return it->second;
+        llvm::SmallVector<Type, 16> work{root};
+        llvm::DenseSet<Type> seen{root};
+        bool found = false;
+        while (!work.empty() && !found) {
+            Type t = work.pop_back_val();
+            if (t == Type(c.rec)) {
+                found = true;
+                break;
+            }
+            llvm::SmallVector<Type, 8> next;
+            if (auto p = dyn_cast<cir::PointerType>(t)) next.push_back(p.getPointee());
+            else if (auto a = dyn_cast<cir::ArrayType>(t)) next.push_back(a.getElementType());
+            else if (auto r = dyn_cast<cir::RecordType>(t); r && !r.isIncomplete())
+                next.append(r.getMembers().begin(), r.getMembers().end());
+            for (Type n : next)
+                if (seen.insert(n).second) work.push_back(n);
+        }
+        memo[root] = found;
+        return found;
+    };
+    auto namedThere = [&](cir::FuncOp f) {
+        return llvm::is_contained(elsewhere, squashSpaces(llvm::demangle(f.getSymName().str())));
+    };
+    auto where = [](Operation *op) {
+        auto f = op->getParentOfType<cir::FuncOp>();
+        return f ? shortName(f) : std::string("a global's initialiser");
+    };
+    auto deallocates = [](cir::FuncOp g) {
+        StringRef n = g ? g.getSymName() : StringRef();
+        return n.starts_with("_ZdlPv") || n.starts_with("_ZdaPv");
+    };
+    auto typeName = [](Type t) -> std::string {
+        if (auto p = dyn_cast<cir::PointerType>(t)) {
+            if (isa<cir::VoidType>(p.getPointee())) return "void *";
+            if (StringRef n = recordName(p.getPointee()); !n.empty()) return (n + " *").str();
+            return "a pointer of another type";
+        }
+        if (isa<cir::IntType>(t)) return "an integer";
+        return "another type";
+    };
+    std::string bad;
+    for (cir::GlobalOp g : module.getOps<cir::GlobalOp>())
+        if ((!cir::isLocalLinkage(g.getLinkage()) || g.isDeclaration()) && reaches(g.getSymType())) {
+            bad = "the global " + g.getSymName().str() + ", which a file linked with this one may name, holds or "
+                  "points to " + cls;
+            break;
+        }
+    for (cir::FuncOp f : module.getOps<cir::FuncOp>()) {
+        if (!bad.empty()) break;
+        if (f.getBody().empty() || !namedThere(f)) continue;
+        auto types = f.getFunctionType();
+        if (llvm::any_of(types.getInputs(), reaches) || llvm::any_of(types.getReturnTypes(), reaches))
+            bad = "a file linked with this one names " + pretty(f.getSymName()) + ", which takes or returns " + cls +
+                  " or a pointer to it";
+    }
+    if (bad.empty())
+        module.walk([&](Operation *op) {
+            if (auto call = dyn_cast<cir::CallOp>(op)) {
+                cir::FuncOp g = call.isIndirect() ? cir::FuncOp() : lookupCallee(call);
+                const bool foreign = !g || g.getBody().empty() || namedThere(g);
+                if (foreign && llvm::any_of(call.getArgOperands(), [&](Value v) { return reaches(v.getType()); })) {
+                    bad = where(op) + " hands " + cls + ", or what holds or points to it, to " +
+                          (g ? pretty(g.getSymName()) : std::string("an indirect call")) +
+                          (!g ? std::string() : g.getBody().empty() ? ", which has no body here"
+                                                                    : ", which a file linked with this one names");
+                    return WalkResult::interrupt();
+                }
+            }
+            Value from, to;
+            if (auto cast = dyn_cast<cir::CastOp>(op); cast && cast.getKind() != cir::CastKind::ptr_to_bool) {
+                from = cast.getSrc();
+                to = cast.getResult();
+            } else if (auto base = dyn_cast<cir::BaseClassAddrOp>(op)) {
+                from = base.getDerivedAddr();
+                to = base.getResult();
+            }
+            // The argument's own memory read as another type, to pass an
+            // object in registers (a lambda that captures `this`), to a
+            // function of this module that the files do not name, or to
+            // return it from one: the bits stay in this module's code.
+            auto coerced = [&](Operation *u) {
+                if (auto st = dyn_cast<cir::StoreOp>(u)) return st.getAddr() == to && st.getValue() != to;
+                auto ld = dyn_cast<cir::LoadOp>(u);
+                if (!ld) return false;
+                return llvm::all_of(ld->getUses(), [&](OpOperand &lu) {
+                    if (auto r = dyn_cast<cir::ReturnOp>(lu.getOwner())) {
+                        auto f = r->getParentOfType<cir::FuncOp>();
+                        return f && !namedThere(f);
+                    }
+                    auto call = dyn_cast<cir::CallOp>(lu.getOwner());
+                    cir::FuncOp g = call && !call.isIndirect() ? lookupCallee(call) : cir::FuncOp();
+                    return g && !g.getBody().empty() && !namedThere(g);
+                });
+            };
+            // A global's destructor registered with __cxa_atexit, which
+            // hands the object back to it, a function of this module.
+            auto atExit = [&](OpOperand &use) {
+                auto call = dyn_cast<cir::CallOp>(use.getOwner());
+                cir::FuncOp g = call ? lookupCallee(call) : cir::FuncOp();
+                if (!g || g.getSymName() != "__cxa_atexit" || use.getOperandNumber() != 1 ||
+                    call.getArgOperands().size() < 2)
+                    return false;
+                Value fn = call.getArgOperands()[0];
+                while (auto cv = fn.getDefiningOp<cir::CastOp>()) fn = cv.getSrc();
+                auto gg = fn.getDefiningOp<cir::GetGlobalOp>();
+                auto dtor = gg ? module.lookupSymbol<cir::FuncOp>(gg.getName()) : cir::FuncOp();
+                return dtor && !dtor.getBody().empty() && !namedThere(dtor);
+            };
+            if (from && reaches(from.getType()) && !reaches(to.getType()) &&
+                !llvm::all_of(to.getUses(), [&](OpOperand &use) {
+                    auto call = dyn_cast<cir::CallOp>(use.getOwner());
+                    return (call && deallocates(lookupCallee(call))) || coerced(use.getOwner()) || atExit(use);
+                })) {
+                bad = where(op) + " converts a pointer to " + cls + ", or to what holds or points to it, to " +
+                      typeName(to.getType()) + ", which the pass does not follow";
+                return WalkResult::interrupt();
+            }
+            return WalkResult::advance();
+        });
+    if (!bad.empty()) c.refuse("(f) " + bad);
+}
+
+// Whether every use of f's symbol is a direct call, and which.
+bool LiftLockedQueuesPass::onlyDirectCalls(cir::FuncOp f, llvm::SmallVectorImpl<cir::CallOp> &calls) {
+    auto uses = SymbolTable::getSymbolUses(f, module);
+    if (!uses) return false;
+    for (const SymbolTable::SymbolUse &u : *uses) {
+        auto call = dyn_cast<cir::CallOp>(u.getUser());
+        if (!call || call.getCalleeAttr() != u.getSymbolRef()) return false;
+        calls.push_back(call);
+    }
+    return true;
+}
+
+// Whether what f returns only ever goes back to a caller: returned as it
+// is, through the return slot, by every caller and theirs, or dropped. A
+// count that is approximate while operations are in flight may be handed
+// to the program's user; it may not decide anything in the program.
+bool LiftLockedQueuesPass::onlyReturned(cir::FuncOp f, unsigned depth, llvm::DenseSet<Operation *> &seen) {
+    if (depth > 16) return false;
+    if (!seen.insert(f).second) return true;
+    llvm::SmallVector<cir::CallOp, 4> calls;
+    if (!onlyDirectCalls(f, calls)) return false;
+    for (cir::CallOp call : calls) {
+        if (call.getNumResults() == 0) continue;
+        auto caller = call->getParentOfType<cir::FuncOp>();
+        for (Operation *user : call.getResult().getUsers()) {
+            if (isa<cir::ReturnOp>(user)) {
+                if (!onlyReturned(caller, depth + 1, seen)) return false;
+                continue;
+            }
+            auto st = dyn_cast<cir::StoreOp>(user);
+            auto slot = st && st.getValue() == call.getResult()
+                            ? traceToLocalRoot(st.getAddr()).getDefiningOp<cir::AllocaOp>()
+                            : cir::AllocaOp();
+            if (!slot) return false;
+            for (Operation *su : slot->getUsers()) {
+                if (su == st.getOperation() || isa<cir::LifetimeStartOp, cir::LifetimeEndOp>(su)) continue;
+                auto ld = dyn_cast<cir::LoadOp>(su);
+                if (!ld) return false;
+                for (Operation *lu : ld->getUsers())
+                    if (!isa<cir::ReturnOp>(lu)) return false;
+            }
+            if (!onlyReturned(caller, depth + 1, seen)) return false;
+        }
+    }
+    return true;
+}
+
+// What a bounded ring needs beyond the shapes: an overrun count that is
+// only handed back, and, for every push that overruns, whether it can run.
+void LiftLockedQueuesPass::boundedChecks(Candidate &c) {
+    // A file linked with this one may call a function of this module, or
+    // reach a record it names, with values the module does not show.
+    ValueSets::Elsewhere others;
+    if (!elsewhere.empty()) {
+        others.calls = [this](cir::FuncOp f) {
+            return llvm::is_contained(elsewhere, squashSpaces(llvm::demangle(f.getSymName().str())));
+        };
+        // Another file's code reaches a record's members without a symbol
+        // that names it (its copy of an inline member function, inlined
+        // where it is called), so every record is open to it.
+        others.names = [](cir::RecordType) { return true; };
+    }
+    ValueSets values(module, others);
+    for (const Method &m : c.methods) {
+        if (m.role == Role::OverrunCounter) {
+            llvm::DenseSet<Operation *> seen;
+            if (!onlyReturned(m.f, 0, seen))
+                c.refuse("(d) the overrun count " + shortName(m.f) + " returns is used for more than handing it "
+                         "back: the substitute's count is exact only once the pushes in flight have returned");
+            else
+                c.features["overrun count, handed back only"]++;
+        }
+        if (m.role != Role::PushOverrun) continue;
+        // The overrun path makes its callers consumers; it is left out only
+        // where no call of it can run.
+        llvm::SmallVector<cir::CallOp, 4> calls;
+        std::string why;
+        bool reachable = !onlyDirectCalls(m.f, calls);
+        if (reachable) why = "its address is taken";
+        for (cir::CallOp call : calls) {
+            if (reachable) break;
+            std::string w;
+            if (!values.neverRuns(call, w)) {
+                reachable = true;
+                why = "the call in " + shortName(call->getParentOfType<cir::FuncOp>()) + " can run: " + w;
+            } else if (why.empty()) {
+                why = "the call in " + shortName(call->getParentOfType<cir::FuncOp>()) + " never runs: " + w;
+            }
+        }
+        if (calls.empty() && !reachable) why = "nothing calls it";
+        c.overrunReachable |= reachable;
+        emitRemark(c.loc) << "wtc: locked queue " << c.label() << ": " << shortName(m.f)
+                          << (reachable ? " may overrun, so its callers are consumers too ("
+                                        : " never runs, so its overrun is left out (")
+                          << why << ")";
+    }
+}
+
 // Constructors build the container with its default constructor and set
 // the stop flag false; destructors destroy it. Nothing else of the queue's.
+// A bounded ring is built by the constructor that takes its capacity.
 bool LiftLockedQueuesPass::constructorOk(Candidate &c, cir::FuncOp f, bool dtor) {
     bool ok = true;
     llvm::ArrayRef<Type> members = c.rec.getMembers();
@@ -1323,14 +2132,29 @@ bool LiftLockedQueuesPass::constructorOk(Candidate &c, cir::FuncOp f, bool dtor)
             if (auto call = dyn_cast<cir::CallOp>(u)) {
                 cir::FuncOp callee = lookupCallee(call);
                 Name n = callee ? nameOf(callee.getSymName()) : Name();
+                if (*m == c.q && c.kind == Kind::Ring && n.ctor && call.getNumOperands() == 2 &&
+                    call.getOperand(0) == gm.getResult() && callee == c.ring->sizedConstructor() && !dtor)
+                    continue;
+                if (*m == c.q && c.kind == Kind::Ring && n.ctor) {
+                    c.refuse("(a) " + shortName(f) + " builds the ring other than with its capacity");
+                    ok = false;
+                    continue;
+                }
                 if (call.getNumOperands() == 1 && call.getOperand(0) == gm.getResult() && (n.ctor || n.dtor)) {
-                    if (*m == c.q && n.ctor && dtor) ok = false;
+                    if (*m == c.q && n.ctor && dtor) {
+                        c.refuse("(a) " + shortName(f) + " builds " + c.memberName(*m) + " in a destructor");
+                        ok = false;
+                    }
+                    // std::atomic<bool>'s default constructor leaves the
+                    // value indeterminate before C++20.
+                    if (isStopType(members[*m]) && n.ctor && !dtor) c.flagInits[f].push_back({*m, std::nullopt});
                     continue;
                 }
                 if (isStopType(members[*m]) && n.ctor && call.getNumOperands() == 2) {
                     auto k = call.getOperand(1).getDefiningOp<cir::ConstantOp>();
                     auto b = k ? dyn_cast<cir::BoolAttr>(k.getValue()) : cir::BoolAttr();
-                    if (b && !b.getValue()) continue;
+                    if (!dtor) c.flagInits[f].push_back({*m, b ? std::optional<bool>(b.getValue()) : std::nullopt});
+                    continue;
                 }
                 if (isStopType(members[*m])) continue;  // judged only if it turns out to be the flag
                 c.refuse("(a) " + shortName(f) + " calls " + (callee ? pretty(callee.getSymName()) : "something") +
@@ -1342,7 +2166,7 @@ bool LiftLockedQueuesPass::constructorOk(Candidate &c, cir::FuncOp f, bool dtor)
                                                       isStopType(members[*m])) {
                 auto k = st.getValue().getDefiningOp<cir::ConstantOp>();
                 auto b = k ? dyn_cast<cir::BoolAttr>(k.getValue()) : cir::BoolAttr();
-                if (!b || b.getValue()) c.features["flag initialised true or computed"]++;
+                c.flagInits[f].push_back({*m, b ? std::optional<bool>(b.getValue()) : std::nullopt});
                 continue;
             }
             if (isStopType(members[*m])) continue;
@@ -1364,9 +2188,27 @@ void LiftLockedQueuesPass::decide(Candidate &c, Reader &r, cir::FuncOp f, bool e
     m.f = f;
     llvm::SmallVector<const Stmt *, 8> q;  // the container's statements, in order
     const Stmt *lastReturn = nullptr;
+    const Stmt *flagIf = nullptr;
     for (const Stmt &s : r.stmts) {
         if (s.k == Stmt::Notify) {
+            // Under the original's mutex, a thread that sees what the
+            // operation did (takes the element, finds the queue closed)
+            // sees it only after the notification has returned, and may
+            // destroy the queue at once. The substitute wakes its sleepers
+            // after the element is visible, so such a thread could destroy
+            // it while the wake-up still runs. Notified after the unlock,
+            // as usual, the original already touches the condition variable
+            // after that point, and a program may not destroy it there.
+            if (s.held) {
+                c.refuse("(d) " + fn + " notifies " + c.memberName(s.cv) + " with the mutex held: a thread that sees "
+                         "its effect may destroy the queue while the substitute is still waking a sleeper");
+                return;
+            }
             m.notifies.push_back({s.cv, s.all});
+            continue;
+        }
+        if (s.k == Stmt::FlagIf) {
+            flagIf = &s;
             continue;
         }
         if (s.k == Stmt::Return) {
@@ -1413,8 +2255,83 @@ void LiftLockedQueuesPass::decide(Candidate &c, Reader &r, cir::FuncOp f, bool e
         return out->front == traceToLocalRoot(front->front);
     };
     const bool returnsBool = f.getFunctionType().getReturnTypes().size() == 1;
+    const bool ring = c.kind == Kind::Ring;
+    auto takePush = [&](const Stmt *p) {
+        m.move = p->move;
+        m.param = p->param;
+        m.byValueSlot = p->byValueSlot;
+    };
 
-    if (is({K::Push})) {
+    if (ring && is({K::Wait, K::Push})) {
+        const Stmt *w = q[0];
+        if (w->table != kNotFull) {
+            c.refuse("(d) " + fn + " waits for something other than \"not full\" before it pushes");
+            return;
+        }
+        if (returnsBool) {
+            c.refuse("(a) " + fn + " waits for room, pushes and returns a value");
+            return;
+        }
+        m.role = Role::PushWait;
+        takePush(q[1]);
+        m.waitCv = w->cv;
+    } else if (ring && is({K::GuardedPush})) {
+        const Stmt *g = q[0];
+        if (g->table != kNotFull) {
+            c.refuse("(d) " + fn + " pushes under a test other than \"not full\"");
+            return;
+        }
+        if (returnsBool || (g->flag && (!flagIf || flagIf->flag != g->flag))) {
+            c.refuse("(a) " + fn + " pushes where there is room in a form other than a push that may decline");
+            return;
+        }
+        m.role = Role::TryPush;
+        takePush(g);
+        m.section = g->section;
+        m.pushedFlag = g->flag;
+        if (flagIf)
+            flagIf->op->walk([&](cir::CallOp call) {
+                for (const Stmt &n : r.stmts)
+                    if (n.k == Stmt::Notify && n.op == call.getOperation()) m.notifyOps.push_back(call);
+            });
+    } else if (ring && is({K::Push})) {
+        // The ring's push_back overruns the oldest when it is full.
+        if (returnsBool) {
+            c.refuse("(a) " + fn + " pushes and returns a value");
+            return;
+        }
+        m.role = Role::PushOverrun;
+        takePush(q[0]);
+    } else if (ring && is({K::TimedWait, K::TimedOut, K::Front, K::Out, K::PopFront})) {
+        const Stmt *w = q[0], *fr = q[2], *o = q[3];
+        if (w->table != kNotEmpty) {
+            c.refuse("(d) " + fn + " waits with a time limit for something other than \"not empty\"");
+            return;
+        }
+        if (!returnsBool || !returnsTrue() || !outOf(fr, o)) {
+            c.refuse("(a) " + fn + " takes the front in a form other than a pop with a time limit");
+            return;
+        }
+        m.role = Role::PopWaitFor;
+        m.move = o->move;
+        m.param = o->param;
+        m.waitCv = w->cv;
+        m.durationParam = w->durationParam;
+        m.unit = w->unit;
+    } else if (ring && is({K::Getter})) {
+        if (!lastReturn || !lastReturn->fromGetter) {
+            c.refuse("(d) " + fn + " reads the ring's " + ringOpName(q[0]->getter) + " for something other than "
+                     "returning it");
+            return;
+        }
+        m.role = q[0]->getter == RingOp::Size ? Role::Size : Role::OverrunCounter;
+    } else if (ring && is({K::Reset})) {
+        if (returnsBool) {
+            c.refuse("(a) " + fn + " resets the overrun count and returns a value");
+            return;
+        }
+        m.role = Role::ResetOverrun;
+    } else if (is({K::Push})) {
         const Stmt *p = q.front();
         m.role = Role::Push;
         m.move = p->move;
@@ -1488,7 +2405,9 @@ void LiftLockedQueuesPass::decide(Candidate &c, Reader &r, cir::FuncOp f, bool e
     } else {
         std::string seq;
         for (K k : kinds) {
-            static const char *names[] = {"push", "front", "take", "pop", "wait", "check", "notify", "stop", "return"};
+            static const char *names[] = {"push", "front", "take", "pop", "wait", "check", "notify", "stop", "return",
+                                          "push if room", "after a push that may decline", "timed wait",
+                                          "return at the time limit", "count", "reset"};
             if (!seq.empty()) seq += ", ";
             seq += names[k];
         }
@@ -1547,10 +2466,49 @@ void LiftLockedQueuesPass::lift(Candidate &c, llvm::StringMap<cir::FuncOp> &rt) 
                                       results.empty() ? Type() : results.front(), args);
         return results.empty() ? Value() : op.getResult();
     };
-    for (StringRef need : {"construct", "destroy", "push_move", "push_copy", "try_pop_move", "close",
-                           "pop_wait_move", "copy_ok"})
+    const bool ring = c.kind == Kind::Ring;
+    // The runtime function each method becomes.
+    auto runtimeOf = [&](const Method &m) -> std::string {
+        const char *how = m.move ? "_move" : "_copy";
+        switch (m.role) {
+        case Role::Push: return std::string("push") + how;
+        case Role::PushWait: return std::string("push_wait") + how;
+        case Role::TryPush: return std::string("try_push") + how;
+        case Role::PushOverrun:
+            return std::string(c.overrunReachable ? "push_overrun" : "push_overrun_unreachable") + how;
+        case Role::TryPop: return "try_pop_move";
+        case Role::PopWait:
+        case Role::PopWaitClosed: return "pop_wait_move";
+        case Role::PopWaitFor: return "pop_wait_for_" + m.unit;
+        case Role::Close: return "close";
+        case Role::Size: return "size";
+        case Role::OverrunCounter: return "overrun_counter";
+        case Role::ResetOverrun: return "reset_overrun_counter";
+        case Role::None: break;
+        }
+        return "";
+    };
+    llvm::SmallVector<std::string, 8> needs{ring ? "construct_bounded" : "construct", "destroy", "copy_ok"};
+    for (const Method &m : c.methods) needs.push_back(runtimeOf(m));
+    for (const std::string &need : needs)
         if (!rt.lookup(need)) {
-            emitRemark(c.loc) << "wtc: locked queue " << c.label() << " not lifted: wtc::lifted lacks " << need;
+            emitRemark(c.loc) << "wtc: locked queue " << c.label() << " not lifted: wtc::lifted"
+                              << (ring ? "_bounded" : "") << " lacks " << need;
+            return;
+        }
+    // The ring's capacity goes to the runtime as it is.
+    if (ring && rt.lookup("construct_bounded").getArgumentTypes()[2] !=
+                    c.ring->sizedConstructor().getArgumentTypes()[1]) {
+        emitRemark(c.loc) << "wtc: locked queue " << c.label() << " not lifted: the ring's capacity is not a size_t";
+        return;
+    }
+    // A timed pop passes the program's duration on as it is: the runtime's
+    // must be the same type.
+    for (const Method &m : c.methods)
+        if (m.role == Role::PopWaitFor &&
+            rt.lookup(runtimeOf(m)).getArgumentTypes()[2] != cir::FuncOp(m.f).getArgumentTypes()[m.durationParam]) {
+            emitRemark(c.loc) << "wtc: locked queue " << c.label() << " not lifted: " << shortName(m.f)
+                              << "'s duration is not the type wtc::lifted_bounded takes";
             return;
         }
     // What the runtime offers for this element type.
@@ -1576,10 +2534,27 @@ void LiftLockedQueuesPass::lift(Candidate &c, llvm::StringMap<cir::FuncOp> &rt) 
             auto m = memberOfThis(op.getOperand(0), f, c.rec);
             if (m && *m == c.q) calls.push_back(op);
         });
+        if (ring) {
+            // The sized constructor, `ring(capacity)`.
+            f.walk([&](cir::CallOp op) {
+                if (op.getNumOperands() != 2) return;
+                auto m = memberOfThis(op.getOperand(0), f, c.rec);
+                if (m && *m == c.q && lookupCallee(op) == c.ring->sizedConstructor()) calls.push_back(op);
+            });
+        }
         for (cir::CallOp op : calls) {
             Name n = nameOf(lookupCallee(op).getSymName());
             OpBuilder b(op);
-            if (n.ctor) {
+            if (n.ctor && ring) {
+                cir::FuncOp ctor = rt.lookup("construct_bounded");
+                Type tagTy = ctor.getArgumentTypes()[1];
+                auto tag = cir::ConstantOp::create(b, op.getLoc(), tagTy, cir::IntAttr::get(tagTy, 0));
+                auto boolTy = cir::BoolType::get(ctx);
+                auto overrun =
+                    cir::ConstantOp::create(b, op.getLoc(), boolTy, cir::BoolAttr::get(ctx, boolTy, c.overrunReachable));
+                Value cap = op.getOperand(1);
+                call(b, op.getLoc(), "construct_bounded", {op.getOperand(0), tag.getResult(), cap, overrun.getResult()});
+            } else if (n.ctor) {
                 cir::FuncOp ctor = rt.lookup("construct");
                 Type tagTy = ctor.getArgumentTypes()[1];
                 auto tag = cir::ConstantOp::create(b, op.getLoc(), tagTy, cir::IntAttr::get(tagTy, 0));
@@ -1594,6 +2569,26 @@ void LiftLockedQueuesPass::lift(Candidate &c, llvm::StringMap<cir::FuncOp> &rt) 
     for (const Method &m : c.methods) {
         cir::FuncOp f = m.f;
         Location loc = f.getLoc();
+        if (m.role == Role::TryPush) {
+            // In place: the critical section becomes the runtime's try_push,
+            // whose answer goes to the flag; the notifications after it are
+            // the runtime's. The program's code for a declined push stays.
+            OpBuilder b(m.section);
+            Value self = f.getBody().front().getArgument(thisIndex(f));
+            Value at = cir::GetMemberOp::create(b, loc, qPtr, self, c.memberName(c.q), c.q).getResult();
+            Value v = f.getBody().front().getArgument(m.param);
+            if (m.byValueSlot) {
+                auto slot = cir::AllocaOp::create(b, loc, cir::PointerType::get(v.getType()), "lifted.value",
+                                                  b.getI64IntegerAttr(8));
+                cir::StoreOp::create(b, loc, v, slot.getResult());
+                v = slot.getResult();
+            }
+            Value ok = call(b, loc, runtimeOf(m), {at, v});
+            if (m.pushedFlag) cir::StoreOp::create(b, loc, ok, m.pushedFlag);
+            for (Operation *n : m.notifyOps) n->erase();
+            m.section->erase();
+            continue;
+        }
         Region &body = f.getBody();
         body.dropAllReferences();
         body.getBlocks().clear();
@@ -1610,6 +2605,8 @@ void LiftLockedQueuesPass::lift(Candidate &c, llvm::StringMap<cir::FuncOp> &rt) 
             else cir::ReturnOp::create(b, loc, ValueRange{});
         };
         switch (m.role) {
+        case Role::PushWait:
+        case Role::PushOverrun:
         case Role::Push: {
             Value v = arg;
             if (m.byValueSlot) {
@@ -1618,7 +2615,7 @@ void LiftLockedQueuesPass::lift(Candidate &c, llvm::StringMap<cir::FuncOp> &rt) 
                 cir::StoreOp::create(b, loc, arg, slot.getResult());
                 v = slot.getResult();
             }
-            call(b, loc, m.move ? "push_move" : "push_copy", {at, v});
+            call(b, loc, runtimeOf(m), {at, v});
             if (m.pushReturns) {
                 auto t = cir::ConstantOp::create(b, loc, boolTy, cir::BoolAttr::get(ctx, boolTy, *m.pushReturns));
                 ret(t.getResult());
@@ -1641,6 +2638,18 @@ void LiftLockedQueuesPass::lift(Candidate &c, llvm::StringMap<cir::FuncOp> &rt) 
             call(b, loc, "close", {at});
             ret(Value());
             break;
+        case Role::PopWaitFor:
+            ret(call(b, loc, runtimeOf(m), {at, arg, entry->getArgument(m.durationParam)}));
+            break;
+        case Role::Size:
+        case Role::OverrunCounter:
+            ret(call(b, loc, runtimeOf(m), {at}));
+            break;
+        case Role::ResetOverrun:
+            call(b, loc, runtimeOf(m), {at});
+            ret(Value());
+            break;
+        case Role::TryPush:
         case Role::None:
             break;
         }

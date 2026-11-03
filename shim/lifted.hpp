@@ -1,9 +1,11 @@
 #pragma once
 
+#include <cstdlib>
 #include <new>
 #include <type_traits>
 #include <utility>
 
+#include "bounded.hpp"
 #include "queue.hpp"
 
 namespace wtc {
@@ -70,8 +72,14 @@ struct lifted {
     [[clang::annotate("wtc_queue_push"), clang::annotate("wtc_lifted_push_move")]]
     static void push(C* at, T&& v) { get(at)->push(std::move(v)); }
 
+    // A class that copies its element in. Instantiated with the rest for
+    // every C, also for an element that cannot be copied, whose class
+    // never copies it in and never calls this.
     [[clang::annotate("wtc_queue_push"), clang::annotate("wtc_lifted_push_copy")]]
-    static void push_copy(C* at, const T& v) { get(at)->push(v); }
+    static void push_copy(C* at, const T& v) {
+        if constexpr (std::is_copy_constructible_v<T>) get(at)->push(v);
+        else std::abort();
+    }
 
     // The element is moved out. Used for a class that copies it out only
     // when copy_ok(), where the two are the same.
@@ -89,6 +97,135 @@ struct lifted {
     // The original's "set the stop flag under the mutex, wake every waiter".
     [[clang::annotate("wtc_lifted_close")]]
     static void close(C* at) { get(at)->close(); }
+};
+
+// The same for a class whose container is a bounded ring (spdlog's
+// circular_q): the container's storage holds a pointer to a wtc::bounded,
+// whose capacity is the ring's, built from the argument the class passed
+// to the ring's constructor. A push has the three answers to a full queue
+// the class wrote (wait, fail, overrun the oldest), each a function below
+// with an annotation of its own; the pops are the unbounded ones'.
+//
+// An overrun removes an element, so a thread that may overrun is a
+// consumer as well as a producer: push_overrun is annotated so, and the
+// queue is built for it (overrun = true). Where the pass has proved that
+// no overrun can run (the overflow policy that would choose it is a value
+// it can resolve, and never that one), the class's overrunning push is
+// lifted to push_overrun_unreachable instead, which counts as a push only,
+// and the queue is built without overruns; reaching it anyway ends the
+// program (runtime/bounded_ring.hpp), rather than letting a producer
+// consume from a queue proved to have one consumer.
+//
+// The counters: size() is exact. overrun_counter() is approximate while an
+// overrun is in flight (runtime/bounded_ring.hpp), and the pass lifts it
+// only where its value is returned to the caller and nothing else.
+template <class C>
+struct lifted_bounded {
+    using T = typename C::value_type;
+    using Q = bounded<T>;
+
+    static_assert(sizeof(C) >= sizeof(Q*) && alignof(C) >= alignof(Q*),
+                  "the container's storage holds the pointer to the queue");
+
+    static Q* get(C* at) { return *std::launder(reinterpret_cast<Q**>(at)); }
+
+    // The pushes that copy exist for every element type, since the driver
+    // instantiates the whole template; for a type that cannot be copied the
+    // pass never calls them (the class pushed by moving).
+    template <class F>
+    static void copy(C* at, const T& v, F&& f) {
+        if constexpr (std::is_copy_constructible_v<T>) f(get(at), v);
+        else (void)at, (void)v, (void)f, std::abort();
+    }
+
+    [[clang::annotate("wtc_lifted_copy_ok")]]
+    static bool copy_ok(C*) {
+        if constexpr (std::is_trivially_copyable_v<T>) return true;
+        else return false;
+    }
+
+    [[clang::annotate("wtc_queue_construction"), clang::annotate("wtc_lifted_construct_bounded")]]
+    static void construct(C* at, topology tag, std::size_t capacity, bool overrun) {
+        ::new (static_cast<void*>(at)) Q*(new Q(tag, capacity, overrun, wait_policy::spin_then_park));
+    }
+
+    [[clang::annotate("wtc_lifted_destroy")]]
+    static void destroy(C* at) { delete get(at); }
+
+    [[clang::annotate("wtc_queue_push_wait"), clang::annotate("wtc_queue_bounded"),
+      clang::annotate("wtc_lifted_push_wait_move")]]
+    static void push_wait(C* at, T&& v) { get(at)->push_wait(std::move(v)); }
+
+    [[clang::annotate("wtc_queue_push_wait"), clang::annotate("wtc_queue_bounded"),
+      clang::annotate("wtc_lifted_push_wait_copy")]]
+    static void push_wait_copy(C* at, const T& v) { copy(at, v, [](auto* q, const auto& x) { q->push_wait(x); }); }
+
+    [[clang::annotate("wtc_queue_try_push"), clang::annotate("wtc_queue_bounded"),
+      clang::annotate("wtc_lifted_try_push_move")]]
+    static bool try_push(C* at, T&& v) { return get(at)->try_push(std::move(v)); }
+
+    [[clang::annotate("wtc_queue_try_push"), clang::annotate("wtc_queue_bounded"),
+      clang::annotate("wtc_lifted_try_push_copy")]]
+    static bool try_push_copy(C* at, const T& v) {
+        bool ok = false;
+        copy(at, v, [&](auto* q, const auto& x) { ok = q->try_push(x); });
+        return ok;
+    }
+
+    [[clang::annotate("wtc_queue_push_overrun"), clang::annotate("wtc_queue_bounded"),
+      clang::annotate("wtc_lifted_push_overrun_move")]]
+    static void push_overrun(C* at, T&& v) { get(at)->push_overrun(std::move(v)); }
+
+    [[clang::annotate("wtc_queue_push_overrun"), clang::annotate("wtc_queue_bounded"),
+      clang::annotate("wtc_lifted_push_overrun_copy")]]
+    static void push_overrun_copy(C* at, const T& v) { copy(at, v, [](auto* q, const auto& x) { q->push_overrun(x); }); }
+
+    [[clang::annotate("wtc_queue_push"), clang::annotate("wtc_queue_bounded"),
+      clang::annotate("wtc_lifted_push_overrun_unreachable_move")]]
+    static void push_overrun_unreachable(C* at, T&& v) { get(at)->push_overrun(std::move(v)); }
+
+    [[clang::annotate("wtc_queue_push"), clang::annotate("wtc_queue_bounded"),
+      clang::annotate("wtc_lifted_push_overrun_unreachable_copy")]]
+    static void push_overrun_unreachable_copy(C* at, const T& v) {
+        copy(at, v, [](auto* q, const auto& x) { q->push_overrun(x); });
+    }
+
+    [[clang::annotate("wtc_queue_try_pop_into"), clang::annotate("wtc_queue_bounded"),
+      clang::annotate("wtc_lifted_try_pop_move")]]
+    static bool try_pop(C* at, T& out) { return get(at)->try_pop(out); }
+
+    [[clang::annotate("wtc_queue_pop_wait"), clang::annotate("wtc_queue_bounded"),
+      clang::annotate("wtc_lifted_pop_wait_move")]]
+    static bool pop_wait(C* at, T& out) { return get(at)->pop_wait(out); }
+
+    // The original's timed wait, by the unit of its duration.
+    [[clang::annotate("wtc_queue_pop_wait_for"), clang::annotate("wtc_queue_bounded"),
+      clang::annotate("wtc_lifted_pop_wait_for_ns")]]
+    static bool pop_wait_for_ns(C* at, T& out, std::chrono::nanoseconds d) { return get(at)->pop_wait_for(out, d); }
+
+    [[clang::annotate("wtc_queue_pop_wait_for"), clang::annotate("wtc_queue_bounded"),
+      clang::annotate("wtc_lifted_pop_wait_for_us")]]
+    static bool pop_wait_for_us(C* at, T& out, std::chrono::microseconds d) { return get(at)->pop_wait_for(out, d); }
+
+    [[clang::annotate("wtc_queue_pop_wait_for"), clang::annotate("wtc_queue_bounded"),
+      clang::annotate("wtc_lifted_pop_wait_for_ms")]]
+    static bool pop_wait_for_ms(C* at, T& out, std::chrono::milliseconds d) { return get(at)->pop_wait_for(out, d); }
+
+    [[clang::annotate("wtc_queue_pop_wait_for"), clang::annotate("wtc_queue_bounded"),
+      clang::annotate("wtc_lifted_pop_wait_for_s")]]
+    static bool pop_wait_for_s(C* at, T& out, std::chrono::seconds d) { return get(at)->pop_wait_for(out, d); }
+
+    [[clang::annotate("wtc_lifted_close")]]
+    static void close(C* at) { get(at)->close(); }
+
+    [[clang::annotate("wtc_lifted_size")]]
+    static std::size_t size(C* at) { return get(at)->size(); }
+
+    [[clang::annotate("wtc_lifted_overrun_counter")]]
+    static std::size_t overrun_counter(C* at) { return get(at)->overrun_counter(); }
+
+    [[clang::annotate("wtc_lifted_reset_overrun_counter")]]
+    static void reset_overrun_counter(C* at) { get(at)->reset_overrun_counter(); }
 };
 
 }  // namespace wtc

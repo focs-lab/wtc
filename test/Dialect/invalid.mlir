@@ -150,3 +150,46 @@ module {
     cir.return
   }
 }
+
+// -----
+
+// A push that waits for room, overruns or may decline exists only on a
+// bounded queue, and is one of the three.
+!s32i = !cir.int<s, 32>
+!q = !cir.struct<"q" {data !s32i}>
+module {
+  cir.func @wait_unbounded(%qp: !cir.ptr<!q>, %v: !cir.ptr<!s32i>) {
+    %h = builtin.unrealized_conversion_cast %qp : !cir.ptr<!q> to !wtc.queue<!q>
+    // expected-error @+1 {{waits, overruns or may decline only on a bounded queue}}
+    "wtc.queue_push"(%h, %v) {wait} : (!wtc.queue<!q>, !cir.ptr<!s32i>) -> ()
+    cir.return
+  }
+}
+
+// -----
+
+!s32i = !cir.int<s, 32>
+!q = !cir.struct<"q" {data !s32i}>
+module {
+  cir.func @wait_and_overrun(%qp: !cir.ptr<!q>, %v: !cir.ptr<!s32i>) {
+    %h = builtin.unrealized_conversion_cast %qp : !cir.ptr<!q> to !wtc.queue<!q>
+    // expected-error @+1 {{is at most one of a waiting push, an overrunning push and a try_push}}
+    "wtc.queue_push"(%h, %v) {bounded, wait, overrun} : (!wtc.queue<!q>, !cir.ptr<!s32i>) -> ()
+    cir.return
+  }
+}
+
+// -----
+
+!s32i = !cir.int<s, 32>
+!q = !cir.struct<"q" {data !s32i}>
+module {
+  cir.func private @push(!cir.ptr<!q>, !cir.ptr<!s32i>) [#cir.annotation<"wtc_queue_push">]
+  // A try_push lowers to the runtime's try_push, which answers.
+  cir.func @try_push_lowers_to_push(%qp: !cir.ptr<!q>, %v: !cir.ptr<!s32i>) {
+    %h = builtin.unrealized_conversion_cast %qp : !cir.ptr<!q> to !wtc.queue<!q>
+    // expected-error @+1 {{fallback_impl @push is not annotated wtc_queue_try_push or wtc_impl_*_try_push}}
+    %ok = "wtc.queue_push"(%h, %v) {fallback_impl = @push, bounded} : (!wtc.queue<!q>, !cir.ptr<!s32i>) -> !cir.bool
+    cir.return
+  }
+}

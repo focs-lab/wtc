@@ -87,6 +87,13 @@ LogicalResult LockBatchEndOp::verifySymbolUses(SymbolTableCollection &symbolTabl
 }
 
 LogicalResult QueuePushOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+    if (getWait())
+        return verifyFallbackImpl(*this, getFallbackImplAttr(), "wtc_queue_push_wait", "push_wait", 2, symbolTable);
+    if (getOverrun())
+        return verifyFallbackImpl(*this, getFallbackImplAttr(), "wtc_queue_push_overrun", "push_overrun", 2,
+                                  symbolTable);
+    if (getPushed())
+        return verifyFallbackImpl(*this, getFallbackImplAttr(), "wtc_queue_try_push", "try_push", 2, symbolTable);
     return verifyFallbackImpl(*this, getFallbackImplAttr(), "wtc_queue_push", "push", 2, symbolTable);
 }
 
@@ -102,6 +109,11 @@ LogicalResult QueuePopOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 LogicalResult QueuePushOp::verify() {
+    const int forms = (getWait() ? 1 : 0) + (getOverrun() ? 1 : 0) + (getPushed() ? 1 : 0);
+    if (forms > 1)
+        return emitOpError("is at most one of a waiting push, an overrunning push and a try_push");
+    if (forms && !getBounded())
+        return emitOpError("waits, overruns or may decline only on a bounded queue");
     return verifySourceQueueType(*this, getQueue().getType(), getSourceQueueType());
 }
 
@@ -189,11 +201,21 @@ static bool segmented(::mlir::wtc::Impl impl) {
     return impl == ::mlir::wtc::Impl::generic || impl == ::mlir::wtc::Impl::mpsc;
 }
 
+// A bounded queue (runtime/bounded_ring.hpp) takes a ticket and then may
+// wait for the operation of the previous lap, or for the push of its own
+// ticket, to finish with the cell: an operation in progress, but a wait.
+// It never allocates: the ring is built with the queue.
 Progress QueuePushOp::getProgress() {
+    if (getBounded()) return Progress::blocking;
     return segmented(implOf(getImpl())) ? Progress::lock_free : Progress::wait_free;
 }
-bool QueuePushOp::mayCallAllocator() { return true; }
+bool QueuePushOp::mayCallAllocator() { return !getBounded(); }
 std::string QueuePushOp::getBlockingReason() {
+    if (getBounded()) {
+        std::string why = "may wait for the pop that last held its cell to finish moving the item out";
+        if (getWait()) return "waits while the queue is full, as its wait policy says; and " + why;
+        return why;
+    }
     switch (implOf(getImpl())) {
     case ::mlir::wtc::Impl::spsc:
     case ::mlir::wtc::Impl::spsc_inline:
@@ -209,7 +231,7 @@ std::string QueuePushOp::getBlockingReason() {
 Progress QueuePopOp::getProgress() {
     // A waiting pop waits for a push by design, whatever the queue and its
     // wait policy: spinning is waiting too.
-    if (getWait()) return Progress::blocking;
+    if (getWait() || getBounded()) return Progress::blocking;
     switch (implOf(getImpl())) {
     case ::mlir::wtc::Impl::generic:
         return Progress::blocking;
@@ -225,11 +247,20 @@ Progress QueuePopOp::getProgress() {
 // queues made of segments (general-purpose, mpsc, spmc) then still free the
 // segments they move past.
 bool QueuePopOp::mayCallAllocator() {
+    if (getBounded()) return !getTransfer();
     const ::mlir::wtc::Impl impl = implOf(getImpl());
     if (getTransfer()) return segmented(impl) || impl == ::mlir::wtc::Impl::spmc;
     return impl != ::mlir::wtc::Impl::spsc_inline;
 }
 std::string QueuePopOp::getBlockingReason() {
+    if (getBounded()) {
+        std::string why = "may wait for the push that took its cell to fill it";
+        if (getWait())
+            return (getTimeout() ? "waits for a push, for the queue to be closed, or for its time limit"
+                                 : "waits for a push or for the queue to be closed") +
+                   std::string(", as its wait policy says; and ") + why;
+        return why;
+    }
     if (getWait()) {
         std::string why = getTimeout() ? "waits for a push, for the queue to be closed, or for its "
                                          "time limit, as its wait policy says: spinning, or asleep "

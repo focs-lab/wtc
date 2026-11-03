@@ -218,3 +218,48 @@ target_compile_options(waiter_drop_wakeups PRIVATE $<$<CXX_COMPILER_ID:GNU>:-Wno
 target_compile_definitions(waiter_drop_wakeups PRIVATE WTC_TEST_DROP_WAKEUPS=1)
 add_test(NAME waiter_drop_wakeups_is_caught
          COMMAND sh -c "$<TARGET_FILE:waiter_drop_wakeups> interleave 2>&1 | grep -q 'lost wake-up: a publish'")
+
+# The bounded queue (bounded_ring.hpp) through the shim's wtc::bounded:
+# its answers against a sequential bounded queue, the exactness of its
+# bound with a pop held inside its step, waiting on both sides on every
+# topology and policy, close() with sleepers on both sides, and discards
+# and overruns under contention. The test that must fail: waiters that
+# drop their wake-ups must leave a producer asleep against room.
+add_executable(bounded_test bounded_test.cpp)
+target_link_libraries(bounded_test PRIVATE wtc_rt_flags)
+if(WTC_RT_SANITIZE)
+  set(bounded_n 2000)
+  set(bounded_ping 300)
+else()
+  set(bounded_n 20000)
+  set(bounded_ping 2000)
+endif()
+add_test(NAME bounded_model COMMAND bounded_test model ${bounded_n})
+add_test(NAME bounded_exact COMMAND bounded_test exact)
+add_test(NAME bounded_stress COMMAND bounded_test stress ${bounded_n})
+add_test(NAME bounded_pingfull COMMAND bounded_test pingfull ${bounded_ping})
+add_test(NAME bounded_close COMMAND bounded_test close)
+add_test(NAME bounded_discard COMMAND bounded_test discard ${bounded_n})
+add_test(NAME bounded_overrun COMMAND bounded_test overrun ${bounded_n})
+set_tests_properties(bounded_model bounded_exact bounded_stress bounded_pingfull bounded_close
+                     bounded_discard bounded_overrun PROPERTIES TIMEOUT 300)
+
+add_executable(bounded_drop_wakeups bounded_test.cpp)
+target_link_libraries(bounded_drop_wakeups PRIVATE wtc_rt_flags)
+target_compile_definitions(bounded_drop_wakeups PRIVATE WTC_TEST_DROP_WAKEUPS=1)
+add_test(NAME bounded_drop_wakeups_is_caught
+         COMMAND sh -c "$<TARGET_FILE:bounded_drop_wakeups> pingfull 200 2>&1 | grep -q 'lost wake-up: a publish woke nobody'")
+
+# A push of the split layout held between its two reads while other
+# threads move both counters past it: it must not be refused as full.
+add_executable(bounded_push_steps bounded_test.cpp)
+target_link_libraries(bounded_push_steps PRIVATE wtc_rt_flags)
+target_compile_definitions(bounded_push_steps PRIVATE WTC_TEST_PUSH_STEPS=1)
+add_test(NAME bounded_split_push_steps COMMAND bounded_push_steps split)
+set_tests_properties(bounded_split_push_steps PROPERTIES TIMEOUT 300)
+
+# Two producers on a queue built for one: the contract check must say so.
+if(WTC_CHECK)
+  add_test(NAME bounded_two_producers_is_caught
+           COMMAND sh -c "$<TARGET_FILE:bounded_test> twoproducers 2>&1 | grep -q 'bounded queue contract violated: a second producer'")
+endif()
