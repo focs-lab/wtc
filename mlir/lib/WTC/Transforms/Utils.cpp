@@ -7,6 +7,7 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/Demangle/Demangle.h"
+#include "llvm/Support/Regex.h"
 
 #include <cstdlib>
 
@@ -687,6 +688,42 @@ bool isAllocator(cir::FuncOp f) {
            n == "rte_ring_create" || n == "rte_ring_create_elem" || n == "rte_stack_create" ||
            n == "rte_mempool_create" || n == "rte_mempool_create_empty" || n == "rte_pktmbuf_pool_create" ||
            n == "rte_pktmbuf_pool_create_by_ops" || n == "rte_pktmbuf_pool_create_extbuf";
+}
+
+// The replaceable global operator new and delete by their exact mangled
+// names, so that a class's own operator new, or a placement form taking
+// the program's arguments, is not taken for the allocator: _Znwm (new),
+// _Znam (new[]), each perhaps aligned (St11align_val_t) and nothrow
+// (RKSt9nothrow_t), with j for a 32-bit size_t; and _ZdlPv (delete),
+// _ZdaPv (delete[]), each perhaps sized, aligned and nothrow.
+static AllocKind newDeleteKind(StringRef n, bool deleting) {
+    static const llvm::Regex newForm("^_Zn([wa])[mj](St11align_val_t)?(RKSt9nothrow_t)?$");
+    static const llvm::Regex deleteForm("^_Zd([la])Pv[mj]?(St11align_val_t)?(RKSt9nothrow_t)?$");
+    llvm::SmallVector<StringRef, 4> m;
+    if (!(deleting ? deleteForm : newForm).match(n, &m)) return AllocKind::None;
+    const bool array = m[1] == "a", aligned = !m[2].empty();
+    return array ? (aligned ? AllocKind::NewArrayAligned : AllocKind::NewArray)
+                 : (aligned ? AllocKind::NewAligned : AllocKind::New);
+}
+
+AllocKind allocationKind(cir::FuncOp f) {
+    if (!f) return AllocKind::None;
+    const StringRef n = f.getSymName();
+    if (n == "malloc" || n == "calloc" || n == "aligned_alloc" || n == "memalign" || n == "posix_memalign")
+        return AllocKind::Malloc;
+    if (AllocKind k = newDeleteKind(n, /*deleting=*/false); k != AllocKind::None) return k;
+    if (n == "rte_malloc" || n == "rte_zmalloc" || n == "rte_calloc" || n == "rte_malloc_socket" ||
+        n == "rte_zmalloc_socket" || n == "rte_calloc_socket")
+        return AllocKind::Rte;
+    return isAllocator(f) ? AllocKind::Other : AllocKind::None;
+}
+
+AllocKind deallocationKind(cir::FuncOp f) {
+    if (!f) return AllocKind::None;
+    const StringRef n = f.getSymName();
+    if (n == "free") return AllocKind::Malloc;
+    if (n == "rte_free") return AllocKind::Rte;
+    return newDeleteKind(n, /*deleting=*/true);
 }
 
 static void allocationsBehindImpl(cir::CallOp call, unsigned depth, llvm::SmallVectorImpl<cir::CallOp> &sites,

@@ -2212,14 +2212,14 @@ bool LiftCQueuesPass::confined(Candidate &c) {
                 if (auto call = dyn_cast<cir::CallOp>(user)) {
                     cir::FuncOp callee = lookupCallee(call);
                     if (callee && ops.count(callee)) continue;
-                    if (callee && callee.getSymName() == "free") continue;
+                    if (deallocationKind(callee) == AllocKind::Malloc) continue;
                 }
                 if (auto cast = dyn_cast<cir::CastOp>(user)) {
                     if (cast.getKind() == cir::CastKind::ptr_to_bool) continue;
                     bool toFree = llvm::all_of(cast->getUses(), [](OpOperand &cu) {
                         auto call = dyn_cast<cir::CallOp>(cu.getOwner());
                         cir::FuncOp callee = call ? lookupCallee(call) : cir::FuncOp();
-                        return callee && callee.getSymName() == "free";
+                        return deallocationKind(callee) == AllocKind::Malloc;
                     });
                     if (toFree) continue;
                 }
@@ -2257,7 +2257,7 @@ bool LiftCQueuesPass::confined(Candidate &c) {
         return llvm::all_of(v.getUses(), [](OpOperand &cu) {
             auto call = dyn_cast<cir::CallOp>(cu.getOwner());
             cir::FuncOp callee = call ? lookupCallee(call) : cir::FuncOp();
-            return callee && callee.getSymName() == "free";
+            return deallocationKind(callee) == AllocKind::Malloc;
         });
     };
     module.walk([&](Operation *op) {
@@ -2293,7 +2293,7 @@ bool LiftCQueuesPass::confined(Candidate &c) {
         }
         if (auto call = dyn_cast<cir::CallOp>(op)) {
             cir::FuncOp callee = call.isIndirect() ? cir::FuncOp() : lookupCallee(call);
-            if (callee && callee.getSymName() == "free") return;
+            if (deallocationKind(callee) == AllocKind::Malloc) return;
             if ((!callee || callee.isDeclaration()) &&
                 llvm::any_of(call.getArgOperands(), [&](Value a) { return toHolder(a.getType()); }))
                 bad = "(a) " + at + " passes a pointer to a struct that holds the queue to " +

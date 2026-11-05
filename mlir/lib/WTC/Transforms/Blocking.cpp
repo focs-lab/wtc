@@ -41,10 +41,7 @@ std::optional<ExternalBlocking> externalBlocking(cir::FuncOp f) {
     // array, aligned, sized and nothrow -- since a class's operator new or a
     // placement form taking the program's own arguments (a pool, say) is the
     // program's code, which may take any lock.
-    static const llvm::StringSet<> freeing = {"realloc", "free", "rte_free"};
-    static const llvm::Regex newDelete("^_Z(n[wa][mj](St11align_val_t)?(RKSt9nothrow_t)?"
-                                       "|d[la]Pv[mj]?(St11align_val_t)?(RKSt9nothrow_t)?)$");
-    if (isAllocator(f) || freeing.contains(mangled) || newDelete.match(mangled))
+    if (isAllocator(f) || allocationKind(f) != AllocKind::None || isDeallocator(f) || mangled == "realloc")
         return is(BlockingKind::Allocates, "calls the allocator");
 
     // The threading library: its locks, conditions, joins, one-time
