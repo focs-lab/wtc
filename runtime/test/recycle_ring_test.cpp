@@ -13,6 +13,12 @@
 //                                  back; for each allocator kind
 //   recycle_ring_test twogivers    two consumers giving back to one ring,
 //                                  which the contract check must catch
+//   recycle_ring_test shim [N]     the same hand-back through the shim's
+//                                  wtc::queue<T*> (recycle_take and
+//                                  recycle_give, as the compiler calls
+//                                  them): round the ring on the spsc and
+//                                  spsc_inline tags, to the allocator on
+//                                  the others, and a stress run on each
 //
 // Run it under ThreadSanitizer as well. The stress mode is the one that
 // matters there: the consumer's writes to an object and the producer's
@@ -20,6 +26,7 @@
 // release and acquire order them. With two givers TSan must report a race,
 // which is the test that the test can fail.
 
+#include "../../shim/queue.hpp"
 #include "recycle_ring.hpp"
 #include "spsc_ring.hpp"
 
@@ -131,6 +138,56 @@ void twogivers(std::uint64_t n) {
   b.join();
 }
 
+// What the compiler's rewrite of `new object` and `delete o` calls, on a
+// wtc::queue<object*> built with each tag.
+void shim(std::uint64_t n) {
+  constexpr int kNew = static_cast<int>(recycle_kind::new_);
+  for (wtc::topology tag : {wtc::topology::spsc, wtc::topology::spsc_inline, wtc::topology::generic,
+                            wtc::topology::mpsc, wtc::topology::spmc}) {
+    const bool rings = tag == wtc::topology::spsc || tag == wtc::topology::spsc_inline;
+    {
+      // One thread: two objects handed over and given back come round
+      // again in order on a ring; elsewhere they went to the allocator.
+      wtc::queue<object*> q(tag);
+      void* a = q.recycle_take(sizeof(object), kNew);
+      void* b = q.recycle_take(sizeof(object), kNew);
+      q.push(static_cast<object*>(a));
+      q.push(static_cast<object*>(b));
+      object* o;
+      while (q.try_pop(o)) q.recycle_give(o, kNew);
+      void* a2 = q.recycle_take(sizeof(object), kNew);
+      void* b2 = q.recycle_take(sizeof(object), kNew);
+      if (rings) expect(a2 == a && b2 == b, "a ring tag hands the objects back in order");
+      q.recycle_give(a2, kNew);
+      q.recycle_give(b2, kNew);
+      q.recycle_give(nullptr, kNew);
+    }
+    // Two threads, the consumer writing over each object before giving it
+    // back; the queue's destructor frees what the ring still holds.
+    wtc::queue<object*> q(tag);
+    std::atomic<bool> bad{false};
+    std::thread consumer([&] {
+      for (std::uint64_t expected = 0; expected < n;) {
+        object* o;
+        if (!q.try_pop(o)) continue;
+        if (o->seq != expected || o->words[6] != expected * 7 + 6) bad.store(true, std::memory_order_relaxed);
+        o->seq = ~std::uint64_t(0);
+        for (std::uint64_t& w : o->words) w = 0xDEADBEEF;
+        q.recycle_give(o, kNew);
+        ++expected;
+      }
+    });
+    for (std::uint64_t i = 0; i < n; ++i) {
+      auto* o = static_cast<object*>(q.recycle_take(sizeof(object), kNew));
+      o->seq = i;
+      for (unsigned k = 0; k < 7; ++k) o->words[k] = i * 7 + k;
+      q.push(o);
+    }
+    consumer.join();
+    expect(!bad.load(), "through the shim, every object arrives whole and in order");
+  }
+}
+
 std::uint64_t count_arg(int argc, char** argv, std::uint64_t dflt) {
   return argc > 2 ? std::strtoull(argv[2], nullptr, 10) : dflt;
 }
@@ -144,10 +201,12 @@ int main(int argc, char** argv) {
   } else if (!std::strcmp(mode, "stress")) {
     const std::uint64_t n = count_arg(argc, argv, 2'000'000);
     for (recycle_kind kind : {recycle_kind::malloc_, recycle_kind::calloc_, recycle_kind::new_}) stress(n, kind);
+  } else if (!std::strcmp(mode, "shim")) {
+    shim(count_arg(argc, argv, 500'000));
   } else if (!std::strcmp(mode, "twogivers")) {
     twogivers(count_arg(argc, argv, 200'000));
   } else {
-    std::fprintf(stderr, "usage: recycle_ring_test unit | stress [N] | twogivers [N]\n");
+    std::fprintf(stderr, "usage: recycle_ring_test unit | stress [N] | shim [N] | twogivers [N]\n");
     return 2;
   }
   if (failures) return 1;

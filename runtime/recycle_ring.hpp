@@ -132,9 +132,7 @@ class recycle_ring {
     given_.store(g + 1, std::memory_order_release);
   }
 
- private:
-  static constexpr std::size_t kLine = 64;
-
+  // The allocator itself, for a block the ring does not serve.
   static void* allocate(std::size_t size, recycle_kind kind) {
     switch (kind) {
     case recycle_kind::calloc_: return std::calloc(1, size);
@@ -142,11 +140,13 @@ class recycle_ring {
     default: return std::malloc(size);
     }
   }
-
   static void release(void* p, recycle_kind kind) {
     if (kind == recycle_kind::new_) ::operator delete(p);
     else std::free(p);
   }
+
+ private:
+  static constexpr std::size_t kLine = 64;
 
 #ifdef WTC_CHECK
   // A thread's identity: the address of a thread-local, which no two live

@@ -1,6 +1,8 @@
 #pragma once
 
+#include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
@@ -11,6 +13,7 @@
 #include "topology.hpp"
 #include "../runtime/segment_queue.hpp"
 #include "../runtime/spmc_queue.hpp"
+#include "../runtime/recycle_ring.hpp"
 #include "../runtime/spsc_ring.hpp"
 #include "../runtime/waiter.hpp"
 
@@ -130,6 +133,11 @@ private:
     // its cache through the adjacent-line prefetcher and every push pays
     // to take it back.
     alignas(128) topology tag_;
+    // The ring that hands a queue of pointers' objects back from its
+    // consumer to its producer (recycle_take, recycle_give), made by the
+    // producer's first take. Written once and read after, like the tag,
+    // with which it shares its line.
+    std::atomic<rt::recycle_ring*> recycle_{nullptr};
     alignas(128) storage impl_;
     // Its own lines: a consumer that goes to sleep or wakes writes them,
     // and every publish of a queue that can park reads them.
@@ -219,6 +227,7 @@ public:
     queue& operator=(queue&&) = delete;
 
     ~queue() {
+        delete recycle_.load(std::memory_order_relaxed);
         switch (tag_) {
         case topology::spsc_inline:
 #ifdef WTC_CHECK
@@ -356,6 +365,42 @@ public:
     // is neither side's operation, so it changes no topology.
     void close() { wait_.close(); }
     bool closed() const { return wait_.closed(); }
+
+    // A queue of pointers may recycle the objects it carries, where the
+    // compiler proves that every object pushed comes from one allocation on
+    // the producer and every object popped reaches one deallocation on the
+    // consumer (--wtc-recycle). The compiler replaces the allocation with
+    // recycle_take and the deallocation with recycle_give, passing the
+    // allocator as a constant (rt::recycle_kind). On a queue with one
+    // producer and one consumer, which the tag says, the objects go round
+    // a return ring (runtime/recycle_ring.hpp); on any other tag, or for a
+    // block the ring cannot take or give, they go to the allocator, as the
+    // program wrote. The tag never changes, so a block always goes back the
+    // way it came. The bodies exist for every T, called or not, as the
+    // batch's do; only a queue of pointers is ever recycled.
+    [[gnu::used, clang::annotate("wtc_queue_recycle_take")]]
+    void* recycle_take(std::size_t size, int kind) {
+        const auto k = static_cast<rt::recycle_kind>(kind);
+        if (tag_ != topology::spsc && tag_ != topology::spsc_inline) return rt::recycle_ring::allocate(size, k);
+        rt::recycle_ring* r = recycle_.load(std::memory_order_relaxed);
+        if (!r) {
+            r = new rt::recycle_ring();
+            recycle_.store(r, std::memory_order_release);
+        }
+        return r->take(size, k);
+    }
+
+    // The ring is the producer's, made before its first push of a taken
+    // object; the pop of that object orders it before this load.
+    [[gnu::used, clang::annotate("wtc_queue_recycle_give")]]
+    void recycle_give(void* p, int kind) {
+        const auto k = static_cast<rt::recycle_kind>(kind);
+        rt::recycle_ring* r = (tag_ == topology::spsc || tag_ == topology::spsc_inline)
+                                  ? recycle_.load(std::memory_order_acquire)
+                                  : nullptr;
+        if (r) r->give(p, k);
+        else if (p) rt::recycle_ring::release(p, k);
+    }
 
     // gnu::used: the compiler calls these where the program allows it, so
     // they must be in every module that uses the queue, called or not.

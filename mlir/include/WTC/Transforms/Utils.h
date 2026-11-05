@@ -40,6 +40,13 @@ enum class SemanticOpKind {
     QueueBatchBegin,
     QueuePushDeferred,
     QueueBatchEnd,
+    // The hand-back of a queue of pointers' objects from its consumer to its
+    // producer (shim/queue.hpp): what the recycling pass puts in place of
+    // the producer's allocation and the consumer's deallocation. Calls, not
+    // dialect operations; named here so that every pass reads them as the
+    // shim's own functions, as the batch's are.
+    QueueRecycleTake,
+    QueueRecycleGive,
     MutexLock,
     MutexUnlock,
     MutexBatchBegin,

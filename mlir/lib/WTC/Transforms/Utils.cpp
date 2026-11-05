@@ -121,6 +121,8 @@ SemanticOpKind getSemanticKind(cir::FuncOp funcOp) {
         if (name == "wtc_queue_batch_begin")  return SemanticOpKind::QueueBatchBegin;
         if (name == "wtc_queue_push_deferred") return SemanticOpKind::QueuePushDeferred;
         if (name == "wtc_queue_batch_end")    return SemanticOpKind::QueueBatchEnd;
+        if (name == "wtc_queue_recycle_take") return SemanticOpKind::QueueRecycleTake;
+        if (name == "wtc_queue_recycle_give") return SemanticOpKind::QueueRecycleGive;
         if (name == "wtc_mutex_lock")         return SemanticOpKind::MutexLock;
         if (name == "wtc_mutex_unlock")       return SemanticOpKind::MutexUnlock;
         if (name == "wtc_mutex_batch_begin")  return SemanticOpKind::MutexBatchBegin;
