@@ -1298,7 +1298,9 @@ static bool harmlessCallee(cir::FuncOp f) {
         return true;
     const StringRef n = f.getSymName();
     if (n == "memcpy" || n == "memmove") return false;
-    return touchesOnlyItsArguments(f) || n == "free" || n == "rte_free" || n == "puts" || n == "printf" || n == "fprintf";
+    const AllocKind freed = deallocationKind(f);
+    return touchesOnlyItsArguments(f) || freed == AllocKind::Malloc || freed == AllocKind::Rte || n == "puts" ||
+           n == "printf" || n == "fprintf";
 }
 
 // Whether the function, by its name, writes through its argument `arg`.
@@ -2087,7 +2089,7 @@ void ThreadInstanceWalk::computeEntryFields() const {
                 for (Operation *u : c.getResult().getUsers()) {
                     auto call = dyn_cast<cir::CallOp>(u);
                     cir::FuncOp callee = call ? lookupCallee(call) : cir::FuncOp();
-                    if (!callee || callee.getSymName() != "free") onlyFree = false;
+                    if (deallocationKind(callee) != AllocKind::Malloc) onlyFree = false;
                 }
                 if (!onlyFree) rejected.insert(r);
             }

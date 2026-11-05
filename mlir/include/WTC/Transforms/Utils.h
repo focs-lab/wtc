@@ -40,6 +40,13 @@ enum class SemanticOpKind {
     QueueBatchBegin,
     QueuePushDeferred,
     QueueBatchEnd,
+    // The hand-back of a queue of pointers' objects from its consumer to its
+    // producer (shim/queue.hpp): what the recycling pass puts in place of
+    // the producer's allocation and the consumer's deallocation. Calls, not
+    // dialect operations; named here so that every pass reads them as the
+    // shim's own functions, as the batch's are.
+    QueueRecycleTake,
+    QueueRecycleGive,
     MutexLock,
     MutexUnlock,
     MutexBatchBegin,
@@ -196,6 +203,26 @@ void memoryAccesses(Operation *op, llvm::SmallVectorImpl<MemoryAccess> &out);
 // for "the object allocated here", standing for every object the site
 // allocates when the site runs more than once.
 bool isAllocator(cir::FuncOp f);
+
+// Which allocator memory comes from, so that it goes back to the same one:
+// the C library's (malloc, calloc, aligned_alloc, memalign, posix_memalign;
+// free), the replaceable global operator new and delete, scalar or array,
+// plain or aligned (with or without nothrow, sized or not), and DPDK's heap
+// (rte_malloc and its forms; rte_free). Memory from one kind given to
+// another's deallocation is undefined behaviour. Other is an allocator
+// whose object goes back some other way (a ring, a mempool), None anything
+// that allocates nothing.
+enum class AllocKind { None, Malloc, New, NewArray, NewAligned, NewArrayAligned, Rte, Other };
+
+// The kind of memory a call to f hands out, by f's name; None when f does
+// not allocate. realloc is None: it replaces an object rather than making
+// one, and is neither a fresh allocation nor only a deallocation.
+AllocKind allocationKind(cir::FuncOp f);
+// The kind of memory a call to f gives back to its allocator; None when f
+// frees nothing. A placement operator delete, which runs when a placement
+// new throws and frees nothing, is None.
+AllocKind deallocationKind(cir::FuncOp f);
+inline bool isDeallocator(cir::FuncOp f) { return deallocationKind(f) != AllocKind::None; }
 
 // Functions without a body here that read and write only the memory they
 // are handed, and do nothing else: no input or output, no allocation, no
