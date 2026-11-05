@@ -264,6 +264,28 @@ if(WTC_CHECK)
            COMMAND sh -c "$<TARGET_FILE:bounded_test> twoproducers 2>&1 | grep -q 'bounded queue contract violated: a second producer'")
 endif()
 
+# The return ring that recycles a queue's objects from its consumer to its
+# producer (recycle_ring.hpp), and its test that must fail: a second giver.
+add_executable(recycle_ring_test recycle_ring_test.cpp)
+target_link_libraries(recycle_ring_test PRIVATE wtc_rt_flags)
+if(WTC_RT_SANITIZE)
+  set(recycle_n 100000)
+else()
+  set(recycle_n 2000000)
+endif()
+add_test(NAME recycle_ring_unit COMMAND recycle_ring_test unit)
+add_test(NAME recycle_ring_stress COMMAND recycle_ring_test stress ${recycle_n})
+set_tests_properties(recycle_ring_stress PROPERTIES TIMEOUT 300)
+if(WTC_CHECK)
+  add_test(NAME recycle_ring_two_givers_is_caught
+           COMMAND sh -c "$<TARGET_FILE:recycle_ring_test> twogivers 2>&1 | grep -q 'recycle contract violated: a second giver'")
+elseif(WTC_RT_SANITIZE STREQUAL "thread")
+  add_test(NAME recycle_ring_two_givers_is_caught
+           COMMAND sh -c "$<TARGET_FILE:recycle_ring_test> twogivers 2>&1 | grep -q 'ThreadSanitizer: data race'")
+  set_tests_properties(recycle_ring_two_givers_is_caught PROPERTIES
+                       ENVIRONMENT "TSAN_OPTIONS=halt_on_error=1:symbolize=0")
+endif()
+
 # The runtime of lifted C queues (shim/c_queue.cpp), through the entry
 # points a lifted program calls.
 add_executable(c_queue_test c_queue_test.cpp ../../shim/c_queue.cpp)
