@@ -27,11 +27,10 @@
 #                      by wtc::lifted, whose instantiations this script adds,
 #                      and a C struct by shim/c_queue.h's runtime. A class or
 #                      struct lifts only in a whole program: not with -c, and
-#                      not when a file linked here names it. Off by default:
-#                      the check that nothing else in the program touches
-#                      the queue is a type-based closed-world rule, to be
-#                      replaced by an escape analysis (docs/lifting.md,
-#                      "Opt-in")
+#                      not when a file linked here names it or its code may
+#                      reach the object, which an escape analysis decides.
+#                      Off by default until that analysis has been reviewed
+#                      (docs/lifting.md, "Opt-in")
 #   --no-lift          leave those queues as written (the default)
 #   --unity            compile several source files of one language as one
 #                      translation unit: a generated file that includes each
@@ -270,6 +269,10 @@ else
       # posix format: "name type [value size]", and "archive[member]:"
       # before each member of an archive.
       awk 'NF >= 2 && $1 !~ /:$/ { print $1 }' "$WORK/$base.nm" | sort -u > "$WORK/$base.elsewhere"
+      # The symbols they define, apart from those they only reference: a
+      # function of a library's name defined there is the program's.
+      awk 'NF >= 2 && $1 !~ /:$/ && $2 != "U" && $2 != "w" && $2 != "v" { print $1 }' "$WORK/$base.nm" |
+        sort -u > "$WORK/$base.defined"
       QOA="--queue-ownership-analysis=named-elsewhere=$WORK/$base.elsewhere"
     else
       echo "wtc-cc: cannot list the symbols of ${OTHERS[*]}; any symbol of $SRC may be named there" >&2
@@ -282,7 +285,7 @@ fi
 LIFTOPTS=""
 case "$QOA" in
   *open-world*) LIFTOPTS="open-world=true" ;;
-  *named-elsewhere=*) LIFTOPTS="named-elsewhere=${QOA#*named-elsewhere=}" ;;
+  *named-elsewhere=*) LIFTOPTS="named-elsewhere=${QOA#*named-elsewhere=} defined-elsewhere=$WORK/$base.defined" ;;
 esac
 
 if (( LANG_C )); then

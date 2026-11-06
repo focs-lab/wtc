@@ -1,4 +1,5 @@
 #include "WTC/Transforms/ClosedWorld.h"
+#include "WTC/Transforms/EscapeAnalysis.h"
 #include "WTC/Transforms/LiftNames.h"
 #include "WTC/Transforms/Utils.h"
 
@@ -20,6 +21,19 @@ LogicalResult ClosedWorld::init(ModuleOp m, const ClosedWorldOptions &o) {
     main = mainFn && !mainFn.getBody().empty();
     raw.clear();
     demangled.clear();
+    defined.clear();
+    if (!options.definedElsewhereFile.empty()) {
+        auto buf = llvm::MemoryBuffer::getFile(options.definedElsewhereFile);
+        if (!buf) {
+            module.emitError() << "wtc: cannot read the symbols defined elsewhere from "
+                               << options.definedElsewhereFile;
+            return failure();
+        }
+        llvm::SmallVector<StringRef, 64> lines;
+        (*buf)->getBuffer().split(lines, '\n', -1, false);
+        for (StringRef l : lines)
+            if (!(l = l.trim()).empty()) defined.insert(l);
+    }
     if (options.namedElsewhereFile.empty()) return success();
     auto buf = llvm::MemoryBuffer::getFile(options.namedElsewhereFile);
     if (!buf) {
@@ -47,6 +61,28 @@ std::string ClosedWorld::mentioning(StringRef cls) const {
     return "";
 }
 
+namespace {
+
+// What a value that may point to an object of `rec` may point to as well:
+// the object, a record or array that holds it, void, a byte.
+bool byteOrHolder(Type t, cir::RecordType rec) {
+    if (isa<cir::VoidType>(t)) return true;
+    if (auto i = dyn_cast<cir::IntType>(t); i && i.getWidth() == 8) return true;
+    llvm::SmallVector<Type, 8> work{t};
+    llvm::DenseSet<Type> seen;
+    while (!work.empty()) {
+        Type x = work.pop_back_val();
+        if (x == Type(rec)) return true;
+        if (!seen.insert(x).second) continue;
+        if (auto a = dyn_cast<cir::ArrayType>(x)) work.push_back(a.getElementType());
+        else if (auto r = dyn_cast<cir::RecordType>(x); r && !r.isIncomplete())
+            for (Type m : r.getMembers()) work.push_back(m);
+    }
+    return false;
+}
+
+}  // namespace
+
 // (f) The class is this module's alone. Lifting changes what its member
 // functions do with the object's storage; a copy of them compiled in
 // another unit, as written, would read the same storage as the container
@@ -60,17 +96,13 @@ std::string ClosedWorld::mentioning(StringRef cls) const {
 //
 // Symbols alone cannot show that a linked file leaves the class alone: its
 // copy of an inline member function may be inlined where it is called,
-// leaving no symbol that names the class. So, with any file linked, the
-// object must also be out of its reach, by a rule on this module's own
-// code: no global another file may name (not internal, or only declared
-// here) holds the class or points to it, at any depth; no call hands
-// something that holds or points to it to a function with no body here,
-// to an indirect call or to a function a linked file names; no function
-// of this module that a linked file names takes or returns such a thing;
-// and no pointer to such a thing is converted to a type that is not one,
-// which the pass could no longer follow (to `void *`, to an integer, to a
-// base class), other than to free it.
-void ClosedWorld::closeClass(cir::RecordType rec, Verdict &v) const {
+// leaving no symbol that names the class. So, with any file linked, no
+// object of the class may be reached by that file's code: the escape
+// analysis (EscapeAnalysis.h) follows every value that may carry an
+// object's address, through casts, integers, memory, calls and pointers
+// to functions, to the roots that code can see.
+void ClosedWorld::closeClass(cir::RecordType rec, const llvm::DenseSet<Operation *> &own, Type element,
+                             Verdict &v) const {
     const std::string cls = recordName(rec).str();
     if (openWorld()) {
         v.refuse("(f) the unit is compiled to be linked with files the pass does not see, which may use " + cls +
@@ -88,132 +120,41 @@ void ClosedWorld::closeClass(cir::RecordType rec, Verdict &v) const {
         v.refuse("(f) a file linked with this one names " + cls + " (" + s + ")");
         return;
     }
-    if (!linked()) return;
-
-    // Whether a type is the class, holds it or points to something that
-    // does, at any depth: a search of the types it is made of.
-    llvm::DenseMap<Type, bool> memo;
-    auto reaches = [&](Type root) {
-        auto [it, fresh] = memo.try_emplace(root, false);
-        if (!fresh) return it->second;
-        llvm::SmallVector<Type, 16> work{root};
-        llvm::DenseSet<Type> seen{root};
-        bool found = false;
-        while (!work.empty() && !found) {
-            Type t = work.pop_back_val();
-            if (t == Type(rec)) {
-                found = true;
-                break;
-            }
-            llvm::SmallVector<Type, 8> next;
-            if (auto p = dyn_cast<cir::PointerType>(t)) next.push_back(p.getPointee());
-            else if (auto a = dyn_cast<cir::ArrayType>(t)) next.push_back(a.getElementType());
-            else if (auto r = dyn_cast<cir::RecordType>(t); r && !r.isIncomplete())
-                next.append(r.getMembers().begin(), r.getMembers().end());
-            for (Type n : next)
-                if (seen.insert(n).second) work.push_back(n);
-        }
-        memo[root] = found;
-        return found;
+    // The escape analysis runs whether or not a file is linked: with none,
+    // the code the pass does not see is the system's libraries, and an
+    // object they may hand back, or keep where the program reads it as
+    // another type, is not confined either.
+    EscapeQuery q;
+    q.own = own;
+    q.self = [rec](cir::FuncOp g) -> std::optional<unsigned> {
+        const unsigned i = g.getNumArguments() >= 2 && g.getArgAttr(0, "llvm.sret") ? 1 : 0;
+        auto p = i < g.getNumArguments() ? dyn_cast<cir::PointerType>(g.getArgumentTypes()[i]) : cir::PointerType();
+        if (!p || p.getPointee() != Type(rec)) return std::nullopt;
+        return i;
     };
-    auto namedThere = [&](cir::FuncOp f) { return namesFunction(f); };
-    auto where = [](Operation *op) {
+    q.namesSymbol = [this](StringRef sym) { return names(sym); };
+    q.namesFunction = [this](cir::FuncOp f) { return namesFunction(f); };
+    q.definedElsewhere = [this](StringRef sym) { return defines(sym); };
+    q.nameOf = [](cir::FuncOp f) { return shortName(f); };
+    q.allowedPointee = [rec](Type t) { return byteOrHolder(t, rec); };
+    q.elementType = element;
+    q.linked = linked();
+    EscapeResult r = escapes(module, q);
+    if (r.escape) v.refuse("(f) an object of " + cls + " may be reached by code the pass does not see: " + *r.escape);
+    if (r.reread) v.refuse("(a) " + *r.reread + ", and reads " + cls + " as that type");
+    // A pointer to a member of the class reaches the member's storage
+    // with no member step the confinement sees.
+    std::string mp;
+    module.walk([&](Operation *op) {
+        if (!mp.empty()) return;
         auto f = op->getParentOfType<cir::FuncOp>();
-        return f ? shortName(f) : std::string("a global's initialiser");
-    };
-    auto deallocates = [](cir::FuncOp g) {
-        StringRef n = g ? g.getSymName() : StringRef();
-        return n.starts_with("_ZdlPv") || n.starts_with("_ZdaPv");
-    };
-    auto typeName = [](Type t) -> std::string {
-        if (auto p = dyn_cast<cir::PointerType>(t)) {
-            if (isa<cir::VoidType>(p.getPointee())) return "void *";
-            if (StringRef n = recordName(p.getPointee()); !n.empty()) return (n + " *").str();
-            return "a pointer of another type";
-        }
-        if (isa<cir::IntType>(t)) return "an integer";
-        return "another type";
-    };
-    std::string bad;
-    for (cir::GlobalOp g : module.getOps<cir::GlobalOp>())
-        if ((!cir::isLocalLinkage(g.getLinkage()) || g.isDeclaration()) && reaches(g.getSymType())) {
-            bad = "the global " + g.getSymName().str() + ", which a file linked with this one may name, holds or "
-                  "points to " + cls;
-            break;
-        }
-    for (cir::FuncOp f : module.getOps<cir::FuncOp>()) {
-        if (!bad.empty()) break;
-        if (f.getBody().empty() || !namedThere(f)) continue;
-        auto types = f.getFunctionType();
-        if (llvm::any_of(types.getInputs(), reaches) || llvm::any_of(types.getReturnTypes(), reaches))
-            bad = "a file linked with this one names " + pretty(f.getSymName()) + ", which takes or returns " + cls +
-                  " or a pointer to it";
-    }
-    if (bad.empty())
-        module.walk([&](Operation *op) {
-            if (auto call = dyn_cast<cir::CallOp>(op)) {
-                cir::FuncOp g = call.isIndirect() ? cir::FuncOp() : lookupCallee(call);
-                const bool foreign = !g || g.getBody().empty() || namedThere(g);
-                if (foreign && llvm::any_of(call.getArgOperands(), [&](Value x) { return reaches(x.getType()); })) {
-                    bad = where(op) + " hands " + cls + ", or what holds or points to it, to " +
-                          (g ? pretty(g.getSymName()) : std::string("an indirect call")) +
-                          (!g ? std::string() : g.getBody().empty() ? ", which has no body here"
-                                                                    : ", which a file linked with this one names");
-                    return WalkResult::interrupt();
-                }
-            }
-            Value from, to;
-            if (auto cast = dyn_cast<cir::CastOp>(op); cast && cast.getKind() != cir::CastKind::ptr_to_bool) {
-                from = cast.getSrc();
-                to = cast.getResult();
-            } else if (auto base = dyn_cast<cir::BaseClassAddrOp>(op)) {
-                from = base.getDerivedAddr();
-                to = base.getResult();
-            }
-            // The argument's own memory read as another type, to pass an
-            // object in registers (a lambda that captures `this`), to a
-            // function of this module that the files do not name, or to
-            // return it from one: the bits stay in this module's code.
-            auto coerced = [&](Operation *u) {
-                if (auto st = dyn_cast<cir::StoreOp>(u)) return st.getAddr() == to && st.getValue() != to;
-                auto ld = dyn_cast<cir::LoadOp>(u);
-                if (!ld) return false;
-                return llvm::all_of(ld->getUses(), [&](OpOperand &lu) {
-                    if (auto r = dyn_cast<cir::ReturnOp>(lu.getOwner())) {
-                        auto f = r->getParentOfType<cir::FuncOp>();
-                        return f && !namedThere(f);
-                    }
-                    auto call = dyn_cast<cir::CallOp>(lu.getOwner());
-                    cir::FuncOp g = call && !call.isIndirect() ? lookupCallee(call) : cir::FuncOp();
-                    return g && !g.getBody().empty() && !namedThere(g);
-                });
-            };
-            // A global's destructor registered with __cxa_atexit, which
-            // hands the object back to it, a function of this module.
-            auto atExit = [&](OpOperand &use) {
-                auto call = dyn_cast<cir::CallOp>(use.getOwner());
-                cir::FuncOp g = call ? lookupCallee(call) : cir::FuncOp();
-                if (!g || g.getSymName() != "__cxa_atexit" || use.getOperandNumber() != 1 ||
-                    call.getArgOperands().size() < 2)
-                    return false;
-                Value fn = call.getArgOperands()[0];
-                while (auto cv = fn.getDefiningOp<cir::CastOp>()) fn = cv.getSrc();
-                auto gg = fn.getDefiningOp<cir::GetGlobalOp>();
-                auto dtor = gg ? module.lookupSymbol<cir::FuncOp>(gg.getName()) : cir::FuncOp();
-                return dtor && !dtor.getBody().empty() && !namedThere(dtor);
-            };
-            if (from && reaches(from.getType()) && !reaches(to.getType()) &&
-                !llvm::all_of(to.getUses(), [&](OpOperand &use) {
-                    auto call = dyn_cast<cir::CallOp>(use.getOwner());
-                    return (call && deallocates(lookupCallee(call))) || coerced(use.getOwner()) || atExit(use);
-                })) {
-                bad = where(op) + " converts a pointer to " + cls + ", or to what holds or points to it, to " +
-                      typeName(to.getType()) + ", which the pass does not follow";
-                return WalkResult::interrupt();
-            }
-            return WalkResult::advance();
-        });
-    if (!bad.empty()) v.refuse("(f) " + bad);
+        if (f && own.contains(f)) return;
+        for (Value x : op->getResults())
+            if (auto dm = dyn_cast<cir::DataMemberType>(x.getType()); dm && dm.getClassTy() == rec)
+                mp = (f ? shortName(f) : std::string("a global's initialiser"));
+    });
+    if (!mp.empty())
+        v.refuse("(a) " + mp + " takes a pointer to a member of " + cls + ", which reaches its storage as written");
 }
 
 namespace {
@@ -275,6 +216,8 @@ bool pointerCell(Value addr, Type ptrTy) {
 }  // namespace
 
 bool ClosedWorld::confineStruct(cir::RecordType rec, const llvm::DenseSet<Operation *> &ops,
+                                const llvm::DenseSet<Operation *> &replaced,
+                                const std::function<std::optional<unsigned>(cir::FuncOp)> &self, Type element,
                                 const std::function<std::string(unsigned)> &field, Verdict &v) const {
     auto no = [&](const Twine &w) {
         v.refuse(w);
@@ -318,7 +261,7 @@ bool ClosedWorld::confineStruct(cir::RecordType rec, const llvm::DenseSet<Operat
                           " stores a pointer to the struct in memory the pass does not follow";
                     return;
                 }
-                if (isa<cir::PtrStrideOp, cir::CmpOp>(user)) continue;
+                if (isa<cir::PtrStrideOp, cir::CmpOp, cir::LifetimeStartOp, cir::LifetimeEndOp>(user)) continue;
                 if (auto call = dyn_cast<cir::CallOp>(user)) {
                     cir::FuncOp callee = lookupCallee(call);
                     if (callee && ops.count(callee)) continue;
@@ -411,41 +354,24 @@ bool ClosedWorld::confineStruct(cir::RecordType rec, const llvm::DenseSet<Operat
         }
     });
     if (!bad.empty()) return no(bad);
-    // Nothing another unit sees: the struct's functions, a function that
-    // takes or returns what holds or points to the queue, and a global
-    // whose type holds or points to it, at any depth.
+    // Nothing another unit sees: the struct's functions by name, and, with
+    // any file linked, no value that may point to a queue reaching that
+    // file's code (EscapeAnalysis.h), whatever its type on the way.
     for (Operation *f : ops)
         if (names(cast<cir::FuncOp>(f).getSymName()))
             return no("(a) " + cast<cir::FuncOp>(f).getSymName() + " is named by another file linked with this one");
-    // A search of the types a type is made of, through pointers: each is
-    // looked at once, so a list that points to itself ends.
-    auto reaches = [&](Type root) {
-        llvm::SmallVector<Type, 16> work{root};
-        llvm::DenseSet<Type> seen{root};
-        while (!work.empty()) {
-            Type t = work.pop_back_val();
-            if (t == Type(rec)) return true;
-            llvm::SmallVector<Type, 8> next;
-            if (auto p = dyn_cast<cir::PointerType>(t)) next.push_back(p.getPointee());
-            else if (auto a = dyn_cast<cir::ArrayType>(t)) next.push_back(a.getElementType());
-            else if (auto r = dyn_cast<cir::RecordType>(t); r && !r.isIncomplete())
-                next.append(r.getMembers().begin(), r.getMembers().end());
-            for (Type n : next)
-                if (seen.insert(n).second) work.push_back(n);
-        }
-        return false;
-    };
-    // A function of this module that another file calls: what it is
-    // handed and what it hands back. (A call of a function with no body
-    // here is checked above, by what it is passed.)
-    for (cir::FuncOp f : module.getOps<cir::FuncOp>()) {
-        if (f.isDeclaration() || !names(f.getSymName())) continue;
-        auto ft = f.getFunctionType();
-        if (llvm::any_of(ft.getInputs(), reaches) || llvm::any_of(ft.getReturnTypes(), reaches))
-            return no("(a) " + f.getSymName() + ", named by another file linked with this one, takes or returns a pointer that reaches the queue");
-    }
-    for (auto g : module.getOps<cir::GlobalOp>())
-        if (reaches(g.getSymType()) && names(g.getSymName()))
-            return no("(a) " + g.getSymName() + " is named by another file linked with this one");
+    EscapeQuery q;
+    q.own = replaced;
+    q.self = self;
+    q.namesSymbol = [this](StringRef sym) { return names(sym); };
+    q.namesFunction = [this](cir::FuncOp f) { return names(f.getSymName()); };
+    q.definedElsewhere = [this](StringRef sym) { return defines(sym); };
+    q.nameOf = [](cir::FuncOp f) { return f.getSymName().str(); };
+    q.allowedPointee = [rec](Type t) { return byteOrHolder(t, rec); };
+    q.elementType = element;
+    q.linked = linked();
+    EscapeResult r = escapes(module, q);
+    if (r.escape) return no("(a) a queue may be reached by code the pass does not see: " + *r.escape);
+    if (r.reread) return no("(a) " + *r.reread + ", and reads a queue as that type");
     return true;
 }

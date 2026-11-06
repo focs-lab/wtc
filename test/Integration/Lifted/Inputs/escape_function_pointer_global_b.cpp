@@ -1,4 +1,4 @@
-// The other file of open_function_pointer_global.cpp, built as written at -O2.
+// The other file of escape_function_pointer_global.cpp, built as written at -O2.
 #include "other_unit.h"
 
 extern LQ<int>* (*g_get)();

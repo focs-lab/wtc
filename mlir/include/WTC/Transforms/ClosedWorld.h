@@ -31,6 +31,7 @@
 #include "llvm/ADT/StringSet.h"
 
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -42,6 +43,9 @@ struct ClosedWorldOptions {
     // A file listing, one per line, the symbols the files linked with the
     // module define or reference; empty when none is linked.
     std::string namedElsewhereFile;
+    // Of those, the symbols they define (nm's other than undefined), one
+    // per line: a function of a library's name there is the program's.
+    std::string definedElsewhereFile;
 };
 
 class ClosedWorld {
@@ -59,6 +63,8 @@ public:
     bool anyNamed() const { return !demangled.empty(); }
     // Whether the linked files name this symbol, exactly.
     bool names(llvm::StringRef symbol) const { return raw.contains(symbol); }
+    // Whether they define it.
+    bool defines(llvm::StringRef symbol) const { return defined.contains(symbol); }
     // Whether they name this function of the module, by its demangled
     // name with the spaces removed.
     bool namesFunction(cir::FuncOp f) const;
@@ -67,16 +73,21 @@ public:
     std::string mentioning(llvm::StringRef cls) const;
 
     // Condition (f) for a C++ class: the reasons the module may not be the
-    // whole program for objects of `rec`, recorded in `v`.
-    void closeClass(cir::RecordType rec, Verdict &v) const;
+    // whole program for objects of `rec`, recorded in `v`. `own` are the
+    // functions whose bodies the rewrite replaces.
+    void closeClass(cir::RecordType rec, const llvm::DenseSet<Operation *> &own, Type element, Verdict &v) const;
 
-    // Condition (a) for a C struct, outside its own functions (`own`, the
+    // Condition (a) for a C struct, outside its own functions (`ops`, the
     // functions that take a pointer to it): its members touched, objects
     // copied, pointers to it or to what holds it handed where the pass does
-    // not follow them, and what the linked files name. `field` names a
-    // member of the struct, for the remarks. Returns false at the first
-    // reason, which it records in `v`.
-    bool confineStruct(cir::RecordType rec, const llvm::DenseSet<Operation *> &own,
+    // not follow them, what the linked files name, and, with any file
+    // linked, a queue those files' code may reach. `replaced` are the
+    // functions whose bodies the rewrite replaces, `self` which argument
+    // of one is the queue; `field` names a member of the struct, for the
+    // remarks. Returns false at the first reason, which it records in `v`.
+    bool confineStruct(cir::RecordType rec, const llvm::DenseSet<Operation *> &ops,
+                       const llvm::DenseSet<Operation *> &replaced,
+                       const std::function<std::optional<unsigned>(cir::FuncOp)> &self, Type element,
                        const std::function<std::string(unsigned)> &field, Verdict &v) const;
 
 private:
@@ -84,6 +95,7 @@ private:
     ClosedWorldOptions options;
     bool main = false;
     llvm::StringSet<> raw;               // the symbols, as nm lists them
+    llvm::StringSet<> defined;           // those the linked files define
     std::vector<std::string> demangled;  // demangled, spaces removed
 };
 

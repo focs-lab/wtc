@@ -1432,6 +1432,10 @@ public:
         *this, "named-elsewhere", llvm::cl::init(""),
         llvm::cl::desc("A file listing, one per line, the symbols the other files linked with this module "
                        "define or reference: a class any of them names does not lift")};
+    Option<std::string> definedElsewhereFile{
+        *this, "defined-elsewhere", llvm::cl::init(""),
+        llvm::cl::desc("A file listing the symbols the other files linked with this module define: a function "
+                       "of a library's name there is the program's, and escapes what it is handed")};
 
     void runOnOperation() override;
 
@@ -1463,7 +1467,7 @@ void LiftLockedQueuesPass::runOnOperation() {
         gSections = nullptr;
     });
 
-    if (failed(world.init(module, ClosedWorldOptions{openWorld, namedElsewhereFile})))
+    if (failed(world.init(module, ClosedWorldOptions{openWorld, namedElsewhereFile, definedElsewhereFile})))
         return signalPassFailure();
 
     // Member names, and the records that hold a std::mutex.
@@ -1538,7 +1542,11 @@ void LiftLockedQueuesPass::runOnOperation() {
         c.v.idiom = "locked queue";
         c.v.label = c.label();
         analyse(c);
-        world.closeClass(c.rec, c.v);
+        llvm::DenseSet<Operation *> own;  // what the rewrite replaces
+        for (const Method &m : c.methods) own.insert(m.f);
+        for (cir::FuncOp f : c.ctors) own.insert(f);
+        for (cir::FuncOp f : c.dtors) own.insert(f);
+        world.closeClass(c.rec, own, c.frontElem ? c.frontElem : c.elem, c.v);
 
         c.v.emitUses(c.loc);
         if (c.refused()) {

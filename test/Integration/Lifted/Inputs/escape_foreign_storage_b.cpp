@@ -1,4 +1,4 @@
-// The other file of open_foreign_storage.cpp, built as written at -O2.
+// The other file of escape_foreign_storage.cpp, built as written at -O2.
 #include "other_unit.h"
 
 alignas(LQ<int>) static unsigned char buf[sizeof(LQ<int>)];

@@ -1,4 +1,4 @@
-// The other file of open_atexit_forwarding.cpp, built as written at -O2.
+// The other file of escape_atexit_forwarding.cpp, built as written at -O2.
 #include "other_unit.h"
 #include <cstdio>
 
