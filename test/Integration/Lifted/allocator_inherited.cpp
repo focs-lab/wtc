@@ -1,20 +1,16 @@
-// Known open finding (docs/lifting.md, "Known open findings"), condition
-// (e): std::allocator of the element, specialised by the program for its
-// own type, which a program may do for a type it defines. The name the
-// check reads is std::deque<Item, std::allocator<Item>>, yet the allocator
-// is the program's, and it bounds the queue as allocator_bound.cpp's
-// CapAlloc does: it throws after so many blocks, and the program counts
-// the pushes refused. Lifted, the substitute allocates without it and
-// refuses nothing. The test passes once the class is refused here, or
-// lifted keeps what the program prints as written.
+// A finding of the review of 6 Nov 2026: std::allocator<Item> specialised
+// as a class derived from the program's own bounding allocator: its
+// allocate is the base's, found through allocator_traits. Lifted, the
+// program printed otherwise; now the class is refused, and the program
+// prints what it prints as written.
 //
-// XFAIL: *
-// RUN: %wtc_cc --lift -O1 -DWTC_CHECK %s -o %t.exe
+// RUN: %wtc_cc --lift -O1 -DWTC_CHECK %s -o %t.exe 2>&1 | FileCheck %s --check-prefix=WHY
 // RUN: %t.exe | FileCheck %s --match-full-lines
-// RUN: %wtc_cc --lift -O1 -DWTC_CHECK -DDEQUE %s -o %t.deque.exe
+// RUN: %wtc_cc --lift -O1 -DWTC_CHECK -DDEQUE %s -o %t.deque.exe 2>&1 | FileCheck %s --check-prefix=WHY
 // RUN: %t.deque.exe | FileCheck %s --match-full-lines
 //
 // CHECK: pushed 191 refused 809 popped 191
+// WHY: locked queue q_ in Q not lifted: (e) the program's std::allocator<Item> allocates with an allocator other than libstdc++'s, which may bound or count what the container holds; the substitute allocates
 
 #include <condition_variable>
 #include <cstdio>
@@ -26,8 +22,20 @@
 
 enum class Item : long {};  // a program-defined type, held as a scalar
 static int blocks = 0;
+// The program's own bounding allocator, and std::allocator<Item>
+// specialised as a class derived from it: its allocate is CapAlloc's, whose
+// name is not std::allocator<Item>, so the check finds nothing to refuse.
+template <class T> struct CapAlloc {
+    using value_type = T;
+    T* allocate(std::size_t n, const void* = nullptr) {
+        if (++blocks > 3) throw std::bad_alloc();
+        return static_cast<T*>(::operator new(n * sizeof(T)));
+    }
+    void deallocate(T* p, std::size_t) noexcept { --blocks; ::operator delete(p); }
+    std::size_t max_size() const noexcept { return std::size_t(-1) / sizeof(T); }
+};
 namespace std {
-template <> struct allocator<Item> {
+template <> struct allocator<Item> : CapAlloc<Item> {
     using value_type = Item;
     using pointer = Item*;
     using const_pointer = const Item*;
@@ -40,12 +48,6 @@ template <> struct allocator<Item> {
     template <class U> struct rebind { using other = allocator<U>; };
     allocator() noexcept = default;
     template <class U> allocator(const allocator<U>&) noexcept {}
-    Item* allocate(std::size_t n, const void* = nullptr) {
-        if (++blocks > 3) throw std::bad_alloc();
-        return static_cast<Item*>(::operator new(n * sizeof(Item)));
-    }
-    void deallocate(Item* p, std::size_t) noexcept { --blocks; ::operator delete(p); }
-    std::size_t max_size() const noexcept { return std::size_t(-1) / sizeof(Item); }
     template <class U, class... A> void construct(U* p, A&&... a) { ::new ((void*)p) U(std::forward<A>(a)...); }
     template <class U> void destroy(U* p) { p->~U(); }
     bool operator==(const allocator&) const noexcept { return true; }
