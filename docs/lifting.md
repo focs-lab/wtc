@@ -150,7 +150,7 @@ remark that says why.
 | closed world, C: storage from a call with no body here | the queue, or a struct that holds it, is another file's, reached here only through a function with no body here; its uses here are only the queue's functions | as above | the escape analysis, as for C++ | `LiftedC/escape_storage_from_call.c` |
 | (e) `std::allocator` specialised by the program | `std::allocator<Item>` specialised for the program's own element type, which bounds the queue as `allocator_bound.cpp`'s allocator does; the name the check reads is `std::allocator` of the element | the substitute allocates without it and refuses no push | open | `Lifted/open_allocator_specialisation.cpp` |
 | C: a union that holds the queue | a queue inside a union, read through the union's other member; the step to that member is not a step to the queue | the other member reads the substitute's pointer | condition (a): a step into a union that holds the queue, to another of its members, refuses | `LiftedC/union_holder.c` |
-| C: a ring's narrow index | a ring whose indices are `unsigned char`, wrapping at 256 before the slot count, by `++` or by the `int` result of `(put + 1) % nslots` converted back; the C ring's evaluator takes the increment, and a conversion that loses values, for the identity | the substitute keeps every element the original overwrote | open | `LiftedC/open_narrow_index.c` |
+| C: a ring's narrow index | a ring whose indices are `unsigned char`, wrapping at 256 before the slot count, by `++` or by the `int` result of `(put + 1) % nslots` converted back; the C ring's evaluator takes the increment, and a conversion that loses values, for the identity | the substitute keeps every element the original overwrote | condition (e): an index of fewer than 32 bits that does not hold every value of the slot count refuses | `LiftedC/narrow_index.c` |
 | `wtc-cc --unity`: header statics and tentative definitions | a header with an include guard and a static of its own (C or C++), whose second include the unit skips, so that the files share the static; or `static int x;` in two files, tentative definitions of one internal object in the unit (C11 6.9.2) | the files share state that each has its own of compiled apart; the check that each file means in the unit what it means alone does not catch it | open | `LiftedC/open_unity_header_static.c`, `LiftedC/open_unity_tentative.c` |
 
 ## The shape
@@ -758,7 +758,11 @@ condition:
   makes as well: it ends the program when it fails.
 - **(e) FIFO.** Elements go in at one index and leave at the other, each
   advanced by one modulo the slot count that init set with the
-  allocation (an index wrapped at a constant of its own refuses). The ring
+  allocation (an index wrapped at a constant of its own refuses). Each
+  index holds every slot: it holds every value of the slot count's type,
+  or has 32 bits or more (the substitute ends the program at init above
+  2^30 slots); a narrower one (`unsigned char` under an `int` count)
+  would wrap at its own width first, and refuses. The ring
   holds pointers: a ring of `long` or `double`, of a pointer's size, is
   refused.
 
