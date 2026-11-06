@@ -1,16 +1,17 @@
-/* Known open finding (docs/lifting.md, "Known open findings"): a queue
-   inside a union, read through the union's other member. The program
+/* Once an open finding (docs/lifting.md, "Findings of 1 Nov 2026"): a
+   queue inside a union, read through the union's other member. The program
    reads the queue's first two ints (put, take) as the bytes of words[0].
    The holder rules let a pointer to the union go to member steps, and the
    step to words is not a step to the queue. Lifted, words[0] is the
-   substitute's pointer. The test passes once the struct is refused here,
-   or lifted keeps what the program prints as written.
+   substitute's pointer. Now a step into a union that holds the queue, to
+   another of its members, refuses the struct; the program prints what it
+   prints as written.
 
-   XFAIL: *
-   RUN: %wtc_cc --lift -O1 -DWTC_CHECK -I%S/../../Transforms/LiftCQueues/Inputs %s -o %t.exe
+   RUN: %wtc_cc --lift -O1 -DWTC_CHECK -I%S/../../Transforms/LiftCQueues/Inputs %s -o %t.exe 2>&1 | FileCheck %s --check-prefix=WHY
    RUN: %t.exe | FileCheck %s --match-full-lines
 
    CHECK: put 3 take 2
+   WHY: C queue struct chan not lifted: (a) main reads a union that holds the queue through another of its members
 */
 #include "chan.h"
 

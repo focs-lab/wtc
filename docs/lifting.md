@@ -149,7 +149,7 @@ remark that says why.
 | closed world, C: a pointer to a function that returns a static holder | a static struct that holds the queue, and a global another file names holding a pointer to a function that returns the struct's address | the other file reads the substitute's pointer as the queue's index | the escape analysis, as for C++ | `LiftedC/escape_function_pointer.c` |
 | closed world, C: storage from a call with no body here | the queue, or a struct that holds it, is another file's, reached here only through a function with no body here; its uses here are only the queue's functions | as above | the escape analysis, as for C++ | `LiftedC/escape_storage_from_call.c` |
 | (e) `std::allocator` specialised by the program | `std::allocator<Item>` specialised for the program's own element type, which bounds the queue as `allocator_bound.cpp`'s allocator does; the name the check reads is `std::allocator` of the element | the substitute allocates without it and refuses no push | open | `Lifted/open_allocator_specialisation.cpp` |
-| C: a union that holds the queue | a queue inside a union, read through the union's other member; the step to that member is not a step to the queue | the other member reads the substitute's pointer | open | `LiftedC/open_union_holder.c` |
+| C: a union that holds the queue | a queue inside a union, read through the union's other member; the step to that member is not a step to the queue | the other member reads the substitute's pointer | condition (a): a step into a union that holds the queue, to another of its members, refuses | `LiftedC/union_holder.c` |
 | C: a ring's narrow index | a ring whose indices are `unsigned char`, wrapping at 256 before the slot count, by `++` or by the `int` result of `(put + 1) % nslots` converted back; the C ring's evaluator takes the increment, and a conversion that loses values, for the identity | the substitute keeps every element the original overwrote | open | `LiftedC/open_narrow_index.c` |
 | `wtc-cc --unity`: header statics and tentative definitions | a header with an include guard and a static of its own (C or C++), whose second include the unit skips, so that the files share the static; or `static int x;` in two files, tentative definitions of one internal object in the unit (C11 6.9.2) | the files share state that each has its own of compiled apart; the check that each file means in the unit what it means alone does not catch it | open | `LiftedC/open_unity_header_static.c`, `LiftedC/open_unity_tentative.c` |
 
@@ -712,11 +712,13 @@ condition:
   reaches it reaches the queue: it is not copied or written whole, a
   pointer to one is only stepped into, compared, loaded and stored as its
   own type, handed to functions with a body here and freed, and one
-  initialised statically must leave the queue inside it zero. No queue
-  may be reached by code the pass does not see, a file linked or not, nor
-  read by the module as another type (offsetof arithmetic from another
-  member of a struct that holds it): the escape analysis of condition
-  (f), with the struct's functions as the operations, decides it. Each function is one of the operations or a helper
+  initialised statically must leave the queue inside it zero. A union
+  that holds the queue is read only through the member that holds it:
+  its other members share the queue's storage. No queue may be reached
+  by code the pass does not see, a file linked or not, nor read by the
+  module as another type (offsetof arithmetic from another member of a
+  struct that holds it): the escape analysis of condition (f), with the
+  struct's functions as the operations, decides it. Each function is one of the operations or a helper
   only they call. What init, destroy and terminate return must be a
   constant, which the substitute returns in its place; a value computed
   from the queue or from the allocation refuses.

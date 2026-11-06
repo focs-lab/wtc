@@ -318,6 +318,20 @@ bool ClosedWorld::confineStruct(cir::RecordType rec, const llvm::DenseSet<Operat
         auto fn = op->getParentOfType<cir::FuncOp>();
         if (fn && ops.count(fn)) return;
         const std::string at = fn ? fn.getSymName().str() : std::string("a global");
+        // A union that holds the queue shares its storage with its other
+        // members: a step into one of those reaches the queue's bytes as
+        // another type.
+        if (auto gm = dyn_cast<cir::GetMemberOp>(op)) {
+            auto pt = dyn_cast<cir::PointerType>(gm.getAddr().getType());
+            auto u = pt ? dyn_cast<cir::RecordType>(pt.getPointee()) : cir::RecordType();
+            if (u && u.isUnion() && !u.isIncomplete() && holds(u, 0) && gm.getIndex() < u.getMembers().size()) {
+                Type m = u.getMembers()[gm.getIndex()];
+                if (m != Type(rec) && !holds(m, 0)) {
+                    bad = "(a) " + at + " reads a union that holds the queue through another of its members";
+                    return;
+                }
+            }
+        }
         for (Value r : op->getResults())
             if (holds(r.getType(), 0)) {
                 bad = "(a) " + at + " copies a struct that holds the queue";
