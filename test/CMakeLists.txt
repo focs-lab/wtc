@@ -7,6 +7,7 @@ configure_lit_site_cfg(
 
 set(WTC_TEST_DEPENDS
         wtc-opt
+        wtc-link
         )
 
 add_lit_testsuite(check-wtc "Running the wtc regression tests"

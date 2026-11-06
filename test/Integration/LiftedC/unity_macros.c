@@ -1,19 +1,20 @@
-/* --unity compiles several files as one, and each must mean what it means
-   compiled apart. A macro a file defines in its own text is undefined
-   after it, so that it does not reach the files after it: here LIMIT,
-   which would replace the second file's default (5 apart, 9 in the
-   unity). One a header of it defines cannot be, and when it changes a
-   later file's text the build stops. A feature-test macro configures the
-   system's headers once for every later file: refused.
+/* Several files, linked as CIR modules (wtc-cc, wtc-link), each compiled
+   apart: a macro a file defines, in its own text or in a header of its
+   own, does not reach the files after it (LIMIT would replace the second
+   file's default, 5 apart, 9 together), and a feature-test macro
+   configures the system's headers for its own file only. Concatenated
+   into one unit (--unity until 6 Nov 2026), the first was undefined after
+   the file and the others stopped the build; linked, all three build and
+   print what they print built apart.
 
    RUN: %wtc_cc --lift --unity -O1 %s %S/Inputs/unity_macro_user.c -o %t.exe
    RUN: %t.exe | FileCheck %s
-   RUN: not %wtc_cc --lift --unity -O1 -DIN_HEADER -I%S/Inputs %s %S/Inputs/unity_macro_user.c -o %t.h.exe 2>&1 | FileCheck %s --check-prefix=HEADER
-   RUN: not %wtc_cc --lift --unity -O1 -DFEATURE %s %S/Inputs/unity_macro_user.c -o %t.f.exe 2>&1 | FileCheck %s --check-prefix=FEATURE
+   RUN: %wtc_cc --lift -O1 -DIN_HEADER -I%S/Inputs %s %S/Inputs/unity_macro_user.c -o %t.h.exe
+   RUN: %t.h.exe | FileCheck %s
+   RUN: %wtc_cc --lift -O1 -DFEATURE %s %S/Inputs/unity_macro_user.c -o %t.f.exe
+   RUN: %t.f.exe | FileCheck %s
 
    CHECK: limit 5
-   HEADER: wtc-cc: --unity: {{.*}}unity_macro_user.c reads differently after the files before it (a macro of theirs changes it); compile it apart
-   FEATURE: wtc-cc: --unity: {{.*}}unity_macros.c defines _GNU_SOURCE, which configures the headers of every file after it; pass it with -D instead
 */
 #if defined(FEATURE)
 #define _GNU_SOURCE
