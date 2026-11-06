@@ -8,8 +8,9 @@
 //
 // The class does not lift, and the remarks say why: the mutex also guards
 // the running count, the waiting flag and the stop flag outside any queue
-// operation; a worker pops through pop_task(), which touches the queue
-// without taking the mutex itself; wait() decides on tasks.empty()
+// operation; a worker pops through pop_task(), which takes no lock itself
+// and runs only under the mutex the worker holds (CriticalSections.h), and
+// is none of the queue's operations; wait() decides on tasks.empty()
 // together with the running count; get_tasks_queued() reads size(); and
 // the worker returns at the stop flag with tasks still queued. Each of
 // these is a joint invariant of the queue and the pool that a lock-free
@@ -21,7 +22,7 @@
 // RUN: %t.exe | FileCheck %s --check-prefix=OUT
 //
 // CHECK-DAG: locked queue tasks in BS::thread_pool not lifted: (c) the mutex tasks_mutex also guards tasks_running in BS::thread_pool::worker
-// CHECK-DAG: locked queue tasks in BS::thread_pool not lifted: (b) BS::thread_pool::pop_task calls front on tasks without the mutex held
+// CHECK-DAG: locked queue tasks in BS::thread_pool not lifted: (a) BS::thread_pool::pop_task calls front on tasks under the mutex its callers hold (BS::thread_pool::worker), and is none of the operations
 // CHECK-DAG: locked queue tasks in BS::thread_pool not lifted: (d) BS::thread_pool::get_tasks_queued reads size(): the substitutes keep no linearisable count
 // CHECK-NOT: lifted (
 // OUT: tasks 3000 queued 0

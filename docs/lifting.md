@@ -278,6 +278,17 @@ prefixed by the condition it fails.
 The pass also counts, per class, every container operation and wait form
 it saw (the "uses" remark), so that a refusal says what a class would need.
 
+Both passes share the framework under `mlir/include/WTC/Transforms/`:
+`Refusal.h`, the verdict and its remarks (every reason found is reported,
+for a C struct as for a C++ class: the closed world, the first reason its
+operations fail, and its confinement); `ClosedWorld.h`, conditions (f) and
+the closed-world part of (a), with the symbol list read once; and
+`CriticalSections.h`, the critical sections of a module (a lock object's
+cleanup scope, a `pthread_mutex_lock` and its unlock), what each reads and
+writes, and the calls made in it one level down, so that a member function
+called only with the mutex held, such as BS::thread_pool's `pop_task`, is
+seen under it (`wtc-opt --wtc-critical-sections` prints them).
+
 ## What the substitution keeps, and what it changes
 
 Kept:
@@ -501,7 +512,7 @@ reduced. Read as written, without source edits (29 Oct 2026):
 |---|---|---|
 | CTPL, `detail::Queue` (`ctpl_stl.h`) | lifts | push and try-pop; the pool's own condition variable and mutex stay, and the element, a pointer, is copied out, which is moving it. The model's topology is many to many (two threads submit; the pool's workers and the stopping thread pop), so the general-purpose queue. The real library with the leg's driver (`benchmarks/apps/ctpl`), one submitter, is spmc: the workers and the stopping thread pop |
 | g3log, `shared_queue` (`shared_queue.hpp`) | lifts | push and a blocking pop; shutdown is a message, so no stop flag. In the model, with one `Active` object, the queue is proved many producers to one consumer and becomes the single-consumer queue; the model runs correctly under ThreadSanitizer and `WTC_CHECK`. The real program (`benchmarks/apps/g3log`, the logger and its performance test as one unit) builds one `Active` per sink type and one for the worker, each popped by its own thread; the queue stands for all of them, so many to many |
-| BS::thread_pool, `tasks` (`BS_thread_pool.hpp`) | refused | (c) the mutex also guards the running count, the waiting flag, the thread count and the stop flag; (b) the worker pops through `pop_task()`, which takes no lock itself; (d) `get_tasks_queued()` reads `size()`, and `wait()` sleeps until the queue is empty and nothing runs, a joint invariant of the queue and the pool |
+| BS::thread_pool, `tasks` (`BS_thread_pool.hpp`) | refused | (c) the mutex also guards the running count, the waiting flag, the thread count and the stop flag; (a) the worker pops through `pop_task()`, which takes no lock itself and runs only under the mutex the worker holds, but is none of the operations; (d) `get_tasks_queued()` reads `size()`, and `wait()` sleeps until the queue is empty and nothing runs, a joint invariant of the queue and the pool |
 | Bitcoin, `CCheckQueue::queue` (`checkqueue.h`) | refused | (e) a `std::vector` taken from the back, with range insert and erase; (d) the batch size is computed from `size()`; (c) the mutex also guards the idle, total and unfinished counts and the result |
 | cpp-httplib, `ThreadPool::jobs_` (`httplib.h`) | refused | (c) the mutex also guards the idle count, the admission bound and the dynamic threads; (d) `enqueue` decides on `jobs_.size()`; dynamic workers wait with a time-out. Its shutdown flag alone would have been supported |
 | spdlog, `mpmc_blocking_queue::q_` (`mpmc_blocking_q.h`) | lifts | `circular_q` is read as a ring of capacity `max_items`; `enqueue` waits for room, `enqueue_if_have_room` may decline (its discard count stays the class's), `enqueue_nowait` overruns, `dequeue` is the blocking pop (`dequeue_for`, used by spdlog before 1.10, the pop with a time limit). The overrun cannot run in the model, whose loggers are built with `block`, so it is left out there, and the model's queue is chosen when the pool builds it: single-consumer with one worker, else general-purpose (below). The real program, `benchmarks/apps/spdlog/bench.cpp` over spdlog's own headers, lifts and runs correctly with `WTC_CHECK` and under ThreadSanitizer; since 31 Oct 2026 its overrun is kept (the policy is read through `std::make_shared`'s control block, which the pass does not follow), so its loggers are consumers too and its queue is general-purpose |

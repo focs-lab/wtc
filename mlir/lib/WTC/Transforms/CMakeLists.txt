@@ -1,5 +1,7 @@
 add_mlir_library(MLIRWTCTransforms
   Blocking.cpp
+  ClosedWorld.cpp
+  CriticalSections.cpp
   LiftCIRToWTC.cpp
   LiftCQueues.cpp
   LiftLockedQueues.cpp
