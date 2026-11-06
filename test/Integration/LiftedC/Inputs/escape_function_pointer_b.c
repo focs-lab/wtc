@@ -1,4 +1,4 @@
-/* The other file of open_function_pointer.c, built as written. */
+/* The other file of escape_function_pointer.c, built as written. */
 #include <pthread.h>
 
 struct chan {

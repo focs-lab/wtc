@@ -10,7 +10,7 @@
    RUN: %wtc_cc --lift -O1 -DWTC_CHECK -DSTATIC -I%S/../../Transforms/LiftCQueues/Inputs %s -o %t.static.exe 2>&1 | FileCheck %s --check-prefix=STATIC
    RUN: %t.static.exe | FileCheck %s --check-prefix=STATIC-OUT
 
-   NAMED: C queue struct chan not lifted: (a) A is named by another file linked with this one
+   NAMED: C queue struct chan not lifted: (a) a queue may be reached by code the pass does not see: the global A, which a file linked with this one names, may hold it
    NAMED-OUT: take 2
    STATIC: C queue struct chan not lifted: (a) A is initialised statically, not by chan_open
    STATIC-OUT: sum 15 fixed 150

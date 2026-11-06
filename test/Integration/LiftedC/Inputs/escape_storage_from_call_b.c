@@ -1,4 +1,4 @@
-/* The other file of open_storage_from_call.c, built as written. */
+/* The other file of escape_storage_from_call.c, built as written. */
 #include <pthread.h>
 
 struct chan {

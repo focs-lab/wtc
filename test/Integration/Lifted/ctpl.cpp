@@ -7,13 +7,15 @@
 // every worker, joins them and clears what is left. The model keeps that
 // structure and drops the futures. Nothing is written for the compiler.
 //
-// The queue class lifts without a blocking form: push and the try-pop
-// match, and the element, a pointer, is copied out, which is moving it.
-// The pool's own wait is left as it is: the lifted pop is non-blocking,
-// as the original was, and a pusher still takes the pool's mutex before
-// it notifies, so the worker's check and its sleep stay atomic with
-// respect to the push. Every task runs once, under ThreadSanitizer and with
-// WTC_CHECK too.
+// The queue class's operations match: push and the try-pop, the element,
+// a pointer, copied out, which is moving it. Since 23 Nov 2026 it is
+// refused all the same, a false refusal of the field-insensitive escape
+// analysis (docs/lifting.md, "Assumptions"): the worker's wait predicate
+// captures both the pool, which holds the queue, and the slot a pop
+// writes the task into, so the pool is one class with the tasks, the
+// tasks' captures and the counters main prints, and what is printed is
+// the outside's. Every task runs once, under ThreadSanitizer and with
+// WTC_CHECK too, as written.
 //
 // The code kept is the upstream code, reduced; CTPL is under the Apache License 2.0.
 //
@@ -23,9 +25,7 @@
 // RUN: %if tsan %{ %wtc_cc --lift --tsan -O1 -g %s -o %t.tsan.exe 2>&1 | FileCheck %s %}
 // RUN: %if tsan %{ env TSAN_OPTIONS=halt_on_error=1:symbolize=0 %t.tsan.exe 4 2>&1 | FileCheck %s --check-prefixes=TSAN,OUT %}
 //
-// CHECK: locked queue q in ctpl::detail::Queue<std::function<void (int)> *> lifted (ctpl::detail::Queue<std::function<void (int)>*>::pop: try-pop, ctpl::detail::Queue<std::function<void (int)>*>::push: push)
-// CHECK: queue q in any ctpl::detail::Queue<std::function<void (int)> *>: mpmc (producers: many, consumers: many)
-// CHECK-NOT: not lifted
+// CHECK: locked queue q in ctpl::detail::Queue<std::function<void (int)> *> not lifted: (f) an object of ctpl::detail::Queue<std::function<void (int)> *> may be reached by code the pass does not see
 // TSAN-NOT: ThreadSanitizer
 // OUT: tasks 20000 sum 200010000
 

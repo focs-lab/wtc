@@ -1,4 +1,4 @@
-// The other file of open_bits_cast.cpp, built as written at -O2.
+// The other file of escape_bits_cast.cpp, built as written at -O2.
 #include "other_unit.h"
 #include <cstdint>
 

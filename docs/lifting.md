@@ -24,18 +24,20 @@ as written; `--no-lift`, which turned the substitution off while it was
 the default, is still accepted and is now the default. `wtc-opt` runs the
 pass only when `--wtc-lift-locked-queues` is given, as before.
 
-The reason is how the proof decides that nothing outside the class touches
-the container. It decides by the program's types, taking the module for
-the whole program as far as the class goes, a closed-world rule, not by
-following where the object itself goes. Reviews of the substitution's
-faithfulness kept finding programs that reach the object by a path the
-types do not show: a pointer made an integer, a pointer to a function that
-returns the object, storage another file hands over. Each finding was
-closed by another refusal, and the next review found more of the same
-kind. The rule is to be replaced by an escape analysis that follows the
-object's address; until then the substitution is a choice a build makes,
-and the tests that exercise it pass `--lift`. The findings still open
-are listed under "Known open findings", below.
+The reason was how the proof decided that nothing outside the class
+touches the container. It decided by the program's types, taking the
+module for the whole program as far as the class goes, a closed-world
+rule, not by following where the object itself goes. Reviews of the
+substitution's faithfulness kept finding programs that reach the object by
+a path the types do not show: a pointer made an integer, a pointer to a
+function that returns the object, storage another file hands over. Each
+finding was closed by another refusal, and the next review found more of
+the same kind (20, then 11, then 9). Since 6 Nov 2026 the rule is an
+escape analysis that follows the object's address instead
+(`mlir/include/WTC/Transforms/EscapeAnalysis.h`; condition (f) below), and
+the findings of the last review are closed ("Findings of 1 Nov 2026",
+below). The substitution stays a choice a build makes until the analysis
+has had a review of its own, and the tests that exercise it pass `--lift`.
 
 ## The contract
 
@@ -57,6 +59,10 @@ What the contract takes as given:
 - **A race-free program.** The original has no data race and does not
   depend on timing: how long a thread sleeps or waits, or the order in
   which the scheduler runs threads, is not behaviour it can rely on.
+- **A program free of undefined behaviour.** Its pointers reach only the
+  objects they were formed from, its unions are read as C and C++ allow,
+  and so on ("Assumptions", below): the proof follows what the program
+  does, and a program whose behaviour is undefined may do anything.
 - **Observable behaviour.** What the program writes, its exit status, and
   the values its functions compute: in particular the elements a pop
   returns, whether a try-pop or a closable pop found one, and the order in
@@ -101,10 +107,9 @@ version lifted unfaithfully:
 | (f) a file linked with this one names C | an object file, archive or shared object linked by `wtc-cc` defines or references a member function of C, or a function that takes or returns C | as above: the linker keeps one copy of each inline member function for the program, the lifted one or the original |
 | (f) the module has no main | a unit that is not the program | as above |
 | (f) C::f has no body here | a member function defined in another unit | as above |
-| (f) the global G, which a file linked with this one may name, holds or points to C | with any file linked, a global that is not static, or only declared here, of a type that holds or points to C | the other file's copy of a member function, inlined at `-O2`, left no symbol naming C, and read the substitute's pointer as the container (31 Oct) |
-| (f) F converts a pointer to C, or to what holds or points to it, to T, which the pass does not follow | with any file linked, the object's address made `void *`, an integer or a base class, other than to free it, to pass a lambda that captures it in registers to a function of this module, or to register a global's destructor | as above, the object handed to the other file as `void *` (31 Oct) |
-| (f) F hands C, or what holds or points to it, to G, which has no body here | with any file linked, such a value passed to a function with no body here, to an indirect call or to a function a linked file names | as above (31 Oct) |
-| (f) a file linked with this one names F, which takes or returns C or a pointer to it | with any file linked, a function of this module the other file calls, whose parameter or result holds or points to C | as above (31 Oct) |
+| (f) an object of C may be reached by code the pass does not see: the global G, which a file linked with this one names, may hold it | with any file linked, a global that file names, or one only declared here, that may hold the object's address | the other file's copy of a member function, inlined at `-O2`, left no symbol naming C, and read the substitute's pointer as the container (31 Oct; a type-based rule until 6 Nov) |
+| (f) ... F hands a value that may point to it to G, which has no body here; ... F takes a value that may point to it from G | with any file linked, the object's address, in whatever type (`void *`, an integer, the bits of a pointer slot, a base class, a field of a struct), handed to a function with no body here, or the object built in storage such a function returns | as above, the object handed to the other file as `void *` (31 Oct), and the findings of 1 Nov |
+| (f) ... a file linked with this one names F, which may be handed it or hand it back; ... F, whose address may reach code the pass does not see, ... | with any file linked, a function of this module the other file calls, or may call through a pointer it can reach, whose parameters or result may carry the object's address | as above (31 Oct, 1 Nov) |
 | (e) the container allocates with an allocator other than std::allocator of its element | `std::deque<T, A>`, `std::list<T, A>` or a `std::queue` over one, with A the program's own | the allocator bounded the queue (it threw after so many blocks, and the program counted the pushes refused) or counted what it allocated; the substitute allocates with neither, and refused nothing (31 Oct) |
 | (a) F builds or destroys a local T, whose constructor or destructor may have effects of its own | a local object other than a lock or a duration, built inside an operation | the operation's body is replaced whole, and the object's effects went with it |
 | (d) F starts the stop flag S other than false / indeterminate | a stop flag that starts true, is computed, or is left uninitialised by a constructor | the substitute starts open: a closable pop that returned false at once waited instead |
@@ -115,7 +120,7 @@ version lifted unfaithfully:
 | "may overrun" where it said "never runs" (a member or parameter now unknown) | a policy member written by value-initialisation, `memcpy`, a pointer to member, a function with no body here, `calloc`, or a function another file calls | the overrunning push was pruned, the queue built without overruns, and the program aborted when the push ran |
 | "may overrun" where it said "never runs" (the values read exactly) | a policy of an unsigned type (200 in an `unsigned char` was read as -56, 4000000000 in an `unsigned` compared signed), a conversion that changes the value (256 made an `unsigned char` was taken for 256), a member written through another member of a union that holds its record, any member when a file is linked (whose inlined code reaches records unnamed) | as above (31 Oct) |
 | (e) the ring's F converts a value to a type that does not hold all of its values | a ring whose index wraps through a narrower type (`static_cast<unsigned char>(tail + 1) % slots`) | a conversion was taken for the identity; the original's tail went back to zero at 256, the substitute's ring did not, and its pops returned elements the original had overwritten (31 Oct) |
-| (a) G is named by another file linked with this one; (a) F copies a struct that holds the queue, passes a pointer to one to G, which has no body here, converts it to another type | a C queue inside another struct (`struct app { int id; struct chan q; }`) that another file reaches by name, or that is copied, handed to code the pass does not see or made `void *` | only globals of the queue's own type, pointers to it and arrays of them were checked: the other file read the substitute's pointer as the queue's index (31 Oct) |
+| (a) a queue may be reached by code the pass does not see: the global G, which a file linked with this one names, may hold it; (a) F copies a struct that holds the queue, passes a pointer to one to G, which has no body here, converts it to another type | a C queue inside another struct (`struct app { int id; struct chan q; }`) that another file reaches by name, or that is copied, handed to code the pass does not see or made `void *` | only globals of the queue's own type, pointers to it and arrays of them were checked: the other file read the substitute's pointer as the queue's index (31 Oct) |
 | (a) G is initialised statically, not by init | the same struct holding the queue, initialised statically (`= { 1, { 0, 0, buf, ... } }`) | init never built the queue inside it, and the lifted program crashed (31 Oct) |
 | none: the ring is built with no room | a C ring of zero slots, its count read at run time | the substitute, built with the slots minus one places, ended the program at init, where the original's pops answer "finished" (31 Oct) |
 | (d) F wakes one pop at the last termination, with a signal, where the substitute wakes them all | a C termination that signals the pops' variable | with two pops asleep and a pop that does not pass the wake-up on, the original leaves one asleep for ever; the substitute's close woke both, and the program finished (31 Oct) |
@@ -128,30 +133,29 @@ full when other threads push and pop past the tail it read before it
 reads the head: it refuses only once a third read finds the tail
 unchanged (`bounded_push_steps split`).
 
-## Known open findings
+## Findings of 1 Nov 2026
 
-The review of 1 Nov 2026 confirmed the findings below, which are not
-fixed: each of these programs, built with `--lift` (the last, with
-`--unity`), behaves otherwise than as written. Each is a test under
-`test/Integration/` marked `XFAIL: *`, which states the program's output
-as written and passes once the hole is closed, whether the class or struct
-is then refused or lifted faithfully (or the unit refused); the suite then
-reports an unexpected pass, and the mark comes off. The first six are
-holes in the closed-world rule of conditions (f) and, for C, (a), the rule
-that the escape analysis is to replace ("Opt-in").
+The review of 1 Nov 2026 confirmed the findings below: each of these
+programs, built with `--lift` (the last, with `--unity`), behaved otherwise
+than as written. Each is a test under `test/Integration/` that states the
+program's output as written; it was marked `XFAIL: *` while the finding
+was open. The first six were holes in the closed-world rule of conditions
+(f) and, for C, (a), which the escape analysis closes (since 6 Nov 2026,
+"Opt-in"): the class or struct is now refused, and the test checks the
+remark that says why.
 
-| finding | the shape | what lifting it does | test |
-|---|---|---|---|
-| closed world: an integer through the coerced exception | with a file linked, the object's address leaves as an integer through `__builtin_bit_cast` (`std::bit_cast`'s body), the bits of a pointer slot loaded as an integer, which the "coerced" exception admits when the load goes to a function of this module; that function keeps it in a global, and `main` hands it to the other file | the other file, built at `-O2` with no symbol naming the class, turns the integer back into the class and reads the substitute's pointer as the container | `Lifted/open_bits_cast.cpp` |
-| closed world: pointers to functions in globals | a global another file may name holds a pointer to a function that returns the object, which is itself static; the search for the class in such globals' types does not enter function types | as above, through the pointer | `Lifted/open_function_pointer_global.cpp` |
-| closed world: call results, placement new into foreign storage | the object is built by placement new in storage that another file hands over as the result of a call with no body here (a call's arguments are checked, not its result), and that file reads it by its own pointer (`void *` to `C *` is a conversion into the types the pass follows, not out of them) | the other file reads the substitute's pointer as the container | `Lifted/open_foreign_storage.cpp` |
-| closed world: `__cxa_atexit` forwarding | the object's address, made `void *`, registered with `__cxa_atexit` for a function with a body here, which the exception for a global's destructor admits; that function hands it on to another file | the other file reads the substitute's pointer as the container at exit | `Lifted/open_atexit_forwarding.cpp` |
-| closed world, C: a pointer to a function that returns a static holder | a static struct that holds the queue, and a global another file names holding a pointer to a function that returns the struct's address | the other file reads the substitute's pointer as the queue's index | `LiftedC/open_function_pointer.c` |
-| closed world, C: storage from a call with no body here | the queue, or a struct that holds it, is another file's, reached here only through a function with no body here; its uses here are only the queue's functions | as above | `LiftedC/open_storage_from_call.c` |
-| (e) `std::allocator` specialised by the program | `std::allocator<Item>` specialised for the program's own element type, which bounds the queue as `allocator_bound.cpp`'s allocator does; the name the check reads is `std::allocator` of the element | the substitute allocates without it and refuses no push | `Lifted/open_allocator_specialisation.cpp` |
-| C: a union that holds the queue | a queue inside a union, read through the union's other member; the step to that member is not a step to the queue | the other member reads the substitute's pointer | `LiftedC/open_union_holder.c` |
-| C: a ring's narrow index | a ring whose indices are `unsigned char`, wrapping at 256 before the slot count, by `++` or by the `int` result of `(put + 1) % nslots` converted back; the C ring's evaluator takes the increment, and a conversion that loses values, for the identity | the substitute keeps every element the original overwrote | `LiftedC/open_narrow_index.c` |
-| `wtc-cc --unity`: header statics and tentative definitions | a header with an include guard and a static of its own (C or C++), whose second include the unit skips, so that the files share the static; or `static int x;` in two files, tentative definitions of one internal object in the unit (C11 6.9.2) | the files share state that each has its own of compiled apart; the check that each file means in the unit what it means alone does not catch it | `LiftedC/open_unity_header_static.c`, `LiftedC/open_unity_tentative.c` |
+| finding | the shape | what lifting it did | closed by | test |
+|---|---|---|---|---|
+| closed world: an integer through the coerced exception | with a file linked, the object's address leaves as an integer through `__builtin_bit_cast` (`std::bit_cast`'s body), the bits of a pointer slot loaded as an integer, which the "coerced" exception admitted when the load went to a function of this module; that function keeps it in a global, and `main` hands it to the other file | the other file, built at `-O2` with no symbol naming the class, turns the integer back into the class and reads the substitute's pointer as the container | the escape analysis: the bits, the integer and the call are one class with the object | `Lifted/escape_bits_cast.cpp` |
+| closed world: pointers to functions in globals | a global another file may name holds a pointer to a function that returns the object, which is itself static; the search for the class in such globals' types did not enter function types | as above, through the pointer | the escape analysis: a function whose address reaches the other file is called by it | `Lifted/escape_function_pointer_global.cpp` |
+| closed world: call results, placement new into foreign storage | the object is built by placement new in storage that another file hands over as the result of a call with no body here (a call's arguments were checked, not its result), and that file reads it by its own pointer | the other file reads the substitute's pointer as the container | the escape analysis: a result of such a call is the other file's | `Lifted/escape_foreign_storage.cpp` |
+| closed world: `__cxa_atexit` forwarding | the object's address, made `void *`, registered with `__cxa_atexit` for a function with a body here, which the exception for a global's destructor admitted; that function hands it on to another file | the other file reads the substitute's pointer as the container at exit | the escape analysis: the registered argument is the callback's parameter, followed to the call | `Lifted/escape_atexit_forwarding.cpp` |
+| closed world, C: a pointer to a function that returns a static holder | a static struct that holds the queue, and a global another file names holding a pointer to a function that returns the struct's address | the other file reads the substitute's pointer as the queue's index | the escape analysis, as for C++ | `LiftedC/escape_function_pointer.c` |
+| closed world, C: storage from a call with no body here | the queue, or a struct that holds it, is another file's, reached here only through a function with no body here; its uses here are only the queue's functions | as above | the escape analysis, as for C++ | `LiftedC/escape_storage_from_call.c` |
+| (e) `std::allocator` specialised by the program | `std::allocator<Item>` specialised for the program's own element type, which bounds the queue as `allocator_bound.cpp`'s allocator does; the name the check reads is `std::allocator` of the element | the substitute allocates without it and refuses no push | open | `Lifted/open_allocator_specialisation.cpp` |
+| C: a union that holds the queue | a queue inside a union, read through the union's other member; the step to that member is not a step to the queue | the other member reads the substitute's pointer | open | `LiftedC/open_union_holder.c` |
+| C: a ring's narrow index | a ring whose indices are `unsigned char`, wrapping at 256 before the slot count, by `++` or by the `int` result of `(put + 1) % nslots` converted back; the C ring's evaluator takes the increment, and a conversion that loses values, for the identity | the substitute keeps every element the original overwrote | open | `LiftedC/open_narrow_index.c` |
+| `wtc-cc --unity`: header statics and tentative definitions | a header with an include guard and a static of its own (C or C++), whose second include the unit skips, so that the files share the static; or `static int x;` in two files, tentative definitions of one internal object in the unit (C11 6.9.2) | the files share state that each has its own of compiled apart; the check that each file means in the unit what it means alone does not catch it | open | `LiftedC/open_unity_header_static.c`, `LiftedC/open_unity_tentative.c` |
 
 ## The shape
 
@@ -260,20 +264,39 @@ prefixed by the condition it fails.
   Symbols cannot show that a linked file leaves the class alone: its copy
   of a member function may be inlined where it is called (`-O2`), and
   then no symbol names the class. So, with any file linked, the module's
-  own code must keep the object out of that file's reach, by a rule on
-  types: no global another file may name (not static, or only declared
-  here) has a type that holds or points to the class, at any depth; no
-  call hands such a value to a function with no body here, to an indirect
-  call or to a function a linked file names; no function a linked file
-  names takes or returns one; and no pointer to such a thing is converted
-  to a type that is not one (`void *`, an integer, a base class), which
-  the pass could no longer follow. Three conversions stay in the module
-  and are allowed: the address handed to `operator delete`, an object
-  passed in registers (a lambda that captures `this`, read as `void *`
-  to pass it) to a function of this module the files do not name, and a
-  global's destructor registered with `__cxa_atexit`. Without a linked
-  file, the functions with no body are the system's libraries, which hold
-  no code compiled from the class.
+  own code must keep the object out of that file's reach, and an escape
+  analysis decides it (`EscapeAnalysis.h`). It follows values, not types:
+  a unification-based points-to analysis over the whole module, in which
+  an assignment, a cast of any kind (an integer made from a pointer
+  included), a member or element step, arithmetic, a call's argument and
+  the callee's parameter, a return and the call's result put two values
+  in one class, and a load, a store or a copy relate a class to what its
+  values point to. The code the pass does not see is one more class, the
+  outside, and its roots are the globals a linked file names, those only
+  declared here (but the C++ ABI's vtables and type_info) and those in a
+  section of their own or kept by `llvm.used`; the parameters and results
+  of the functions a linked file names, aliases included; the arguments
+  and results of calls of functions with no body here; the indirect calls
+  whose callee may be the outside's; the parameters and results of a
+  function whose address reaches it; inline assembly; and a thrown
+  exception. The library models are deny-by-default (since 6 Nov 2026): a
+  short, audited list of the C library's and libstdc++'s functions says
+  what each does with its pointers (allocation, deallocation, the mutexes
+  and condition variables, the string and memory functions, formatted
+  output and input by the conversions of a literal format, files read and
+  written, `pthread_join`'s result, a callback's argument), and any other
+  function with no body here, or one a linked file defines under a name on
+  the list, may keep and hand on what it is handed. The analysis runs
+  whether or not a file is linked: with none, the system's libraries may
+  still hand the object back. The class's own operations, whose bodies
+  the rewrite replaces, are left out: a call of one hands it the object.
+  The class is refused when the class of a value handed to one of them as
+  the object reaches the outside, and the remark names the root that made
+  it so. Within the module, a cast of a value that may point to the
+  object to a pointer to another type (its first member, by
+  `reinterpret_cast`), and a pointer to one of its members, read its
+  storage without a member step the confinement sees, and refuse it under
+  (a).
 
 The pass also counts, per class, every container operation and wait form
 it saw (the "uses" remark), so that a refusal says what a class would need.
@@ -288,6 +311,236 @@ cleanup scope, a `pthread_mutex_lock` and its unlock), what each reads and
 writes, and the calls made in it one level down, so that a member function
 called only with the mutex held, such as BS::thread_pool's `pop_task`, is
 seen under it (`wtc-opt --wtc-critical-sections` prints them).
+
+## Assumptions
+
+Lifting is a soundy front end: it is faithful for every program that
+meets the contract above and the assumptions below, and for no other is
+anything claimed. This is the complete list of what the proof of
+conditions (a) and (f) takes for granted (`EscapeAnalysis.h`,
+`ClosedWorld.h`, `tools/wtc-cc`); each says why it is
+reasonable and what a program that breaks it looks like. Where an
+assumption is sound, breaking it only refuses more; breaking any other is
+a program the substitution may change, and a finding against this list.
+
+What the substitution preserves, and what it does not, is the contract
+("The contract", above: the whole program, a race-free program free of
+undefined behaviour, the observable behaviour, the queue's semantics, and
+the known differences listed there) and, for a bounded ring and a C queue,
+"What a program may still see differently" and "What the substitution
+keeps, and what it changes" below. The assumptions here are about how the
+pass decides that a program is inside that contract.
+
+- **The program is free of undefined behaviour.** A pointer is used only
+  to reach the object it was formed from (or one it is
+  pointer-interconvertible with), an integer made from a pointer is made
+  back into a pointer to the same object, a union's member is read only
+  as the one last written or through the type-punning C allows: the
+  analysis follows what the program does with its values, and a program
+  that reaches the object by guessing its address, or through memory it
+  does not own, is outside the contract.
+- **Field insensitivity, context insensitivity (sound, imprecise).** The
+  analysis keeps one class for every member of an object and for every
+  value that may point to it, and one class for a function's parameters
+  and result across all its calls; a small function of the system's
+  headers that calls nothing (an accessor, an iterator's step) is
+  summarised once and copied at each call. It can only merge more than
+  the program does, so it never misses a path; it refuses programs that
+  are faithful to lift ("Known limitations", below).
+- **Constructors and destructors are the program's code.** The rewrite
+  replaces only the container's construction and destruction in them, so
+  the analysis walks them as written, and a call of one hands it the
+  object; the operations, whose bodies the rewrite replaces whole, are
+  left out.
+- **An object's vptr is a field of its own.** It is not merged with the
+  object's other members: it holds only vtable addresses, which the front
+  end stores and the program does not.
+- **A vtable stored during construction is overwritten by the derived
+  one.** A base class's constructor stores the base's vtable into the
+  vptr, the derived class's constructor then the derived one; a virtual
+  call on the object may reach the functions of every vtable stored
+  there, and one that can reach only a vtable only declared here (a class
+  of libstdc++'s) is a call of code the pass does not see. The assumption
+  is that the virtual calls of a fully built object go to the most derived
+  class's functions, which the module has whenever it builds the object.
+  A program breaks it by calling, from a base class's constructor or
+  destructor, a virtual function the base's file defines, and handing it
+  the object.
+- **The C++ ABI's data holds no object of the program's.** A vtable, a
+  `type_info` and its name, a VTT, declared here and defined in a
+  library, are no root: they are read-only tables of functions and
+  strings. A program breaks it only by writing into one.
+- **The audited list, and deny-by-default for everything else.** A
+  function with no body here is modelled only if it is on this list, and
+  only by what the C library or libstdc++ documents it to do with its
+  pointers; any other one, and one of these names that a linked file
+  defines (the program's own), may keep and hand on what it is handed,
+  and what it returns is the outside's:
+  - fresh storage: `malloc`, `calloc`, `aligned_alloc`, `memalign`,
+    `posix_memalign`, the global `operator new` forms,
+    `__cxa_allocate_exception`, `fopen`, `fdopen`, `tmpfile`,
+    `__errno_location`, the `__ctype_*_loc` functions, `strerror`,
+    `getenv`, and DPDK's `rte_malloc` family and its ring, stack and
+    mempool constructors; `strdup` and `strndup`, whose copy holds what the
+    argument held;
+  - deallocation, and functions that keep nothing and return nothing they
+    are handed: `free`, `rte_free`, the global `operator delete` forms,
+    `__cxa_free_exception`, `memcmp`, `strcmp`, `strncmp`, `strlen`,
+    `strnlen`, `strcasecmp`, `strncasecmp`, `strspn`, `strcspn`,
+    `fflush`, `fclose`, `fileno`, `feof`, `ferror`, `open`, `close`,
+    `lseek`, `pipe`, `unlink`, `abort`, `exit`, `_exit`, `quick_exit`,
+    `__assert_fail`, `__stack_chk_fail`, the clocks and sleeps (`time`,
+    `clock`, `clock_gettime`, `gettimeofday`, `sleep`, `usleep`,
+    `nanosleep`, `sched_yield`, `sched_getcpu`, `sysconf`, `get_nprocs`,
+    `getpid`), the random numbers (`rand`, `srand`, `rand_r`, `random`,
+    `srandom`), the mathematical and character functions, the pthread
+    mutexes, condition variables (`pthread_cond_clockwait` included),
+    spinlocks, read-write locks, barriers and attributes, `pthread_self`,
+    `pthread_equal`, `pthread_detach`, `pthread_setaffinity_np`,
+    `pthread_getaffinity_np`, the semaphores (`sem_init`, `sem_wait`,
+    `sem_trywait`, `sem_post`, `sem_destroy`, `sem_getvalue`), the guard
+    and unwinding functions (`__cxa_guard_*`, `__cxa_pure_virtual`,
+    `__cxa_end_catch`, `_Unwind_Resume`, `__gxx_personality_v0`), and of
+    libstdc++ `std::condition_variable` (construction, destruction,
+    `notify_one`, `notify_all`, `wait`), `std::thread::join`, `detach`
+    and `hardware_concurrency`, `std::thread::_State`'s destructor,
+    `std::terminate`, the steady and system clocks' `now`,
+    `std::this_thread::__sleep_for`, `std::ios_base::Init`, the throw
+    helpers `std::__throw_*` and `std::exception`'s destructor;
+  - copies, returned arguments and numbers read: `memcpy`, `memmove`,
+    `strcpy`, `strncpy`, `strcat`, `strncat`, `stpcpy` and their `_chk`
+    forms (the destination's memory holds what the source's held, and the
+    destination is returned); `memset`, `strchr`, `strrchr`, `strstr`,
+    `memchr`, `strpbrk` and `realloc` return their first argument;
+    `strtol`, `strtoul`, `strtoll`, `strtoull`, `strtod`, `strtof`,
+    `strtold` and glibc's `__isoc23_` forms return what the string's
+    memory holds and store into the end pointer a pointer into the
+    string; `atoi`, `atol`, `atoll` and `atof` return what it holds;
+  - formatted output and input, by the conversions of a literal format
+    (`%p` and the numbers are values, `%s` the string's memory, `%n`
+    nothing; a format that is not a literal may format any of them):
+    `printf`, `vprintf`, `fprintf`, `dprintf`, `__printf_chk` and
+    `__fprintf_chk` write to files; `sprintf`, `snprintf` and their `_chk`
+    forms write into their first argument's memory; `scanf`, `fscanf` and
+    their `__isoc99_` and `__isoc23_` forms read from files, `sscanf` from
+    its first argument's memory; `puts`, `fputs`, `perror`, `fwrite` and
+    `write` write memory to a file, `putchar`, `putc` and `fputc` their
+    argument; libstdc++'s stream insertions (`operator<<`,
+    `ostream::write`, `put`) write their first argument and its memory;
+    `read`, `fgets` and `fread` read a file into memory. What is written
+    to files, and what is read from them, is the outside's, a file linked
+    or not: a function off the list (`pread`, `recv`) or another process
+    may read it back;
+  - structures: libstdc++'s out-of-line `std::basic_string` members, the
+    red-black tree's insertion, rebalancing, increment and decrement, and
+    the list node's functions, which link and copy their arguments'
+    memory into each other;
+  - threads and callbacks: `pthread_create` (the function is called with
+    the argument; what it returns, and what `pthread_exit` is handed, is
+    what `pthread_join` stores), `std::thread::_M_start_thread` (the
+    state's `_M_run`), `__cxa_atexit`, `__cxa_thread_atexit`, `atexit`,
+    `at_quick_exit`, `on_exit` (the argument is the callback's second
+    parameter) and `pthread_once`. A callback with no body here, or one
+    the pass cannot name, is a call of a function with no body here.
+
+  The list is short so that each entry can be checked against the
+  library's documentation; a program that uses anything else (`mmap`,
+  `shmat`, `pread`, `dlopen`, `dlsym`, `signal`, `sigaction`, `setjmp`,
+  `qsort`, a library's callback interface) is refused if the object may
+  reach it. A program breaks the assumption only if one of these
+  functions does more than the list says, which is a finding against the
+  list.
+- **One address space, nothing shared with another process beyond what
+  is modelled.** The object is in this process's memory and no other
+  process maps it. `mmap`, `shmat`, `shm_open` and the like are not on
+  the list: what they return is the outside's, so a program that keeps
+  the object's address in shared memory, or maps one file twice, has it
+  escape. A program breaks the assumption with memory shared in a way no
+  call shows (a write to `/proc/self/mem`, a debugger, a mapping another
+  process set up before `exec`).
+- **No signal handler, `setjmp` or `longjmp` reaches the queue.**
+  `signal`, `sigaction` and `setjmp` are not on the list: a handler
+  handed to them is a function whose address reaches the outside, so its
+  parameters and result are the outside's, and a `jmp_buf`'s memory is
+  the outside's. A handler that calls the queue's operations, or a
+  `longjmp` out of one (from a handler, or from a function an operation
+  calls), interrupts it with the original's mutex held; such a program is
+  outside the contract, as it is not race-free (the original's mutex is
+  not async-signal-safe either), and the pass does not decide it.
+- **Inline assembly does what it likes.** Its operands and results are
+  roots, and memory it may touch through them is the outside's.
+- **A reinterpretation of the object is in the program's own code, or in
+  libstdc++'s pointer casts.** The module itself may not read the object
+  as another type. Refused, for a value that may point to the object: a
+  cast (a bit cast, an integer made a pointer) to a pointer to another
+  type than the object's, a record that holds it, or void; a cast of a
+  value that may point to a slot holding a pointer to it (the slot of
+  `__builtin_bit_cast`) to a pointer to a pointer of another type; a
+  union's member read as another pointer type than the one stored; a
+  `memcpy` of a pointer to it into a pointer of another type; a byte
+  view of it (`char`, `unsigned char`, `std::byte`) used for anything but
+  clearing, copying or freeing it whole (`memset`, `memcpy`, `memmove`,
+  `free`, `operator delete`, a comparison, a lifetime marker); a pointer
+  to one of its members. A check of a value typed as the object (or as
+  what holds it) applies wherever the cast is; one of a value that only
+  the classes say may point to it applies in the program's own files and
+  in libstdc++'s `static_pointer_cast`, `reinterpret_pointer_cast`,
+  `const_pointer_cast` and `dynamic_pointer_cast`. The rest of the
+  system's headers (libstdc++'s allocators and containers) are taken to
+  type as their element only storage they allocated, and a cast of
+  storage an allocator has just returned is no reinterpretation. A
+  program breaks it by having another part of libstdc++ read the object
+  as another type, which needs the program's own specialisation of a
+  template in `std`, or a header of its own in a system directory.
+- **The shim's runtime is the compiler's, known by its headers.** The
+  functions defined in the shim's `lifted.hpp`, `queue.hpp`,
+  `bounded.hpp` and `c_queue.h`, in a directory `shim` that holds
+  `lifted.hpp`, and in the `runtime` directory beside it, are one class:
+  what any of them is handed, any of them may hand back, and they keep it
+  from everyone else. Never by a function's name: the program may name
+  its functions as it likes (namespace `wtc`, `wtc_*`), and a function a
+  linked file defines is never the runtime. A program breaks it only by
+  placing a header of its own under one of those names in the compiler's
+  shim directory.
+- **No file finds the module's symbols by name at run time.** Another
+  file reaches the module's symbols through the symbols nm lists for it,
+  and the executable exports none it does not list: `-rdynamic`,
+  `-Wl,-E`, `--export-dynamic` make the world open. A `dlopen` or `dlsym`
+  of the program's own is off the list, and returns the outside's values;
+  a library that looks up the executable's symbols by a string it builds
+  is outside the contract.
+- **A process does not fork with the queue in use.** `fork` is not on
+  the list; a child that uses a queue its parent shares with other
+  threads is outside the contract, for the original as for the
+  substitute.
+
+### Known limitations
+
+What the pass refuses rather than models, so that a refusal of one of
+these shapes is expected, not a finding:
+
+- the object read as another type by the module itself, in every form
+  the list above names (a pointer to a member, a cast, a slot, a union, a
+  `memcpy`, a byte view other than whole), even where the program is
+  well-defined (a standard-layout class read through its first member);
+- the object reaching a function off the audited list: `mmap`, shared
+  memory, `pread`, `recv`, `dlopen`/`dlsym`, signal handlers, `setjmp`,
+  `qsort` and other callback interfaces, inline assembly;
+- what the program prints, writes or reads, when its class may hold the
+  object's address: printed values are the outside's, and with the
+  analysis field-insensitive a value computed from a class that holds the
+  queue (a counter a task captures in CTPL's model, where the worker's
+  wait predicate captures both the pool and the slot a pop fills) may be
+  one class with it: `Lifted/ctpl.cpp` is refused since 23 Nov 2026;
+- a class that holds the queue and a container of elements that point
+  back to it is one class with them, and so are the objects of every
+  std::function a small function of the system's headers with calls
+  merges (a template accessor is not summarised);
+- C: a queue in a union read through another member, a ring whose index
+  is narrower than 32 bits and the slot count, a ring whose indices are
+  bit-fields (the evaluator does not read `set_bitfield`), a channel of
+  channels handed as `void *`;
+- a C++ class in a union (not checked: the union rule is the C pass's).
 
 ## What the substitution keeps, and what it changes
 
@@ -510,14 +763,14 @@ reduced. Read as written, without source edits (29 Oct 2026):
 
 | program, class | verdict | why |
 |---|---|---|
-| CTPL, `detail::Queue` (`ctpl_stl.h`) | lifts | push and try-pop; the pool's own condition variable and mutex stay, and the element, a pointer, is copied out, which is moving it. The model's topology is many to many (two threads submit; the pool's workers and the stopping thread pop), so the general-purpose queue. The real library with the leg's driver (`benchmarks/apps/ctpl`), one submitter, is spmc: the workers and the stopping thread pop |
+| CTPL, `detail::Queue` (`ctpl_stl.h`) | refused since 23 Nov 2026, lifted before | a false refusal of the field-insensitive escape analysis ("Known limitations"): the worker's wait predicate captures both the pool and the slot a pop fills, so the pool is one class with the tasks and what main prints. Its operations match: push and try-pop; the pool's own condition variable and mutex stay, and the element, a pointer, is copied out, which is moving it. The model's topology is many to many (two threads submit; the pool's workers and the stopping thread pop), so the general-purpose queue. The real library with the leg's driver (`benchmarks/apps/ctpl`), one submitter, is spmc: the workers and the stopping thread pop |
 | g3log, `shared_queue` (`shared_queue.hpp`) | lifts | push and a blocking pop; shutdown is a message, so no stop flag. In the model, with one `Active` object, the queue is proved many producers to one consumer and becomes the single-consumer queue; the model runs correctly under ThreadSanitizer and `WTC_CHECK`. The real program (`benchmarks/apps/g3log`, the logger and its performance test as one unit) builds one `Active` per sink type and one for the worker, each popped by its own thread; the queue stands for all of them, so many to many |
 | BS::thread_pool, `tasks` (`BS_thread_pool.hpp`) | refused | (c) the mutex also guards the running count, the waiting flag, the thread count and the stop flag; (a) the worker pops through `pop_task()`, which takes no lock itself and runs only under the mutex the worker holds, but is none of the operations; (d) `get_tasks_queued()` reads `size()`, and `wait()` sleeps until the queue is empty and nothing runs, a joint invariant of the queue and the pool |
 | Bitcoin, `CCheckQueue::queue` (`checkqueue.h`) | refused | (e) a `std::vector` taken from the back, with range insert and erase; (d) the batch size is computed from `size()`; (c) the mutex also guards the idle, total and unfinished counts and the result |
 | cpp-httplib, `ThreadPool::jobs_` (`httplib.h`) | refused | (c) the mutex also guards the idle count, the admission bound and the dynamic threads; (d) `enqueue` decides on `jobs_.size()`; dynamic workers wait with a time-out. Its shutdown flag alone would have been supported |
 | spdlog, `mpmc_blocking_queue::q_` (`mpmc_blocking_q.h`) | lifts | `circular_q` is read as a ring of capacity `max_items`; `enqueue` waits for room, `enqueue_if_have_room` may decline (its discard count stays the class's), `enqueue_nowait` overruns, `dequeue` is the blocking pop (`dequeue_for`, used by spdlog before 1.10, the pop with a time limit). The overrun cannot run in the model, whose loggers are built with `block`, so it is left out there, and the model's queue is chosen when the pool builds it: single-consumer with one worker, else general-purpose (below). The real program, `benchmarks/apps/spdlog/bench.cpp` over spdlog's own headers, lifts and runs correctly with `WTC_CHECK` and under ThreadSanitizer; since 31 Oct 2026 its overrun is kept (the policy is read through `std::make_shared`'s control block, which the pass does not follow), so its loggers are consumers too and its queue is general-purpose |
 
-So three of the six lift.
+So two of the six lift, and a third (CTPL) matches but is refused for want of precision.
 
 spdlog's queue is many producers and many consumers, because the number
 of workers is known only when the pool is built; the pool knows it
@@ -692,9 +945,12 @@ condition:
   int id; struct chan q; }`) is confined as the queue is, since what
   reaches it reaches the queue: it is not copied or written whole, a
   pointer to one is only stepped into, compared, loaded and stored as its
-  own type, handed to functions with a body here and freed; a global
-  whose type holds or points to the queue is not named by a linked file,
-  and one initialised statically must leave the queue inside it zero. Each function is one of the operations or a helper
+  own type, handed to functions with a body here and freed, and one
+  initialised statically must leave the queue inside it zero. No queue
+  may be reached by code the pass does not see, a file linked or not, nor
+  read by the module as another type (offsetof arithmetic from another
+  member of a struct that holds it): the escape analysis of condition
+  (f), with the struct's functions as the operations, decides it. Each function is one of the operations or a helper
   only they call. What init, destroy and terminate return must be a
   constant, which the substitute returns in its place; a value computed
   from the queue or from the allocation refuses.
@@ -848,9 +1104,9 @@ from the pinned PARSEC tree, unedited, by `benchmarks/apps/*/build.sh`
 | ferret, `struct queue` (`src/queue.c`) | lifts | init, destroy, push, pop, terminate, with ferret's capacity (`DEPTH - 1`) and the counted close over `prod_threads`. The model, which starts its threads with `pthread_create`, gets its tags when the queues are built, from the counts in `argv`, and so does the real program since 30 Oct 2026, whose stages start through PARSEC's own thread pool and whose loader reaches the first queue through a recursive directory scan: every queue spsc at one thread a stage, its producers' or consumers' side many at more ("Reading the threads of real programs", below). Before, its five queues were unknown |
 | dedup, `queue_t` (`queue.c`, `queue.h`) | refused | "(d) queue_dequeue ends the program when (q->nProducers < q->nTerminated), a check the substitute does not make": its operations assert that no more producers terminate than there are, that nothing is pushed after the queue has finished and that no element is null, checks the substitute does not make. Otherwise its functions read as init, destroy, terminate, and the batched pop and push (`queue_dequeue`, `queue_enqueue`, through dedup's own `ringbuffer_*` helpers), with the counted close over `nProducers`; the model without the assertions lifts, as spsc with one thread a stage |
 
-So of the eight queues read from real programs, C++ and C, four lift
-(CTPL, g3log, spdlog, ferret) and four are refused, each for a reason the
-remark names.
+So of the eight queues read from real programs, C++ and C, three lift
+(g3log, spdlog, ferret) and five are refused, each for a reason the remark
+names; CTPL's lifted until 23 Nov 2026 and is now a false refusal.
 
 The runs below are of 30 Oct 2026, when dedup's assertions were dropped
 with the replaced bodies and dedup lifted; it is refused since. Both

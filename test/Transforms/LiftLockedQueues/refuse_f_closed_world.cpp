@@ -9,12 +9,13 @@
 // defined elsewhere all refuse. A list of other symbols leaves the class
 // alone, unless this module's own code puts the object within another
 // file's reach, which symbols cannot show (that file's copy of a member
-// function may be inlined, naming nothing): with any file linked, a global
-// another file may name that holds the class (GLOBAL; a static one lifts),
-// the object's address converted to void * (VOIDPTR), something that
-// points to it handed to a function with no body here (HOLDER), and a
-// function of this module that the other file names and that returns a
-// pointer to it (GETTER) refuse.
+// function may be inlined, naming nothing). The escape analysis follows the
+// object's address: with any file linked, a global that file names holding
+// it (GLOBAL; one it does not name, or a static one, lifts), its address
+// made void * and handed to a function with no body here (VOIDPTR), a
+// struct holding a pointer to it handed so (HOLDER), and a function of this
+// module that the other file names returning a pointer to it (GETTER)
+// refuse.
 //
 // RUN: %clangxx -std=c++17 -fclangir -emit-cir %s -o %t.cir
 // RUN: wtc-opt %t.cir --wtc-lift-locked-queues=rewrite=false -o /dev/null 2>&1 | FileCheck %s --check-prefix=CLOSED
@@ -27,9 +28,11 @@
 // RUN: wtc-opt %t.cir --wtc-lift-locked-queues="rewrite=false named-elsewhere=%t.other" -o /dev/null 2>&1 | FileCheck %s --check-prefix=CLOSED
 // RUN: %clangxx -std=c++17 -fclangir -emit-cir %s -DGLOBAL -o %t.global.cir
 // RUN: wtc-opt %t.global.cir --wtc-lift-locked-queues=rewrite=false -o /dev/null 2>&1 | FileCheck %s --check-prefix=CLOSED
-// RUN: wtc-opt %t.global.cir --wtc-lift-locked-queues="rewrite=false named-elsewhere=%t.other" -o /dev/null 2>&1 | FileCheck %s --check-prefix=GLOBAL
+// RUN: wtc-opt %t.global.cir --wtc-lift-locked-queues="rewrite=false named-elsewhere=%t.other" -o /dev/null 2>&1 | FileCheck %s --check-prefix=CLOSED
+// RUN: printf '_Z6reportR3LQ2IiE\ngq\n' > %t.gq
+// RUN: wtc-opt %t.global.cir --wtc-lift-locked-queues="rewrite=false named-elsewhere=%t.gq" -o /dev/null 2>&1 | FileCheck %s --check-prefix=GLOBAL
 // RUN: %clangxx -std=c++17 -fclangir -emit-cir %s -DGLOBAL -DSTATIC=static -o %t.static.cir
-// RUN: wtc-opt %t.static.cir --wtc-lift-locked-queues="rewrite=false named-elsewhere=%t.other" -o /dev/null 2>&1 | FileCheck %s --check-prefix=CLOSED
+// RUN: wtc-opt %t.static.cir --wtc-lift-locked-queues="rewrite=false named-elsewhere=%t.gq" -o /dev/null 2>&1 | FileCheck %s --check-prefix=CLOSED
 // RUN: %clangxx -std=c++17 -fclangir -emit-cir %s -DVOIDPTR -o %t.void.cir
 // RUN: wtc-opt %t.void.cir --wtc-lift-locked-queues="rewrite=false named-elsewhere=%t.other" -o /dev/null 2>&1 | FileCheck %s --check-prefix=VOIDPTR
 // RUN: %clangxx -std=c++17 -fclangir -emit-cir %s -DHOLDER -o %t.holder.cir
@@ -49,10 +52,10 @@
 // PARAM: locked queue q_ in LQ<int> not lifted: (f) a file linked with this one names LQ<int> (report(LQ<int>&))
 // NOMAIN: locked queue q_ in LQ<int> not lifted: (f) the module has no main: the rest of the program, elsewhere, may use LQ<int> as written
 // OOL: locked queue q_ in LQ<int> not lifted: (f) LQ<int>::pending has no body here: another unit defines it
-// GLOBAL: locked queue q_ in LQ<int> not lifted: (f) the global gq, which a file linked with this one may name, holds or points to LQ<int>
-// VOIDPTR: locked queue q_ in LQ<int> not lifted: (f) main converts a pointer to LQ<int>, or to what holds or points to it, to void *, which the pass does not follow
-// HOLDER: locked queue q_ in LQ<int> not lifted: (f) main hands LQ<int>, or what holds or points to it, to inspect(Holder&), which has no body here
-// GETTER: locked queue q_ in LQ<int> not lifted: (f) a file linked with this one names get(), which takes or returns LQ<int> or a pointer to it
+// GLOBAL: locked queue q_ in LQ<int> not lifted: (f) an object of LQ<int> may be reached by code the pass does not see: the global gq, which a file linked with this one names, may hold it
+// VOIDPTR: locked queue q_ in LQ<int> not lifted: (f) an object of LQ<int> may be reached by code the pass does not see: main hands a value that may point to it to inspect, which has no body here
+// HOLDER: locked queue q_ in LQ<int> not lifted: (f) an object of LQ<int> may be reached by code the pass does not see: main hands a value that may point to it to inspect(Holder&), which has no body here
+// GETTER: locked queue q_ in LQ<int> not lifted: (f) an object of LQ<int> may be reached by code the pass does not see: a file linked with this one names get, which may be handed it or hand it back
 
 #include <condition_variable>
 #include <cstddef>
@@ -103,6 +106,9 @@ int main() {
     LQ<int>& q = gq;
 #else
     LQ<int> q;
+#endif
+#if defined(GETTER)
+    got = &q;
 #endif
 #if defined(VOIDPTR)
     inspect(&q);

@@ -10,9 +10,10 @@
 // member only, the condition is decided and the push left out, unless any
 // file is linked with this one (LINKED): its code may reach a record's
 // members without a symbol that names the record (its copy of an inline
-// function, inlined), so every member is unknown then. In both linked
-// runs the class itself is refused too, since main hands the queue to
-// post as a void *, which the files may reach.
+// function, inlined), so every member is unknown then. Where the other
+// file names post, the class itself is refused too: the queue reaches it
+// through post's parameter; where it names only malloc, nothing it can
+// reach holds the queue, and the class lifts.
 //
 // RUN: %clangxx -std=c++17 -fclangir -emit-cir %s -DPLAIN -o %t.plain.cir
 // RUN: wtc-opt %t.plain.cir --wtc-lift-locked-queues=rewrite=false -o /dev/null 2>&1 | FileCheck %s --check-prefix=PRUNED
@@ -44,10 +45,10 @@
 // KEPT: locked queue q_ in Q lifts
 // CALLED: Q::enqueue_nowait may overrun, so its callers are consumers too
 // CALLED-SAME: a parameter of post(void*, int, int), which another file may call
-// CALLED: locked queue q_ in Q not lifted: (f) main converts a pointer to Q, or to what holds or points to it, to void *
+// CALLED: locked queue q_ in Q not lifted: (f) an object of Q may be reached by code the pass does not see: a file linked with this one names post, which may be handed it or hand it back
 // LINKED: Q::enqueue_nowait may overrun, so its callers are consumers too
 // LINKED-SAME: a member of Cfg, whose storage is open to the files linked with this one
-// LINKED: locked queue q_ in Q not lifted: (f) main converts a pointer to Q, or to what holds or points to it, to void *
+// LINKED: locked queue q_ in Q lifts
 
 #include "Inputs/circular_q.h"
 

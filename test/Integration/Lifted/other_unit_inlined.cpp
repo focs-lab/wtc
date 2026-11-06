@@ -3,8 +3,9 @@
 // of the member function is inlined, and it reaches the object through a
 // global (GLOBAL) or a void * it is handed (VOIDPTR). The symbols nm
 // lists cannot tell; this file's own code can. With a file linked, the
-// class does not lift when a global another file may name holds it, or
-// when its address leaves the types the pass follows. Lifted, the other
+// class does not lift when the escape analysis finds the object's address
+// reaching that file: a global it names holds it, or a function with no
+// body here is handed it. Lifted, the other
 // file's inlined count read the substitute's pointer as a std::deque.
 // The program runs as written in both cases.
 //
@@ -15,9 +16,9 @@
 // RUN: %wtc_cc --lift -O1 -DWTC_CHECK %s %t.void.o -o %t.void.exe 2>&1 | FileCheck %s --check-prefix=VOIDPTR
 // RUN: %t.void.exe | FileCheck %s --check-prefix=OUT
 //
-// GLOBAL: locked queue q_ in LQ<int> not lifted: (f) the global gq, which a file linked with this one may name, holds or points to LQ<int>
+// GLOBAL: locked queue q_ in LQ<int> not lifted: (f) an object of LQ<int> may be reached by code the pass does not see: the global gq, which a file linked with this one names, may hold it
 // GLOBAL-NOT: lifted (
-// VOIDPTR: locked queue q_ in LQ<int> not lifted: (f) main converts a pointer to LQ<int>, or to what holds or points to it, to void *, which the pass does not follow
+// VOIDPTR: locked queue q_ in LQ<int> not lifted: (f) an object of LQ<int> may be reached by code the pass does not see: main hands a value that may point to it to report, which has no body here
 // VOIDPTR-NOT: lifted (
 // OUT: pending 3
 // OUT: sum 3

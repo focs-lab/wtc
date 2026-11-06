@@ -26,7 +26,7 @@
    RUN: wtc-opt %t.list.cir --wtc-lift-c-queues="rewrite=false named-elsewhere=%t.list" -o /dev/null 2>&1 | FileCheck %s --check-prefix=PLAIN
 
    PLAIN: C queue struct chan lifts
-   NAMED: C queue struct chan not lifted: (a) A is named by another file linked with this one
+   NAMED: C queue struct chan not lifted: (a) a queue may be reached by code the pass does not see: the global A, which a file linked with this one names, may hold it
    STATIC: C queue struct chan not lifted: (a) A is initialised statically, not by chan_open
    COPY: C queue struct chan not lifted: (a) main copies a struct that holds the queue
    PASSED: C queue struct chan not lifted: (a) main passes a pointer to a struct that holds the queue to inspect, which has no body here

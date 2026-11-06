@@ -1202,6 +1202,10 @@ public:
     Option<std::string> namedElsewhere{
         *this, "named-elsewhere", llvm::cl::init(""),
         llvm::cl::desc("A file of the symbols the other files linked with this one define or reference")};
+    Option<std::string> definedElsewhereFile{
+        *this, "defined-elsewhere", llvm::cl::init(""),
+        llvm::cl::desc("A file listing the symbols the other files linked with this module define: a function "
+                       "of a library's name there is the program's, and escapes what it is handed")};
     Option<bool> openWorld{*this, "open-world", llvm::cl::init(false),
                            llvm::cl::desc("Other units may name any external symbol of this one")};
 
@@ -1242,7 +1246,7 @@ void LiftCQueuesPass::runOnOperation() {
         auto rec = pt ? dyn_cast<cir::RecordType>(pt.getPointee()) : cir::RecordType();
         if (rec) names.try_emplace({rec, static_cast<unsigned>(gm.getIndex())}, gm.getName().str());
     });
-    if (failed(world.init(module, ClosedWorldOptions{openWorld, namedElsewhere}))) return signalPassFailure();
+    if (failed(world.init(module, ClosedWorldOptions{openWorld, namedElsewhere, definedElsewhereFile}))) return signalPassFailure();
 
     // Structs with a pthread mutex and a condition variable, directly or in
     // a member struct, and the functions that take a pointer to them.
@@ -1316,9 +1320,35 @@ void LiftCQueuesPass::analyse(Candidate &c) {
     if (world.openWorld()) refuseWith(c, "(a) the module is compiled to be linked with units it does not see");
     analyseOps(c);
     if (!closed) return;
-    llvm::DenseSet<Operation *> own;
-    for (Fn &fn : c.fns) own.insert(fn.f);
-    world.confineStruct(c.rec, own, [&](unsigned i) { return field(c, {i}); }, c.v);
+    // The struct's functions; those whose bodies the rewrite replaces (a
+    // helper stays, called by nothing once they are), and which argument
+    // of each is the queue.
+    llvm::DenseSet<Operation *> own, replaced;
+    llvm::DenseMap<Operation *, unsigned> queueArg;
+    for (Fn &fn : c.fns) {
+        own.insert(fn.f);
+        if (fn.role != Role::Helper) replaced.insert(fn.f);
+        queueArg[fn.f] = fn.q;
+    }
+    // The element: what the ring's slots hold, when the layout is known.
+    Type element;
+    if (c.ring.known) {
+        Type t = c.rec;
+        for (unsigned i : c.ring.d) {
+            auto r = dyn_cast<cir::RecordType>(t);
+            t = r && i < r.getMembers().size() ? r.getMembers()[i] : Type();
+        }
+        if (auto pt = dyn_cast_or_null<cir::PointerType>(t)) element = pt.getPointee();
+    }
+    world.confineStruct(
+        c.rec, own, replaced,
+        [&](cir::FuncOp f) -> std::optional<unsigned> {
+            auto it = queueArg.find(f);
+            if (it == queueArg.end()) return std::nullopt;
+            return it->second;
+        },
+        element,
+        [&](unsigned i) { return field(c, {i}); }, c.v);
 }
 
 void LiftCQueuesPass::analyseOps(Candidate &c) {
