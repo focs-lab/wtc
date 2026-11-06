@@ -120,7 +120,7 @@ version lifted unfaithfully:
 | (a) G is initialised statically, not by init | the same struct holding the queue, initialised statically (`= { 1, { 0, 0, buf, ... } }`) | init never built the queue inside it, and the lifted program crashed (31 Oct) |
 | none: the ring is built with no room | a C ring of zero slots, its count read at run time | the substitute, built with the slots minus one places, ended the program at init, where the original's pops answer "finished" (31 Oct) |
 | (d) F wakes one pop at the last termination, with a signal, where the substitute wakes them all | a C termination that signals the pops' variable | with two pops asleep and a pop that does not pass the wake-up on, the original leaves one asleep for ever; the substitute's close woke both, and the program finished (31 Oct) |
-| `wtc-cc --unity`: a file means something else in the unity than compiled apart | an earlier file that leaves `#pragma pack` open, has a static of a name a later file declares `extern`, or adds an overload a later file's call prefers | the unit was compiled as one, and printed another size, another variable, another overload's output (31 Oct; the build stops) |
+| `wtc-cc --unity`: a file means something else in the unity than compiled apart | an earlier file that leaves `#pragma pack` open, has a static of a name a later file declares `extern`, or adds an overload a later file's call prefers | the unit was compiled as one, and printed another size, another variable, another overload's output (31 Oct; the build stopped. Since 6 Nov 2026 the files are compiled apart and linked as CIR modules, "Several files", and each means what it means alone) |
 
 A move-only element (`std::unique_ptr<T>`, the common task) lifts: the
 runtime's copying push is compiled for it but never called. A push of
@@ -138,7 +138,9 @@ program's output as written; it was marked `XFAIL: *` while the finding
 was open. The first six were holes in the closed-world rule of conditions
 (f) and, for C, (a), which the escape analysis closes (since 6 Nov 2026,
 "Opt-in"): the class or struct is now refused, and the test checks the
-remark that says why.
+remark that says why. The others are closed by rules of their own, and the
+last by linking several files' CIR modules in place of concatenating
+their sources ("Several files"); none is open.
 
 | finding | the shape | what lifting it did | closed by | test |
 |---|---|---|---|---|
@@ -151,7 +153,7 @@ remark that says why.
 | (e) `std::allocator` specialised by the program | `std::allocator<Item>` specialised for the program's own element type, which bounds the queue as `allocator_bound.cpp`'s allocator does; the name the check reads is `std::allocator` of the element | the substitute allocates without it and refuses no push | condition (e): a `std::allocator` of the element whose `allocate` or `deallocate` the module defines without calling libstdc++'s refuses | `Lifted/allocator_specialisation.cpp` |
 | C: a union that holds the queue | a queue inside a union, read through the union's other member; the step to that member is not a step to the queue | the other member reads the substitute's pointer | condition (a): a step into a union that holds the queue, to another of its members, refuses | `LiftedC/union_holder.c` |
 | C: a ring's narrow index | a ring whose indices are `unsigned char`, wrapping at 256 before the slot count, by `++` or by the `int` result of `(put + 1) % nslots` converted back; the C ring's evaluator takes the increment, and a conversion that loses values, for the identity | the substitute keeps every element the original overwrote | condition (e): an index of fewer than 32 bits that does not hold every value of the slot count refuses | `LiftedC/narrow_index.c` |
-| `wtc-cc --unity`: header statics and tentative definitions | a header with an include guard and a static of its own (C or C++), whose second include the unit skips, so that the files share the static; or `static int x;` in two files, tentative definitions of one internal object in the unit (C11 6.9.2) | the files share state that each has its own of compiled apart; the check that each file means in the unit what it means alone does not catch it | open | `LiftedC/open_unity_header_static.c`, `LiftedC/open_unity_tentative.c` |
+| `wtc-cc --unity`: header statics and tentative definitions | a header with an include guard and a static of its own (C or C++), whose second include the unit skips, so that the files share the static; or `static int x;` in two files, tentative definitions of one internal object in the unit (C11 6.9.2) | the files share state that each has its own of compiled apart; the check that each file means in the unit what it means alone does not catch it | the files compiled apart and linked as CIR modules ("Several files"): each file's statics are its own | `LiftedC/unity_header_static.c`, `LiftedC/unity_tentative.c` |
 
 ## The shape
 
@@ -839,31 +841,54 @@ beyond the producers of a queue whose program tests its end count for
 equality ends the program, as above; a slot count below zero ends the
 program at init.
 
-### Several files: `--unity`
+### Several files
 
-The analysis takes one translation unit, and PARSEC keeps ferret's queue
-in its library and dedup's in a file of its own. `wtc-cc --unity a.c b.c
-...` compiles a generated file that includes each file, unedited, in the
-order given, as one unit; their file-scope names must not clash. Each file
-must mean what it means compiled apart: the macros a file defines in its
-own text are undefined after it, a file that defines a feature-test macro
-(`_GNU_SOURCE`, `_FILE_OFFSET_BITS`, which would configure the system's
-headers for every file after it) is refused, and if a file's own text,
-preprocessed alone and in the unit, differs (a macro of a header of an
-earlier file reaching it), the build stops. A file's text can read the
-same and still mean something else, so its meaning is checked as well
-(`tools/wtc-unity-check`): its LLVM IR, compiled alone and in the unit
-straight from the front end, must define the same functions and globals
-identically, and none of the names it only declares may be another
-file's static in the unit. An earlier file's `#pragma pack` left open
-(another size of a later file's structure), an overload a later file's
-call prefers, a static of a name a later file declares `extern`, an
-implicit declaration an earlier prototype replaces, each stops the build.
-The check is conservative: a C++ file with dynamic initialisation, whose
-functions the unit names after itself, stops it too. The
-benchmark scripts take the original files that hold the queue, the threads
-and `main` this way, and link the rest as PARSEC builds it (for ferret, its
-library without `queue.o` and `tpool.o`, whose functions the unit now
+The analysis takes the whole program as one module, and PARSEC keeps
+ferret's queue in its library and dedup's in a file of its own. `wtc-cc
+a.c b.c ...` compiles each source file apart, to its own CIR module, and
+links the modules into one (`wtc-link`, `mlir/tools/wtc-link`), as the
+system linker links their objects:
+
+- a symbol of internal linkage (a static function or variable, a string
+  literal, what an anonymous namespace holds) is its file's own: where
+  another file's symbol has its name, it is renamed (`name.uN` for the
+  Nth file) in every use in its file. A header's static, or `static int
+  x;` in two files, stays one object per file;
+- an external symbol is one symbol for the program: its one strong
+  definition is kept, or else the first of its weak or inline definitions
+  (the largest of its common ones), or else one only available
+  externally (an `extern template` instantiation), as the linker keeps
+  one copy of an inline function or a template's instance; two strong
+  definitions are an error, as they are for the linker. A file that
+  declared the symbol with another type (`extern int t[];` for `int
+  t[4];`) reads it through its own;
+- an inline variable or a template's static member with a dynamic
+  initialiser is initialised by the file whose definition is kept only:
+  the front end emits each file's initialiser with no guard;
+- a name a file uses and does not define is external, never another
+  file's static: an alias of a static the front end did not emit stops
+  the link with a reason;
+- a record type is the program's where every file that defines its name
+  defines it the same; a C struct tag another file defines otherwise is
+  renamed for that file, with the records that hold it;
+- the record layouts are merged, and the files' dynamic initialisers
+  (`cir.global_ctors`, `cir.global_dtors`) run in the order of the files.
+
+Since each file is compiled alone, it means what it means alone: its
+macros, its `#pragma`s, its feature-test macros and its declarations do
+not reach the other files. Until 6 Nov 2026 `--unity` concatenated the
+files into one translation unit, which had to check that each file meant
+the same there and could not see every way it did not (a header's static
+behind an include guard, two files' tentative definitions of one name,
+"Findings of 1 Nov 2026"); `--unity` is still accepted and changes
+nothing. For the lifting of C++ classes, the explicit instantiation of the
+runtime for a class's container goes after the first file in which it
+compiles, the file that defines the container's type; the runtime's
+header goes before the file, so that no macro of the program's reaches
+it. The benchmark
+scripts take the original files that hold the queue, the threads and
+`main` this way, and link the rest as PARSEC builds it (for ferret, its
+library without `queue.o` and `tpool.o`, whose functions the module now
 defines).
 
 ### ferret and dedup from PARSEC's sources
