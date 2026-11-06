@@ -101,7 +101,7 @@ ROOT=$(cd "$HERE/.." && pwd)
 SRCS=()
 KEEP=""; SPECIALIZE=1; LIFT=0; TSAN=0; CENSUS=0; COMPILE_ONLY=0; FORCE=""; FORCE_INLINE=""; TOOLCHAIN=""; OUT="a.out"; SRC=""
 BATCH_COST=""; BATCH_HOST=""; BATCH_NS=""
-PASSTHRU=(); LINKARGS=(); OPTARGS=()
+PASSTHRU=(); LINKARGS=(); OPTARGS=(); UNREAD=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --keep) KEEP=$2; shift 2 ;;
@@ -121,8 +121,22 @@ while [ $# -gt 0 ]; do
     --wtc-opt-arg) OPTARGS+=("$2"); shift 2 ;;
     -o) OUT=$2; shift 2 ;;
     *.cpp|*.cc|*.cxx|*.c) SRCS+=("$1"); shift ;;
-    *.o|*.a|*.so|-l*|-L*|-Wl,*) LINKARGS+=("$1"); shift ;;
-    *) PASSTHRU+=("$1"); shift ;;
+    *.o|*.a|*.so|*.so.[0-9]*|-l?*|-L?*|-Wl,*) LINKARGS+=("$1"); shift ;;
+    -l|-L) LINKARGS+=("$1$2"); shift 2 ;;
+    # A flag that takes the next argument as its value.
+    -I|-D|-U|-include|-isystem|-iquote|-idirafter|-x|-MF|-MT|-MQ|-Xclang|-mllvm|-target|--target|-arch)
+      PASSTHRU+=("$1" "$2"); shift 2 ;;
+    # What the driver does not read may link anything, or let a linked
+    # file find the program's symbols by name: a response file, a linker
+    # script, a linker argument it is not told the meaning of, the
+    # executable's symbols exported, any argument that is neither a source
+    # file, a linker input it lists nor a flag.
+    -Xlinker) UNREAD+=("$1 $2"); LINKARGS+=("$1" "$2"); shift 2 ;;
+    -T) UNREAD+=("$1 $2"); LINKARGS+=("$1" "$2"); shift 2 ;;
+    -T?*|-rdynamic|--export-dynamic|-export-dynamic) UNREAD+=("$1"); LINKARGS+=("$1"); shift ;;
+    @*) UNREAD+=("$1"); PASSTHRU+=("$1"); shift ;;
+    -*) PASSTHRU+=("$1"); shift ;;
+    *) UNREAD+=("$1"); LINKARGS+=("$1"); shift ;;
   esac
 done
 [ ${#SRCS[@]} -gt 0 ] || { echo "wtc-cc: no source file" >&2; exit 2; }
@@ -176,9 +190,57 @@ QOA=--queue-ownership-analysis
 if (( COMPILE_ONLY )); then
   QOA=--queue-ownership-analysis=open-world=true
 else
-  OTHERS=()
-  for a in "${LINKARGS[@]}"; do case "$a" in *.o|*.a|*.so) OTHERS+=("$a") ;; esac; done
-  if (( ${#OTHERS[@]} )); then
+  # The files linked here, as the linker finds them: object files,
+  # archives and shared objects (versioned too), those -Wl, names, and the
+  # libraries -l names in a -L directory. A library -l finds in the
+  # system's directories is taken to hold no code compiled from the
+  # program (the contract, docs/lifting.md); one found nowhere, and any
+  # argument the driver does not read, may link anything: open world.
+  OTHERS=(); LDIRS=()
+  for a in "${LINKARGS[@]}"; do case "$a" in -L?*) LDIRS+=("${a#-L}") ;; esac; done
+  # -L directories given inside -Wl, and LIBRARY_PATH's, which the
+  # compiler driver hands the linker as -L too.
+  for a in "${LINKARGS[@]}"; do
+    case "$a" in -Wl,*) IFS=, read -r -a parts <<< "${a#-Wl,}"
+      for p in "${parts[@]}"; do case "$p" in -L?*) LDIRS+=("${p#-L}") ;; esac; done ;; esac
+  done
+  IFS=: read -r -a lpath <<< "${LIBRARY_PATH:-}"
+  for d in "${lpath[@]}"; do [ -n "$d" ] && LDIRS+=("$d"); done
+  SYSDIRS=(/usr/lib/x86_64-linux-gnu /lib/x86_64-linux-gnu /usr/lib64 /lib64 /usr/lib /lib)
+  find_lib() { # -lNAME or -l:FILE
+    local lib=${1#-l} c d found="" cands
+    cands=("lib$lib.so" "lib$lib.a"); [[ $lib == :* ]] && cands=("${lib#:}")
+    for d in "${LDIRS[@]}"; do for c in "${cands[@]}"; do [ -z "$found" ] && [ -e "$d/$c" ] && found="$d/$c"; done; done
+    if [ -n "$found" ]; then OTHERS+=("$found"); return; fi
+    for d in "${SYSDIRS[@]}"; do for c in "${cands[@]}"; do [ -z "$found" ] && [ -e "$d/$c" ] && found="$d/$c"; done; done
+    [ -n "$found" ] || UNREAD+=("$1")
+  }
+  for a in "${LINKARGS[@]}"; do
+    case "$a" in
+      -L*|-Xlinker|-T*|-rdynamic|--export-dynamic|-export-dynamic) ;;
+      -l*) find_lib "$a" ;;
+      -Wl,*)
+        IFS=, read -r -a parts <<< "${a#-Wl,}"
+        skip=0
+        for p in "${parts[@]}"; do
+          if (( skip )); then skip=0; continue; fi
+          case "$p" in
+            -rpath|-rpath-link|-soname|-z) skip=1 ;;
+            -rpath=*|-rpath-link=*|-soname=*|--as-needed|--no-as-needed|--gc-sections|--no-gc-sections|-O[0-3]|-s|\
+            --start-group|--end-group|--build-id|--build-id=*|-L?*) ;;
+            -l?*) find_lib "$p" ;;
+            *.o|*.a|*.so|*.so.[0-9]*) OTHERS+=("$p") ;;
+            *) UNREAD+=("$a") ;;
+          esac
+        done ;;
+      *.o|*.a|*.so|*.so.[0-9]*) OTHERS+=("$a") ;;
+      *) ;;
+    esac
+  done
+  if (( ${#UNREAD[@]} )); then
+    echo "wtc-cc: ${UNREAD[*]}: the driver cannot tell what this links; any symbol of $SRC may be named there" >&2
+    QOA=--queue-ownership-analysis=open-world=true
+  elif (( ${#OTHERS[@]} )); then
     NM=""
     for c in ${TOOLCHAIN:+"$TOOLCHAIN/bin/llvm-nm"} "$ROOT/build-llvm/bin/llvm-nm" \
              "$(command -v llvm-nm || true)" "$(command -v nm || true)"; do
@@ -187,7 +249,7 @@ else
     listed=1
     : > "$WORK/$base.nm"
     for o in "${OTHERS[@]}"; do
-      flags=(-P -g); [[ $o == *.so ]] && flags+=(-D)
+      flags=(-P -g); [[ $o == *.so || $o == *.so.[0-9]* ]] && flags+=(-D)
       [ -n "$NM" ] && "$NM" "${flags[@]}" "$o" >> "$WORK/$base.nm" 2>/dev/null || listed=0
     done
     if (( listed )); then
