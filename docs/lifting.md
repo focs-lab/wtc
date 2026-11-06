@@ -54,8 +54,13 @@ What the contract takes as given:
   files the pass does not see (`wtc-cc -c`), no file linked with it names
   the class, every member function of the class it declares has its body
   there, and, when any file is linked with it, its own code keeps the
-  object out of that file's reach (condition (f) below). A library linked
-  with `-l` is taken to hold no code compiled from the class.
+  object out of that file's reach (condition (f) below). A library `-l` finds in
+  the system's directories is taken to hold no code compiled from the
+  class; every other file linked (an object file, an archive, a shared
+  object, a versioned one, a file `-Wl,` names, a library `-l` finds in a
+  `-L` directory) is listed with nm, and an argument `wtc-cc` does not
+  read (a response file, `-Xlinker`, a library it cannot find) makes the
+  world open.
 - **A race-free program.** The original has no data race and does not
   depend on timing: how long a thread sleeps or waits, or the order in
   which the scheduler runs threads, is not behaviour it can rely on.
@@ -154,6 +159,28 @@ their sources ("Several files"); none is open.
 | C: a union that holds the queue | a queue inside a union, read through the union's other member; the step to that member is not a step to the queue | the other member reads the substitute's pointer | condition (a): a step into a union that holds the queue, to another of its members, refuses | `LiftedC/union_holder.c` |
 | C: a ring's narrow index | a ring whose indices are `unsigned char`, wrapping at 256 before the slot count, by `++` or by the `int` result of `(put + 1) % nslots` converted back; the C ring's evaluator takes the increment, and a conversion that loses values, for the identity | the substitute keeps every element the original overwrote | condition (e): an index of fewer than 32 bits that does not hold every value of the slot count refuses | `LiftedC/narrow_index.c` |
 | `wtc-cc --unity`: header statics and tentative definitions | a header with an include guard and a static of its own (C or C++), whose second include the unit skips, so that the files share the static; or `static int x;` in two files, tentative definitions of one internal object in the unit (C11 6.9.2) | the files share state that each has its own of compiled apart; the check that each file means in the unit what it means alone does not catch it | the files compiled apart and linked as CIR modules ("Several files"): each file's statics are its own | `LiftedC/unity_header_static.c`, `LiftedC/unity_tentative.c` |
+
+## Findings of 6 Nov 2026
+
+A review of the escape analysis and of the link found 22 programs lifted
+unfaithfully, and programs the link broke with no lifting at all. Each is a
+test under `test/Integration/` that failed before the fix:
+
+| finding | closed by | tests |
+|---|---|---|
+| library models: `pthread_join`'s result, a pipe written and read, `%p` by `snprintf` and `sscanf`, one memory file mapped twice, `strto*`'s end pointer, `memset`'s result, `on_exit`'s argument, a program function named like the C library's in another file | the models are deny-by-default: a short audited list, conversions of a literal format, files read and written, `pthread_join` given what the threads return; a name a linked file defines is the program's | `Lifted/escape_pthread_join*.cpp`, `escape_pipe`, `escape_sprintf`, `escape_mmap`, `escape_memset_result`, `escape_on_exit`, `escape_library_name` |
+| lost indirection: a queue of queues popped into a local, a `va_list` handed to a helper, inline assembly | a pop's out-parameter receives the elements; a `va_list` holds its function's variadic arguments; assembly's operands escape | `escape_queue_of_queues`, `escape_va_list`, `escape_asm` |
+| roots: a constant address, a global in a section of its own, a function alias another file calls, a global alias | constants join their globals; sections and `llvm.used` are roots; an alias is its aliasee | `escape_constant_address`, `escape_section`, `escape_function_alias`, `escape_global_alias` |
+| one file, nothing linked: the container read through a pointer to the first member, through a pointer to member, a C queue read by offsetof arithmetic | the escape analysis runs with nothing linked, and a cast of a value that may point to the object to another type, or a pointer to one of its members, refuses (a) | `confine_first_member`, `confine_member_pointer`, `LiftedC/confine_offsetof.c` |
+| `std::allocator<Item>` specialised as a class derived from the program's bounding allocator | what `allocator_traits` calls must be libstdc++'s | `Lifted/allocator_inherited.cpp` |
+| `wtc-cc`: a versioned shared object, `-Wl,file`, `-l:name` and `-lname` in a `-L` directory, a response file | every linked file is listed; what the driver does not read is open world | `Lifted/escape_link_inputs.cpp` |
+| the link, without lifting: an inline variable initialised once per file, an `extern` array of no size, common symbols of two sizes, an `extern template`, an alias of a static the front end did not emit, a macro of the program's reaching the runtime's header | "Several files" | `Link/*`, `Lifted/macro_before_runtime.cpp` |
+
+A false refusal the review found is gone too (a local C queue's lifetime
+markers, `LiftedC/local_lifetime.c`). Others remain, at the cost of
+precision the field-insensitive analysis has: a class that holds a
+container of elements that point back to it is one class with them, and
+a C channel of channels handed as `void *` stays refused.
 
 ## The shape
 
