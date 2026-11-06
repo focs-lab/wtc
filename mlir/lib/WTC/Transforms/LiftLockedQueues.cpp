@@ -1447,6 +1447,7 @@ private:
     ClosedWorld world;
 
     void analyse(Candidate &c);
+    void specialisedAllocator(Candidate &c, StringRef container);
     void boundedChecks(Candidate &c);
     bool onlyReturned(cir::FuncOp f, unsigned depth, llvm::DenseSet<Operation *> &seen);
     bool onlyDirectCalls(cir::FuncOp f, llvm::SmallVectorImpl<cir::CallOp> &calls);
@@ -1618,6 +1619,8 @@ void LiftLockedQueuesPass::analyse(Candidate &c) {
         else if (!standardAllocator(under))
             c.refuse("(e) the container allocates with an allocator other than std::allocator of its element (" +
                      under + ")");
+        else
+            specialisedAllocator(c, under);
         break;
     }
     case Kind::StdDeque:
@@ -1625,6 +1628,8 @@ void LiftLockedQueuesPass::analyse(Candidate &c) {
         if (!standardAllocator(qType))
             c.refuse("(e) the container allocates with an allocator other than std::allocator of its element (" +
                      qType + ")");
+        else
+            specialisedAllocator(c, qType);
         break;
     case Kind::StdVector:
         c.refuse("(e) the container is a std::vector, which the class may use as a stack or a batch");
@@ -1781,6 +1786,70 @@ void LiftLockedQueuesPass::analyse(Candidate &c) {
     if (c.methods.empty() && !c.refused()) c.refuse("(a) no member function pushes or pops");
     if (c.ctors.empty() && !c.refused())
         c.refuse("(a) no constructor of " + recordName(c.rec) + " builds the container here");
+}
+
+// std::allocator of the element, as the container's name says, may still be
+// the program's own: a program may specialise it for a type it defines,
+// and its allocate may bound or count what it hands out. libstdc++'s
+// allocator has no allocate of its own before C++20, and from C++20 its
+// allocate calls __new_allocator's: one that does not is the program's.
+void LiftLockedQueuesPass::specialisedAllocator(Candidate &c, StringRef container) {
+    auto args = templateArgs(container);
+    if (!args || args->empty()) return;
+    const std::string alloc = squashSpaces("std::allocator<" + (*args)[0] + ">");
+    // What the container calls to allocate, through allocator_traits: the
+    // allocator's own allocate, or one it inherits from a base of the
+    // program's (a specialisation derived from a bounding allocator) must
+    // be libstdc++'s __new_allocator's, directly or through
+    // std::allocator's own (C++20).
+    const std::string traits = squashSpaces("std::allocator_traits<" + alloc + ">");
+    auto libraryAllocates = [&](cir::FuncOp g, auto &self, unsigned depth) -> bool {
+        if (!g || depth > 2) return false;
+        Name n = nameOf(g.getSymName());
+        if (StringRef(n.context).starts_with("std::__new_allocator<")) return true;
+        if (squashSpaces(n.context) != alloc || g.getBody().empty()) return false;
+        bool ok = true, any = false;
+        g.walk([&](cir::CallOp call) {
+            cir::FuncOp h = lookupCallee(call);
+            Name hn = h ? nameOf(h.getSymName()) : Name();
+            if (hn.base != "allocate" && hn.base != "deallocate") return;
+            any = true;
+            ok &= self(h, self, depth + 1);
+        });
+        return ok && any;
+    };
+    for (cir::FuncOp f : module.getOps<cir::FuncOp>()) {
+        Name n = nameOf(f.getSymName());
+        if (!n.ok || squashSpaces(n.context) != traits || (n.base != "allocate" && n.base != "deallocate") ||
+            f.getBody().empty())
+            continue;
+        bool ok = true;
+        f.walk([&](cir::CallOp call) {
+            cir::FuncOp g = lookupCallee(call);
+            Name gn = g ? nameOf(g.getSymName()) : Name();
+            if (gn.base == "allocate" || gn.base == "deallocate") ok &= libraryAllocates(g, libraryAllocates, 0);
+        });
+        if (!ok) {
+            c.refuse("(e) the program's std::allocator<" + (*args)[0] + "> " + n.base +
+                     "s with an allocator other than libstdc++'s, which may bound or count what the container "
+                     "holds; the substitute allocates without it");
+            return;
+        }
+    }
+    for (cir::FuncOp f : module.getOps<cir::FuncOp>()) {
+        Name n = nameOf(f.getSymName());
+        if (!n.ok || squashSpaces(n.context) != alloc || (n.base != "allocate" && n.base != "deallocate")) continue;
+        bool library = false;
+        f.walk([&](cir::CallOp call) {
+            cir::FuncOp g = lookupCallee(call);
+            library |= g && StringRef(nameOf(g.getSymName()).context).starts_with("std::__new_allocator<");
+        });
+        if (f.getBody().empty() || !library) {
+            c.refuse("(e) the program specialises std::allocator<" + (*args)[0] + ">, whose " + n.base +
+                     " may bound or count what the container holds; the substitute allocates without it");
+            return;
+        }
+    }
 }
 
 // Whether every use of f's symbol is a direct call, and which.
