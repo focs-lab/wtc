@@ -1816,6 +1816,39 @@ bool LiftCQueuesPass::confined(Candidate &c) {
         if (!dt || !isa<cir::PointerType>(dt.getPointee()))
             return no("(e) the ring " + field(c, c.ring.d) + " holds something other than pointers");
     }
+    // The indices wrap at the slot count, and nowhere else. An index too
+    // narrow for the slots (an unsigned char under an int count) wraps at
+    // its own width first, by ++ or by the conversion of (i + 1) % n back
+    // to its type, which the evaluator, reading the arithmetic as on
+    // integers, does not see: the original's ring then overwrites elements
+    // the substitute keeps. An index holds every slot when it holds every
+    // value of the count's type, or when it has 32 bits or more: the
+    // substitute ends the program at init for more than 2^30 slots.
+    {
+        auto intAt = [&](const std::vector<unsigned> &path) -> cir::IntType {
+            Type t = c.rec;
+            for (unsigned i : path) {
+                auto r = dyn_cast<cir::RecordType>(t);
+                t = r && i < r.getMembers().size() ? r.getMembers()[i] : Type();
+            }
+            return dyn_cast_or_null<cir::IntType>(t);
+        };
+        auto typeName = [](cir::IntType t) {
+            return (t.isSigned() ? "a signed " : "an unsigned ") + std::to_string(t.getWidth()) + "-bit integer";
+        };
+        cir::IntType count = intAt(c.ring.s);
+        for (const std::vector<unsigned> *idx : {&c.ring.in, &c.ring.out}) {
+            cir::IntType t = intAt(*idx);
+            const bool holds = t && count &&
+                               (t.getWidth() >= 32 || t.getWidth() > count.getWidth() ||
+                                (t.getWidth() == count.getWidth() && (t.isSigned() == count.isSigned() || t.isUnsigned())));
+            if (!holds)
+                return no("(e) the index " + field(c, *idx) + ", " + (t ? typeName(t) : std::string("not an integer")) +
+                          ", does not hold every value of the slot count " + field(c, c.ring.s) + ", " +
+                          (count ? typeName(count) : std::string("not an integer")) +
+                          ", and has fewer than 32 bits: it may wrap before the slot count");
+        }
+    }
     // Where the program ends itself (an assertion, abort, exit): the
     // substitute makes none of those checks, so only one is allowed, an
     // initialisation's on its allocation, which the substitute's own

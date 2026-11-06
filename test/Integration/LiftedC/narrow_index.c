@@ -1,20 +1,21 @@
-/* Known open finding (docs/lifting.md, "Known open findings"): ferret's
-   channel with its indices kept in unsigned chars. With 300 slots the
-   original's put wraps to 0 after 255 (++ on an unsigned char, or REM: the
-   int result of (put + 1) % nslots converted back), so the 257th and
+/* Once an open finding (docs/lifting.md, "Findings of 1 Nov 2026"):
+   ferret's channel with its indices kept in unsigned chars. With 300 slots
+   the original's put wraps to 0 after 255 (++ on an unsigned char, or REM:
+   the int result of (put + 1) % nslots converted back), so the 257th and
    258th sends overwrite slots 0 and 1, and the receiver gets two elements.
    The C ring's evaluator takes the increment, and an integral conversion
    that loses values, for the identity: lifted, the substitute is a ring of
-   299 places and hands back all 258. The test passes once the struct is
-   refused here, or lifted keeps what the program prints as written.
+   299 places and hands back all 258. Now an index of fewer than 32 bits
+   that does not hold every value of the slot count refuses the struct; the
+   program prints what it prints as written.
 
-   XFAIL: *
-   RUN: %wtc_cc --lift -O1 -DWTC_CHECK %s -o %t.exe
+   RUN: %wtc_cc --lift -O1 -DWTC_CHECK %s -o %t.exe 2>&1 | FileCheck %s --check-prefix=WHY
    RUN: %t.exe | FileCheck %s --match-full-lines
-   RUN: %wtc_cc --lift -O1 -DWTC_CHECK -DREM %s -o %t.rem.exe
+   RUN: %wtc_cc --lift -O1 -DWTC_CHECK -DREM %s -o %t.rem.exe 2>&1 | FileCheck %s --check-prefix=WHY
    RUN: %t.rem.exe | FileCheck %s --match-full-lines
 
    CHECK: received 2 sum 515
+   WHY: C queue struct chan not lifted: (e) the index put, an unsigned 8-bit integer, does not hold every value of the slot count nslots, a signed 32-bit integer, and has fewer than 32 bits: it may wrap before the slot count
 */
 #include <pthread.h>
 #include <stdio.h>
