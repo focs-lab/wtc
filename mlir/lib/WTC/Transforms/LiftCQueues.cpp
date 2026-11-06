@@ -1,4 +1,6 @@
+#include "WTC/Transforms/ClosedWorld.h"
 #include "WTC/Transforms/Passes.h"
+#include "WTC/Transforms/Refusal.h"
 #include "WTC/Transforms/Utils.h"
 #include "WTC/WTCAttrs.h"
 #include "WTC/WTCOps.h"
@@ -14,7 +16,6 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <algorithm>
@@ -1164,7 +1165,7 @@ struct Candidate {
     // original goes wrong after them (it waits for ever or takes from an
     // empty ring), and the runtime ends the program instead.
     mutable bool endEq = false;
-    std::string why;
+    Verdict v;  // the reasons that refuse it
 };
 
 std::string fieldName(cir::RecordType rec, const std::vector<unsigned> &path,
@@ -1201,6 +1202,10 @@ public:
     Option<std::string> namedElsewhere{
         *this, "named-elsewhere", llvm::cl::init(""),
         llvm::cl::desc("A file of the symbols the other files linked with this one define or reference")};
+    Option<std::string> definedElsewhereFile{
+        *this, "defined-elsewhere", llvm::cl::init(""),
+        llvm::cl::desc("A file listing the symbols the other files linked with this module define: a function "
+                       "of a library's name there is the program's, and escapes what it is handed")};
     Option<bool> openWorld{*this, "open-world", llvm::cl::init(false),
                            llvm::cl::desc("Other units may name any external symbol of this one")};
 
@@ -1209,9 +1214,10 @@ public:
 private:
     ModuleOp module;
     llvm::DenseMap<std::pair<Type, unsigned>, std::string> names;
-    std::set<std::string> elsewhere;
+    ClosedWorld world;
 
     void analyse(Candidate &c);
+    void analyseOps(Candidate &c);
     bool classify(Candidate &c, Fn &fn);
     bool confined(Candidate &c);
     bool localRing(Candidate &c, Fn &fn);
@@ -1220,8 +1226,10 @@ private:
     cir::FuncOp thunk(Candidate &c, cir::FuncOp rt, llvm::ArrayRef<StringRef> ann);
     std::string field(Candidate &c, const std::vector<unsigned> &p) { return fieldName(c.rec, p, names); }
     std::string readable(Candidate &c, const Ex &e, const std::string &root);
+    // The reason, recorded; false, so that the check that found it stops
+    // there (what it would check next depends on what it found wrong).
     bool refuseWith(Candidate &c, const Twine &w) {
-        if (c.why.empty()) c.why = w.str();
+        c.v.refuse(w);
         return false;
     }
 };
@@ -1238,13 +1246,7 @@ void LiftCQueuesPass::runOnOperation() {
         auto rec = pt ? dyn_cast<cir::RecordType>(pt.getPointee()) : cir::RecordType();
         if (rec) names.try_emplace({rec, static_cast<unsigned>(gm.getIndex())}, gm.getName().str());
     });
-    if (!namedElsewhere.empty()) {
-        if (auto buf = llvm::MemoryBuffer::getFile(namedElsewhere)) {
-            llvm::SmallVector<StringRef, 64> lines;
-            (*buf)->getBuffer().split(lines, '\n', -1, false);
-            for (StringRef l : lines) elsewhere.insert(l.trim().str());
-        }
-    }
+    if (failed(world.init(module, ClosedWorldOptions{openWorld, namedElsewhere, definedElsewhereFile}))) return signalPassFailure();
 
     // Structs with a pthread mutex and a condition variable, directly or in
     // a member struct, and the functions that take a pointer to them.
@@ -1265,6 +1267,8 @@ void LiftCQueuesPass::runOnOperation() {
             Candidate c;
             c.rec = rec;
             c.label = "struct " + (rec.getName() ? rec.getName().getValue().str() : std::string("<anonymous>"));
+            c.v.idiom = "C queue";
+            c.v.label = c.label;
             cands.push_back(c);
         }
     });
@@ -1284,13 +1288,12 @@ void LiftCQueuesPass::runOnOperation() {
             }
         });
         analyse(c);
-        if (!c.why.empty()) {
-            emitRemark(c.fns.empty() ? module.getLoc() : c.fns.front().f.getLoc())
-                << "wtc: C queue " << c.label << " not lifted: " << c.why;
+        if (c.v.refused()) {
+            c.v.emitRefusals(c.fns.empty() ? module.getLoc() : c.fns.front().f.getLoc());
             continue;
         }
         if (!rewrite) {
-            InFlightDiagnostic d = emitRemark(c.fns.front().f.getLoc()) << "wtc: C queue " << c.label << " lifts (";
+            InFlightDiagnostic d = emitRemark(c.fns.front().f.getLoc()) << "wtc: " << c.v.idiom << " " << c.v.label << " lifts (";
             bool first = true;
             for (Fn &fn : c.fns) {
                 if (fn.role == Role::Helper) continue;
@@ -1305,12 +1308,50 @@ void LiftCQueuesPass::runOnOperation() {
 }
 
 // Every function of the struct read and classified, the layout agreed, the
-// proof's conditions checked.
+// proof's conditions checked. The reasons are recorded in three parts, each
+// of which may refuse on its own: the closed world (main, open-world), the
+// operations (the first reason found: what is checked next depends on it),
+// and, in a closed world, the struct's confinement outside its functions.
 void LiftCQueuesPass::analyse(Candidate &c) {
     if (c.fns.empty()) return (void)refuseWith(c, "(a) no function takes a pointer to it");
-    if (!openWorld && !module.lookupSymbol<cir::FuncOp>("main"))
-        return (void)refuseWith(c, "(a) the module has no main, so other units may touch the struct");
-    if (openWorld) return (void)refuseWith(c, "(a) the module is compiled to be linked with units it does not see");
+    const bool closed = !world.openWorld() && world.hasMain();
+    if (!world.openWorld() && !world.hasMain())
+        refuseWith(c, "(a) the module has no main, so other units may touch the struct");
+    if (world.openWorld()) refuseWith(c, "(a) the module is compiled to be linked with units it does not see");
+    analyseOps(c);
+    if (!closed) return;
+    // The struct's functions; those whose bodies the rewrite replaces (a
+    // helper stays, called by nothing once they are), and which argument
+    // of each is the queue.
+    llvm::DenseSet<Operation *> own, replaced;
+    llvm::DenseMap<Operation *, unsigned> queueArg;
+    for (Fn &fn : c.fns) {
+        own.insert(fn.f);
+        if (fn.role != Role::Helper) replaced.insert(fn.f);
+        queueArg[fn.f] = fn.q;
+    }
+    // The element: what the ring's slots hold, when the layout is known.
+    Type element;
+    if (c.ring.known) {
+        Type t = c.rec;
+        for (unsigned i : c.ring.d) {
+            auto r = dyn_cast<cir::RecordType>(t);
+            t = r && i < r.getMembers().size() ? r.getMembers()[i] : Type();
+        }
+        if (auto pt = dyn_cast_or_null<cir::PointerType>(t)) element = pt.getPointee();
+    }
+    world.confineStruct(
+        c.rec, own, replaced,
+        [&](cir::FuncOp f) -> std::optional<unsigned> {
+            auto it = queueArg.find(f);
+            if (it == queueArg.end()) return std::nullopt;
+            return it->second;
+        },
+        element,
+        [&](unsigned i) { return field(c, {i}); }, c.v);
+}
+
+void LiftCQueuesPass::analyseOps(Candidate &c) {
     // Members written by the operations (not by initialisation and
     // destruction): only those change while the queue is shared.
     for (Fn &fn : c.fns) {
@@ -1719,60 +1760,6 @@ bool LiftCQueuesPass::classify(Candidate &c, Fn &fn) {
     return true;
 }
 
-// Where a pointer to the struct may be kept: a local of pointer type whose
-// address goes only to loads and stores, or a global of that type, or an
-// array of them, whose address goes only to loads and stores, through
-// element steps.
-bool pointerCell(Value addr, Type ptrTy) {
-    std::function<bool(Value, unsigned)> onlyLoadsAndStores = [&](Value a, unsigned depth) {
-        if (depth > 4) return false;
-        for (OpOperand &u : a.getUses()) {
-            Operation *o = u.getOwner();
-            if (auto ld = dyn_cast<cir::LoadOp>(o); ld && ld.getAddr() == a) continue;
-            if (auto st = dyn_cast<cir::StoreOp>(o); st && st.getAddr() == a) continue;
-            if (isa<cir::LifetimeStartOp, cir::LifetimeEndOp>(o)) continue;
-            if (auto ps = dyn_cast<cir::PtrStrideOp>(o); ps && ps.getBase() == a) {
-                if (!onlyLoadsAndStores(ps.getResult(), depth + 1)) return false;
-                continue;
-            }
-            if (auto cast = dyn_cast<cir::CastOp>(o); cast && cast.getKind() == cir::CastKind::array_to_ptrdecay) {
-                if (!onlyLoadsAndStores(cast.getResult(), depth + 1)) return false;
-                continue;
-            }
-            return false;
-        }
-        return true;
-    };
-    Value root = addr;
-    while (true) {
-        if (auto ps = root.getDefiningOp<cir::PtrStrideOp>()) root = ps.getBase();
-        else if (auto cast = root.getDefiningOp<cir::CastOp>(); cast && cast.getKind() == cir::CastKind::array_to_ptrdecay)
-            root = cast.getSrc();
-        else break;
-    }
-    auto holds = [&](Type t) {
-        while (auto a = dyn_cast<cir::ArrayType>(t)) t = a.getElementType();
-        return t == ptrTy;
-    };
-    if (auto a = root.getDefiningOp<cir::AllocaOp>())
-        return holds(a.getAllocaType()) && onlyLoadsAndStores(a.getResult(), 0);
-    if (auto g = root.getDefiningOp<cir::GetGlobalOp>()) {
-        auto mod = g->getParentOfType<ModuleOp>();
-        auto glob = SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(g, g.getNameAttr());
-        if (!glob || !holds(glob.getSymType())) return false;
-        // Every use of the global, in every function: loads and stores.
-        bool ok = true;
-        mod.walk([&](cir::GetGlobalOp other) {
-            if (ok && other.getName() == g.getName()) ok = onlyLoadsAndStores(other.getResult(), 0);
-        });
-        if (auto uses = SymbolTable::getSymbolUses(glob, mod))
-            for (const SymbolTable::SymbolUse &u : *uses)
-                if (!isa<cir::GetGlobalOp>(u.getUser())) ok = false;
-        return ok;
-    }
-    return false;
-}
-
 // The roles agreed, then each function checked against its operation.
 bool LiftCQueuesPass::confined(Candidate &c) {
     auto no = [&](const Twine &w) { return refuseWith(c, w); };
@@ -1828,6 +1815,39 @@ bool LiftCQueuesPass::confined(Candidate &c) {
         auto dt = dyn_cast_or_null<cir::PointerType>(t);
         if (!dt || !isa<cir::PointerType>(dt.getPointee()))
             return no("(e) the ring " + field(c, c.ring.d) + " holds something other than pointers");
+    }
+    // The indices wrap at the slot count, and nowhere else. An index too
+    // narrow for the slots (an unsigned char under an int count) wraps at
+    // its own width first, by ++ or by the conversion of (i + 1) % n back
+    // to its type, which the evaluator, reading the arithmetic as on
+    // integers, does not see: the original's ring then overwrites elements
+    // the substitute keeps. An index holds every slot when it holds every
+    // value of the count's type, or when it has 32 bits or more: the
+    // substitute ends the program at init for more than 2^30 slots.
+    {
+        auto intAt = [&](const std::vector<unsigned> &path) -> cir::IntType {
+            Type t = c.rec;
+            for (unsigned i : path) {
+                auto r = dyn_cast<cir::RecordType>(t);
+                t = r && i < r.getMembers().size() ? r.getMembers()[i] : Type();
+            }
+            return dyn_cast_or_null<cir::IntType>(t);
+        };
+        auto typeName = [](cir::IntType t) {
+            return (t.isSigned() ? "a signed " : "an unsigned ") + std::to_string(t.getWidth()) + "-bit integer";
+        };
+        cir::IntType count = intAt(c.ring.s);
+        for (const std::vector<unsigned> *idx : {&c.ring.in, &c.ring.out}) {
+            cir::IntType t = intAt(*idx);
+            const bool holds = t && count &&
+                               (t.getWidth() >= 32 || t.getWidth() > count.getWidth() ||
+                                (t.getWidth() == count.getWidth() && (t.isSigned() == count.isSigned() || t.isUnsigned())));
+            if (!holds)
+                return no("(e) the index " + field(c, *idx) + ", " + (t ? typeName(t) : std::string("not an integer")) +
+                          ", does not hold every value of the slot count " + field(c, c.ring.s) + ", " +
+                          (count ? typeName(count) : std::string("not an integer")) +
+                          ", and has fewer than 32 bits: it may wrap before the slot count");
+        }
     }
     // Where the program ends itself (an assertion, abort, exit): the
     // substitute makes none of those checks, so only one is allowed, an
@@ -2170,76 +2190,7 @@ bool LiftCQueuesPass::confined(Candidate &c) {
                 return no("(a) " + fn.f.getSymName() + " is called from outside the queue's functions");
         }
     }
-    // The struct's members and pointers to it, outside its functions.
-    Type ptrTy = cir::PointerType::get(c.rec);
-    std::string bad;
-    module.walk([&](Operation *op) {
-        if (!bad.empty()) return;
-        auto fn = op->getParentOfType<cir::FuncOp>();
-        if (fn && ops.count(fn)) return;
-        if (auto gm = dyn_cast<cir::GetMemberOp>(op))
-            if (gm.getAddr().getType() == ptrTy) {
-                bad = "(a) " + (fn ? fn.getSymName().str() : std::string("a global")) + " touches " +
-                      field(c, {static_cast<unsigned>(gm.getIndex())});
-                return;
-            }
-        for (Value v : op->getResults()) {
-            if (v.getType() == Type(c.rec)) {
-                bad = "(a) " + (fn ? fn.getSymName().str() : std::string("a global")) + " copies the struct";
-                return;
-            }
-            if (v.getType() != ptrTy) continue;
-            for (OpOperand &u : v.getUses()) {
-                Operation *user = u.getOwner();
-                if (auto gm = dyn_cast<cir::GetMemberOp>(user)) {
-                    bad = "(a) " + (fn ? fn.getSymName().str() : std::string("a global")) + " touches " +
-                          field(c, {static_cast<unsigned>(gm.getIndex())});
-                    return;
-                }
-                // The pointer stored: only into a local slot or a global
-                // that holds pointers to the struct and nothing else, whose
-                // loads are pointers to the struct and are checked here as
-                // every other one is. Stored anywhere else (a member of
-                // another struct, through a pointer), it reaches code that
-                // the walk does not follow.
-                if (auto st = dyn_cast<cir::StoreOp>(user); st && st.getValue() == v) {
-                    if (pointerCell(st.getAddr(), ptrTy)) continue;
-                    bad = "(a) " + (fn ? fn.getSymName().str() : std::string("a global")) +
-                          " stores a pointer to the struct in memory the pass does not follow";
-                    return;
-                }
-                if (isa<cir::PtrStrideOp, cir::CmpOp>(user)) continue;
-                if (auto call = dyn_cast<cir::CallOp>(user)) {
-                    cir::FuncOp callee = lookupCallee(call);
-                    if (callee && ops.count(callee)) continue;
-                    if (callee && callee.getSymName() == "free") continue;
-                }
-                if (auto cast = dyn_cast<cir::CastOp>(user)) {
-                    if (cast.getKind() == cir::CastKind::ptr_to_bool) continue;
-                    bool toFree = llvm::all_of(cast->getUses(), [](OpOperand &cu) {
-                        auto call = dyn_cast<cir::CallOp>(cu.getOwner());
-                        cir::FuncOp callee = call ? lookupCallee(call) : cir::FuncOp();
-                        return callee && callee.getSymName() == "free";
-                    });
-                    if (toFree) continue;
-                }
-                bad = "(a) " + (fn ? fn.getSymName().str() : std::string("a global")) + " passes a pointer to the struct to " +
-                      user->getName().getStringRef().str() +
-                      (isa<cir::CallOp>(user) && lookupCallee(cast<cir::CallOp>(user))
-                           ? " " + lookupCallee(cast<cir::CallOp>(user)).getSymName().str()
-                           : std::string());
-                return;
-            }
-        }
-    });
-    if (!bad.empty()) return no(bad);
-    // A struct, or array, that holds the queue by value, at any depth
-    // (`struct app { int id; struct chan q; }`), other than the queue's
-    // own struct: whatever reaches it reaches the queue. Its objects are
-    // confined as the queue's are: not copied or written whole, and a
-    // pointer to one goes only to member and element steps (whose pointers
-    // to the queue the walk above checks), comparisons, loads and stores
-    // of its own type, functions with a body here, and free.
+    // A struct, or array, that holds the queue by value, at any depth.
     std::function<bool(Type, unsigned)> holds = [&](Type t, unsigned depth) -> bool {
         if (depth > 32) return true;  // too deep to tell: as if it did
         if (t == Type(c.rec)) return depth > 0;
@@ -2249,92 +2200,6 @@ bool LiftCQueuesPass::confined(Candidate &c) {
                 if (m == Type(c.rec) || holds(m, depth + 1)) return true;
         return false;
     };
-    auto toHolder = [&](Type t) {
-        auto p = dyn_cast<cir::PointerType>(t);
-        return p && holds(p.getPointee(), 0);
-    };
-    auto freed = [](Value v) {
-        return llvm::all_of(v.getUses(), [](OpOperand &cu) {
-            auto call = dyn_cast<cir::CallOp>(cu.getOwner());
-            cir::FuncOp callee = call ? lookupCallee(call) : cir::FuncOp();
-            return callee && callee.getSymName() == "free";
-        });
-    };
-    module.walk([&](Operation *op) {
-        if (!bad.empty()) return;
-        auto fn = op->getParentOfType<cir::FuncOp>();
-        if (fn && ops.count(fn)) return;
-        const std::string at = fn ? fn.getSymName().str() : std::string("a global");
-        for (Value v : op->getResults())
-            if (holds(v.getType(), 0)) {
-                bad = "(a) " + at + " copies a struct that holds the queue";
-                return;
-            }
-        if (auto cp = dyn_cast<cir::CopyOp>(op); cp && holds(cp.getDst().getType().getPointee(), 0)) {
-            bad = "(a) " + at + " copies a struct that holds the queue";
-            return;
-        }
-        if (auto st = dyn_cast<cir::StoreOp>(op)) {
-            if (holds(st.getValue().getType(), 0)) {
-                bad = "(a) " + at + " writes a struct that holds the queue whole";
-                return;
-            }
-            if (toHolder(st.getValue().getType()) && !pointerCell(st.getAddr(), st.getValue().getType())) {
-                bad = "(a) " + at + " stores a pointer to a struct that holds the queue in memory the pass does not follow";
-                return;
-            }
-        }
-        if (auto cast = dyn_cast<cir::CastOp>(op); cast && toHolder(cast.getSrc().getType()) &&
-                                                   cast.getKind() != cir::CastKind::ptr_to_bool &&
-                                                   cast.getResult().getType() != ptrTy &&
-                                                   !toHolder(cast.getResult().getType()) && !freed(cast.getResult())) {
-            bad = "(a) " + at + " converts a pointer to a struct that holds the queue to another type";
-            return;
-        }
-        if (auto call = dyn_cast<cir::CallOp>(op)) {
-            cir::FuncOp callee = call.isIndirect() ? cir::FuncOp() : lookupCallee(call);
-            if (callee && callee.getSymName() == "free") return;
-            if ((!callee || callee.isDeclaration()) &&
-                llvm::any_of(call.getArgOperands(), [&](Value a) { return toHolder(a.getType()); }))
-                bad = "(a) " + at + " passes a pointer to a struct that holds the queue to " +
-                      (callee ? callee.getSymName().str() + ", which has no body here" : std::string("an indirect call"));
-        }
-    });
-    if (!bad.empty()) return no(bad);
-    // Nothing another unit sees: the struct's functions, a function that
-    // takes or returns what holds or points to the queue, and a global
-    // whose type holds or points to it, at any depth.
-    for (Fn &fn : c.fns)
-        if (elsewhere.count(fn.f.getSymName().str()))
-            return no("(a) " + fn.f.getSymName() + " is named by another file linked with this one");
-    // A search of the types a type is made of, through pointers: each is
-    // looked at once, so a list that points to itself ends.
-    auto reaches = [&](Type root, unsigned) {
-        llvm::SmallVector<Type, 16> work{root};
-        llvm::DenseSet<Type> seen{root};
-        while (!work.empty()) {
-            Type t = work.pop_back_val();
-            if (t == Type(c.rec)) return true;
-            llvm::SmallVector<Type, 8> next;
-            if (auto p = dyn_cast<cir::PointerType>(t)) next.push_back(p.getPointee());
-            else if (auto a = dyn_cast<cir::ArrayType>(t)) next.push_back(a.getElementType());
-            else if (auto r = dyn_cast<cir::RecordType>(t); r && !r.isIncomplete())
-                next.append(r.getMembers().begin(), r.getMembers().end());
-            for (Type n : next)
-                if (seen.insert(n).second) work.push_back(n);
-        }
-        return false;
-    };
-    // A function of this module that another file calls: what it is
-    // handed and what it hands back. (A call of a function with no body
-    // here is checked above, by what it is passed.)
-    for (cir::FuncOp f : module.getOps<cir::FuncOp>()) {
-        if (f.isDeclaration() || !elsewhere.count(f.getSymName().str())) continue;
-        auto ft = f.getFunctionType();
-        auto r = [&](Type t) { return reaches(t, 0); };
-        if (llvm::any_of(ft.getInputs(), r) || llvm::any_of(ft.getReturnTypes(), r))
-            return no("(a) " + f.getSymName() + ", named by another file linked with this one, takes or returns a pointer that reaches the queue");
-    }
     // Whether a constant initialiser leaves every queue inside it zero.
     std::function<bool(Attribute, Type, unsigned)> queueZero = [&](Attribute a, Type t, unsigned depth) -> bool {
         if (isa<cir::ZeroAttr>(a)) return true;
@@ -2360,8 +2225,6 @@ bool LiftCQueuesPass::confined(Candidate &c) {
     };
     for (auto g : module.getOps<cir::GlobalOp>()) {
         Type t = g.getSymType();
-        if (reaches(t, 0) && elsewhere.count(g.getSymName().str()))
-            return no("(a) " + g.getSymName() + " is named by another file linked with this one");
         // A queue the program initialised statically, `= { ... }`, on its
         // own or inside another struct or array, is never built by the
         // substitute's init: refused. Zero, or no initialiser, is the
@@ -2641,7 +2504,7 @@ void LiftCQueuesPass::lift(Candidate &c) {
     // Helpers nothing calls any more, if private.
     for (Fn &fn : c.fns)
         if (fn.role == Role::Helper && SymbolTable::symbolKnownUseEmpty(fn.f, module) && fn.f.isPrivate()) fn.f.erase();
-    InFlightDiagnostic d = emitRemark(c.fns.front().f.getLoc()) << "wtc: C queue " << c.label << " lifted (";
+    InFlightDiagnostic d = emitRemark(c.fns.front().f.getLoc()) << "wtc: " << c.v.idiom << " " << c.v.label << " lifted (";
     bool first = true;
     for (Fn &fn : c.fns) {
         if (fn.role == Role::Helper) continue;

@@ -1,19 +1,20 @@
 /* A program whose channel is in another file (Inputs/unity_chan.c), as
-   ferret's queue is in its library: wtc-cc analyses one translation unit,
-   and --unity makes one of several files, unedited, by including each of
-   them in a generated file. Without it, wtc-cc says that it takes one
-   unit; with the channel's file built apart and linked, the channel's
-   functions are not in the unit and nothing lifts; with --unity they are,
-   the channel lifts, and with one thread on each side it is proved spsc.
+   ferret's queue is in its library. wtc-cc compiles each source file to
+   its CIR module and links them into one (wtc-link), so that the analysis
+   sees both; --unity, the concatenation it replaced, is accepted and
+   changes nothing. With the channel's file built apart and linked as an
+   object, its functions are not in the module and nothing lifts; given as
+   a source, the channel lifts, and with one thread on each side it is
+   proved spsc.
 
-   RUN: not %wtc_cc --lift %s %S/Inputs/unity_chan.c -o %t.exe 2>&1 | FileCheck %s --check-prefix=MANY
+   RUN: %wtc_cc --lift -O1 -DWTC_CHECK -I%S/Inputs %s %S/Inputs/unity_chan.c -o %t.many.exe 2>&1 | FileCheck %s
+   RUN: %t.many.exe | FileCheck %s --check-prefix=OUT
    RUN: %clang -O1 -c %S/Inputs/unity_chan.c -o %t.q.o
    RUN: %wtc_cc --lift -O1 -I%S/Inputs %s %t.q.o -o %t.apart.exe 2>&1 | FileCheck %s --check-prefix=APART --allow-empty
    RUN: %t.apart.exe | FileCheck %s --check-prefix=OUT
    RUN: %wtc_cc --lift --unity -O1 -DWTC_CHECK -I%S/Inputs %s %S/Inputs/unity_chan.c -o %t.exe 2>&1 | FileCheck %s
    RUN: %t.exe | FileCheck %s --check-prefix=OUT
 
-   MANY: wtc-cc: 2 source files: the analysis takes one translation unit; pass --unity to compile them as one
    APART-NOT: C queue
    CHECK: C queue struct chan lifted
    CHECK: queue @jobs: spsc (producers: 1, consumers: 1)

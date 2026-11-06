@@ -1,5 +1,9 @@
+#include "WTC/Transforms/ClosedWorld.h"
+#include "WTC/Transforms/CriticalSections.h"
+#include "WTC/Transforms/LiftNames.h"
 #include "WTC/Transforms/LiftedBounded.h"
 #include "WTC/Transforms/Passes.h"
+#include "WTC/Transforms/Refusal.h"
 #include "WTC/Transforms/Utils.h"
 
 #include "clang/CIR/Dialect/IR/CIRAttrs.h"
@@ -13,6 +17,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/MapVector.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Demangle/Demangle.h"
@@ -101,51 +106,6 @@ using namespace mlir::wtc;
 // end of the file (a lambda, an anonymous namespace) is refused.
 
 namespace {
-
-// A function's name in parts, from the Itanium demangler.
-struct Name {
-    std::string base, context, params;
-    bool ctor = false, dtor = false, ok = false;
-};
-
-Name nameOf(StringRef mangled) {
-    Name n;
-    if (!mangled.starts_with("_Z")) {
-        n.base = mangled.str();
-        return n;
-    }
-    const std::string s = mangled.str();
-    llvm::ItaniumPartialDemangler d;
-    if (d.partialDemangle(s.c_str()) || !d.isFunction()) return n;
-    auto take = [](char *c) {
-        std::string out = c ? c : "";
-        std::free(c);
-        return out;
-    };
-    size_t len = 0;
-    n.base = take(d.getFunctionBaseName(nullptr, &len));
-    n.context = take(d.getFunctionDeclContextName(nullptr, &len));
-    n.params = take(d.getFunctionParameters(nullptr, &len));
-    n.ctor = d.isCtorOrDtor() && !StringRef(n.base).starts_with("~");
-    n.dtor = d.isCtorOrDtor() && StringRef(n.base).starts_with("~");
-    n.ok = true;
-    return n;
-}
-
-std::string pretty(StringRef mangled) { return llvm::demangle(mangled.str()); }
-
-StringRef recordName(Type t) {
-    auto r = dyn_cast_or_null<cir::RecordType>(t);
-    return r && r.getName() ? r.getName().getValue() : StringRef();
-}
-
-// Where a member function's name sits inside the demangled one, for remarks
-// that must stay short: "shared_queue<int>::push".
-std::string shortName(cir::FuncOp f) {
-    Name n = nameOf(f.getSymName());
-    if (!n.ok) return f.getSymName().str();
-    return n.context.empty() ? n.base : n.context + "::" + n.base;
-}
 
 // Ring: a record the pass reads as a bounded FIFO ring (LiftedBounded.h).
 enum class Kind { Unknown, StdQueue, StdDeque, StdList, StdVector, StdPriorityQueue, Ring, Other };
@@ -307,8 +267,7 @@ struct Candidate {
     // What each constructor stores into each flag-typed member: the
     // constant, or none when it is computed or left indeterminate.
     llvm::DenseMap<Operation *, llvm::SmallVector<std::pair<unsigned, std::optional<bool>>, 2>> flagInits;
-    llvm::SmallVector<std::string, 4> reasons;
-    std::map<std::string, unsigned> features;
+    Verdict v;  // the reasons that refuse it, and what it uses
     Location loc;
     // A bounded ring: its reading, and whether a push may overrun.
     std::shared_ptr<RingModel> ring;
@@ -320,15 +279,15 @@ struct Candidate {
         return (memberName(q) + " in " + recordName(rec)).str();
     }
     StringRef memberName(unsigned i) const;
-    void refuse(const Twine &why) {
-        std::string s = why.str();
-        if (llvm::find(reasons, s) == reasons.end()) reasons.push_back(s);
-    }
+    void refuse(const Twine &why) { v.refuse(why); }
+    bool refused() const { return v.refused(); }
 };
 
 // Member names are not part of a CIR record type; they are on the
 // get_member operations, so the pass keeps the first it sees for each.
 llvm::DenseMap<std::pair<Type, unsigned>, std::string> *gMemberNames = nullptr;
+// The module's critical sections, for the duration of one run.
+const CriticalSections *gSections = nullptr;
 
 StringRef Candidate::memberName(unsigned i) const {
     auto it = gMemberNames->find({rec, i});
@@ -393,30 +352,6 @@ cir::AllocaOp localSlot(Value addr) {
 // the record's name, spaces aside (the demangler writes "> >" and "T*",
 // CIR's record names ">>" and "T *"). A lambda's call operator is scoped
 // to the function it is written in, and a free function to a namespace.
-std::string squashSpaces(StringRef x) {
-    std::string out;
-    for (char ch : x)
-        if (ch != ' ') out += ch;
-    return out;
-}
-
-bool isMemberOf(cir::FuncOp f, cir::RecordType rec) {
-    Name n = nameOf(f.getSymName());
-    return n.ok && squashSpaces(n.context) == squashSpaces(recordName(rec));
-}
-
-// Whether a demangled name, spaces removed, mentions the class: its name
-// as a whole word, as the scope of a member ("LQ<int>::pending()") or in a
-// parameter ("report(LQ<int>&)").
-bool mentions(StringRef name, StringRef cls) {
-    auto word = [](char ch) { return llvm::isAlnum(ch) || ch == '_'; };
-    for (size_t at = name.find(cls); at != StringRef::npos; at = name.find(cls, at + 1)) {
-        const size_t end = at + cls.size();
-        if ((at == 0 || !word(name[at - 1])) && (end == name.size() || !word(name[end]))) return true;
-    }
-    return false;
-}
-
 // The local objects a lifted function may build and destroy: those whose
 // constructors and destructors touch nothing but the object itself.
 bool effectFreeLocal(StringRef type) {
@@ -796,9 +731,20 @@ private:
         const std::string bs = opName(lookupCallee(call));
         if (bs.empty()) return (void)fail("calls " + n.base + ", which the pass cannot read, on the ring");
         StringRef b = bs;
-        c.features[b.str()]++;
+        c.v.features[b.str()]++;
         if (!held) {
-            if (why.empty())
+            // A member function that takes no lock itself but runs only
+            // where its callers hold the class's mutex (BS::thread_pool's
+            // pop_task) is under the mutex; what refuses it is that it is
+            // none of the operations, whose bodies the rewrite replaces.
+            llvm::SmallVector<cir::CallOp, 2> under;
+            if (why.empty() && c.mutex && gSections) under = gSections->callsUnderLock(f, thisIndex(f), *c.mutex);
+            if (why.empty() && !under.empty())
+                c.refuse("(a) " + fname() + " calls " + b + " on " + c.memberName(c.q) +
+                         " under the mutex its callers hold (" +
+                         shortName(under.front()->getParentOfType<cir::FuncOp>()) +
+                         "), and is none of the operations");
+            else if (why.empty())
                 c.refuse("(b) " + fname() + " calls " + b + " on " + c.memberName(c.q) + " without the mutex held");
             fail("touches the container without the mutex");
             return;
@@ -894,11 +840,11 @@ private:
             return;
         }
         if (b == "wait_for" && call.getNumOperands() == 4 && c.kind == Kind::Ring) {
-            c.features["timed wait"]++;
+            c.v.features["timed wait"]++;
             return timedWait(call, cv);
         }
         if (b == "wait_for" || b == "wait_until") {
-            c.features["timed wait"]++;
+            c.v.features["timed wait"]++;
             c.refuse("(d) " + fname() + " waits with a time-out (" + b + "): the time-out path has no faithful "
                      "equivalent yet");
             return (void)fail("waits with a time-out");
@@ -965,7 +911,7 @@ private:
             if (call && callee) {
                 const std::string b = nameOf(callee.getSymName()).base;
                 if (b == "wait_for" || b == "wait_until") {
-                    c.features["timed wait"]++;
+                    c.v.features["timed wait"]++;
                     c.refuse("(d) " + fname() + " waits with a time-out (" + b +
                              "): the time-out path has no faithful equivalent yet");
                 }
@@ -1092,7 +1038,7 @@ private:
                 if (m && *m == c.q && callee && opName(callee) == "push_back") pushCall = call;
             }
         if (!pushCall) return false;
-        c.features["push_back"]++;
+        c.v.features["push_back"]++;
         Stmt s(Stmt::GuardedPush);
         s.op = i;
         if (!i.getElseRegion().empty()) return fail("has an else beside a push that may decline"), true;
@@ -1224,7 +1170,7 @@ private:
             if (!callee || !m || !isCv(*m)) return;
             const std::string b = nameOf(callee.getSymName()).base;
             if (b == "wait_for" || b == "wait_until") {
-                c.features["timed wait"]++;
+                c.v.features["timed wait"]++;
                 c.refuse("(d) " + fname() + " waits with a time-out (" + b +
                          "): the time-out path has no faithful equivalent yet");
                 waits = true;
@@ -1376,7 +1322,7 @@ private:
             }
             if (callee && m && *m == c.q) {
                 const std::string b = opName(callee);
-                c.features[b]++;
+                c.v.features[b]++;
                 if (b == "size")
                     c.refuse("(d) " + fname() + " reads size(): the substitutes keep no linearisable count");
                 else if (b == "full")
@@ -1486,6 +1432,10 @@ public:
         *this, "named-elsewhere", llvm::cl::init(""),
         llvm::cl::desc("A file listing, one per line, the symbols the other files linked with this module "
                        "define or reference: a class any of them names does not lift")};
+    Option<std::string> definedElsewhereFile{
+        *this, "defined-elsewhere", llvm::cl::init(""),
+        llvm::cl::desc("A file listing the symbols the other files linked with this module define: a function "
+                       "of a library's name there is the program's, and escapes what it is handed")};
 
     void runOnOperation() override;
 
@@ -1493,13 +1443,11 @@ private:
     ModuleOp module;
     llvm::DenseMap<std::pair<Type, unsigned>, std::string> memberNames;
 
-    // What the rest of the program may see: whether this module has main,
-    // and the demangled names, spaces removed, the other files name.
-    bool hasMain = false;
-    std::vector<std::string> elsewhere;
+    // What the rest of the program may see.
+    ClosedWorld world;
 
     void analyse(Candidate &c);
-    void closedWorld(Candidate &c);
+    void specialisedAllocator(Candidate &c, StringRef container);
     void boundedChecks(Candidate &c);
     bool onlyReturned(cir::FuncOp f, unsigned depth, llvm::DenseSet<Operation *> &seen);
     bool onlyDirectCalls(cir::FuncOp f, llvm::SmallVectorImpl<cir::CallOp> &calls);
@@ -1513,21 +1461,15 @@ private:
 void LiftLockedQueuesPass::runOnOperation() {
     module = getOperation();
     gMemberNames = &memberNames;
+    CriticalSections sections(module);
+    gSections = &sections;
+    llvm::scope_exit reset([] {
+        gMemberNames = nullptr;
+        gSections = nullptr;
+    });
 
-    auto mainFn = module.lookupSymbol<cir::FuncOp>("main");
-    hasMain = mainFn && !mainFn.getBody().empty();
-    elsewhere.clear();
-    if (!namedElsewhereFile.empty()) {
-        auto buf = llvm::MemoryBuffer::getFile(namedElsewhereFile.getValue());
-        if (!buf) {
-            module.emitError() << "wtc: cannot read the symbols named elsewhere from " << namedElsewhereFile.getValue();
-            return signalPassFailure();
-        }
-        llvm::SmallVector<StringRef, 64> lines;
-        (*buf)->getBuffer().split(lines, '\n', -1, false);
-        for (StringRef l : lines)
-            if (!(l = l.trim()).empty()) elsewhere.push_back(squashSpaces(llvm::demangle(l.str())));
-    }
+    if (failed(world.init(module, ClosedWorldOptions{openWorld, namedElsewhereFile, definedElsewhereFile})))
+        return signalPassFailure();
 
     // Member names, and the records that hold a std::mutex.
     llvm::SetVector<Type> withMutex;
@@ -1598,16 +1540,18 @@ void LiftLockedQueuesPass::runOnOperation() {
         Candidate c(loc);
         c.rec = cast<cir::RecordType>(key.first);
         c.q = key.second;
+        c.v.idiom = "locked queue";
+        c.v.label = c.label();
         analyse(c);
-        closedWorld(c);
+        llvm::DenseSet<Operation *> own;  // what the rewrite replaces
+        for (const Method &m : c.methods) own.insert(m.f);
+        for (cir::FuncOp f : c.ctors) own.insert(f);
+        for (cir::FuncOp f : c.dtors) own.insert(f);
+        world.closeClass(c.rec, own, c.frontElem ? c.frontElem : c.elem, c.v);
 
-        if (!c.features.empty()) {
-            InFlightDiagnostic fd = emitRemark(c.loc) << "wtc: locked queue " << c.label() << " uses ";
-            llvm::interleaveComma(c.features, fd, [&](const auto &kv) { fd << kv.first << " " << kv.second; });
-        }
-        if (!c.reasons.empty()) {
-            for (const std::string &why : c.reasons)
-                emitRemark(c.loc) << "wtc: locked queue " << c.label() << " not lifted: " << why;
+        c.v.emitUses(c.loc);
+        if (c.refused()) {
+            c.v.emitRefusals(c.loc);
             continue;
         }
 
@@ -1615,23 +1559,20 @@ void LiftLockedQueuesPass::runOnOperation() {
         if (rt.empty()) {
             StringRef ty = recordName(c.rec.getElementType(c.q));
             if (ty.contains("(lambda") || ty.contains("(anonymous") || ty.contains("(unnamed")) {
-                emitRemark(c.loc) << "wtc: locked queue " << c.label()
-                                  << " not lifted: its container type cannot be named outside the file";
+                c.v.emitRefusal(c.loc, "its container type cannot be named outside the file");
                 continue;
             }
             lines += ("template struct wtc::lifted" + Twine(c.kind == Kind::Ring ? "_bounded" : "") + "<" + ty +
                       ">;\n")
                          .str();
             if (rewrite)
-                emitRemark(c.loc) << "wtc: locked queue " << c.label()
-                                  << " not lifted: wtc::lifted<" << ty
-                                  << "> is not instantiated in this module (wtc-cc instantiates it)";
+                c.v.emitRefusal(c.loc, "wtc::lifted<" + ty + "> is not instantiated in this module (wtc-cc instantiates it)");
             else
-                emitRemark(c.loc) << "wtc: locked queue " << c.label() << " lifts";
+                c.v.emitLifts(c.loc);
             continue;
         }
         if (rewrite) lift(c, rt);
-        else emitRemark(c.loc) << "wtc: locked queue " << c.label() << " lifts";
+        else c.v.emitLifts(c.loc);
     }
     if (rewrite) eraseUnusedRuntime();
 
@@ -1644,7 +1585,6 @@ void LiftLockedQueuesPass::runOnOperation() {
         }
         out << lines;
     }
-    gMemberNames = nullptr;
 }
 
 void LiftLockedQueuesPass::analyse(Candidate &c) {
@@ -1679,6 +1619,8 @@ void LiftLockedQueuesPass::analyse(Candidate &c) {
         else if (!standardAllocator(under))
             c.refuse("(e) the container allocates with an allocator other than std::allocator of its element (" +
                      under + ")");
+        else
+            specialisedAllocator(c, under);
         break;
     }
     case Kind::StdDeque:
@@ -1686,6 +1628,8 @@ void LiftLockedQueuesPass::analyse(Candidate &c) {
         if (!standardAllocator(qType))
             c.refuse("(e) the container allocates with an allocator other than std::allocator of its element (" +
                      qType + ")");
+        else
+            specialisedAllocator(c, qType);
         break;
     case Kind::StdVector:
         c.refuse("(e) the container is a std::vector, which the class may use as a stack or a batch");
@@ -1744,16 +1688,16 @@ void LiftLockedQueuesPass::analyse(Candidate &c) {
             continue;
         }
         Reader r(c, f, module);
-        const size_t before = c.reasons.size();
+        const size_t before = c.v.reasons.size();
         r.read();
         for (cir::FuncOp p : r.preds) c.preds.push_back(p);
-        decide(c, r, f, c.reasons.size() != before);
+        decide(c, r, f, c.v.reasons.size() != before);
     }
     // A function that is not a member, other than a wait's predicate. A
     // lambda inside a member function that is already refused adds
     // nothing to the report.
     for (cir::FuncOp f : lambdas)
-        if (!llvm::is_contained(c.preds, f) && c.reasons.empty())
+        if (!llvm::is_contained(c.preds, f) && !c.refused())
             c.refuse("(a) " + shortName(f) + " touches the members of " + recordName(c.rec) +
                      " outside its member functions");
 
@@ -1805,7 +1749,7 @@ void LiftLockedQueuesPass::analyse(Candidate &c) {
             spaceCv = m.waitCv;
         }
     for (const Method &m : c.methods) {
-        if (!c.reasons.empty()) break;
+        if (!!c.refused()) break;
         if (isPush(m.role) && waits &&
             llvm::none_of(m.notifies, [&](auto n) { return n.first == *dataCv; }))
             c.refuse("(d) " + shortName(m.f) + " does not notify " + c.memberName(*dataCv) +
@@ -1818,9 +1762,9 @@ void LiftLockedQueuesPass::analyse(Candidate &c) {
             if (waits && llvm::none_of(m.notifies, [&](auto n) { return n.first == *dataCv && n.second; }))
                 c.refuse("(d) " + shortName(m.f) + " sets the stop flag but does not wake every waiter on " +
                          c.memberName(*dataCv));
-            c.features["stop flag"]++;
+            c.v.features["stop flag"]++;
         }
-        if (m.role == Role::PopWaitClosed) c.features["closable pop"]++;
+        if (m.role == Role::PopWaitClosed) c.v.features["closable pop"]++;
     }
     // A pop that ignores the flag would return, once the queue is closed
     // and empty, where the original waits on.
@@ -1838,184 +1782,74 @@ void LiftLockedQueuesPass::analyse(Candidate &c) {
         if (closes && m.role == Role::PushWait)
             c.refuse("(d) " + shortName(m.f) + " waits only for room in a class that also closes");
     }
-    if (c.kind == Kind::Ring && c.reasons.empty()) boundedChecks(c);
-    if (c.methods.empty() && c.reasons.empty()) c.refuse("(a) no member function pushes or pops");
-    if (c.ctors.empty() && c.reasons.empty())
+    if (c.kind == Kind::Ring && !c.refused()) boundedChecks(c);
+    if (c.methods.empty() && !c.refused()) c.refuse("(a) no member function pushes or pops");
+    if (c.ctors.empty() && !c.refused())
         c.refuse("(a) no constructor of " + recordName(c.rec) + " builds the container here");
 }
 
-// (f) The class is this module's alone. Lifting changes what its member
-// functions do with the object's storage; a copy of them compiled in
-// another unit, as written, would read the same storage as the container
-// it no longer holds, and the linker keeps one copy of an inline member
-// function for the whole program, which may be either. So the class lifts
-// only when the module is the whole program as far as the class goes: it
-// has main, it is not compiled to be linked with files the pass does not
-// see, none of the files it is linked with names the class (a member
-// function, or a function that takes or returns the class), and every
-// member function of the class this module declares has its body here.
-//
-// Symbols alone cannot show that a linked file leaves the class alone: its
-// copy of an inline member function may be inlined where it is called,
-// leaving no symbol that names the class. So, with any file linked, the
-// object must also be out of its reach, by a rule on this module's own
-// code: no global another file may name (not internal, or only declared
-// here) holds the class or points to it, at any depth; no call hands
-// something that holds or points to it to a function with no body here,
-// to an indirect call or to a function a linked file names; no function
-// of this module that a linked file names takes or returns such a thing;
-// and no pointer to such a thing is converted to a type that is not one,
-// which the pass could no longer follow (to `void *`, to an integer, to a
-// base class), other than to free it.
-void LiftLockedQueuesPass::closedWorld(Candidate &c) {
-    const std::string cls = recordName(c.rec).str();
-    if (openWorld) {
-        c.refuse("(f) the unit is compiled to be linked with files the pass does not see, which may use " + cls +
-                 " as written");
-        return;
-    }
-    if (!hasMain) {
-        c.refuse("(f) the module has no main: the rest of the program, elsewhere, may use " + cls +
-                 " as written");
-        return;
-    }
-    for (cir::FuncOp f : module.getOps<cir::FuncOp>())
-        if (f.getBody().empty() && isMemberOf(f, c.rec))
-            c.refuse("(f) " + shortName(f) + " has no body here: another unit defines it");
-    const std::string want = squashSpaces(cls);
-    for (const std::string &s : elsewhere)
-        if (mentions(s, want)) {
-            c.refuse("(f) a file linked with this one names " + cls + " (" + s + ")");
+// std::allocator of the element, as the container's name says, may still be
+// the program's own: a program may specialise it for a type it defines,
+// and its allocate may bound or count what it hands out. libstdc++'s
+// allocator has no allocate of its own before C++20, and from C++20 its
+// allocate calls __new_allocator's: one that does not is the program's.
+void LiftLockedQueuesPass::specialisedAllocator(Candidate &c, StringRef container) {
+    auto args = templateArgs(container);
+    if (!args || args->empty()) return;
+    const std::string alloc = squashSpaces("std::allocator<" + (*args)[0] + ">");
+    // What the container calls to allocate, through allocator_traits: the
+    // allocator's own allocate, or one it inherits from a base of the
+    // program's (a specialisation derived from a bounding allocator) must
+    // be libstdc++'s __new_allocator's, directly or through
+    // std::allocator's own (C++20).
+    const std::string traits = squashSpaces("std::allocator_traits<" + alloc + ">");
+    auto libraryAllocates = [&](cir::FuncOp g, auto &self, unsigned depth) -> bool {
+        if (!g || depth > 2) return false;
+        Name n = nameOf(g.getSymName());
+        if (StringRef(n.context).starts_with("std::__new_allocator<")) return true;
+        if (squashSpaces(n.context) != alloc || g.getBody().empty()) return false;
+        bool ok = true, any = false;
+        g.walk([&](cir::CallOp call) {
+            cir::FuncOp h = lookupCallee(call);
+            Name hn = h ? nameOf(h.getSymName()) : Name();
+            if (hn.base != "allocate" && hn.base != "deallocate") return;
+            any = true;
+            ok &= self(h, self, depth + 1);
+        });
+        return ok && any;
+    };
+    for (cir::FuncOp f : module.getOps<cir::FuncOp>()) {
+        Name n = nameOf(f.getSymName());
+        if (!n.ok || squashSpaces(n.context) != traits || (n.base != "allocate" && n.base != "deallocate") ||
+            f.getBody().empty())
+            continue;
+        bool ok = true;
+        f.walk([&](cir::CallOp call) {
+            cir::FuncOp g = lookupCallee(call);
+            Name gn = g ? nameOf(g.getSymName()) : Name();
+            if (gn.base == "allocate" || gn.base == "deallocate") ok &= libraryAllocates(g, libraryAllocates, 0);
+        });
+        if (!ok) {
+            c.refuse("(e) the program's std::allocator<" + (*args)[0] + "> " + n.base +
+                     "s with an allocator other than libstdc++'s, which may bound or count what the container "
+                     "holds; the substitute allocates without it");
             return;
         }
-    if (namedElsewhereFile.empty()) return;
-
-    // Whether a type is the class, holds it or points to something that
-    // does, at any depth: a search of the types it is made of.
-    llvm::DenseMap<Type, bool> memo;
-    auto reaches = [&](Type root) {
-        auto [it, fresh] = memo.try_emplace(root, false);
-        if (!fresh) return it->second;
-        llvm::SmallVector<Type, 16> work{root};
-        llvm::DenseSet<Type> seen{root};
-        bool found = false;
-        while (!work.empty() && !found) {
-            Type t = work.pop_back_val();
-            if (t == Type(c.rec)) {
-                found = true;
-                break;
-            }
-            llvm::SmallVector<Type, 8> next;
-            if (auto p = dyn_cast<cir::PointerType>(t)) next.push_back(p.getPointee());
-            else if (auto a = dyn_cast<cir::ArrayType>(t)) next.push_back(a.getElementType());
-            else if (auto r = dyn_cast<cir::RecordType>(t); r && !r.isIncomplete())
-                next.append(r.getMembers().begin(), r.getMembers().end());
-            for (Type n : next)
-                if (seen.insert(n).second) work.push_back(n);
-        }
-        memo[root] = found;
-        return found;
-    };
-    auto namedThere = [&](cir::FuncOp f) {
-        return llvm::is_contained(elsewhere, squashSpaces(llvm::demangle(f.getSymName().str())));
-    };
-    auto where = [](Operation *op) {
-        auto f = op->getParentOfType<cir::FuncOp>();
-        return f ? shortName(f) : std::string("a global's initialiser");
-    };
-    auto deallocates = [](cir::FuncOp g) {
-        StringRef n = g ? g.getSymName() : StringRef();
-        return n.starts_with("_ZdlPv") || n.starts_with("_ZdaPv");
-    };
-    auto typeName = [](Type t) -> std::string {
-        if (auto p = dyn_cast<cir::PointerType>(t)) {
-            if (isa<cir::VoidType>(p.getPointee())) return "void *";
-            if (StringRef n = recordName(p.getPointee()); !n.empty()) return (n + " *").str();
-            return "a pointer of another type";
-        }
-        if (isa<cir::IntType>(t)) return "an integer";
-        return "another type";
-    };
-    std::string bad;
-    for (cir::GlobalOp g : module.getOps<cir::GlobalOp>())
-        if ((!cir::isLocalLinkage(g.getLinkage()) || g.isDeclaration()) && reaches(g.getSymType())) {
-            bad = "the global " + g.getSymName().str() + ", which a file linked with this one may name, holds or "
-                  "points to " + cls;
-            break;
-        }
-    for (cir::FuncOp f : module.getOps<cir::FuncOp>()) {
-        if (!bad.empty()) break;
-        if (f.getBody().empty() || !namedThere(f)) continue;
-        auto types = f.getFunctionType();
-        if (llvm::any_of(types.getInputs(), reaches) || llvm::any_of(types.getReturnTypes(), reaches))
-            bad = "a file linked with this one names " + pretty(f.getSymName()) + ", which takes or returns " + cls +
-                  " or a pointer to it";
     }
-    if (bad.empty())
-        module.walk([&](Operation *op) {
-            if (auto call = dyn_cast<cir::CallOp>(op)) {
-                cir::FuncOp g = call.isIndirect() ? cir::FuncOp() : lookupCallee(call);
-                const bool foreign = !g || g.getBody().empty() || namedThere(g);
-                if (foreign && llvm::any_of(call.getArgOperands(), [&](Value v) { return reaches(v.getType()); })) {
-                    bad = where(op) + " hands " + cls + ", or what holds or points to it, to " +
-                          (g ? pretty(g.getSymName()) : std::string("an indirect call")) +
-                          (!g ? std::string() : g.getBody().empty() ? ", which has no body here"
-                                                                    : ", which a file linked with this one names");
-                    return WalkResult::interrupt();
-                }
-            }
-            Value from, to;
-            if (auto cast = dyn_cast<cir::CastOp>(op); cast && cast.getKind() != cir::CastKind::ptr_to_bool) {
-                from = cast.getSrc();
-                to = cast.getResult();
-            } else if (auto base = dyn_cast<cir::BaseClassAddrOp>(op)) {
-                from = base.getDerivedAddr();
-                to = base.getResult();
-            }
-            // The argument's own memory read as another type, to pass an
-            // object in registers (a lambda that captures `this`), to a
-            // function of this module that the files do not name, or to
-            // return it from one: the bits stay in this module's code.
-            auto coerced = [&](Operation *u) {
-                if (auto st = dyn_cast<cir::StoreOp>(u)) return st.getAddr() == to && st.getValue() != to;
-                auto ld = dyn_cast<cir::LoadOp>(u);
-                if (!ld) return false;
-                return llvm::all_of(ld->getUses(), [&](OpOperand &lu) {
-                    if (auto r = dyn_cast<cir::ReturnOp>(lu.getOwner())) {
-                        auto f = r->getParentOfType<cir::FuncOp>();
-                        return f && !namedThere(f);
-                    }
-                    auto call = dyn_cast<cir::CallOp>(lu.getOwner());
-                    cir::FuncOp g = call && !call.isIndirect() ? lookupCallee(call) : cir::FuncOp();
-                    return g && !g.getBody().empty() && !namedThere(g);
-                });
-            };
-            // A global's destructor registered with __cxa_atexit, which
-            // hands the object back to it, a function of this module.
-            auto atExit = [&](OpOperand &use) {
-                auto call = dyn_cast<cir::CallOp>(use.getOwner());
-                cir::FuncOp g = call ? lookupCallee(call) : cir::FuncOp();
-                if (!g || g.getSymName() != "__cxa_atexit" || use.getOperandNumber() != 1 ||
-                    call.getArgOperands().size() < 2)
-                    return false;
-                Value fn = call.getArgOperands()[0];
-                while (auto cv = fn.getDefiningOp<cir::CastOp>()) fn = cv.getSrc();
-                auto gg = fn.getDefiningOp<cir::GetGlobalOp>();
-                auto dtor = gg ? module.lookupSymbol<cir::FuncOp>(gg.getName()) : cir::FuncOp();
-                return dtor && !dtor.getBody().empty() && !namedThere(dtor);
-            };
-            if (from && reaches(from.getType()) && !reaches(to.getType()) &&
-                !llvm::all_of(to.getUses(), [&](OpOperand &use) {
-                    auto call = dyn_cast<cir::CallOp>(use.getOwner());
-                    return (call && deallocates(lookupCallee(call))) || coerced(use.getOwner()) || atExit(use);
-                })) {
-                bad = where(op) + " converts a pointer to " + cls + ", or to what holds or points to it, to " +
-                      typeName(to.getType()) + ", which the pass does not follow";
-                return WalkResult::interrupt();
-            }
-            return WalkResult::advance();
+    for (cir::FuncOp f : module.getOps<cir::FuncOp>()) {
+        Name n = nameOf(f.getSymName());
+        if (!n.ok || squashSpaces(n.context) != alloc || (n.base != "allocate" && n.base != "deallocate")) continue;
+        bool library = false;
+        f.walk([&](cir::CallOp call) {
+            cir::FuncOp g = lookupCallee(call);
+            library |= g && StringRef(nameOf(g.getSymName()).context).starts_with("std::__new_allocator<");
         });
-    if (!bad.empty()) c.refuse("(f) " + bad);
+        if (f.getBody().empty() || !library) {
+            c.refuse("(e) the program specialises std::allocator<" + (*args)[0] + ">, whose " + n.base +
+                     " may bound or count what the container holds; the substitute allocates without it");
+            return;
+        }
+    }
 }
 
 // Whether every use of f's symbol is a direct call, and which.
@@ -2071,10 +1905,8 @@ void LiftLockedQueuesPass::boundedChecks(Candidate &c) {
     // A file linked with this one may call a function of this module, or
     // reach a record it names, with values the module does not show.
     ValueSets::Elsewhere others;
-    if (!elsewhere.empty()) {
-        others.calls = [this](cir::FuncOp f) {
-            return llvm::is_contained(elsewhere, squashSpaces(llvm::demangle(f.getSymName().str())));
-        };
+    if (world.anyNamed()) {
+        others.calls = [this](cir::FuncOp f) { return world.namesFunction(f); };
         // Another file's code reaches a record's members without a symbol
         // that names it (its copy of an inline member function, inlined
         // where it is called), so every record is open to it.
@@ -2088,7 +1920,7 @@ void LiftLockedQueuesPass::boundedChecks(Candidate &c) {
                 c.refuse("(d) the overrun count " + shortName(m.f) + " returns is used for more than handing it "
                          "back: the substitute's count is exact only once the pushes in flight have returned");
             else
-                c.features["overrun count, handed back only"]++;
+                c.v.features["overrun count, handed back only"]++;
         }
         if (m.role != Role::PushOverrun) continue;
         // The overrun path makes its callers consumers; it is left out only
@@ -2109,7 +1941,7 @@ void LiftLockedQueuesPass::boundedChecks(Candidate &c) {
         }
         if (calls.empty() && !reachable) why = "nothing calls it";
         c.overrunReachable |= reachable;
-        emitRemark(c.loc) << "wtc: locked queue " << c.label() << ": " << shortName(m.f)
+        emitRemark(c.loc) << "wtc: " << c.v.idiom << " " << c.v.label << ": " << shortName(m.f)
                           << (reachable ? " may overrun, so its callers are consumers too ("
                                         : " never runs, so its overrun is left out (")
                           << why << ")";
@@ -2492,14 +2324,13 @@ void LiftLockedQueuesPass::lift(Candidate &c, llvm::StringMap<cir::FuncOp> &rt) 
     for (const Method &m : c.methods) needs.push_back(runtimeOf(m));
     for (const std::string &need : needs)
         if (!rt.lookup(need)) {
-            emitRemark(c.loc) << "wtc: locked queue " << c.label() << " not lifted: wtc::lifted"
-                              << (ring ? "_bounded" : "") << " lacks " << need;
+            c.v.emitRefusal(c.loc, "wtc::lifted" + Twine(ring ? "_bounded" : "") + " lacks " + need);
             return;
         }
     // The ring's capacity goes to the runtime as it is.
     if (ring && rt.lookup("construct_bounded").getArgumentTypes()[2] !=
                     c.ring->sizedConstructor().getArgumentTypes()[1]) {
-        emitRemark(c.loc) << "wtc: locked queue " << c.label() << " not lifted: the ring's capacity is not a size_t";
+        c.v.emitRefusal(c.loc, "the ring's capacity is not a size_t");
         return;
     }
     // A timed pop passes the program's duration on as it is: the runtime's
@@ -2507,8 +2338,7 @@ void LiftLockedQueuesPass::lift(Candidate &c, llvm::StringMap<cir::FuncOp> &rt) 
     for (const Method &m : c.methods)
         if (m.role == Role::PopWaitFor &&
             rt.lookup(runtimeOf(m)).getArgumentTypes()[2] != cir::FuncOp(m.f).getArgumentTypes()[m.durationParam]) {
-            emitRemark(c.loc) << "wtc: locked queue " << c.label() << " not lifted: " << shortName(m.f)
-                              << "'s duration is not the type wtc::lifted_bounded takes";
+            c.v.emitRefusal(c.loc, shortName(m.f) + "'s duration is not the type wtc::lifted_bounded takes");
             return;
         }
     // What the runtime offers for this element type.
@@ -2517,9 +2347,9 @@ void LiftLockedQueuesPass::lift(Candidate &c, llvm::StringMap<cir::FuncOp> &rt) 
     for (const Method &m : c.methods) {
         const bool takes = m.role == Role::TryPop || m.role == Role::PopWait || m.role == Role::PopWaitClosed;
         if (takes && !m.move && !copyOk) {
-            emitRemark(c.loc) << "wtc: locked queue " << c.label() << " not lifted: (e) " << shortName(m.f)
-                              << " copies the element out, and wtc::queue moves it: the same only for a "
-                                 "trivially copyable type";
+            c.v.emitRefusal(c.loc, "(e) " + shortName(m.f) +
+                                       " copies the element out, and wtc::queue moves it: the same only for a "
+                                       "trivially copyable type");
             refused = true;
         }
     }
@@ -2654,7 +2484,7 @@ void LiftLockedQueuesPass::lift(Candidate &c, llvm::StringMap<cir::FuncOp> &rt) 
             break;
         }
     }
-    InFlightDiagnostic d = emitRemark(c.loc) << "wtc: locked queue " << c.label() << " lifted (";
+    InFlightDiagnostic d = emitRemark(c.loc) << "wtc: " << c.v.idiom << " " << c.v.label << " lifted (";
     llvm::interleaveComma(c.methods, d, [&](const Method &m) { d << shortName(m.f) << ": " << roleName(m.role); });
     d << ")";
 }
