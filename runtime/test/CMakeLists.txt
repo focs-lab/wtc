@@ -219,6 +219,33 @@ target_compile_definitions(waiter_drop_wakeups PRIVATE WTC_TEST_DROP_WAKEUPS=1)
 add_test(NAME waiter_drop_wakeups_is_caught
          COMMAND sh -c "$<TARGET_FILE:waiter_drop_wakeups> interleave 2>&1 | grep -q 'lost wake-up: a publish'")
 
+# The wait whose loop is the caller's (waiter.hpp: begin, step, end), as a
+# lifted wait uses it (shim/lifted.hpp): a predicate of the program's own,
+# a pop from a queue under its own mutex or a stop flag, on every policy;
+# the lost wake-up's window forced, tasks with pauses then the stop flag,
+# every waiter asleep then the stop flag. The test that must fail: a
+# waiter that drops its wake-ups must be caught sleeping through a publish.
+add_executable(waiter_loop_test waiter_loop_test.cpp)
+target_link_libraries(waiter_loop_test PRIVATE wtc_rt_flags)
+target_compile_options(waiter_loop_test PRIVATE $<$<CXX_COMPILER_ID:GNU>:-Wno-attributes>)
+if(WTC_RT_SANITIZE)
+  set(waiter_loop_stress 2000)
+else()
+  set(waiter_loop_stress 20000)
+endif()
+add_test(NAME waiter_loop_interleave COMMAND waiter_loop_test interleave)
+add_test(NAME waiter_loop_stress COMMAND waiter_loop_test stress ${waiter_loop_stress})
+add_test(NAME waiter_loop_stop COMMAND waiter_loop_test stop)
+add_test(NAME waiter_loop_idle COMMAND waiter_loop_test idle)
+set_tests_properties(waiter_loop_interleave waiter_loop_stress waiter_loop_stop waiter_loop_idle PROPERTIES TIMEOUT 300)
+
+add_executable(waiter_loop_drop_wakeups waiter_loop_test.cpp)
+target_link_libraries(waiter_loop_drop_wakeups PRIVATE wtc_rt_flags)
+target_compile_options(waiter_loop_drop_wakeups PRIVATE $<$<CXX_COMPILER_ID:GNU>:-Wno-attributes>)
+target_compile_definitions(waiter_loop_drop_wakeups PRIVATE WTC_TEST_DROP_WAKEUPS=1)
+add_test(NAME waiter_loop_drop_wakeups_is_caught
+         COMMAND sh -c "$<TARGET_FILE:waiter_loop_drop_wakeups> interleave 2>&1 | grep -q 'lost wake-up: a publish'")
+
 # The bounded queue (bounded_ring.hpp) through the shim's wtc::bounded:
 # its answers against a sequential bounded queue, the exactness of its
 # bound with a pop held inside its step, waiting on both sides on every

@@ -169,12 +169,46 @@ enum class wait_policy : int {
     spin_then_park = 2,
 };
 
+// The processors the calling thread may run on: the count of its affinity
+// mask, read now, or 0 when it cannot be read (more than 1024 processors,
+// or no such call here).
+inline unsigned affinity_cpus() noexcept {
+#if defined(__linux__)
+    unsigned long mask[1024 / (8 * sizeof(unsigned long))] = {};
+    const long n = syscall(SYS_sched_getaffinity, 0, sizeof(mask), mask);
+    if (n <= 0) return 0;
+    unsigned c = 0;
+    for (long i = 0; i < n / static_cast<long>(sizeof(unsigned long)); ++i) c += __builtin_popcountl(mask[i]);
+    return c;
+#else
+    return std::thread::hardware_concurrency();
+#endif
+}
+
+// Whether the calling thread runs under the default time-sharing policy
+// (SCHED_OTHER, SCHED_BATCH or SCHED_IDLE). Under a real-time policy
+// (SCHED_FIFO, SCHED_RR, SCHED_DEADLINE) a waiter that yields keeps its
+// processor from a lower-priority thread on it, the one it waits for.
+inline bool time_sharing() noexcept {
+#if defined(__linux__)
+    const long p = syscall(SYS_sched_getscheduler, 0);
+    return p == 0 || p == 3 || p == 5;
+#else
+    return false;
+#endif
+}
+
 class waiter {
 public:
     static constexpr std::uint64_t kSpinNs = WTC_SPIN_NS;
 
-    explicit waiter(wait_policy policy = wait_policy::spin, std::uint64_t spin_ns = kSpinNs)
-        : policy_(policy), spin_ns_(spin_ns) {}
+    // spin_ns: how long a waiter pauses between looks before it yields
+    // (spin) or parks (spin_then_park). yield_ns, for spin_then_park: how
+    // long since the wait began it then yields between looks before it
+    // parks; 0 parks once the pause is over.
+    explicit waiter(wait_policy policy = wait_policy::spin, std::uint64_t spin_ns = kSpinNs,
+                    std::uint64_t yield_ns = 0)
+        : policy_(policy), spin_ns_(spin_ns), yield_ns_(yield_ns) {}
 
     waiter(const waiter&) = delete;
     waiter& operator=(const waiter&) = delete;
@@ -213,6 +247,79 @@ public:
         fence();
         if (waiters_.load(std::memory_order_relaxed) == 0) return;
         wake(published > INT_MAX ? INT_MAX : static_cast<int>(published));
+    }
+
+    // After a change that may make several waiters' predicates true (a
+    // stop flag set): wakes every sleeper, if any is announced. The fence
+    // pairs with the one in prepare(), as notify's does.
+    void notify_all() noexcept {
+        if (policy_ == wait_policy::spin) return;
+#ifdef WTC_TEST_DROP_WAKEUPS
+        return;
+#endif
+        fence();
+        if (waiters_.load(std::memory_order_relaxed) == 0) return;
+        wake(INT_MAX);
+    }
+
+    // A wait whose loop is the caller's, for a predicate that is not a pop
+    // of a queue of ours (a program's own wait lifted off its condition
+    // variable, shim/lifted.hpp):
+    //
+    //   waiter::state st;
+    //   w.begin(st);
+    //   while (!pred()) w.step(st);
+    //   w.end(st);
+    //
+    // The protocol is the eventcount's, as in wait() above: once the spin
+    // budget is spent (at once, for park), step() announces the caller,
+    // whose next look at its predicate comes after the fence and the read
+    // of the epoch; the step after a look that found nothing sleeps while
+    // the epoch keeps that value, then announces it again. A change the
+    // predicate reads, made before a notify() or notify_all(), is seen by
+    // the next look or ends the sleep. Predicates may be looked at any
+    // number of times, as a condition variable's spurious wake-ups allow.
+    // A predicate that throws leaves the caller counted among the waiters,
+    // which costs later publishes a wake-up and loses nothing.
+    struct state {
+        std::uint64_t start = 0;
+        std::uint32_t key = 0;
+        bool announced = false;
+    };
+
+    void begin(state& st) noexcept {
+        st.start = ticks();
+        st.announced = false;
+        if (policy_ == wait_policy::park) {
+            st.key = prepare();
+            st.announced = true;
+        }
+    }
+
+    // After a look that found the predicate false.
+    void step(state& st) noexcept {
+        if (!st.announced) {
+            const std::uint64_t spent = ticks() - st.start;
+            if (spent < to_ticks(spin_ns_)) {
+                relax();
+            } else if (policy_ == wait_policy::spin || spent < to_ticks(yield_ns_)) {
+                std::this_thread::yield();
+            } else {
+                st.key = prepare();
+                st.announced = true;
+            }
+            return;
+        }
+        parks_.fetch_add(1, std::memory_order_relaxed);
+        sleep(st.key, 0);
+        cancel();
+        st.key = prepare();
+    }
+
+    // After the look that found the predicate true.
+    void end(state& st) noexcept {
+        if (st.announced) cancel();
+        st.announced = false;
     }
 
     // From then on, a waiting pop that finds the queue empty returns false.
@@ -291,7 +398,7 @@ private:
                 if (limited && passed(until, now)) return false;
                 if (now - start < budget) {
                     relax();
-                } else if (policy_ == wait_policy::spin) {
+                } else if (policy_ == wait_policy::spin || now - start < to_ticks(yield_ns_)) {
                     std::this_thread::yield();
                 } else {
                     break;
@@ -379,6 +486,7 @@ private:
     // Read-only after construction.
     const wait_policy policy_;
     const std::uint64_t spin_ns_;
+    const std::uint64_t yield_ns_;
     // Read by every publish of a queue that can park; written when a
     // consumer announces itself or leaves.
     std::atomic<std::uint32_t> waiters_{0};
