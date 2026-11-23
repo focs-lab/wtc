@@ -560,6 +560,24 @@ pass decides that a program is inside that contract.
   as a file of the program's. A program breaks the assumption by
   installing a library of its own, built from the class's header, in a
   system directory and linking it with `-l` and no `-L`.
+- **A lifted wait's sections, and the calls they make.** Condition (k)
+  of "Lifting a wait" follows a call through a pointer to the functions
+  whose address the module takes that it may legally call (calling a
+  function through a pointer of an incompatible type is undefined
+  behaviour; the object of a call through a pointer to member, which the
+  front end passes as `void *`, fits any), and models the functions with
+  no body here it allows ("Lifting a wait", (k)): the memory functions
+  and pthread mutexes change nothing a predicate reads; libstdc++'s
+  strings and exception classes may call the program's replacement
+  allocation functions; throwing, catching and exception pointers may run
+  the destructors of what the program throws. A program breaks it by
+  making a write the predicate reads through one of these without such a
+  call (a `memcpy` into a `std::atomic<bool>`, undefined behaviour), or
+  by a libstdc++ function calling back into the program by a path the
+  model omits. A member the waiting section changes is reached only by
+  the module's code: its address goes only to its atomic operations, and
+  code the pass does not see reaches the module only through the
+  functions whose address it takes.
 - **Anything the driver does not understand means open world.** An
   argument that is neither a source file, a flag (with its value, for the
   flags that take one), nor a linker input `wtc-cc` lists (`other.obj`,
@@ -587,9 +605,25 @@ these shapes is expected, not a finding:
 - what the program prints, writes or reads, when its class may hold the
   object's address: printed values are the outside's, and with the
   analysis field-insensitive a value computed from a class that holds the
-  queue (a counter a task captures in CTPL's model, where the worker's
-  wait predicate captures both the pool and the slot a pop fills) may be
-  one class with it: `Lifted/ctpl.cpp` is refused since 23 Nov 2026;
+  queue may be one class with it. CTPL is refused this way since 23 Nov
+  2026, its model (`Lifted/ctpl.cpp`, "main prints a value that may point
+  to it") and the library with the leg's driver ("the global
+  `__once_callable`, which is only declared here, may hold it", from
+  `std::call_once` inside `std::packaged_task`). Diagnosed on 23 Nov 2026:
+  a lambda's captures are one class (the worker's `[this, i, flag]` makes
+  the thread index one class with the pool, the driver's `[&]` every local
+  of `main`); a small function of the system's headers that calls another
+  (`std::atomic<bool>`'s conversion calls its `load`) is linked once for
+  all its callers, which joins every `std::atomic<bool>` the program reads;
+  the container's own construction, which the rewrite replaces, makes the
+  container's class point to itself; and at `-O1` and above the vtables
+  the front end emits join every virtual call's targets (through
+  `__cxa_pure_virtual`, in every abstract class's vtable). Following a
+  closure's captures one by one and summarising such functions makes the
+  model lift at `-O0`, not above; the rest needs a context-sensitive
+  treatment of the system's headers, not a small change. CTPL's own wait
+  lifts all the same ("Lifting a wait"): it needs the queue's operations
+  atomic, which they are under the queue class's mutex as written;
 - a class that holds the queue and a container of elements that point
   back to it is one class with them, and so are the objects of every
   std::function a small function of the system's headers with calls
@@ -806,8 +840,9 @@ to have one consumer.
 
 `wtc::lifted<C>` is a template the program never names. `tools/wtc-cc`
 runs the pass once with `rewrite=false instantiations=FILE`, which lists
-`template struct wtc::lifted<C>;` (`wtc::lifted_bounded<C>` for a ring)
-for each class that would lift, and, when
+`template struct wtc::lifted<C>;` (`wtc::lifted_bounded<C>` for a ring,
+`wtc::lifted_wait<P>` for a class whose wait lifts) for each class that
+would lift, and, when
 the list is not empty, compiles a unit of the runtime's: `lifted.hpp`,
 then the file (for the container's type), then those lines. The file
 itself is compiled as written, and `wtc-link` keeps of the runtime's unit
@@ -831,7 +866,7 @@ reduced. Read as written, without source edits (29 Oct 2026):
 
 | program, class | verdict | why |
 |---|---|---|
-| CTPL, `detail::Queue` (`ctpl_stl.h`) | refused since 23 Nov 2026, lifted before | a false refusal of the field-insensitive escape analysis ("Known limitations"): the worker's wait predicate captures both the pool and the slot a pop fills, so the pool is one class with the tasks and what main prints. Its operations match: push and try-pop; the pool's own condition variable and mutex stay, and the element, a pointer, is copied out, which is moving it. The model's topology is many to many (two threads submit; the pool's workers and the stopping thread pop), so the general-purpose queue. The real library with the leg's driver (`benchmarks/apps/ctpl`), one submitter, is spmc: the workers and the stopping thread pop |
+| CTPL, `detail::Queue` (`ctpl_stl.h`) | refused since 23 Nov 2026, lifted before; the pool's wait lifts | a false refusal of the escape analysis ("Known limitations"): the pool is one class with the tasks and what main prints. Its operations match: push and try-pop, and the element, a pointer, is copied out, which is moving it. The pool's own condition variable and mutex, which serve only the workers' wait for "a task or stop", are lifted apart since 23 Nov 2026 ("Lifting a wait"), in the model and in the library with the leg's driver. The model's topology is many to many (two threads submit; the pool's workers and the stopping thread pop), so the general-purpose queue. The real library with the leg's driver (`benchmarks/apps/ctpl`), one submitter, is spmc: the workers and the stopping thread pop |
 | g3log, `shared_queue` (`shared_queue.hpp`) | lifts | push and a blocking pop; shutdown is a message, so no stop flag. In the model, with one `Active` object, the queue is proved many producers to one consumer and becomes the single-consumer queue; the model runs correctly under ThreadSanitizer and `WTC_CHECK`. The real program (`benchmarks/apps/g3log`, the logger and its performance test as one unit) builds one `Active` per sink type and one for the worker, each popped by its own thread; the queue stands for all of them, so many to many |
 | BS::thread_pool, `tasks` (`BS_thread_pool.hpp`) | refused | (c) the mutex also guards the running count, the waiting flag, the thread count and the stop flag; (a) the worker pops through `pop_task()`, which takes no lock itself and runs only under the mutex the worker holds, but is none of the operations; (d) `get_tasks_queued()` reads `size()`, and `wait()` sleeps until the queue is empty and nothing runs, a joint invariant of the queue and the pool |
 | Bitcoin, `CCheckQueue::queue` (`checkqueue.h`) | refused | (e) a `std::vector` taken from the back, with range insert and erase; (d) the batch size is computed from `size()`; (c) the mutex also guards the idle, total and unfinished counts and the result |
@@ -916,6 +951,278 @@ spinning where the gaps between tasks are short, and still sleeps, as the
 original did. A class that closes must not also have a pop that waits only
 for an element: once the queue is closed and empty that pop would return,
 where the original waits on, so it is refused.
+
+## Lifting a wait
+
+A thread pool keeps its tasks in a queue and puts its workers to sleep on
+a condition variable of its own, under a mutex of its own, with a
+predicate that pops the queue or reads a stop flag. CTPL's worker:
+
+```cpp
+std::unique_lock<std::mutex> lock(this->mutex);
+++this->nWaiting;
+this->cv.wait(lock, [this, &_f, &isPop, &_flag](){ isPop = this->q.pop(_f); return isPop || this->isDone || _flag; });
+--this->nWaiting;
+```
+
+and every push notifies under that mutex (`q.push(_f); std::unique_lock
+lock(this->mutex); this->cv.notify_one();`). Lifting the queue class
+replaces the queue and keeps this wait: the worker still takes the pool's
+mutex, and a push still wakes a sleeper through the condition variable, a
+futex wake of a few microseconds that the pushing thread pays. Probe Q5
+(23 Nov 2026) measured CTPL with the wait replaced by hand with the
+runtime's eventcount (`runtime/waiter.hpp`): 1.5-2.6x with one submitter,
+4-10x with four. Since 23 Nov 2026 `--wtc-lift-locked-queues`
+(`mlir/lib/WTC/Transforms/LiftWaits.cpp`) makes that replacement itself,
+opt-in with `--lift` as the rest of lifting.
+
+### What it becomes
+
+The class keeps its layout. The condition variable's storage holds a
+pointer to an eventcount, `wtc::lifted_wait<P>` (`shim/lifted.hpp`):
+
+| in the program | becomes |
+|---|---|
+| the condition variable's construction and destruction | `construct`, which also chooses the wait's policy (below), and `destroy` |
+| `cv.wait(lock, pred)` | std::condition_variable::wait's own loop, `while (!pred()) wait(lock);`, copied into a function of the module's with its sleep replaced by the eventcount's `step`, between `begin` and `end` |
+| the wait's `std::unique_lock` on the mutex | built without taking the mutex (`std::defer_lock`): the waiting thread no longer takes it, and the lock's destructor finds nothing to unlock |
+| `cv.notify_one()`, `cv.notify_all()` | the eventcount's: a fence and a read, and a futex wake only when a waiter sleeps (one, or all) |
+| every other section of the mutex | unchanged: it still takes the mutex |
+
+The predicate is looked at, as before, until it is true; the eventcount
+announces the waiter before its last look and sleeps only while nothing
+has been published since (the protocol, and the two fences that rule out
+a lost wake-up, are `runtime/waiter.hpp`'s). Copying the library's loop
+rather than writing one keeps the predicate's call where the analyses
+see it: the topology of the queue it pops is read through it as before.
+A predicate's closure of up to 16 bytes (`[this]`, `[this, &x]`) is passed
+in registers, as one or two `void *` loaded from a copy of it; the pass
+reads the copy back to the closure the waiting function builds.
+
+### The conditions
+
+As for a queue, every doubt refuses and the remark names the condition
+("locked wait cv in P not lifted: (k) ..."):
+
+- **(g) A closed module.** It has `main`, nothing is linked with it and it
+  is not compiled to be linked later (`-c`), and every member function of
+  the class has its body here. The rule is the queue's (f) without the
+  escape analysis: with nothing linked, the code the pass does not see is
+  the system's libraries, and they touch a program's condition variable
+  only when handed it, which (h) refuses. Code of another file, which
+  could notify or wait on it as written, is excluded outright.
+- **(h) The condition variable serves one wait.** It is constructed,
+  destroyed, notified (`notify_one`, `notify_all`) and waited on, with a
+  predicate, at exactly one place, and its address goes nowhere else.
+  Refused: a wait without a predicate (a loop of the program's own around
+  `wait(lock)`), a timed wait (`wait_for`, `wait_until`), a second wait
+  (on another predicate, which a notification meant for the first would
+  also wake), the variable handed to anything
+  (`std::notify_all_at_thread_exit`), and a body of
+  `std::condition_variable::wait<Pred>` other than the loop above.
+- **(i) The mutex serves locks.** It is constructed and taken only by
+  `std::unique_lock` and `std::lock_guard` objects, each used only to be
+  built and destroyed, so that its section is its scope: `unlock()`,
+  `release()` (which keeps the mutex locked past the scope) or `mutex()`
+  refuses. The wait's lock is a `std::unique_lock` built on it in the
+  waiting function, used besides only to wait with.
+- **(j) The predicate needs no mutex.** It reads only a queue whose
+  operations are each atomic on their own, by its try-pop (a queue class
+  the pass read, refused if at all only for the closed world of its
+  storage: as written its operations are atomic under its own mutex,
+  lifted they are the runtime's), `std::atomic<bool>` flags by their loads
+  (members of the class or reached through its captures), its captures,
+  and the waiting function's locals it captures by reference; it writes
+  only those locals, whose address goes nowhere but the predicate, the
+  waiting function's loads and stores, and the queue's operations.
+  Anything else it reads, a plain member, a global, a function it calls,
+  refuses: without the mutex the read could race.
+- **(k) The sections.** The wait's section runs without the mutex once
+  lifted: the waiters run theirs at the same time, and the other sections
+  no longer exclude it. It reads and writes only the waiting function's
+  locals (a global, a static, a member, refuses: another section may be
+  writing it), and changes the class's state by at most one atomic
+  read-modify-write on each side of the wait, its result unused, of a
+  member the predicate does not read (CTPL's `++nWaiting` and
+  `--nWaiting`): the original's mutex made each side one step, and a load
+  and a store, or two read-modify-writes, would no longer be one. The
+  address of such a member goes only to its atomic operations, and
+  nothing outside the wait's section touches it, at any depth of the
+  calls made, in a section of the mutex or in a function that notifies
+  (a notification decided on a count of the waiters, read under the
+  mutex, could miss a waiter that counts itself and looks without it).
+  Every other section of the mutex keeps it and must change nothing the
+  predicate reads, at any depth of the calls it makes: no call of the
+  queue class's functions, no write of a `std::atomic<bool>`, no call of
+  a function with no body here that the pass does not model (below).
+  Otherwise the predicate, read without the mutex, could see such a
+  section half done (a task pushed and the stop flag not yet set, or the
+  reverse), which the original's mutex never shows it.
+- **(l) The object stays whole.** No object of the class is copied whole
+  or as bytes, no pointer to it is converted to another type, and no
+  pointer to one of its members is formed: a copy of the lifted condition
+  variable is a copy of a pointer to its waiter.
+
+Calls through a pointer, in (k), reach every function whose address the
+module takes (a vtable's entry, a function made a pointer, a pointer to a
+member function) that the call may legally call: as many parameters as it
+has arguments, or no more for a variadic function, each the argument's
+type, or for a pointer to a class, a pointer to a class derived from it
+(whose overrider a virtual call reaches), or any pointer for an argument
+the front end passes as `void *`, as it passes the object of a call
+through a pointer to member (`(o.*f)()`, and so `std::invoke`,
+`std::mem_fn`, `std::bind` over one). One of no such function reaches code
+the pass does not see: refused, unless its object is of a class of
+libstdc++'s, whose overriders are libstdc++'s.
+
+A function with no body here is what its model says, and anything else
+refuses: the memory functions and the pthread mutex and condition
+variable functions change nothing the predicate reads; libstdc++'s
+out-of-line string and exception class members allocate, and so may call
+the program's replacement of `operator new` or `operator delete`, which
+the pass then follows; throwing, catching, rethrowing and dropping an
+exception pointer's last reference (`__cxa_throw`, `__cxa_end_catch`,
+`std::rethrow_exception`, `std::exception_ptr`'s members, the futures'
+result base, the `std::__throw_*` helpers) may in addition run the
+destructor of anything the program throws, which the pass names from
+every `__cxa_throw` and `std::make_exception_ptr` and follows. With a
+terminate, unexpected or new handler of the program's installed, these
+refuse. CTPL's push holds the mutex while it returns `pck->get_future()`,
+whose exception paths release shared states through virtual calls; they
+reach only such functions, and nothing CTPL throws.
+
+### What the substitution keeps, and what it changes
+
+Kept: every run of the lifted wait returns where the original's would,
+with its predicate true, having looked at it under the same conditions.
+The original allows spurious wake-ups, so the number of times the
+predicate is looked at is not something a program can rely on; a
+predicate's look that finds nothing changes nothing (a failed try-pop, a
+flag read). A change the predicate reads, made before a notification,
+is seen by the waiter's next look or wakes it, as the original's mutex
+and notification guarantee: the queue's push, or the stop flag's store,
+is sequenced before the eventcount's fence in the notify, and the
+waiter's look after the fence of its announcement.
+
+Changed, outside the contract (as for every substitution, decisions/0003):
+
+- **The mutex orders less.** The original's waiting thread took the mutex
+  around its predicate and the code next to it, and a section that
+  notified was ordered after it. The lifted waiter takes it no longer: its
+  section orders nothing against the others but through the atomics and
+  the queue it touches. A program that read, after a push, state the
+  waiter wrote in its section and relied on the mutex for the order (not
+  on an atomic) is outside the contract; (k) refuses the common forms of
+  it, plain members read or written in the wait's section.
+- **Wake-ups.** A notification wakes a sleeper only when one is
+  registered; a waiter may spin before it sleeps (the policy, below).
+  Only timing tells, and the CPU time and context switches the process
+  uses.
+- **A predicate that throws** leaves its thread counted among the
+  eventcount's waiters, which costs later notifications a wake-up and
+  loses nothing.
+
+### The policy
+
+The eventcount spins (pause, then yield between looks), parks at once, or
+spins for 4 us and then parks (`spin_then_park`, the default of every
+lifted queue). Probe Q5 measured the three on CTPL, BS::thread_pool and
+spdlog (62 cells, 20 cores of a-p13) and found one rule per queue end that
+beats the default by a geometric mean of 1.22 with at most +1.4 cores:
+
+> spin if the other end has exactly one thread and this end at most four
+> waiters, or if the threads of both ends outnumber the processors of
+> the affinity mask; otherwise spin, then park after 4 us.
+
+The lifted wait keeps the first half of that rule and not the second:
+
+> spin if the other end has exactly one thread, this end at most four
+> waiters, and the threads of both ends fit the processors of the
+> affinity mask; otherwise spin, then park after 4 us.
+
+Spinning in Q5 never parked, which an idle pool pays for with a core per
+waiter for as long as it is idle. The lifted wait's spin is bounded: it
+pauses for 4 us, then yields between looks until 64 us since the wait
+began are spent, then parks. Q5's cells say what the bound costs: where
+the rule spins, spin_then_park with a 64 us pause kept 0.98 of
+spinning's rate (geometric mean of 19 cells, 0.90 at worst). A timed leg
+on focs (CTPL, 24 Nov 2026, `benchmarks/results/2026-11-24-d5-wait`)
+puts the lifted wait at 1.28 to 1.51 times the original with one
+submitter and 2 to 16 workers, and at 1.02 to 1.66 times with four
+submitters.
+
+Where the threads outnumber the processors the wait first spun too,
+pausing, then yielding for 16 ms before it parked. That budget came from
+one untimed cell on a-p13 (4 processors, one submitter, eight workers),
+where 16 ms reached spinning without end and shorter budgets did not. It
+did not hold. The timed leg swept the budget from 64 us to 64 ms on 4
+and 8 processors: throughput fell as the budget grew, 16 ms reached 0.48
+to 1.21 of the original and 0.36 to 0.93 of parking after the pause, and
+parking after the pause was the best policy in four cells of five. On
+that host a yielding waiter does not give its processor to the thread
+with work often enough to pay for the yields, and spinning without end
+loses as well. The oversubscribed branch now parks after the 4 us pause.
+Measured again with it (`2026-11-24-d5-wait-releg`), the lifted wait is
+1.18 to 1.72 times the original there and 1.7 to 3.1 times the 16 ms
+build from eight workers on, with round trips of one task in flight 2.3
+times shorter.
+
+Parking at once, with no pause, was measured in the same re-leg, since a
+probe of unlifted queues had seen it ahead of the rule untimed. It wins
+every cell whose queue is never empty: 1.06 to 1.37 times the pause, on
+fewer cores. It loses the cells with one task in flight, where every
+round trip pays a futex wake, by 1.5 to 2.6 times. Which of the two a
+program is depends on its load, which the pass does not see, so the
+policy keeps the pause.
+
+The pass reads the counts from the thread walk (`ThreadInstances.h`) and
+hands them to `construct`, which applies the rule when the class is built
+(`wtc::lifted_wait_policy`, `shim/lifted.hpp`):
+
+- **producers**: the threads that call the popped queue class's pushes,
+  when each is one thread; otherwise not known;
+- **waiters**: the threads that reach the wait, when each is one thread;
+  or, when they are started by one loop (the spawn in it, or up to three
+  calls below it, as CTPL's `resize()` starts `set_thread()`), the bound
+  of that loop (`i < n`), when the function that builds the class passes
+  it from a parameter it keeps and calls the loop's function once: that
+  parameter is read when the condition variable is built (CTPL: the
+  pool's size, given to its constructor);
+- **paced**: a producer whose push, on every iteration of its loop, comes
+  after a call that sleeps, reads or waits (a sleep, `read`, `recv`,
+  `poll`, a condition variable's or a future's wait, a join), outside any
+  branch of the loop. Q5 found spinning pure waste there (+0.8 to +7.6
+  cores for an unchanged rate).
+
+With either count not known, or a producer paced, the policy is
+`spin_then_park` with its 4 us pause, as before, whatever the mask: the
+oversubscribed branch counts only known threads. With both known it is
+the rule's, and the affinity mask is read then, once
+(`sched_getaffinity`); `runtime/test/lifted_policy_test.cpp` checks the
+rule on masks it sets. The counts choose
+only the policy: every policy is a complete wait over the same predicate,
+so a count the walk gets wrong (it may count one `std::thread` twice)
+costs time, not faithfulness. The remark says what was read: "1
+producers, waiters read when it is built".
+
+Assumptions of the policy, which only performance depends on:
+
+- **A time-sharing scheduler.** Spinning relies on `sched_yield` giving
+  the processor to the thread waited for. Under `SCHED_FIFO` or
+  `SCHED_RR` a spinning thread of higher priority never lets a
+  lower-priority producer on the same processor run, which is a livelock,
+  worst where the threads outnumber the processors, a case that now
+  parks. `construct` reads the building thread's policy and never spins
+  under a real-time one; a
+  thread that changes its policy later, or a program run under `chrt`
+  after the class is built, is not seen.
+- **No CPU quota.** Under a cgroup's CPU quota a spinner spends the
+  quota; the rule does not read it.
+- **The affinity mask at construction.** It may change later; the policy
+  stays.
+- **Producers not paced in ways the pass does not see** (a producer that
+  waits for input through a function of its own the walk does not
+  enter): a spinning waiter then burns up to a core while it waits.
 
 ## C queues
 
