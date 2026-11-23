@@ -2,6 +2,7 @@ add_mlir_library(MLIRWTCTransforms
   Blocking.cpp
   ClosedWorld.cpp
   CriticalSections.cpp
+  DelegateSections.cpp
   EscapeAnalysis.cpp
   LiftCIRToWTC.cpp
   LiftCQueues.cpp
@@ -31,6 +32,9 @@ add_mlir_library(MLIRWTCTransforms
   # wtc-opt linked MLIRCIR itself; a second consumer would not be so lucky.
   MLIRCIR
   MLIRCIRInterfaces
+  # The delegation of critical sections flattens the functions it outlines
+  # from (cir-flatten-cfg, cir-hoist-allocas).
+  MLIRCIRTransforms
 
   MLIRIR
   MLIRPass

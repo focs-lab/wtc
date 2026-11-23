@@ -225,4 +225,41 @@ def QueueBatchEndOp : WTC_BatchOp<"queue_batch_end", (ins)> {
     let summary = "Publishes what is left of the run and ends it";
 }
 
+// A critical section of one mutex, run by the mutex's delegation server
+// (runtime/delegate.hpp) instead of under the mutex by the calling thread
+// (--wtc-delegate-sections, docs/delegation.md).
+def DelegateOp : WTC_Op<"delegate", [
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+        DeclareOpInterfaceMethods<WTC_ProgressOpInterface>,
+        MemoryEffects<[MemRead, MemWrite]>]> {
+    let summary = "Runs a critical section on the delegation server of its mutex";
+    let description = [{
+        `section` is a critical section of the mutex `mutex` points to,
+        outlined into a function of its own: its body is the section as
+        the program wrote it, the mutex's own lock at its start and the
+        mutex's own unlock at its end included, and it reads the values the
+        section needs from `env` and writes there those the code after it
+        reads. Its result, and this operation's, is the exit by which the
+        section left, numbered from zero.
+
+        The operation means `section(env)` called on this thread, which
+        is the program as written. Lowered (--lower-wtc-to-cir), it is a
+        call of the runtime's wtc_delegate_run, which runs `section(env)`
+        on the server of `mutex`, one thread per mutex, and returns once
+        it has returned; a server that reaches the operation runs the
+        section on its own thread. The section's writes happen before the
+        operation returns, and what the thread did before the operation
+        happens before the section, as the original's unlock and lock
+        ordered them. The pass proves, before it builds one, that the
+        section cannot tell which thread runs it, waits for no other
+        thread but by locks it lets go again, and lets no exception out.
+        `mutex_name` is the mutex as the option named it, for remarks.
+    }];
+    let arguments = (ins AnyType:$mutex, AnyType:$env, FlatSymbolRefAttr:$section, StrAttr:$mutex_name);
+    let results = (outs AnyType:$exit);
+    let assemblyFormat = [{
+        $mutex `,` $section `(` $env `)` attr-dict `:` type($mutex) `,` type($env) `->` type($exit)
+    }];
+}
+
 #endif // WTC_OPS_TD

@@ -169,6 +169,32 @@ struct LowerLockBatchPattern : public OpConversionPattern<Op> {
     }
 };
 
+// A delegated section (wtc.delegate) becomes the runtime's call:
+// wtc_delegate_run(mutex, section, env), the mutex's address and the
+// section's made void * and a pointer to the function, which the pass
+// declares before the conversion runs (runtime/delegate.hpp).
+constexpr llvm::StringLiteral kDelegateRun = "wtc_delegate_run";
+
+struct LowerDelegatePattern : public OpConversionPattern<DelegateOp> {
+    using OpConversionPattern::OpConversionPattern;
+    LogicalResult matchAndRewrite(DelegateOp op, OpAdaptor adaptor,
+                                  ConversionPatternRewriter &rewriter) const override {
+        auto module = op->getParentOfType<ModuleOp>();
+        auto section = module.lookupSymbol<cir::FuncOp>(op.getSectionAttr());
+        auto run = module.lookupSymbol<cir::FuncOp>(kDelegateRun);
+        if (!section || !run) return op.emitError("wtc: cannot lower a delegated section without its function");
+        Location loc = op.getLoc();
+        auto voidPtr = cir::PointerType::get(cir::VoidType::get(op.getContext()));
+        Value key = cir::CastOp::create(rewriter, loc, voidPtr, cir::CastKind::bitcast, adaptor.getMutex());
+        Value fn = cir::GetGlobalOp::create(rewriter, loc, cir::PointerType::get(section.getFunctionType()),
+                                            section.getSymName());
+        auto call = cir::CallOp::create(rewriter, loc, FlatSymbolRefAttr::get(run.getSymNameAttr()),
+                                        op.getExit().getType(), ValueRange{key, fn, adaptor.getEnv()});
+        rewriter.replaceOp(op, call->getResults());
+        return success();
+    }
+};
+
 struct LowerWTCToCIRPass : public PassWrapper<LowerWTCToCIRPass, OperationPass<ModuleOp>> {
     MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerWTCToCIRPass)
 
@@ -185,6 +211,23 @@ struct LowerWTCToCIRPass : public PassWrapper<LowerWTCToCIRPass, OperationPass<M
 
     void runOnOperation() override {
         MLIRContext *context = &getContext();
+        // The runtime's entry point for delegated sections, declared once
+        // for every wtc.delegate: int wtc_delegate_run(void *, int (*)(void *), void *).
+        ModuleOp module = getOperation();
+        DelegateOp anyDelegate;
+        module.walk([&](DelegateOp op) {
+            anyDelegate = op;
+            return WalkResult::interrupt();
+        });
+        if (anyDelegate && !module.lookupSymbol<cir::FuncOp>(kDelegateRun)) {
+            auto voidPtr = cir::PointerType::get(cir::VoidType::get(context));
+            Type exit = anyDelegate.getExit().getType();
+            auto sectionType = cir::FuncType::get({voidPtr}, exit);
+            OpBuilder b = OpBuilder::atBlockEnd(module.getBody());
+            auto run = cir::FuncOp::create(b, module.getLoc(), kDelegateRun,
+                                           cir::FuncType::get({voidPtr, cir::PointerType::get(sectionType), voidPtr}, exit));
+            SymbolTable::setSymbolVisibility(run, SymbolTable::Visibility::Private);
+        }
         WTCToCirConversionTarget target(*context);
         RewritePatternSet patterns(context);
         patterns.add<LowerMutexLockPattern, LowerMutexUnlockPattern,
@@ -194,7 +237,8 @@ struct LowerWTCToCIRPass : public PassWrapper<LowerWTCToCIRPass, OperationPass<M
                      LowerQueueBatchPattern<QueueBatchEndOp>,
                      LowerLockBatchPattern<LockBatchBeginOp>,
                      LowerLockBatchPattern<LockBatchStepOp>,
-                     LowerLockBatchPattern<LockBatchEndOp>>(context);
+                     LowerLockBatchPattern<LockBatchEndOp>,
+                     LowerDelegatePattern>(context);
         if (failed(applyPartialConversion(getOperation(), target, std::move(patterns))))
             return signalPassFailure();
 

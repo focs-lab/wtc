@@ -16,6 +16,7 @@ namespace mlir::wtc {
     void registerWTCAlignByOwnerPass();
     void registerWTCCensusPass();
     void registerWTCCriticalSectionsPass();
+    void registerWTCDelegateSectionsPass();
 }
 
 #endif

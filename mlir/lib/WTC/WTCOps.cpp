@@ -184,6 +184,28 @@ namespace {
 
 } // namespace
 
+// A delegated section waits for its mutex's server, and the section it
+// runs may do whatever the section as written did, the allocator included.
+Progress DelegateOp::getProgress() { return Progress::blocking; }
+bool DelegateOp::mayCallAllocator() { return true; }
+std::string DelegateOp::getBlockingReason() {
+    return "waits for the delegation server of a mutex to run a critical section";
+}
+
+// `section` must be the outlined section: a cir.func with a body, taking
+// the environment and returning the exit.
+LogicalResult DelegateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+    auto func = symbolTable.lookupNearestSymbolFrom<cir::FuncOp>(*this, getSectionAttr());
+    if (!func) return emitOpError("section ") << getSectionAttr() << " does not name a cir.func";
+    if (func.getBody().empty()) return emitOpError("section ") << getSectionAttr() << " has no body";
+    auto type = func.getFunctionType();
+    if (type.getNumInputs() != 1 || type.getInput(0) != getEnv().getType())
+        return emitOpError("section ") << getSectionAttr() << " does not take the environment alone";
+    if (type.getReturnType() != getExit().getType())
+        return emitOpError("section ") << getSectionAttr() << " does not return the exit's type";
+    return success();
+}
+
 Progress LockOp::getProgress() { return Progress::blocking; }
 bool LockOp::mayCallAllocator() { return false; }
 std::string LockOp::getBlockingReason() { return "takes a mutex"; }
