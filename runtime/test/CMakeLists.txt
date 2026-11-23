@@ -239,6 +239,13 @@ add_test(NAME waiter_loop_stop COMMAND waiter_loop_test stop)
 add_test(NAME waiter_loop_idle COMMAND waiter_loop_test idle)
 set_tests_properties(waiter_loop_interleave waiter_loop_stress waiter_loop_stop waiter_loop_idle PROPERTIES TIMEOUT 300)
 
+# The policy rule of a lifted wait (shim/lifted.hpp), on affinity masks
+# the test sets: counts not known never spin, whatever the mask.
+add_executable(lifted_policy_test lifted_policy_test.cpp)
+target_link_libraries(lifted_policy_test PRIVATE wtc_rt_flags)
+target_compile_options(lifted_policy_test PRIVATE $<$<CXX_COMPILER_ID:GNU>:-Wno-attributes>)
+add_test(NAME lifted_policy COMMAND lifted_policy_test)
+
 add_executable(waiter_loop_drop_wakeups waiter_loop_test.cpp)
 target_link_libraries(waiter_loop_drop_wakeups PRIVATE wtc_rt_flags)
 target_compile_options(waiter_loop_drop_wakeups PRIVATE $<$<CXX_COMPILER_ID:GNU>:-Wno-attributes>)

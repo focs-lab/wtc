@@ -1,6 +1,9 @@
 #pragma once
 
+#include <condition_variable>
+#include <cstdint>
 #include <cstdlib>
+#include <mutex>
 #include <new>
 #include <type_traits>
 #include <utility>
@@ -226,6 +229,108 @@ struct lifted_bounded {
 
     [[clang::annotate("wtc_lifted_reset_overrun_counter")]]
     static void reset_overrun_counter(C* at) { get(at)->reset_overrun_counter(); }
+};
+
+// The wait of a lifted wait, chosen when the class is built
+// (docs/lifting.md, "Lifting a wait", "The policy"). Spin when the other
+// end of the wait is one thread and this end has at most four waiters,
+// and the threads of both ends fit the processors of the affinity mask;
+// otherwise spin, then park after 4 us, as every lifted queue does: also
+// whenever a count is not known (0), a producer may be paced (a sleep or
+// a blocking read before each push), or the threads, each count known,
+// outnumber the processors.
+//
+// To spin is to pause for 4 us, then yield between looks, and to park
+// once 64 us since the wait began are spent, so that an idle pool
+// sleeps. Probe Q5 (23 Nov 2026) measured spinning without end against
+// spin_then_park with a 64 us pause: on 20 cores, in the cells the rule
+// spins in, the second kept 0.98 of the first's rate (geometric mean of
+// 19 cells, 0.90 at worst). Where the threads outnumber the processors a
+// waiter parks after the pause: a timed leg (focs, CTPL with one
+// submitter and 4 to 16 workers on 4 and 8 processors, 24 Nov 2026,
+// benchmarks/results/2026-11-24-d5-wait) found every yield budget from
+// 64 us to 64 ms below parking after the pause in four cells of five,
+// and the longest the worst; the 16 ms this branch had, chosen from one
+// untimed cell, kept 0.36 to 0.93 of parking.
+//
+// Spinning is chosen only under the default time-sharing policies, never
+// under a real-time one, where yielding keeps a lower-priority producer
+// off the processor.
+struct lifted_wait_choice {
+    rt::wait_policy policy;
+    std::uint64_t spin_ns;
+    std::uint64_t yield_ns;
+};
+inline constexpr std::uint64_t kLiftedYieldNs = 64000;
+
+inline lifted_wait_choice lifted_wait_policy(int producers, int waiters, bool paced) {
+    const lifted_wait_choice park_after_pause{rt::wait_policy::spin_then_park, rt::waiter::kSpinNs, 0};
+    if (paced || producers <= 0 || waiters <= 0 || !rt::time_sharing()) return park_after_pause;
+    const unsigned cpus = rt::affinity_cpus();
+    if (cpus > 0 && static_cast<long>(producers) + waiters > static_cast<long>(cpus)) return park_after_pause;
+    if (producers == 1 && waiters <= 4) return {rt::wait_policy::spin_then_park, rt::waiter::kSpinNs, kLiftedYieldNs};
+    return park_after_pause;
+}
+
+// What the compiler puts in place of a class's own wait on a condition
+// variable (--wtc-lift-locked-queues, docs/lifting.md "Lifting a wait"):
+// the class P has a std::mutex and a std::condition_variable used for one
+// wait only, `cv.wait(lock, pred)`, whose predicate reads a queue and
+// flags that are safe to read without the mutex. The wait becomes the
+// runtime's eventcount (runtime/waiter.hpp) and leaves the mutex; the
+// notifications become its notify and notify_all; the sections that
+// notify keep the mutex.
+//
+// The class keeps its layout. The condition variable's storage holds a
+// pointer to the waiter, built by construct and freed by destroy; the pass
+// proves first that nothing else in the program touches that storage.
+// The wait's loop is the program's own predicate loop (the body of
+// std::condition_variable::wait<Pred>, copied with its sleep replaced by
+// step), so that the analyses see the predicate's calls as before.
+template <class P>
+struct lifted_wait {
+    using W = rt::waiter;
+    using state = W::state;
+
+    static_assert(sizeof(std::condition_variable) >= sizeof(W*) &&
+                      alignof(std::condition_variable) >= alignof(W*),
+                  "the condition variable's storage holds the pointer to the waiter");
+
+    static W* get(std::condition_variable* at) { return *std::launder(reinterpret_cast<W**>(at)); }
+
+    // producers and waiters: the threads at each end of the wait, 0 when
+    // not known; paced: whether a producer may sleep or block before it
+    // publishes. Read by lifted_wait_policy above.
+    [[clang::annotate("wtc_lifted_wait_construct")]]
+    static void construct(std::condition_variable* at, int producers, int waiters, bool paced) {
+        const lifted_wait_choice c = lifted_wait_policy(producers, waiters, paced);
+        ::new (static_cast<void*>(at)) W*(new W(c.policy, c.spin_ns, c.yield_ns));
+    }
+
+    [[clang::annotate("wtc_lifted_wait_destroy")]]
+    static void destroy(std::condition_variable* at) { delete get(at); }
+
+    // The wait's lock, built without taking the mutex: the lock object
+    // stays, and its destructor finds nothing to unlock.
+    [[clang::annotate("wtc_lifted_wait_defer")]]
+    static void defer(std::unique_lock<std::mutex>* lock, std::mutex* m) {
+        ::new (static_cast<void*>(lock)) std::unique_lock<std::mutex>(*m, std::defer_lock);
+    }
+
+    [[clang::annotate("wtc_lifted_wait_begin")]]
+    static void begin(std::condition_variable* at, state* st) { get(at)->begin(*st); }
+
+    [[clang::annotate("wtc_lifted_wait_step")]]
+    static void step(std::condition_variable* at, state* st) { get(at)->step(*st); }
+
+    [[clang::annotate("wtc_lifted_wait_end")]]
+    static void end(std::condition_variable* at, state* st) { get(at)->end(*st); }
+
+    [[clang::annotate("wtc_lifted_notify_one")]]
+    static void notify_one(std::condition_variable* at) { get(at)->notify(1); }
+
+    [[clang::annotate("wtc_lifted_notify_all")]]
+    static void notify_all(std::condition_variable* at) { get(at)->notify_all(); }
 };
 
 }  // namespace wtc

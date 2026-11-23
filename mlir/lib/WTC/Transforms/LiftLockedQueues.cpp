@@ -1,6 +1,7 @@
 #include "WTC/Transforms/ClosedWorld.h"
 #include "WTC/Transforms/CriticalSections.h"
 #include "WTC/Transforms/LiftNames.h"
+#include "WTC/Transforms/LiftWaits.h"
 #include "WTC/Transforms/LiftedBounded.h"
 #include "WTC/Transforms/Passes.h"
 #include "WTC/Transforms/Refusal.h"
@@ -1536,6 +1537,7 @@ void LiftLockedQueuesPass::runOnOperation() {
         if (u.put && u.take && u.locked) found.insert({key, u.loc});
 
     std::string lines;
+    std::vector<QueueClassForWaits> forWaits;
     for (auto &[key, loc] : found) {
         Candidate c(loc);
         c.rec = cast<cir::RecordType>(key.first);
@@ -1551,6 +1553,22 @@ void LiftLockedQueuesPass::runOnOperation() {
         for (cir::FuncOp f : c.ctors) objectFns.insert(f);
         for (cir::FuncOp f : c.dtors) objectFns.insert(f);
         world.closeClass(c.rec, own, objectFns, c.frontElem ? c.frontElem : c.elem, c.v);
+
+        // A class whose operations are each atomic, lifted or under its own
+        // mutex as written (refused, if at all, only for the closed world of
+        // its storage), is a queue a lifted wait's predicate may pop.
+        if (llvm::all_of(c.v.reasons, [](const Reason &r) { return r.cond == "f"; })) {
+            QueueClassForWaits qc;
+            qc.rec = c.rec;
+            for (const Method &m : c.methods)
+                if (m.role == Role::TryPop) qc.tryPops.insert(m.f);
+                else if (m.role == Role::Push || m.role == Role::PushWait || m.role == Role::TryPush ||
+                         m.role == Role::PushOverrun)
+                    qc.pushes.insert(m.f);
+            for (cir::FuncOp f : module.getOps<cir::FuncOp>())
+                if (isMemberOf(f, c.rec)) qc.functions.insert(f);
+            forWaits.push_back(std::move(qc));
+        }
 
         c.v.emitUses(c.loc);
         if (c.refused()) {
@@ -1577,6 +1595,8 @@ void LiftLockedQueuesPass::runOnOperation() {
         if (rewrite) lift(c, rt);
         else c.v.emitLifts(c.loc);
     }
+    // A class's own wait, lifted off its condition variable.
+    lines += liftWaits(module, world, forWaits, rewrite);
     if (rewrite) eraseUnusedRuntime();
 
     if (!instantiations.empty()) {

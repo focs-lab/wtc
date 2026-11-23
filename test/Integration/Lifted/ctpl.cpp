@@ -10,12 +10,17 @@
 // The queue class's operations match: push and the try-pop, the element,
 // a pointer, copied out, which is moving it. Since 23 Nov 2026 it is
 // refused all the same, a false refusal of the field-insensitive escape
-// analysis (docs/lifting.md, "Assumptions"): the worker's wait predicate
-// captures both the pool, which holds the queue, and the slot a pop
-// writes the task into, so the pool is one class with the tasks, the
-// tasks' captures and the counters main prints, and what is printed is
-// the outside's. Every task runs once, under ThreadSanitizer and with
-// WTC_CHECK too, as written.
+// analysis (docs/lifting.md, "Known limitations"): the worker's captures
+// make the pool one class with the tasks and the counters main prints.
+//
+// The pool's own wait lifts (docs/lifting.md, "Lifting a wait"): its
+// mutex and condition variable serve only the workers' wait for "a task,
+// or done", whose predicate pops the queue class, atomic under its own
+// mutex, and reads atomic flags; the pushes notify under the mutex and
+// change nothing else there, and stop sets isDone before it notifies.
+// Two threads push, and the workers are started by resize()'s loop, whose
+// bound the constructor is given. Every task runs once, under
+// ThreadSanitizer and with WTC_CHECK too, as written.
 //
 // The code kept is the upstream code, reduced; CTPL is under the Apache License 2.0.
 //
@@ -26,6 +31,7 @@
 // RUN: %if tsan %{ env TSAN_OPTIONS=halt_on_error=1:symbolize=0 %t.tsan.exe 4 2>&1 | FileCheck %s --check-prefixes=TSAN,OUT %}
 //
 // CHECK: locked queue q in ctpl::detail::Queue<std::function<void (int)> *> not lifted: (f) an object of ctpl::detail::Queue<std::function<void (int)> *> may be reached by code the pass does not see
+// CHECK: locked wait cv in ctpl::thread_pool lifted (wait in ctpl::thread_pool::set_thread(int)::'lambda'()::operator(), 2 notify_one, 1 notify_all; 2 producers, waiters read when it is built)
 // TSAN-NOT: ThreadSanitizer
 // OUT: tasks 20000 sum 200010000
 
