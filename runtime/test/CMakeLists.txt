@@ -302,3 +302,48 @@ if(WTC_CHECK)
   add_test(NAME c_queue_two_consumers_is_caught
            COMMAND sh -c "$<TARGET_FILE:c_queue_test> twoconsumers 2>&1 | grep -q 'bounded queue contract violated: a second consumer'")
 endif()
+
+# The delegation server (delegate.hpp) through the entry point a delegated
+# program calls (shim/delegate.cpp): exclusion between clients and threads
+# that run a section inline, results and writes coming back, each client's
+# order, a section that reaches another delegated one, one server per
+# mutex, clients and servers asleep between sections, and short-lived
+# clients whose waiters later threads take over.
+add_executable(delegate_test delegate_test.cpp ../../shim/delegate.cpp)
+target_link_libraries(delegate_test PRIVATE wtc_rt_flags)
+if(WTC_RT_SANITIZE)
+  set(delegate_n 5000)
+  set(delegate_park 300)
+  set(delegate_churn 30)
+else()
+  set(delegate_n 100000)
+  set(delegate_park 2000)
+  set(delegate_churn 200)
+endif()
+add_test(NAME delegate_exclusion COMMAND delegate_test exclusion ${delegate_n})
+add_test(NAME delegate_results COMMAND delegate_test results)
+add_test(NAME delegate_order COMMAND delegate_test order ${delegate_n})
+add_test(NAME delegate_nested COMMAND delegate_test nested)
+add_test(NAME delegate_servers COMMAND delegate_test servers ${delegate_n})
+add_test(NAME delegate_park COMMAND delegate_test park ${delegate_park})
+add_test(NAME delegate_churn COMMAND delegate_test churn ${delegate_churn})
+# The servers' lives and how they are started: they end with the last
+# client (and a main that ends with pthread_exit ends the process), at most
+# four run, they block every signal, have their starting client's stack,
+# start afresh in a fork's child, and a section from a thread-local
+# destructor after the thread stopped being a client runs on it.
+foreach(mode ends cap signals stack fork tls_exit)
+  add_test(NAME delegate_${mode} COMMAND delegate_test ${mode})
+endforeach()
+set_tests_properties(delegate_exclusion delegate_order delegate_servers delegate_park delegate_churn
+                     delegate_ends delegate_cap delegate_signals delegate_stack delegate_fork
+                     delegate_tls_exit PROPERTIES TIMEOUT 300)
+# ThreadSanitizer's own runtime keeps a process whose main thread ended with
+# pthread_exit alive (a program with no server does the same), and refuses
+# to start a thread in the child of a multi-threaded fork unless told.
+if(NOT WTC_RT_SANITIZE STREQUAL "thread")
+  add_test(NAME delegate_main_exit COMMAND delegate_test main_exit)
+  set_tests_properties(delegate_main_exit PROPERTIES TIMEOUT 30 PASS_REGULAR_EXPRESSION "main_exit: ok")
+else()
+  set_tests_properties(delegate_fork PROPERTIES ENVIRONMENT "TSAN_OPTIONS=die_after_fork=0")
+endif()
