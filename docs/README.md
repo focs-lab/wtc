@@ -12,6 +12,7 @@
 | `census-dynamic.md` | Which mutexes and `shared_ptr` counts only one thread touches, counted at run time in six programs under two loads each: the ceiling for removing a mutex or an atomic count by proving the object confined |
 | `related-work.md` | What the compiler does against where each technique was done before, claim by claim, with checked citations; papers collected earlier are under `related-works/` |
 | `declared-topology-audit.md` | Hand-declared queue topologies read in DPDK's examples and in users of four SPSC libraries: which hold, which only by convention, and what a compiler check needs |
+| `delegation.md` | Running the critical sections of a hot mutex on a server thread: what the pass delegates, the legality proof and its refusals, the runtime, the contract and its assumptions, and LevelDB |
 | `correctness.md` | Why substituting a queue preserves the program: one lemma per implementation under its precondition, the facts the analyses must prove, and what is assumed rather than derived |
 | `paper-outline.md` | The paper's outline around topology and ownership, the experiments it needs with the leg behind each, and the claims no measurement supports yet |
 | `toolchain.md` | Building and sharing the ClangIR-enabled Clang the project needs |
