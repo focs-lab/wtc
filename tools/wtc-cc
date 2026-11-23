@@ -66,6 +66,20 @@
 #                      nm lists for them (named-elsewhere); a C struct's
 #                      queue then does not lift, other units seeing it
 #   --wtc-opt-arg ARG  pass ARG to wtc-opt (repeatable), e.g. --mlir-timing
+#   --delegate MUTEX   run the critical sections of MUTEX on a server thread
+#                      for it (--wtc-delegate-sections, docs/delegation.md):
+#                      Class::member, as CIR names the class, or a global's
+#                      name; repeatable. Each section the pass proves cannot
+#                      tell which thread runs it is outlined and handed to
+#                      the runtime of shim/delegate.cpp, which this script
+#                      then compiles and links; the others stay as written.
+#                      Whether delegating the mutex pays is the build's
+#                      decision: one hot mutex every operation takes, more
+#                      threads than sections per operation
+#   --delegate-assume-uniform-threads  admit a delegated section that
+#                      starts a thread: the clients share their signal
+#                      mask, affinity and scheduling attributes, which the
+#                      server and the thread it starts inherit
 #   --census           call wtc_rc_note at the entry of shared_ptr's reference
 #                      counts (--wtc-census), for the thread census in
 #                      tools/census; the symbol is weak and left for the
@@ -100,7 +114,7 @@ ROOT=$(cd "$HERE/.." && pwd)
 
 SRCS=()
 KEEP=""; SPECIALIZE=1; LIFT=0; TSAN=0; CENSUS=0; COMPILE_ONLY=0; FORCE=""; FORCE_INLINE=""; TOOLCHAIN=""; OUT="a.out"; SRC=""
-BATCH_COST=""; BATCH_HOST=""; BATCH_NS=""
+BATCH_COST=""; BATCH_HOST=""; BATCH_NS=""; DELEGATE=""; DELEGATE_UNIFORM=0
 PASSTHRU=(); LINKARGS=(); OPTARGS=(); UNREAD=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -116,6 +130,8 @@ while [ $# -gt 0 ]; do
     --batch-host) BATCH_HOST=$2; shift 2 ;;
     --batch-ns-per-unit) BATCH_NS=$2; shift 2 ;;
     --tsan) TSAN=1; shift ;;
+    --delegate) DELEGATE="${DELEGATE:+$DELEGATE,}$2"; shift 2 ;;
+    --delegate-assume-uniform-threads) DELEGATE_UNIFORM=1; shift ;;
     --census) CENSUS=1; shift ;;
     -c) COMPILE_ONLY=1; shift ;;
     --wtc-opt-arg) OPTARGS+=("$2"); shift 2 ;;
@@ -375,7 +391,15 @@ if (( SPECIALIZE )); then
 else
   PASSES+=(--wtc-specialize=rewrite=false)
 fi
-PASSES+=(--wtc-check-progress --lower-wtc-to-cir)
+PASSES+=(--wtc-check-progress)
+# Delegation outlines sections from flattened functions, so it runs after
+# every analysis that reads the structured form.
+if [ -n "$DELEGATE" ]; then
+  DOPTS="mutex=$DELEGATE${LIFTOPTS:+ $LIFTOPTS}"
+  (( DELEGATE_UNIFORM )) && DOPTS="$DOPTS assume-uniform-threads=true"
+  PASSES+=("--wtc-delegate-sections=$DOPTS")
+fi
+PASSES+=(--lower-wtc-to-cir)
 if (( CENSUS )); then PASSES+=(--wtc-census); fi
 PASSES+=(--reconcile-unrealized-casts)
 # Diagnostics name their place; printing the whole operation after each one
@@ -398,6 +422,17 @@ if grep -q '@wtc_c_queue_' "$WORK/$base.wtc.cir"; then
   (( TSAN )) && RTFLAGS+=(-fsanitize=thread)
   RTOBJ="$WORK/c_queue.o"
   step runtime "$CLANGXX" -std=c++17 "${RTFLAGS[@]}" -c "$ROOT/shim/c_queue.cpp" -o "$RTOBJ"
+fi
+
+# The delegation runtime (shim/delegate.cpp, runtime/delegate.hpp), the
+# same way, when a section was delegated.
+if grep -q '@wtc_delegate_run' "$WORK/$base.wtc.cir"; then
+  RTFLAGS=()
+  for a in "${PASSTHRU[@]}"; do case "$a" in -O*|-g*|-DWTC_*) RTFLAGS+=("$a") ;; esac; done
+  (( TSAN )) && RTFLAGS+=(-fsanitize=thread)
+  step runtime "$CLANGXX" -std=c++17 "${RTFLAGS[@]}" -c "$ROOT/shim/delegate.cpp" -o "$WORK/delegate.o"
+  RTOBJ="${RTOBJ:+$RTOBJ }$WORK/delegate.o"
+  (( COMPILE_ONLY )) && echo "wtc-cc: -c: link the object of $ROOT/shim/delegate.cpp with the program" >&2
 fi
 
 if (( TSAN )); then
