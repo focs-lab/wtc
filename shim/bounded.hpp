@@ -36,12 +36,20 @@ namespace wtc {
 // its producers are consumers too. The tag is the constructor's first
 // argument, which the specialisation pass rewrites as it does
 // wtc::queue's.
+//
+// Three more choose the settled ring, for a path that requires one side
+// not to wait for the other: spsc_settled, mpsc_settled and spmc_settled,
+// the ring with those sides whose single side publishes its counter only
+// once its cell is filled or emptied (runtime/bounded_ring.hpp, built
+// settled). With one producer no pop waits for a push, with one consumer
+// no push waits for a pop; the many side's wait remains. A queue built
+// to overrun keeps the ring whatever its tag.
 template <typename T>
 class bounded {
 public:
     bounded(topology tag, std::size_t capacity, bool overrun, rt::wait_policy policy)
         : tag_(tag),
-          ring_(capacity, manyProducers(tag), manyConsumers(tag), overrun),
+          ring_(capacity, manyProducers(tag), manyConsumers(tag), overrun, false, settled(tag)),
           not_empty_(policy),
           not_full_(policy) {}
 
@@ -108,8 +116,17 @@ public:
     const rt::waiter& producers() const { return not_full_; }
 
 private:
-    static bool manyProducers(topology t) { return t != topology::spsc && t != topology::spsc_inline && t != topology::spmc; }
-    static bool manyConsumers(topology t) { return t != topology::spsc && t != topology::spsc_inline && t != topology::mpsc; }
+    static bool settled(topology t) {
+        return t == topology::spsc_settled || t == topology::mpsc_settled || t == topology::spmc_settled;
+    }
+    static bool manyProducers(topology t) {
+        return t != topology::spsc && t != topology::spsc_inline && t != topology::spmc &&
+               t != topology::spsc_settled && t != topology::spmc_settled;
+    }
+    static bool manyConsumers(topology t) {
+        return t != topology::spsc && t != topology::spsc_inline && t != topology::mpsc &&
+               t != topology::spsc_settled && t != topology::mpsc_settled;
+    }
 
     bool take(T& out) noexcept {
         return ring_.consume([&](T&& e) noexcept { out = std::move(e); });

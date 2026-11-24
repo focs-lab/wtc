@@ -94,6 +94,43 @@
 // sides, since both sides write the one word (and an overrun makes every
 // producer a consumer as well).
 //
+// With the counter taken first and the cell filled after, as above, a pop of
+// the ticket a push has taken waits while the push constructs its element, even
+// with one producer and one consumer; and a push waits while the pop of the
+// previous lap moves its element out: every operation is blocking, on every
+// topology. Built settled (the shim's settled tags), a single side changes the
+// order of its steps, in the split layout, so that the other side never waits
+// for it, as in the classic two-index ring ("Specifying concurrent program
+// modules", TOPLAS 1983):
+//
+//   one producer   fills the cell of ticket t, then stores tail = t + 1.
+//                  Every ticket below tail is filled, so no pop waits for
+//                  a push: a pop is wait-free with one consumer and
+//                  lock-free (its compare-and-swap fails only to another
+//                  pop's) with many. The push takes effect at its store.
+//   one consumer   moves the element of ticket h out and frees the cell,
+//                  then stores head = h + 1, so head counts finished pops.
+//                  A push admitted by tail - head < capacity <= R then
+//                  finds the previous lap's pop finished with its cell,
+//                  and no push waits for a pop: a push is wait-free with
+//                  one producer and lock-free with many. The pop takes
+//                  effect at its store; before it only the consumer can
+//                  see the element, so an answer of full until then is an
+//                  answer the original's mutex gives (the push ordered
+//                  before the pop), and the bound stays exact.
+//
+// What still waits: with many producers and one consumer, a pop waits for
+// the push that took its ticket to fill it; with one producer and many
+// consumers, a push waits for the previous lap's pop of its cell, which
+// may still be moving out. With many on both sides both waits remain.
+// Either way the waits are on an operation already in progress.
+//
+// It is not the default because it costs: the other side meets the cell
+// only after it is published, where with the ticket first it overlaps
+// the fill, and the spsc ring ran at 0.62 and the spmc one at 0.73 of the
+// default's throughput (one machine of two). So it is what a program gets
+// only where a path requires the other side not to wait.
+//
 // Elements. A push constructs its element in the cell from its argument
 // (by move or copy) only after it has its ticket, so a failed push leaves
 // its argument untouched; a pop hands the element to its taker and
@@ -151,13 +188,17 @@ public:
     // / pop over the queue's life. overrun: whether push_overrun may be
     // called; batches: whether try_push_n and consume_n may. Either
     // chooses the packed layout.
-    bounded_ring(std::size_t capacity, bool manyProducers, bool manyConsumers, bool overrun, bool batches = false)
+    // settled: whether a single side publishes its counter only after its
+    // cell's step ("The sides"); the split layout only.
+    bounded_ring(std::size_t capacity, bool manyProducers, bool manyConsumers, bool overrun, bool batches = false,
+                 bool settled = false)
         : cap_(static_cast<std::uint32_t>(capacity)),
           mask_(ringSize(capacity) - 1),
           packed_(overrun || batches),
           overrun_(overrun),
           mp_(manyProducers || overrun),
-          mc_(manyConsumers || overrun) {
+          mc_(manyConsumers || overrun),
+          settled_(settled) {
         if (capacity > kMaxCapacity) {
             std::fprintf(stderr, "wtc: bounded queue of capacity %zu: at most %zu\n", capacity, kMaxCapacity);
             std::abort();
@@ -219,6 +260,12 @@ public:
                     return false;
                 }
                 if (!mp_) {
+                    if (settled_) {
+                        // Fill, then publish: no pop of this ticket waits.
+                        fill(t, std::forward<V>(v));
+                        tail_.store(t + 1, std::memory_order_seq_cst);
+                        return true;
+                    }
                     tail_.store(t + 1, std::memory_order_seq_cst);
                     break;
                 }
@@ -291,6 +338,13 @@ public:
                     if (h == t) return false;
                 }
                 if (!mc_) {
+                    if (settled_) {
+                        // Take, then publish: head counts finished pops,
+                        // and no push admitted by it waits for this cell.
+                        take(h, f);
+                        head_.store(h + 1, std::memory_order_seq_cst);
+                        return true;
+                    }
                     head_.store(h + 1, std::memory_order_seq_cst);
                     break;
                 }
@@ -406,8 +460,9 @@ private:
 #endif
     }
 
-    // The push of ticket t: waits for the previous lap's pop to have
-    // emptied the cell, then fills it.
+    // The push of ticket t: waits for the previous lap's pop to have emptied
+    // the cell, then fills it. Built settled, with one consumer, in the split
+    // layout, the cell is always empty already (see "The sides").
     template <class V>
     void fill(std::uint32_t t, V&& v) noexcept {
         cell& c = cells_[t & mask_];
@@ -417,7 +472,9 @@ private:
     }
 
     // The pop of ticket h: waits for its push to have filled the cell, then
-    // hands the element out and frees the cell for the next lap.
+    // hands the element out and frees the cell for the next lap. Built settled,
+    // with one producer, in the split layout, the cell is always filled
+    // already.
     template <class F>
     void take(std::uint32_t h, F&& f) noexcept {
         cell& c = cells_[h & mask_];
@@ -454,7 +511,7 @@ private:
     // Read-only after construction.
     const std::uint32_t cap_;
     const std::uint32_t mask_;
-    const bool packed_, overrun_, mp_, mc_;
+    const bool packed_, overrun_, mp_, mc_, settled_;
     cell* cells_ = nullptr;
     // Split layout: the consumers' line, with tail as a consumer last read
     // it, and the producers' line. The copy only lags, and is refreshed when

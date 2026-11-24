@@ -270,12 +270,13 @@ else()
 endif()
 add_test(NAME bounded_model COMMAND bounded_test model ${bounded_n})
 add_test(NAME bounded_exact COMMAND bounded_test exact)
+add_test(NAME bounded_sides COMMAND bounded_test sides)
 add_test(NAME bounded_stress COMMAND bounded_test stress ${bounded_n})
 add_test(NAME bounded_pingfull COMMAND bounded_test pingfull ${bounded_ping})
 add_test(NAME bounded_close COMMAND bounded_test close)
 add_test(NAME bounded_discard COMMAND bounded_test discard ${bounded_n})
 add_test(NAME bounded_overrun COMMAND bounded_test overrun ${bounded_n})
-set_tests_properties(bounded_model bounded_exact bounded_stress bounded_pingfull bounded_close
+set_tests_properties(bounded_model bounded_exact bounded_sides bounded_stress bounded_pingfull bounded_close
                      bounded_discard bounded_overrun PROPERTIES TIMEOUT 300)
 
 add_executable(bounded_drop_wakeups bounded_test.cpp)

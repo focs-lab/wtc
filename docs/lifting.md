@@ -752,6 +752,26 @@ lap to finish moving its element out of the cell, and a pop for the push
 of its ticket to finish moving its element in: waits on operations
 already in progress, as a thread waits for the original's mutex.
 
+A settled ring (the shim's `spsc_settled`, `mpsc_settled` and
+`spmc_settled` tags, a ring built settled in the runtime; the default
+does not, since the order costs throughput and the original's mutex
+waited anyway) has a single side order its steps the other way, as the
+classic two-index ring does, so that the other side never waits for it.
+One producer fills its cell first and then stores tail, so every ticket a
+pop can take is filled: no pop waits for a push. One consumer moves its
+element out first and then stores head, so head counts finished pops and
+a push admitted by tail - head finds its cell free: no push waits for a
+pop. The pop then takes effect at its store of head, and until then only
+the consumer can see the element, so a push refused as full meanwhile is
+ordered before the pop, an order the original's mutex allows; the step is
+still one store on a counter, and the argument above holds with it. What
+remains is the wait of the side that is many: with many producers and one
+consumer a pop still waits for the push of its ticket, with one producer
+and many consumers a push for the previous lap's pop. `bounded_test
+sides` holds a push in its element's constructor and a pop in its
+element's assignment, on every tag, and checks who answers at once and
+who waits.
+
 A queue whose push may overrun keeps head and tail in one 64-bit word: an
 overrun takes the oldest element's ticket and its own in one
 compare-and-swap, so it is one step, as under the original's mutex, and

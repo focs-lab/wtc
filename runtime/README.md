@@ -111,11 +111,22 @@ would be sized by the other counter as read before its step, and a
 batched pop and a batched push crossing there would each see the queue
 before the other: two elements queued, capacity four, both asking for
 ten, the pop takes two and the push appends two, where the mutex gives
-two and four or four and two. The shim's
-`wtc::bounded<T>` puts two waiters on it, one per side:
-a pop waits while it is empty, a push while it is full, and each publish
-wakes the other side's sleeper, with the same fences as the pop's
-waiter; `close()` closes both.
+two and four or four and two. Every operation of the ring takes its
+ticket and then fills or empties its cell, so a pop may wait for the push
+of its ticket and a push for the previous lap's pop: blocking, on every
+topology. Built settled (the shim's `spsc_settled`, `mpsc_settled` and
+`spmc_settled` tags), a single side orders its steps as the classic
+two-index ring does: one producer fills its cell before it publishes
+tail, one consumer moves its element out before it publishes head. Then
+no pop waits for a push with one producer and no push waits for a pop
+with one consumer, so both sides of the spsc form are wait-free, an mpsc
+push and an spmc pop lock-free; the many side's wait for the other
+remains. The order costs throughput (the other side no longer overlaps
+the fill), so it is what a program gets only where a path requires it.
+The shim's `wtc::bounded<T>` puts two waiters on it, one per side: a pop
+waits while it is empty, a push while it is full, and each publish wakes
+the other side's sleeper, with the same fences as the pop's waiter;
+`close()` closes both.
 
 A queue may be destroyed only after every push to it has returned (its
 producers joined, or otherwise ordered before the destructor), not as

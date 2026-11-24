@@ -8,6 +8,17 @@
 //                              moving its element out: pushes still see
 //                              the room its ticket made, and a size that
 //                              counts the element as gone
+//   bounded_test sides         who waits for whom, on each tag, with a
+//                              push held inside its element's move
+//                              constructor and with a pop held inside its
+//                              move-assignment: on the ring every pop
+//                              waits for the push of its ticket and every
+//                              push for the previous lap's pop; on a
+//                              settled ring, with one producer no pop waits
+//                              for a push, with one consumer no push waits
+//                              for a pop, and the bound stays exact (a pop
+//                              takes effect at its end with one consumer),
+//                              while the many side's wait is still there
 //   bounded_test stress [N]    producers that wait while the queue is full,
 //                              consumers that wait while it is empty, at
 //                              capacities 1 to 3, with random pauses
@@ -45,7 +56,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <condition_variable>
 #include <deque>
+#include <functional>
+#include <memory>
+#include <mutex>
 #include <random>
 #include <string>
 #include <thread>
@@ -86,6 +101,9 @@ const char* name(topology t) {
   case topology::spsc_inline: return "spsc_inline";
   case topology::mpsc: return "mpsc";
   case topology::spmc: return "spmc";
+  case topology::spsc_settled: return "spsc_settled";
+  case topology::mpsc_settled: return "mpsc_settled";
+  case topology::spmc_settled: return "spmc_settled";
   default: return "generic";
   }
 }
@@ -97,10 +115,20 @@ const char* name(wait_policy p) {
   }
 }
 
-bool manyP(topology t) { return t == topology::mpsc || t == topology::generic; }
-bool manyC(topology t) { return t == topology::spmc || t == topology::generic; }
+// The settled rings: a single side publishes after its cell's step.
+bool settled(topology t) {
+  return t == topology::spsc_settled || t == topology::mpsc_settled || t == topology::spmc_settled;
+}
+bool manyP(topology t) {
+  return t == topology::mpsc || t == topology::generic || t == topology::mpsc_settled;
+}
+bool manyC(topology t) {
+  return t == topology::spmc || t == topology::generic || t == topology::spmc_settled;
+}
 
-constexpr topology kTags[] = {topology::spsc, topology::mpsc, topology::spmc, topology::generic};
+constexpr topology kTags[] = {topology::spsc,         topology::mpsc,         topology::spmc,
+                              topology::generic,      topology::spsc_settled, topology::mpsc_settled,
+                              topology::spmc_settled};
 constexpr wait_policy kPolicies[] = {wait_policy::spin, wait_policy::park, wait_policy::spin_then_park};
 
 // An element: the producer and its sequence number, and a payload that is
@@ -254,6 +282,174 @@ void exact() {
     g_hold_id = -1;
   }
   std::printf("exact: %s\n", g_failures ? "FAILED" : "ok");
+}
+
+// ---------------------------------------------------------------------------
+// sides: an element whose move constructor (the push's fill) or move-
+// assignment (the pop's taker) holds the thread until released.
+
+gate g_side_hold;
+std::atomic<int> g_ctor_id{-1}, g_assign_id{-1};
+
+struct side_held {
+  int id = 0;
+  side_held() = default;
+  explicit side_held(int i) : id(i) {}
+  side_held(side_held&& o) noexcept : id(o.id) {
+    if (o.id == g_ctor_id.load()) g_side_hold.stop_here();
+  }
+  side_held& operator=(side_held&& o) noexcept {
+    if (o.id == g_assign_id.load()) g_side_hold.stop_here();
+    id = o.id;
+    return *this;
+  }
+};
+
+void reset_side_hold() {
+  g_side_hold.at = false;
+  g_side_hold.go = false;
+  g_ctor_id = -1;
+  g_assign_id = -1;
+}
+
+// One thread per side, as the single-side topologies require (WTC_CHECK
+// aborts on a second producer or consumer): each side is an actor that
+// runs the calls posted to it, in order.
+struct actor {
+  std::mutex m;
+  std::condition_variable cv;
+  std::deque<std::function<void()>> work;
+  bool stop = false;
+  std::thread t{[this] { run(); }};
+  void run() {
+    for (;;) {
+      std::function<void()> f;
+      {
+        std::unique_lock<std::mutex> l(m);
+        cv.wait(l, [&] { return stop || !work.empty(); });
+        if (work.empty()) return;
+        f = std::move(work.front());
+        work.pop_front();
+      }
+      f();
+    }
+  }
+  // Posts f; the flag says when it has returned.
+  std::shared_ptr<std::atomic<bool>> post(std::function<void()> f) {
+    auto done = std::make_shared<std::atomic<bool>>(false);
+    {
+      std::lock_guard<std::mutex> l(m);
+      work.push_back([f = std::move(f), done] {
+        f();
+        done->store(true);
+      });
+    }
+    cv.notify_one();
+    return done;
+  }
+  void call(std::function<void()> f) {
+    auto done = post(std::move(f));
+    while (!done->load()) std::this_thread::yield();
+  }
+  ~actor() {
+    {
+      std::lock_guard<std::mutex> l(m);
+      stop = true;
+    }
+    cv.notify_one();
+    t.join();
+  }
+};
+
+// Whether a call posted to a side has returned while the held thread is
+// still held: true if it returned within a generous while, false if it is
+// still inside then, waiting for the held thread.
+bool returns_while_held(actor& side, std::function<void()> f) {
+  auto done = side.post(std::move(f));
+  const auto until = clk::now() + std::chrono::milliseconds(200);
+  while (!done->load() && clk::now() < until) std::this_thread::yield();
+  return done->load();
+}
+
+void sides() {
+  for (topology tag : kTags) {
+    // A push held while it constructs its element; a pop meanwhile. On a
+    // settled ring with one producer the ticket is not published yet and
+    // the pop answers empty at once; otherwise the push has taken the
+    // ticket and the pop of it waits for the fill.
+    {
+      reset_side_hold();
+      wtc::bounded<side_held> q(tag, 4, false, wait_policy::spin);
+      actor prod, cons;
+      g_ctor_id = 1;
+      prod.post([&] { EXPECT(q.try_push(side_held(1))); });
+      g_side_hold.wait_arrival();
+      std::atomic<int> got{-1};
+      const bool at_once = returns_while_held(cons, [&q, &got] {
+        side_held out;
+        got = q.try_pop(out) ? out.id : 0;
+      });
+      EXPECT(at_once == (settled(tag) && !manyP(tag)));
+      if (at_once) EXPECT(got.load() == 0);  // empty: the held push has not taken effect
+      g_side_hold.release();
+      prod.call([] {});
+      cons.call([&] {
+        if (!at_once) EXPECT(got.load() == 1);  // it waited for the held push's element
+        side_held out;
+        if (at_once) EXPECT(q.try_pop(out) && out.id == 1);
+        EXPECT(!q.try_pop(out));
+      });
+      std::printf("sides %s: pop during a push's fill %s\n", name(tag), at_once ? "answers at once" : "waits");
+    }
+    // A full queue at capacity R = 4, a pop held while it moves its
+    // element out, and a push meanwhile. On a settled ring with one
+    // consumer the pop has not taken effect: the push answers full at
+    // once, the size counts the element, and once the pop returns there is
+    // room. Otherwise the pop took effect at its ticket: the push is
+    // admitted, takes the ticket whose cell the pop still reads, and waits
+    // for it.
+    {
+      reset_side_hold();
+      wtc::bounded<side_held> q(tag, 4, false, wait_policy::spin);
+      actor prod, cons;
+      prod.call([&] {
+        for (int i = 1; i <= 4; ++i) EXPECT(q.try_push(side_held(i)));
+      });
+      g_assign_id = 1;
+      cons.post([&] {
+        side_held out;
+        EXPECT(q.try_pop(out) && out.id == 1);
+      });
+      g_side_hold.wait_arrival();
+      const bool one_settled_consumer = settled(tag) && !manyC(tag);
+      if (one_settled_consumer) EXPECT(q.size() == 4);
+      else EXPECT(q.size() == 3);
+      std::atomic<int> ok{-1};
+      const bool at_once = returns_while_held(prod, [&q, &ok] { ok = q.try_push(side_held(5)) ? 1 : 0; });
+      EXPECT(at_once == one_settled_consumer);
+      if (at_once) EXPECT(ok.load() == 0);  // full: the held pop has not taken effect
+      g_side_hold.release();
+      cons.call([] {});
+      prod.call([&] {
+        if (at_once) {
+          EXPECT(q.size() == 3);
+          EXPECT(q.try_push(side_held(5)));  // the room the finished pop made
+        } else {
+          EXPECT(ok.load() == 1);
+        }
+      });
+      cons.call([&] {
+        for (int i = 2; i <= 5; ++i) {
+          side_held out;
+          EXPECT(q.try_pop(out) && out.id == i);
+        }
+      });
+      std::printf("sides %s: push while a pop moves out, at capacity R, %s\n", name(tag),
+                  at_once ? "answers at once" : "waits");
+    }
+  }
+  reset_side_hold();
+  std::printf("sides: %s\n", g_failures ? "FAILED" : "ok");
 }
 
 // ---------------------------------------------------------------------------
@@ -599,13 +795,14 @@ extern "C" void wtc_test_push_step() {
 
 int main(int argc, char** argv) {
   if (argc < 2) {
-    std::fprintf(stderr, "usage: bounded_test model|exact|stress|pingfull|close|discard|overrun [N]\n");
+    std::fprintf(stderr, "usage: bounded_test model|exact|sides|stress|pingfull|close|discard|overrun [N]\n");
     return 2;
   }
   const std::string mode = argv[1];
   const long n = argc > 2 ? std::atol(argv[2]) : 0;
   if (mode == "model") model(n ? n : 20000);
   else if (mode == "exact") exact();
+  else if (mode == "sides") sides();
   else if (mode == "stress") stress(n ? n : 20000);
   else if (mode == "pingfull") pingfull(n ? n : 2000);
   else if (mode == "close") close_test();

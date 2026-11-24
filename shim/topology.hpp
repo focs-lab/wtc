@@ -34,6 +34,15 @@ enum class topology : int {
     spsc_inline = 2,
     mpsc = 3,
     spmc = 4,
+    // The settled bounded rings: the bounded ring whose single side publishes
+    // its counter only after it has filled or emptied its cell
+    // (runtime/bounded_ring.hpp, built settled), so that with one producer no
+    // pop waits for a push and with one consumer no push waits for a pop.
+    // Bounded only; tags of their own because the order costs throughput, so a
+    // program gets them only where a path requires it.
+    spsc_settled = 8,
+    mpsc_settled = 9,
+    spmc_settled = 10,
 };
 
 }
