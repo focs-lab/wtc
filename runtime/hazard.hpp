@@ -42,7 +42,9 @@
 // (unhooked() counts these failures) and tries to set the key again at its
 // next operation. A thread that exits untied leaves its record taken for
 // good, with the nodes it retired and could not free: memory, not
-// correctness.
+// correctness. index_ring.hpp's wait-free ring gives an untied thread no
+// thread slot (it runs that ring's counted fallback until its key is set),
+// so no slot stays taken with the record.
 //
 // The key's destructor runs after the thread's C++ thread_local
 // destructors (glibc runs those first), so a queue operation from one of
@@ -52,20 +54,22 @@
 // never destroyed) must not take a record tied to that exit, which might
 // never give it back: the thread is exiting (t_exiting, set by release()),
 // so the operation borrows a record for its own length and gives it back
-// as it returns (use).
+// as it returns (use). A borrowed record has no token, so the wait-free
+// ring gives it no thread slot either.
 // The main thread's record is not given back at exit(), which runs no key
 // destructors; its retired nodes stay reachable from the chunk.
 //
 // After fork() only the forking thread runs in the child, and the records
 // the parent's other threads held are given back there (after_fork, a
 // pthread_atfork handler registered with the key): their slots are
-// cleared and their retired nodes stay for the record's next holder. An
+// cleared, their retired nodes stay for the record's next holder, and
+// their holders' tokens end, which index_ring.hpp's thread slots read. An
 // operation another thread was inside at the fork is abandoned in the
 // child, with whatever it held; the child may use a queue only if no
 // other thread was inside an operation on it at the fork (POSIX allows
 // the child of a multi-threaded process less than that). _Fork() and a raw
 // clone run no atfork handler: in a child made so, the records the other
-// threads held stay taken.
+// threads held, and their thread slots, stay taken.
 #pragma once
 
 #include <pthread.h>
@@ -135,6 +139,14 @@ struct alignas(64) record {
     // when the mark was published (protect_all).
     std::atomic<std::uint64_t> mark_seq[kSlots];
     std::atomic<bool> active{false};
+    // Its present holder's name, 0 while it is idle: taken from a 64-bit
+    // counter for the whole process when the record is taken, so no two
+    // holders ever share one, and cleared when it is given back (or by the
+    // fork handler in the child). index_ring.hpp's thread slots name their
+    // holders by it.
+    std::atomic<std::uint64_t> token{0};
+    // The record's index over all chunks.
+    unsigned id = 0;
     // Its holder's only: the nodes it retired and has not freed.
     node* retired = nullptr;
     std::size_t retired_count = 0;
@@ -146,6 +158,10 @@ struct alignas(64) record {
 };
 
 struct chunk {
+    explicit chunk(unsigned base) : base(base) {
+        for (unsigned i = 0; i < kChunk; ++i) recs[i].id = base + i;
+    }
+    const unsigned base;  // the id of recs[0]
     record recs[kChunk];
     // Records handed out at least once: a scan reads these and no more.
     std::atomic<unsigned> used{0};
@@ -160,6 +176,7 @@ inline thread_local record* t_untied = nullptr;
 // Set when this thread's exit has given its record back (release()).
 inline thread_local bool t_exiting = false;
 inline std::atomic<std::uint64_t> g_unhooked{0};
+inline std::atomic<std::uint64_t> g_tokens{1};
 
 inline void release(void* r);
 inline void after_fork();
@@ -178,7 +195,7 @@ inline void prepare() {
             std::fprintf(stderr, "wtc: hazard pointers: pthread_atfork failed (%d)\n", e);
             std::abort();
         }
-        g_chunks.store(new chunk, std::memory_order_seq_cst);
+        g_chunks.store(new chunk(0), std::memory_order_seq_cst);
         return true;
     }();
     (void)once;
@@ -236,7 +253,7 @@ inline record* acquire() {
         if (!next) {
             // More than kChunk threads hold records: the one allocation a
             // first operation can make.
-            chunk* fresh = new chunk;
+            chunk* fresh = new chunk(c->base + kChunk);
             if (c->next.compare_exchange_strong(next, fresh, std::memory_order_seq_cst))
                 next = fresh;
             else
@@ -286,13 +303,16 @@ inline void scan(record& mine) {
 }
 
 // The key's destructor, at the thread's exit: clears the slots, frees what
-// it can, and gives the record back.
+// it can, and gives the record back. The token ends before the record is
+// idle, with release order: whoever finds it ended sees everything this
+// thread did before.
 inline void release(void* p) {
     record* r = static_cast<record*>(p);
     for (auto& s : r->slot) s.store(nullptr, std::memory_order_release);
     scan(*r);
     t_record = nullptr;
     t_exiting = true;
+    r->token.store(0, std::memory_order_release);
     r->active.store(false, std::memory_order_release);
 }
 
@@ -302,6 +322,7 @@ inline void after_fork() {
     for_each_record([](record& r) {
         if (&r == t_record || &r == t_untied || !r.active.load(std::memory_order_relaxed)) return;
         for (auto& s : r.slot) s.store(nullptr, std::memory_order_relaxed);
+        r.token.store(0, std::memory_order_release);
         r.active.store(false, std::memory_order_release);
     });
 }
@@ -310,7 +331,11 @@ inline void after_fork() {
 // be set (see the top).
 [[gnu::noinline]] inline record& first_use() {
     prepare();  // done already wherever a queue was built first
-    record* r = t_untied ? t_untied : acquire();
+    record* r = t_untied;
+    if (!r) {
+        r = acquire();
+        r->token.store(g_tokens.fetch_add(1, std::memory_order_relaxed), std::memory_order_relaxed);
+    }
     if (pthread_setspecific(g_key, r) != 0) {
         t_untied = r;
         g_unhooked.fetch_add(1, std::memory_order_relaxed);
@@ -375,6 +400,40 @@ inline unsigned records_made() {
     unsigned n = 0;
     for_each_record([&](record&) { ++n; });
     return n;
+}
+
+// The name of r's present holder (record::token), never 0. Constant while
+// the holder holds it.
+inline std::uint64_t token(const record& r) { return r.token.load(std::memory_order_relaxed); }
+
+// The record with this id, which has been handed out: the walk is over the
+// chunks before it, one for every kChunk records.
+inline record& record_at(unsigned id) {
+    chunk* c = g_chunks.load(std::memory_order_seq_cst);
+    while (id >= c->base + kChunk) c = c->next.load(std::memory_order_seq_cst);
+    return c->recs[id - c->base];
+}
+
+// Whether the thread a token names still holds its record, the one with
+// this id: whether that record still shows the token. Tokens are never
+// reused, so a record that shows it is held by that thread at that read;
+// one given back shows another or none, and the token is read with acquire
+// order, so a token found ended was given back with everything its holder
+// did before. Its cost is the chunk walk of record_at.
+inline bool held(std::uint64_t token, unsigned id) {
+    return record_at(id).token.load(std::memory_order_acquire) == token;
+}
+
+// Whether this thread's record is tied to its exit (see the top).
+inline bool tied() { return t_record != nullptr; }
+
+// The thread's record if it is tied to its exit, taken now if the thread
+// has none; nullptr if it is untied or its exit has already run.
+inline record* tied_record() {
+    if (record* r = t_record) return r;
+    if (t_exiting) return nullptr;
+    first_use();
+    return t_record;
 }
 
 // Reads src and keeps what it read from being freed until clear(i): the

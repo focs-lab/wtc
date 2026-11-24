@@ -22,11 +22,11 @@ Every implementation carries, in its header comment:
 | `segment_queue.hpp`, single-consumer form | `wtc::queue<T>` | exactly one thread ever pops, any number push, and the destructor runs after all are done |
 | `spmc_queue.hpp` | `wtc::queue<T>` | exactly one thread ever pushes, any number pop, and the destructor runs after all are done |
 | `stream_gate.hpp` | nothing: whether a single consumer waits for a batch, shared by the ring and the single-consumer form | none |
-| `hazard.hpp` | nothing: hazard pointers for the segmented queues, one slot for pushes and one for pops; a thread's first operation takes a record without allocating unless more than 256 are held at once or the pthread key that gives it back at exit is not among glibc's first 32, and a fork's child gets back the records of the threads that did not survive (not after `_Fork()` or a raw clone, which run no atfork handler) | none |
+| `hazard.hpp` | nothing: hazard pointers for the segmented queues, one slot for pushes and one for pops, and the records by which the wait-free ring's thread slots tell a live thread from one that has exited; a thread's first operation takes a record without allocating unless more than 256 are held at once or the pthread key that gives it back at exit is not among glibc's first 32, and a fork's child gets back the records of the threads that did not survive (not after `_Fork()` or a raw clone, which run no atfork handler) | none |
 | `waiter.hpp` | nothing: how a pop that waits for an element waits (spin, park, or spin then park), and the wake-up a publish owes a sleeping consumer, shared by every queue above; also a wait whose loop is the caller's (`begin`, `step`, `end`), for a program's own wait lifted off its condition variable (`shim/lifted.hpp`) | none |
 | `bounded_ring.hpp` | a bounded ring a program wrote itself under a mutex (spdlog's `circular_q`), through `shim/bounded.hpp` | the ring's capacity and its answers to a full queue, read from its member functions (`docs/lifting.md`, "The bound"); with one producer or one consumer, that side is single |
 | `bounded_ring.hpp`, through `shim/c_queue.cpp` | a ring of pointers a C program wrote itself under a pthread mutex, with an end count (PARSEC ferret's and dedup's `queue.c`) | the ring's capacity, read from its initialisation; with one producer or one consumer, that side is single; batches with any number of producers and consumers (`docs/lifting.md`, "C queues") |
-| `index_ring.hpp` | nothing yet: a bounded queue no operation of which waits for another thread, for a path that requires it (`decisions/0004`) | at most the `threads` it was built for: operations in flight at once, an operation that an element's constructor, move or destructor starts on the same queue counting apart; the capacity semantics of the variant chosen (plain or exact, below) |
+| `index_ring.hpp` | nothing yet: a bounded queue no operation of which waits for another thread, lock-free (SCQ ring) or wait-free (wCQ ring), for a path that requires it (`decisions/0004`) | at most the `threads` it was built for: operations in flight at once, an operation that an element's constructor, move or destructor starts on the same queue counting apart (and for the wait-free ring also threads alive at once that have operated on it, since each holds one of the ring's thread slots until it exits); the capacity semantics of the variant chosen (plain or exact, below) |
 | `delegate.hpp`, through `shim/delegate.cpp` | a critical section of one mutex, run under it by the thread that reaches it while the mutex is free or lightly contended, and by a server thread for the mutex while it is contended (`--wtc-delegate-sections`) | the section does not depend on the thread that runs it, waits for no thread but by locks it lets go again, takes no recursive mutex and lets no exception out (`docs/delegation.md`) |
 
 `spsc_ring<Slot, kSlots>` is an unbounded wait-free ring of blocks of 128 KiB
@@ -173,8 +173,9 @@ against it; the exact variant keeps a count that a pop gives back as
 soon as it has its index, and has spare cells for the pops still moving
 out, so a pop held in its move does not make the queue look full, but a
 push in flight still counts for the pushes after it and not for the pops,
-and so does a pop between taking its element and giving its place back:
-its pops and accepted pushes
+and so does a pop between taking its element and giving its place back
+(on the wait-free ring that can be long: from a helper's finishing its
+request to its own return from the ring): its pops and accepted pushes
 are linearisable, and a refusal is justified by elements queued and
 places those operations hold together, which is not linearisable as a
 bounded queue (`index_queue_test inflight` shows the history for a push;
@@ -185,6 +186,73 @@ a linearisation, a pop held in its move, the exact variant's spare cells
 all in use, frozen producers and consumers, the ring churned and drained,
 stress) and the GenMC configurations in `test/model/`, with deliberate
 bugs that each must catch.
+
+The same queue over `wcq_ring`, the wait-free ring of "wCQ: a fast
+wait-free queue with bounded memory usage" (SPAA 2022), makes every
+operation wait-free, under two conditions: the double-width
+compare-and-swap is one instruction (`-mcx16` on x86-64, LSE on AArch64,
+checked at build and at run time), and every thread operating on the
+ring holds one of its `threads` thread slots, which holds while at most
+`threads` threads that have operated on it are alive at once. After 16
+tries (64 for a dequeue) an operation publishes a request in its slot's
+state and every other thread, once every 16 operations, helps one
+pending request, through a counter that the helpee and its helpers move
+once per attempt and entries updated with that compare-and-swap. A
+thread takes a slot at its first operation on the ring, the first free
+one in index order, and holds it until it exits; a slot whose holder has
+exited, or did not survive a fork, is free again (the header proves that
+a thread never finds every slot held while the condition holds). A
+thread past the bound runs SCQ's loops, lock-free and counted by
+`fallbacks()`, and while one does the others are not wait-free either;
+with `WTC_CHECK` the ring aborts instead. A thread whose hazard record
+could not be tied to its exit (`hazard.hpp`: the key's allocation
+failed) takes no slot, since its exit would not free it, and runs the
+same counted fallback until it is tied; so does an operation from a key
+destructor that runs after the thread's exit has given its record back,
+which borrows a record for its own length. The paper proves the steps
+finite and gives no closed form; none is claimed. Measured instead
+(`wcq_test frozen`, seven threads on a queue of four, one more thread
+frozen in turn at every point of its own operation): the most steps an
+operation of the others took varies from run to run; over six runs on
+a-p13 on 24 and 25 Nov 2026, with the ring's own thread slots, it was 25
+to 150 with the defaults, and over seven, 515 to 540 in a build where
+every enqueue takes the slow path and every operation helps. Porting it
+found several places where the paper's figures, the published code or
+both lose or double an element on the slow path, all fixed and listed in
+the header; the ring churn of `wcq_test ring` and the stress and
+linearisability rounds of `index_queue_wcq_slow_test` are what found
+them.
+
+Neither ring is fast. Untimed on one machine, against the bounded ring
+with any number of producers and consumers, the queue over the SCQ ring
+ran at 0.24 to 0.78 of its throughput and the queue over the wCQ ring at
+0.06 to 0.79, from one to four threads on each side (at one producer and
+eight consumers the wCQ queue moved 0.1 million elements a second), and
+at about the ring's with eight on each side. So they are what the
+compiler picks only for a path whose progress requirement the bounded
+ring cannot meet (the shim's `scq` and `wcq` tags), never by default.
+
+What is model-checked and what is only tested. GenMC (`test/model/run.sh`,
+RC11, every execution of a few operations explored to completion, loops
+unrolled to a bound) checks the SCQ ring and the queue over it on rings
+of two and four indices. Of the wCQ ring it checks, on a ring of two
+indices with no patience and help on every operation, and on 32-bit
+halves rather than 64-bit pairs, only two configurations to completion:
+an enqueue that a dequeue must then see (`wcq_empty`), and two enqueues
+on the slow path, each helping the other's request (the helpee taken in
+turn, FIN, the production at a round's position, and the drain's
+finalising of an entry produced with Enq clear: `wcq_enq2`, 16316
+executions). The configurations with a dequeue on the slow path or with
+more operations (`wcq_enqdeq`, `wcq_fifo`, `wcq_pair`, `wcq_wrap`) do not
+complete in the 15 to 30 minutes tried and check only what they explored;
+`wcq_enqdeq` finds the deliberate bug its run.sh entry names within its
+first 38 executions. Everything else is tested, not model-checked: the
+slow-path dequeue, the fast path's interplay with the slow one, rings and
+queues of realistic size, more than two threads on the slow path, the
+thread slots and their reuse across thread exits and forks, the hazard
+pointers, and the segment queues (`wcq_test`, `index_queue_test`,
+`hazard_test`, the stress tests above, all plain and under
+ThreadSanitizer).
 
 A queue may be destroyed only after every push to it has returned (its
 producers joined, or otherwise ordered before the destructor), not as

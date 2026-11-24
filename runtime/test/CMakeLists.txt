@@ -495,6 +495,13 @@ if(NOT WTC_RT_SANITIZE)
   add_test(NAME first_use_enomem COMMAND first_use_test enomem)
   add_test(NAME first_use_retire COMMAND first_use_test retire)
   add_test(NAME first_use_index_queue COMMAND first_use_test index_queue)
+  # The wait-free ring's queue too, and as the process's first hazard user.
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+    target_compile_options(first_use_test PRIVATE -mcx16)
+    target_compile_definitions(first_use_test PRIVATE WTC_TEST_WCQ_FIRST_USE=1)
+    add_test(NAME first_use_wcq_first COMMAND first_use_test wcq_first)
+    add_test(NAME first_use_untied COMMAND first_use_test untied)
+  endif()
 endif()
 
 # The bounded lock-free queue over rings of indices (index_ring.hpp), both
@@ -527,6 +534,83 @@ set_tests_properties(index_queue_model index_queue_lin index_queue_held index_qu
 # The ring churn alone: with the other tests' threads on the processors
 # its own interleave less, and a threshold too small shows less often.
 set_tests_properties(index_queue_ring PROPERTIES RUN_SERIAL TRUE)
+
+# The same tests on the wait-free ring (wcq_ring), with its defaults and in
+# the build in which every enqueue and almost every dequeue takes the slow
+# path and every operation helps; and the wait-free ring's own tests:
+# threads frozen at each point of their operations while the others go on
+# (their steps printed), a ring churned by six threads, and the detection
+# of the double-width compare-and-swap, which a build without -mcx16 must
+# report missing. x86-64 only here: AArch64 needs LSE (casp) instead.
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+  foreach(v 1 2)
+    if(v EQUAL 1)
+      set(name index_queue_wcq_test)
+    else()
+      set(name index_queue_wcq_slow_test)
+    endif()
+    add_executable(${name} index_queue_test.cpp)
+    target_link_libraries(${name} PRIVATE wtc_rt_flags)
+    target_compile_options(${name} PRIVATE -mcx16)
+    target_compile_definitions(${name} PRIVATE WTC_TEST_WCQ=${v})
+    foreach(mode model held frozen)
+      add_test(NAME ${name}_${mode} COMMAND ${name} ${mode} 20000)
+    endforeach()
+    foreach(mode boundary inflight)
+      add_test(NAME ${name}_${mode} COMMAND ${name} ${mode})
+    endforeach()
+    add_test(NAME ${name}_ring COMMAND ${name} ring ${index_ring})
+    add_test(NAME ${name}_lin COMMAND ${name} lin ${index_lin})
+    add_test(NAME ${name}_stress COMMAND ${name} stress ${index_stress})
+    set_tests_properties(${name}_model ${name}_held ${name}_frozen ${name}_lin ${name}_stress ${name}_ring
+                         PROPERTIES TIMEOUT 900)
+  endforeach()
+  if(WTC_RT_SANITIZE)
+    set(wcq_frozen 2000)
+    set(wcq_ring 30)
+    set(wcq_slow_test_ring 30)
+  else()
+    set(wcq_frozen 20000)
+    set(wcq_ring 1000)
+    # The lookup that stops at the first counter matching under its flags
+    # loses or doubles an index about once in a thousand rounds here.
+    set(wcq_slow_test_ring 10000)
+  endif()
+  add_executable(wcq_test wcq_test.cpp)
+  target_link_libraries(wcq_test PRIVATE wtc_rt_flags)
+  target_compile_options(wcq_test PRIVATE -mcx16)
+  add_executable(wcq_slow_test wcq_test.cpp)
+  target_link_libraries(wcq_slow_test PRIVATE wtc_rt_flags)
+  target_compile_options(wcq_slow_test PRIVATE -mcx16)
+  target_compile_definitions(wcq_slow_test PRIVATE WTC_TEST_WCQ_SLOW=1)
+  set(wcq_test_ring ${wcq_ring})
+  foreach(t wcq_test wcq_slow_test)
+    add_test(NAME ${t}_frozen COMMAND ${t} frozen ${wcq_frozen})
+    add_test(NAME ${t}_ring COMMAND ${t} ring ${${t}_ring})
+    add_test(NAME ${t}_cas2 COMMAND ${t} cas2)
+    add_test(NAME ${t}_slots COMMAND ${t} slots)
+    add_test(NAME ${t}_fork COMMAND ${t} fork)
+    add_test(NAME ${t}_helped COMMAND ${t} helped)
+    if(NOT WTC_RT_SANITIZE STREQUAL "thread")  # as hazard_late
+      add_test(NAME ${t}_late COMMAND ${t} late)
+    endif()
+    set_tests_properties(${t}_frozen ${t}_ring ${t}_slots ${t}_fork PROPERTIES TIMEOUT 900)
+    if(WTC_RT_SANITIZE STREQUAL "thread")
+      set_tests_properties(${t}_fork PROPERTIES ENVIRONMENT "TSAN_OPTIONS=die_after_fork=0")
+    endif()
+    # A thread past the slots: counted, or refused under WTC_CHECK.
+    if(WTC_CHECK)
+      add_test(NAME ${t}_over_is_caught
+               COMMAND sh -c "$<TARGET_FILE:${t}> over 2>&1 | grep -q 'more threads than it was built for'")
+    else()
+      add_test(NAME ${t}_over COMMAND ${t} over)
+    endif()
+  endforeach()
+  add_executable(wcq_no_cas2 wcq_test.cpp)
+  target_link_libraries(wcq_no_cas2 PRIVATE wtc_rt_flags)
+  target_compile_definitions(wcq_no_cas2 PRIVATE WTC_TEST_EXPECT_NO_CAS2=1)
+  add_test(NAME wcq_no_cas2_detected COMMAND wcq_no_cas2 cas2)
+endif()
 
 # Hazard records under thread churn: ten thousand threads, sixteen at a
 # time, each pushing and popping; the records are reused, and every

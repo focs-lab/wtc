@@ -96,7 +96,7 @@ void at(point p) {
     if ((t_jitter >> 16) % 3 == 0) std::this_thread::yield();
   }
 }
-struct hooks {
+struct hooks : wtc::rt::no_ring_hooks {
   static void enq_reserved() { at(kEnq); }
   static void deq_reserved() { at(kDeq); }
   static void push_has_cell() { at(kPushCell); }
@@ -112,7 +112,26 @@ struct elem {
   bool intact() const { return pad.size() == 20 && pad[0] == char('a' + v % 26); }
 };
 
-using queue = wtc::rt::index_queue<elem, hooks>;
+// The ring under test: SCQ (lock-free), or with WTC_TEST_WCQ the
+// wait-free ring, 1 with its defaults, 2 with no patience for enqueues,
+// one try for dequeues and help on every operation, so that the slow path
+// and the helping run all the time.
+#if WTC_TEST_WCQ == 1
+template <class H>
+using test_ring = wtc::rt::wcq_ring<H>;
+#elif WTC_TEST_WCQ == 2
+template <class H>
+using test_ring = wtc::rt::wcq_ring<H, wtc::rt::wide_words, wtc::rt::thread_slots, 0, 1, 1>;
+#else
+template <class H>
+using test_ring = wtc::rt::scq_ring<H>;
+#endif
+
+// Every queue is built for the threads alive at once that use it, the
+// main thread's included where it does: the wait-free ring's thread slots
+// are its own (index_ring.hpp), so the other threads of the process do
+// not count.
+using queue = wtc::rt::index_queue<elem, hooks, test_ring>;
 
 void model(long n) {
   std::mt19937_64 rng(7);
@@ -387,15 +406,21 @@ void frozen_consumer() {
       for (std::uint64_t i = 9; i <= 1000; ++i)
         while (!q.try_push(elem(i))) std::this_thread::yield();
     });
-    // The held pop owns the first element (its position, or its cell);
-    // every other one is taken past it.
+    // The held pop owns at most one element (the one at its position, or
+    // in its cell); every other one is taken past it. On the lock-free
+    // ring and the wait-free one's fast path that is the first element; a
+    // slow-path enqueue may leave the first position empty.
     while (got < 999)
       if (q.try_pop(out)) ++got;
     other.join();
+    if (q.try_pop(out)) ++got;
     EXPECT(!q.try_pop(out));
     g.release();
     stuck.join();
+    EXPECT(got + (held_v.load() ? 1 : 0) == 1000);
+#if !defined(WTC_TEST_WCQ) || WTC_TEST_WCQ == 1
     EXPECT(held_v.load() == 1);
+#endif
     std::printf("frozen consumer at %s: the others took %llu\n", where == kDeq ? "the ring's dequeue" : "its cell",
                 (unsigned long long)got);
   }
@@ -467,7 +492,7 @@ void ring_churn(long rounds) {
   long bad = 0;
   constexpr unsigned kThreads = 6;
   for (long round = 0; round < rounds; ++round) {
-    wtc::rt::scq_ring<hooks> r(1, 2);
+    test_ring<hooks> r(1, 2, kThreads);
     std::atomic<unsigned> go{0};
     std::vector<std::thread> ts;
     for (unsigned t = 0; t < kThreads; ++t)

@@ -30,6 +30,7 @@
 #include <atomic>
 #include <new>
 
+#define WTC_RT_MODEL 1  // the C library only: no hazard records (index_ring.hpp)
 #include "../../index_ring.hpp"
 
 using ring = wtc::rt::scq_ring<>;

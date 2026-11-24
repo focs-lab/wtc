@@ -14,9 +14,18 @@
 //              thread-exit registration (the thread_local destructor that
 //              reaches the dynamic linker's lock) and no mutex.
 //   index_queue  pushes and pops on the bounded index queue, both
-//              variants, from threads other than the one that built it,
-//              many laps round its rings: none calls the allocator, nor
-//              anything else counted.
+//              variants over both rings, from threads other than the one
+//              that built it, many laps round its rings: none calls the
+//              allocator, nor anything else counted.
+//   untied     a thread whose key cannot be set (calloc failing, the key
+//              past the first 32) uses a wcq queue and exits untied: its
+//              operations fall back, counted, and it holds no thread slot
+//              afterwards, so two threads at once on a queue for two find
+//              theirs.
+//   wcq_first  a queue over the wait-free ring is the process's first
+//              user of hazard records: the first push and pop of fresh
+//              threads are clean all the same, its constructor having set
+//              the domain up.
 //   retire     pops on each hazard-using queue across many segments, so
 //              that pops retire segments and scan: the only allocator
 //              calls a pop makes are the frees of segments.
@@ -242,9 +251,10 @@ void retire() {
     pops_free_only("mpsc pops over 40 segments", m, n);
   }).join();
 }
-void index_queue() {
+template <template <class> class Ring>
+void index_queue_over(const char* ring) {
   for (bool exact : {false, true}) {
-    wtc::rt::index_queue<std::uint64_t> q(8, exact, 4);
+    wtc::rt::index_queue<std::uint64_t, wtc::rt::no_ring_hooks, Ring> q(8, exact, 4);
     std::thread prod([&] {
       for (std::uint64_t i = 0; i < 20000; ++i) {
         probe_result r{};
@@ -277,9 +287,69 @@ void index_queue() {
     });
     prod.join();
     cons.join();
-    std::printf("index queue (%s): 20000 pushes and pops, none counted\n", exact ? "exact" : "plain");
+    std::printf("index queue over %s (%s): 20000 pushes and pops, none counted\n", ring, exact ? "exact" : "plain");
   }
 }
+
+// The wait-free ring where the build has its double-width
+// compare-and-swap (CMake sets WTC_TEST_WCQ_FIRST_USE on x86-64, with
+// -mcx16).
+void index_queue() {
+  index_queue_over<wtc::rt::scq_ring>("scq");
+#if WTC_TEST_WCQ_FIRST_USE
+  index_queue_over<wtc::rt::wcq_default>("wcq");
+#endif
+}
+
+#if WTC_TEST_WCQ_FIRST_USE
+using wcq_queue = wtc::rt::index_queue<std::uint64_t, wtc::rt::no_ring_hooks, wtc::rt::wcq_default>;
+
+void wcq_first() {
+  wcq_queue q(8, true, 4);
+  std::uint64_t v = 0;
+  fresh("wcq push, the process's first hazard user", [&] { EXPECT(q.try_push(std::uint64_t{1})); });
+  fresh("wcq push, first in another fresh thread", [&] { EXPECT(q.try_push(std::uint64_t{2})); });
+  fresh("wcq pop, first in a fresh thread", [&] { EXPECT(q.try_pop(v) && v == 1); });
+}
+
+// A thread whose key cannot be set (its record untied) uses a wcq queue
+// and exits so: it takes no thread slot, so two threads alive at once
+// afterwards on a queue built for two find theirs.
+void untied() {
+  pthread_key_t k;
+  for (int i = 0; i < 40; ++i) EXPECT(pthread_key_create(&k, nullptr) == 0);
+  wcq_queue q(16, true, 2);
+  std::thread([&] {
+    t_fail_calloc = true;
+    EXPECT(q.try_push(std::uint64_t{7}));
+    std::uint64_t v = 0;
+    EXPECT(q.try_pop(v) && v == 7);
+    t_fail_calloc = false;
+  }).join();
+  const std::uint64_t untied_ops = q.free_ring().fallbacks() + q.queued_ring().fallbacks();
+  EXPECT(wtc::rt::hazard::unhooked() >= 1);
+  EXPECT(untied_ops > 0);  // its operations fell back, counted
+  std::atomic<int> ready{0};
+  auto work = [&] {
+    ready.fetch_add(1);
+    while (ready.load() < 2) std::this_thread::yield();
+    for (std::uint64_t i = 0; i < 1000; ++i) {
+      EXPECT(q.try_push(i));
+      std::uint64_t v;
+      EXPECT(q.try_pop(v));
+    }
+    ready.fetch_add(1);
+    while (ready.load() < 4) std::this_thread::yield();
+  };
+  std::thread a(work), b(work);
+  a.join();
+  b.join();
+  const std::uint64_t after = q.free_ring().fallbacks() + q.queued_ring().fallbacks();
+  std::printf("untied: the untied thread's operations fell back (%llu); two threads after it: %llu more\n",
+              (unsigned long long)untied_ops, (unsigned long long)(after - untied_ops));
+  EXPECT(after == untied_ops);
+}
+#endif
 
 void make_keys() {
   pthread_key_t k;
@@ -336,6 +406,10 @@ int main(int argc, char** argv) {
   else if (!std::strcmp(mode, "first_ops")) first_ops();
   else if (!std::strcmp(mode, "retire")) retire();
   else if (!std::strcmp(mode, "index_queue")) index_queue();
+#if WTC_TEST_WCQ_FIRST_USE
+  else if (!std::strcmp(mode, "wcq_first")) wcq_first();
+  else if (!std::strcmp(mode, "untied")) untied();
+#endif
   else if (!std::strcmp(mode, "keys40")) keys40();
   else if (!std::strcmp(mode, "enomem")) enomem();
   else {
