@@ -12,8 +12,14 @@ split over four small locks, lost outright. The timed leg of 24 Nov 2026
 1.90 GHz, median of 10) measured the compiler's build: from eight threads
 on it runs 1.43-1.79x the original and 1.10-1.15x the hand-delegated
 patch, but only 0.96-1.10x the best LiTL lock (MCS), which the untimed
-probe had at 1.45x. Below eight threads it loses: 0.51x the original at
-one thread, 0.82x at four. The server costs about one more core.
+probe had at 1.45x. Below eight threads it lost: 0.51x the original at
+one thread, 0.82x at four, since every section was handed over, the mutex
+free or not. The runtime now delegates a section only while its mutex is
+contended (below, "Where a section runs"), and the leg of the same day at
+the new runtime (`benchmarks/results/2026-11-24-d4-adapt/`) has it at
+1.02-1.08x the original at one to four threads, with no extra core, and
+at 1.01-1.06x the delegation of every section from eight threads on
+(1.54-2.00x the original).
 
 `--wtc-delegate-sections` (`mlir/lib/WTC/Transforms/DelegateSections.cpp`)
 does it in the compiler: for one mutex the build names, it finds the
@@ -34,16 +40,21 @@ $ wtc-opt m.cir --wtc-delegate-sections="mutex=leveldb::DBImpl::mutex_"
 
 A mutex is named as CIR names its member, `Class::member`, or as a global,
 `name`; `--delegate` may be given more than once. The pass has no cost
-model: whether delegating pays is the build's decision, and the leg says
-when it does. One mutex that every operation takes, with sections of a
+model: which mutex to name is the build's decision, and the runtime
+decides, as the program runs, whether a section of it is worth handing
+over. It pays for one mutex that every operation takes, with sections of a
 few hundred cycles on lines they share, and more contending cores than
-sections per operation: LevelDB's DB mutex from eight threads on. Not at
-four threads or fewer, where the hand-over is overhead with little to
-save (a client always hands over, even when the mutex is free), and not
-where an operation makes several small sections (memcached 1.6's set
-path, about seven round trips per set, which saturated the server). The
-server takes a core while it has work; when it has none it spins briefly
-and then sleeps, costing nothing until a client wakes it.
+sections per operation: LevelDB's DB mutex from eight threads on. At four
+threads or fewer the mutex stays cold and its sections run on their
+clients, at the original's speed or a little above (the ClangIR build's
+own gain, less the gate's two atomic operations a section). It does not
+pay where an operation makes several small sections (memcached 1.6's set
+path, about seven round trips per set, which saturated the server), and
+the runtime does not tell that case apart: it measures waiting for the
+mutex, not the round trips an operation makes. The server starts when
+the mutex turns hot and takes a core while it has work; when it has none
+it spins briefly and then sleeps, costing nothing until a client wakes
+it, and it ends once its mutex has cooled.
 
 ## What the pass does
 
@@ -98,7 +109,9 @@ was delegated.
 ## The runtime
 
 `runtime/delegate.hpp` keeps one server thread per mutex, keyed by the
-mutex's address and started by the first section delegated on it. A client
+mutex's address and started by the first section delegated on it, and
+delegates a section only while its mutex is contended enough for the
+hand-over to pay (below, "Where a section runs"). A client
 pushes a request (the section, its environment, a completion flag on its
 own stack) on the server's queue, the single-consumer form of
 `runtime/segment_queue.hpp`, and waits for the flag through its own
@@ -126,12 +139,23 @@ The servers' lives, and what each is started with:
   own thread does, as written. A section reached from a thread-local
   object's destructor after its thread stopped being a client runs on that
   thread.
-- **At most four at once** (`WTC_DELEGATE_MAX_SERVERS`). The sections of a
-  mutex delegated while as many servers run run on their client, under the
-  mutex, as written, and so do they when a server cannot be started
-  (`pthread_create` failing for want of memory or threads). That bounds the
-  threads a class with one mutex per object can start; running a section
-  as written is always faithful, it only gains nothing.
+- **At most four at once** (`WTC_DELEGATE_MAX_SERVERS`), each for a mutex
+  that is hot or has just cooled. A server whose mutex has stayed cold
+  for 10 ms ends: it takes itself out of its mutex's entry, answers every
+  request until no client says it is handing it one (a client says so,
+  then reads the entry again, both sequentially consistent, so either it
+  sees the server gone or the server sees it), and is freed. The sections
+  of a mutex that turns hot while as many servers run run on their
+  client, under the mutex, as written, and the mutex turns cold again; so
+  do they when a server cannot be started (`pthread_create` failing for
+  want of memory or threads). That bounds the threads a class with one
+  mutex per object can start; running a section as written is always
+  faithful, it only gains nothing. While a server that has cooled is
+  ending, a second may start for its mutex if it turns hot again: two
+  threads that take one mutex.
+- **Gates for at most 512 mutexes,** in a table twice that size, never
+  freed; a mutex past them has its sections run as written, at the cost
+  of a lookup and no lock.
 - **Every signal blocked,** from its first instruction: an asynchronous
   signal goes to a thread of the program's, never to a server, whatever the
   mask of the client that happened to start it.
@@ -142,21 +166,102 @@ The servers' lives, and what each is started with:
 - **The affinity and scheduling of its starting client,** unless
   `WTC_DELEGATE_CPU` pins it.
 - **None in a fork's child:** the child's runtime starts empty
-  (`pthread_atfork`, registered while the program starts), and its first
-  delegated section starts a server of its own. No state of the runtime's
-  is a function-local static with a dynamic initialiser, whose guard a
-  fork could leave taken by a thread the child does not have; the tick
-  rate the waiters use is kept the same way.
+  (`pthread_atfork`, registered while the program starts), every mutex
+  cold, and its first delegated section starts a server of its own. No
+  state of the runtime's is a function-local static with a dynamic
+  initialiser, whose guard a fork could leave taken by a thread the child
+  does not have; the tick rate the waiters use is kept the same way.
+
+### Where a section runs
+
+A round trip to the server costs a client more than a free or lightly
+contended mutex: the leg of 24 Nov, in which every section was handed
+over, ran at 0.51 of the original at one thread and 0.82 at four. Whether a
+mutex is contended is a fact of the run, so the runtime decides it, per
+mutex, as the program runs. It keeps a gate of its own for each mutex: the
+count of clients in a section of it as written, and whether its server is
+in a busy period (from a request it finds to the queue found empty).
+
+- **Free, while the mutex is cold.** A client that finds the gate open,
+  no client in a section as written and the server idle, takes it and
+  calls the section's function on its own thread: the section as written,
+  which takes the mutex itself. This is the runtime's trylock; a mutex
+  that is never contended never starts a server, and a single thread runs
+  as the program does, with two atomic read-modify-writes more per
+  section.
+- **Contended, while the mutex is cold.** A client that finds the gate
+  taken calls the function as written as well, waiting for the mutex
+  inside it, and times the call: the wait and the section. The gate keeps
+  a moving average of what a section of the mutex waits, every section
+  counted and a free one as no wait, so that a mutex contended now and
+  then stays cold however long its rare waits are. A thread counts its
+  free sections for each of the last four mutexes it ran, and adds a
+  count to its mutex's average when it next adds a time there or drops
+  the mutex for a fifth: a thread that goes between two mutexes still
+  counts the free sections of each (a review found one that dropped its
+  count at every switch turn a mutex hot whose sections waited 2 ns on
+  average). k free sections weigh the average by (1 - 1/4096)^k, exactly. Each new section weighs 1/4096,
+  and a time counts at most eight times the threshold, since a long
+  holder (a compaction, any section the compiler did not delegate) is not
+  shortened by a server. The average is a sum in fixed point (the sum
+  of `next_sum` in `runtime/delegate.hpp`; the average is the sum
+  shifted right by twelve), so that no time is rounded away at any
+  counter rate: a review found the first version, which shifted each time
+  before adding it, turning hot at 1.62 µs where it was told 1.5, and
+  never on a 24 MHz counter. Once the average passes
+  `WTC_DELEGATE_HOT_NS`, 750 ns, the mutex is hot. A time taken while the
+  server is still running sections delegated before the mutex cooled is
+  not counted: it measures the server, not the mutex.
+- **Hot.** A client delegates every section, and the mutex's server
+  starts if it has none. The gate is not looked at: a section run on its
+  client between two of the server's busy periods would take the lines the
+  server keeps, and the server would wait for it at the start of the next.
+  After every `WTC_DELEGATE_EPOCH` sections (262144), or after 10 ms in
+  which its server is given none, the server turns the mutex cold and its
+  average back to half the threshold, so that the clients measure afresh
+  (a mutex hot in a burst and then idle would otherwise keep its server
+  until 262144 more sections came): if waiting for the mutex still costs several
+  times the threshold it turns hot again within a few hundred sections,
+  and never if it costs under half. A server whose mutex stays cold for
+  10 ms with nothing to do ends, so that the bounded number of servers
+  goes to the mutexes that are contended now; a mutex that turns hot when
+  no server can be had (the bound reached, or `pthread_create` failing)
+  turns cold at once, and measures again.
+
+The threshold sits between what LevelDB's readers wait for the DB mutex at
+four and at eight threads on the leg's host. In untimed runs there, with
+every contended section run as written, the average wait of a section,
+free ones counted, each time capped at 6 µs, was about 25 ns at two
+threads, 0.1-0.45 µs at four, 1.0 µs at six, 2.4 µs at eight and 3.5-4.1
+µs at twelve and sixteen; with every contended section delegated, four
+threads lost to the build as written and six gained. Averaged over the
+contended sections only, as the first version did, a mutex contended 1%
+of the time by a long holder turned hot every second or so and lost 12%.
+
+The gate is a hint, not a lock: a client only tries it, and two clients
+that both find it open both call the function, which takes the mutex. A
+server that starts a busy period while clients are in sections as written
+waits for them, at most 10 µs, before it runs its first request, so as not
+to sleep in the kernel on the mutex they hold; past that it runs it, and
+the section waits for the mutex as any thread's would.
+
+`WTC_DELEGATE_MODE=always` delegates every section, free or not, as the
+runtime measured on 24 Nov did, and `WTC_DELEGATE_HOT_NS=0` delegates every
+section that finds the gate taken and runs the others free, with no
+estimate: the trylock alone, for comparison.
 
 The environment:
 
 | variable | what it does |
 |---|---|
+| `WTC_DELEGATE_MODE=always` | delegate every section, with the mutex free or not; unset, the choice above |
+| `WTC_DELEGATE_HOT_NS=N` | a mutex turns hot when its sections wait N ns on average, a free one counting as none (750 by default); 0 delegates every section that finds the gate taken and runs the others free |
+| `WTC_DELEGATE_EPOCH=N` | a server turns its mutex cold every N sections it runs (262144 by default); a server whose mutex stays cold 10 ms ends |
 | `WTC_DELEGATE_CPU=LIST` | pin the servers, in the order they start, to these CPUs; unset, a server inherits its starting client's affinity |
 | `WTC_DELEGATE_WAIT=spin` | the servers never park when idle |
 | `WTC_DELEGATE_SPIN_NS=N` | spin this long before parking, clients and servers (50 microseconds by default) |
 | `WTC_DELEGATE_MAX_SERVERS=N` | at most N servers at once (4 by default); the sections of further mutexes run as written |
-| `WTC_DELEGATE_REPORT=1` | print each server's count of sections at exit |
+| `WTC_DELEGATE_REPORT=1` | print at exit each server's count of sections, where the clients' sections ran (free, contended as written, delegated; of the clients that have ended and the thread that exits), and each gate's mode and average |
 
 The runtime's tests (`runtime/test/delegate_test.cpp`) run plain, under
 ThreadSanitizer and with `WTC_CHECK`: exclusion between clients and threads
@@ -167,10 +272,29 @@ short-lived clients whose waiters later threads take over; servers ending
 with the last client, a main that ends with `pthread_exit`, the bound on
 servers, their blocked signals and their stack, a fork's child, a
 section from a thread-local destructor, forks taken while threads start
-their first sections, and a client's errno, which a
-delegated section leaves as it was (the runtime's own calls, the futex
-a client parks on among them, may set it; the original's lock and
-unlock do not).
+their first sections, and a client's errno, which a delegated section
+leaves as it was (the runtime's own calls, the futex a client parks on
+among them, may set it; the original's lock and unlock do not). They run
+with every section
+delegated (`WTC_DELEGATE_MODE=always`), and those that do not depend on it
+in the default mode as well. Further tests check where a section runs: a
+free mutex's sections on their client with no server started; a contended
+mutex's sections as written while it is cold, delegated once its waits
+have turned it hot, with its server started then, and as written again
+once the server has turned it cold, the server ending with the clients;
+`WTC_DELEGATE_HOT_NS=0`, which delegates the first contended section; the
+three ways mixed with threads that run the section outside the runtime,
+every section counted once; a fork's child, cold and without a server
+where the parent's mutex was hot, turning hot with a server of its own;
+the average against the threshold at this host's counter rate and at 24
+MHz, and a 60 ns threshold turning a contended mutex hot; with one server
+allowed, a cooled mutex's server ending and the next hot mutex getting
+it, and a hot mutex that can have none turning cold; seventeen mutexes
+whose gates collide, and 512 gates and no more; a mutex contended 1%
+of the time staying cold, also for a thread that goes between it and a
+mutex of its own; a mutex hot in a burst and then idle cooling and
+giving its server up; and errno kept when the environment's numbers are
+out of range.
 
 ## The contract
 
@@ -191,16 +315,23 @@ allows. What the contract takes as given:
 
 What the runtime keeps, and why:
 
-- **Exclusion.** The server runs a section by calling its function, which
-  takes the mutex as the original section did; a thread that runs a
-  section of the same mutex as written takes it too.
-- **Happens-before.** A client's push happens before the server's pop of
-  it, and the server's store of the completion flag (release) before the
-  client's load of it (acquire); between sections of different clients the
-  mutex orders them as before.
-- **Order.** Each client waits for its section, so its sections run in its
-  program order; between clients they run in the order the queue
-  linearises their pushes, which an unfair mutex could have granted.
+- **Exclusion.** Every section, wherever it runs, runs by a call of its
+  function, which takes the mutex as the original section did: on its
+  client (free, contended while cold, or for any of the reasons a section
+  runs as written) or on the server, one at a time; a thread that runs a
+  section of the same mutex the pass refused takes it too. The gate plays
+  no part in it: two clients that both find it open both take the mutex.
+- **Happens-before.** A section run on its client is the original's, in
+  the client's program order. For a delegated one, a client's push happens
+  before the server's pop of it, and the server's store of the completion
+  flag (release) before the client's load of it (acquire); between
+  sections of different clients, however each ran, the mutex orders them
+  as before.
+- **Order.** Each client waits for its section, whichever way it runs, so
+  its sections run in its program order; between clients they run in the
+  order the mutex grants it, which for delegated sections is the order the
+  queue linearises their pushes: an order an unfair mutex could have
+  granted.
 - **No new deadlock.** The server stands for its mutex. A client waits for
   it as it waited for the mutex, and while the server runs a client's
   section that client is, for every other thread, inside its section.
@@ -213,19 +344,38 @@ What the runtime keeps, and why:
   section of the other, behind a section of the first, is a deadlock the
   original did not have (memcached's LRU maintainer, in the probe). The
   server is therefore one per mutex, keyed by its address, even when two
-  objects of a class each have one.
+  objects of a class each have one. The choice of where a section runs
+  adds no wait to this: the gate is tried, never waited for, and the
+  section that finds it taken either waits for the mutex, as the original
+  did, or for the server, as above. The server has two new waits. At the
+  start of a busy period it waits for the clients in sections as written,
+  and that wait ends after 10 µs whatever they do: a wait that ends on its
+  own cannot close a cycle, and after it the server waits for the mutex
+  inside the section, as it did before for a refused section or a section
+  run as written. When it ends it waits for the clients handing it
+  sections, each of which is waiting for it, and answers their requests
+  itself while it waits: nothing it waits for waits for anything but it. A thread
+  that holds the mutex on its own thread and delegates a section of another
+  mutex was possible before (a section of the first run as written) and is
+  the original's "holds one, waits for the other".
 
 Known differences, outside the contract:
 
 - **Which thread runs the section.** Proved invisible by condition (a),
   except where an assumption admits it (below).
-- **Progress.** A client waits for the server; if the server is
-  descheduled, every client of that mutex waits for it. A thread that held
-  the mutex could be descheduled as well, but only while it held it.
-- **Cost.** The server takes a core while it has work and sleeps when it
-  has none; under contention the clients spin up to 50 microseconds before
-  they park. A program delegates through up to four more threads than it
-  starts, with stacks as large as its clients'.
+- **Progress.** A client that delegates waits for the server; if the
+  server is descheduled, every client delegating to it waits for it. A
+  thread that held the mutex could be descheduled as well, but only while
+  it held it.
+- **Cost.** A server starts only for a mutex that turns hot; it takes a
+  core while it has work and sleeps when it has none, and under contention
+  the clients spin up to 50 microseconds before they park. A program
+  delegates through up to four more threads than it starts, with stacks as
+  large as its clients'. A section costs two atomic read-modify-writes
+  more on the free path, and three and two reads of the time-stamp counter
+  when it runs as written under contention; a delegated one, a
+  sequentially consistent store and a read of the mutex's entry more than
+  before (the server's end, above).
 - **Memory placement.** Pages a section touches first are placed on the
   server's node.
 - **Thread-level attributes of what a section starts.** A thread started
@@ -435,7 +585,25 @@ and exclude the server's sections by it. ThreadSanitizer on the delegated
 build, readrandom and readwhilewriting at four threads, 320 000 delegated
 sections: no report, as for the build as written.
 
-How fast it is will be a timed leg; untimed checks so far put the
-compiler's build level with the probe's hand-written delegation at eight
-threads, and below the build as written at four, as the probe found for
-the hand-written one.
+Timed twice on focs (24 processors at 1.90 GHz, median of 10; million
+reads a second, all threads): `2026-11-24-d4-delegate` with every section
+delegated, `2026-11-24-d4-adapt` with the runtime choosing:
+
+| threads | original | ClangIR, nothing delegated | every section delegated | adaptive | LiTL MCS |
+|---|---|---|---|---|---|
+| 1 | 0.518 | 0.577 | 0.249 | 0.550 | 0.473 |
+| 2 | 0.749 | 0.839 | 0.437 | 0.811 | 0.709 |
+| 4 | 0.970 | 0.993 | 0.783 | 0.989 | 0.994 |
+| 8 | 0.858 | 0.898 | 1.302 | 1.318 | 1.348 |
+| 12 | 0.871 | 0.907 | 1.516 | 1.555 | 1.402 |
+| 16 | 0.876 | 0.934 | 1.569 | 1.664 | 1.391 |
+| 23 | 0.870 | 0.867 | 1.664 | 1.737 | 1.379 |
+
+(the second leg's numbers; the cells it repeats from the first are within
+0.95 to 1.10 of that leg's). At one and two threads the adaptive build
+runs every section on its client, no server started, and at four it did
+in nine runs of ten; it is 1.02-1.08x the original there, at the
+original's CPU time. From eight threads on 97-98% of the sections are
+delegated, and it is 1.01-1.06x the delegation of every section, at its
+CPU time or a little less. Against MCS, the best library lock from eight
+threads on, it is 0.98x at eight and 1.11-1.26x from twelve.

@@ -4,8 +4,9 @@
     readme_figures.py [--results benchmarks/results] [--out docs/figures]
 
 For each evaluation leg it reads the summary.csv that summarise.py writes
-in the newest results directory of that leg (<date>-eval-w1, -eval-w2, ...)
-and draws one SVG into docs/figures/. A leg with no results yet is skipped
+in the newest results directory of that leg (<date>-eval-w1, -eval-w2, ...),
+and for the adaptive delegation's leg (<date>-d4-adapt) the one its own
+harness writes, and draws one SVG into docs/figures/. A leg with no results yet is skipped
 with a note, and its figure is left as it was.
 
 The figures are drawn here rather than with plot.py: plot.py's figures are
@@ -445,9 +446,38 @@ def w9(leg):
     return f
 
 
+def d4a(leg):
+    f = Fig(430, "Delegating a hot mutex's sections: only where it is contended",
+            f"LevelDB readrandom, million reads a second, all threads; the DB mutex; {leg.how()}",
+            "LevelDB readrandom throughput against threads: as written, every section delegated, "
+            "the adaptive delegation and the LiTL MCS lock")
+    m = lambda a, t: leg.get(threads=t, arm=a)
+    ts = sorted({int(r["threads"]) for r in leg.rows})
+    series = (("orig", "as written", B0, ""), ("litl-mcs", "LiTL MCS lock", B2, ""),
+              ("deleg", "every section delegated", B1, "6 4"), ("adapt", "compiler: delegated while contended", SPSC, ""))
+    top, bottom, left, right = 100, 350, 64, W - 28
+    hi = math.ceil(2 * max(m(a, t) for a, *_ in series for t in ts)) / 2
+    y = lambda v: bottom - (bottom - top) * v / hi
+    for k in range(int(hi * 2) + 1):
+        v = k / 2
+        f.line(left, y(v), right, y(v), B0 if v == 0 else GRID, 2 if v == 0 else 1.5)
+        f.add(f.text(left - 10, y(v) + 5, f"{v:.1f}", 13, MUTED, "end"))
+    x = lambda i: left + 30 + i * (right - left - 60) / (len(ts) - 1)
+    for i, t in enumerate(ts):
+        f.add(f.text(x(i), bottom + 22, t, 13, MUTED))
+    f.add(f.text((left + right) / 2, bottom + 44, "client threads", 14, MUTED))
+    for a, _, col, dash in series:
+        pts = [(x(i), y(m(a, t))) for i, t in enumerate(ts)]
+        f.polyline(pts, col, 3, dash)
+        for px, py in pts:
+            f.dot(px, py, col, r=4)
+    f.legend([(lab, col, "dash" if dash else "line") for _, lab, col, dash in series], 28, 412, 18)
+    return f
+
+
 FIGURES = [("eval-w1", "w1", w1), ("eval-w2", "w2", w2), ("eval-w3", "w3", w3),
            ("eval-w3grain", "grain", grain), ("eval-w7", "w7", w7), ("eval-w8", "w8", w8),
-           ("eval-w9", "w9", w9)]
+           ("eval-w9", "w9", w9), ("d4-adapt", "d4a", d4a)]
 
 
 def main():
