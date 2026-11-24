@@ -1,0 +1,22 @@
+{
+  "leg": "d5-wait-releg",
+  "date": "2026-11-24T08:08:00Z",
+  "end": "2026-11-24T08:19:22Z",
+  "git_sha": "14eb6f49babb32f08110b63a1aa3b9b9955a77ac",
+  "git_dirty": false,
+  "kernel": "6.8.0-40-generic",
+  "cpu_model": "Intel(R) Xeon(R) w9-3495X",
+  "sockets": "1",
+  "numa_nodes": "1",
+  "allowed_cpus": "4-27",
+  "smt_control": "on",
+  "smt_siblings": "offline or reserved",
+  "load_average": "3.42 5.63 4.41",
+  "build": "CTPL 437e135; orig=clang++-18 -O2 -std=c++17 (Ubuntu 18.1.3); hand-<policy>=probe Q5's ctpl_wait.py through tools/wtc-cc --lift -DCTPL_Q5_POLICY=<policy> -DWTC_SPIN_NS=4000 (spin_then_park, park); wtc=tools/wtc-cc --lift of the released source at 14eb6f4, whose oversubscribed branch parks after the pause; orig and hand-spin_then_park byte-identical to the 2026-11-24-d5-wait binaries",
+  "governor": "performance",
+  "no_turbo": "1",
+  "freq_khz": "1899961-1900038",
+  "llvm_sha": "1ebf89d8c5e61f9184431eb4e5c9a6966b5c0748",
+  "glibc": "2.39-0ubuntu8.5",
+  "reps": 10
+}

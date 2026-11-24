@@ -1,0 +1,18 @@
+{
+  "leg": "d5-wait", "date": "2026-11-24T05:26:44Z", "end": "2026-11-24T05:44:30Z",
+  "git_sha": "7c74233aa41b20c5216d49d4b1fc001848397dc0", "git_dirty": false,
+  "kernel": "6.8.0-40-generic",
+  "cpu_model": "Intel(R) Xeon(R) w9-3495X",
+  "sockets": "1", "numa_nodes": "1",
+  "allowed_cpus": "4-27",
+  "smt_control": "on",
+  "smt_siblings": "offline or reserved",
+  "load_average": "5.43 9.01 9.00",
+  "build": "CTPL 437e135; orig=clang++-18 -O2 -std=c++17 (Ubuntu 18.1.3); hand-<policy>=probe Q5's ctpl_wait.py through tools/wtc-cc --lift -DCTPL_Q5_POLICY=<policy> -DWTC_SPIN_NS=4000; wtc=tools/wtc-cc --lift of the released source (wait lifted; bench: 1 producer, waiters read when built; multi: producers not known); wtcy<ns>=wtc with kLiftedOversubscribedYieldNs=<ns>, wtcy16000000 byte-identical to wtc",
+  "governor": "performance",
+  "no_turbo": "1",
+  "freq_khz": "1899961-1900038",
+  "llvm_sha": "1ebf89d8c5e61f9184431eb4e5c9a6966b5c0748",
+  "glibc": "2.39-0ubuntu8.5",
+  "reps": 10
+}
