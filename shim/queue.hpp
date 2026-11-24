@@ -96,6 +96,10 @@ private:
     // generic_original.hpp, kept as a baseline.
     using generic_impl = rt::segment_queue<T, true>;
     using mpsc_impl = rt::segment_queue<T, false>;
+    // jiffy: the single-consumer form with the one-counter push, held
+    // through a pointer, so that its larger object does not grow the
+    // queue's for every other implementation.
+    using jiffy_impl = rt::segment_queue<T, false, 1024, 64, rt::no_hooks, true>;
     using ring_impl = rt::spsc_ring<T>;  // spsc and spsc_inline
     using spmc_impl = rt::spmc_queue<T>;
 
@@ -111,6 +115,18 @@ private:
     [[clang::annotate("wtc_queue_inline_ok")]]
     static void inline_ok() {}
 
+    // The implementations beyond the five this queue announces to the
+    // compiler, with the tag that selects each (shim/topology.hpp).
+    [[clang::annotate("wtc_queue_impl_jiffy")]]
+    static void offers_jiffy(int) {}
+
+    // The operations' dispatch keeps the five cases it had before jiffy
+    // came and finds jiffy under the default, at the price of one test for
+    // the general-purpose queue: with a case of its own the switch became a
+    // jump table, an indirect branch in every push and pop, which cost the
+    // mpsc queue several percent at one producer and one consumer.
+    bool is_jiffy() const { return __builtin_expect(jiffy_, 0); }
+
     // Exactly one member is alive, the one tag_ names. The union's own
     // constructor and destructor do nothing; the enclosing class constructs
     // and destroys the chosen member explicitly.
@@ -118,6 +134,7 @@ private:
         generic_impl generic;
         ring_impl ring;
         mpsc_impl mpsc;
+        jiffy_impl* jiffy;
         spmc_impl spmc;
         storage() {}
         ~storage() {}
@@ -130,6 +147,9 @@ private:
     // its cache through the adjacent-line prefetcher and every push pays
     // to take it back.
     alignas(128) topology tag_;
+    // Whether tag_ is jiffy, apart from it so that the dispatch on tag_
+    // keeps its shape (is_jiffy).
+    bool jiffy_ = false;
     alignas(128) storage impl_;
     // Its own lines: a consumer that goes to sleep or wakes writes them,
     // and every publish of a queue that can park reads them.
@@ -170,6 +190,7 @@ public:
     [[clang::annotate("wtc_queue_construction")]]
     explicit queue(topology tag = topology::generic) : tag_(tag) {
         if constexpr (kInlineOk) inline_ok();
+        offers_jiffy(static_cast<int>(topology::jiffy));
         construct();
     }
 
@@ -178,6 +199,7 @@ public:
     [[clang::annotate("wtc_queue_construction")]]
     queue(topology tag, wait_policy policy) : tag_(tag), wait_(policy) {
         if constexpr (kInlineOk) inline_ok();
+        offers_jiffy(static_cast<int>(topology::jiffy));
         construct();
     }
 
@@ -199,6 +221,10 @@ private:
             break;
         case topology::mpsc:
             new (&impl_.mpsc) mpsc_impl();
+            break;
+        case topology::jiffy:
+            jiffy_ = true;
+            impl_.jiffy = new jiffy_impl();
             break;
         case topology::spmc:
             new (&impl_.spmc) spmc_impl();
@@ -231,6 +257,9 @@ public:
             break;
         case topology::mpsc:
             impl_.mpsc.~mpsc_impl();
+            break;
+        case topology::jiffy:
+            delete impl_.jiffy;
             break;
         case topology::spmc:
             impl_.spmc.~spmc_impl();
@@ -266,7 +295,8 @@ private:
             break;
         default:
             if (!n) return;
-            impl_.generic.push_run(st.run_at(0), n);
+            if (is_jiffy()) impl_.jiffy->push_run(st.run_at(0), n);
+            else impl_.generic.push_run(st.run_at(0), n);
             for (unsigned i = 0; i < n; ++i) st.run_at(i)->~T();
             break;
         }
@@ -285,6 +315,7 @@ private:
         case topology::spmc:
             return impl_.spmc.consume(f);
         default:
+            if (is_jiffy()) return impl_.jiffy->consume(f);
             return impl_.generic.consume(f);
         }
     }
@@ -432,7 +463,8 @@ public:
             impl_.spmc.push(new_value);
             break;
         default:
-            impl_.generic.push(new_value);
+            if (is_jiffy()) impl_.jiffy->push(new_value);
+            else impl_.generic.push(new_value);
             break;
         }
         wait_.notify(1);
@@ -452,7 +484,8 @@ public:
             impl_.spmc.push(std::move(new_value));
             break;
         default:
-            impl_.generic.push(std::move(new_value));
+            if (is_jiffy()) impl_.jiffy->push(std::move(new_value));
+            else impl_.generic.push(std::move(new_value));
             break;
         }
         wait_.notify(1);

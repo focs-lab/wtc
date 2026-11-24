@@ -307,6 +307,12 @@ add_test(NAME waiter_loop_drop_wakeups_is_caught
 # drop their wake-ups must leave a producer asleep against room.
 add_executable(bounded_test bounded_test.cpp)
 target_link_libraries(bounded_test PRIVATE wtc_rt_flags)
+# The shim's annotations are clang's; and the wcq tag runs the wait-free
+# ring only where the double-width compare-and-swap is one instruction.
+target_compile_options(bounded_test PRIVATE $<$<CXX_COMPILER_ID:GNU>:-Wno-attributes>)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+  target_compile_options(bounded_test PRIVATE -mcx16)
+endif()
 if(WTC_RT_SANITIZE)
   set(bounded_n 2000)
   set(bounded_ping 300)
@@ -327,6 +333,7 @@ set_tests_properties(bounded_model bounded_exact bounded_sides bounded_stress bo
 
 add_executable(bounded_drop_wakeups bounded_test.cpp)
 target_link_libraries(bounded_drop_wakeups PRIVATE wtc_rt_flags)
+target_compile_options(bounded_drop_wakeups PRIVATE $<$<CXX_COMPILER_ID:GNU>:-Wno-attributes>)
 target_compile_definitions(bounded_drop_wakeups PRIVATE WTC_TEST_DROP_WAKEUPS=1)
 add_test(NAME bounded_drop_wakeups_is_caught
          COMMAND sh -c "$<TARGET_FILE:bounded_drop_wakeups> pingfull 200 2>&1 | grep -q 'lost wake-up: a publish woke nobody'")
@@ -335,6 +342,7 @@ add_test(NAME bounded_drop_wakeups_is_caught
 # threads move both counters past it: it must not be refused as full.
 add_executable(bounded_push_steps bounded_test.cpp)
 target_link_libraries(bounded_push_steps PRIVATE wtc_rt_flags)
+target_compile_options(bounded_push_steps PRIVATE $<$<CXX_COMPILER_ID:GNU>:-Wno-attributes>)
 target_compile_definitions(bounded_push_steps PRIVATE WTC_TEST_PUSH_STEPS=1)
 add_test(NAME bounded_split_push_steps COMMAND bounded_push_steps split)
 set_tests_properties(bounded_split_push_steps PROPERTIES TIMEOUT 300)

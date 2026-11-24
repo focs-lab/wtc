@@ -34,6 +34,27 @@ enum class topology : int {
     spsc_inline = 2,
     mpsc = 3,
     spmc = 4,
+    // Chosen for a path's progress requirement, and only where the
+    // runtime announces them: the queue's constructor calls a marker
+    // annotated wtc_queue_impl_<name> with the tag (shim/queue.hpp,
+    // shim/bounded.hpp), so the compiler writes this runtime's number and
+    // never assumes one.
+    //
+    // scq and wcq are for a bounded queue: the rings of indices of
+    // runtime/index_ring.hpp, lock-free and wait-free, any number of
+    // producers and consumers up to a bound on threads, which their
+    // markers carry as a second argument (shim/bounded.hpp). wcq is
+    // announced only where the build has a double-width compare-and-swap
+    // that is one instruction.
+    scq = 5,
+    wcq = 6,
+    // jiffy is for an unbounded queue with one consumer: the mpsc form
+    // with the push that takes its index from one counter for the whole
+    // queue (runtime/segment_queue.hpp, kOneCounter), wait-free where
+    // mpsc's push is lock-free with many producers. A tag of its own
+    // because that push costs throughput, so a program gets it only where
+    // a path requires the push to be wait-free.
+    jiffy = 7,
     // The settled bounded rings: the bounded ring whose single side publishes
     // its counter only after it has filled or emptied its cell
     // (runtime/bounded_ring.hpp, built settled), so that with one producer no

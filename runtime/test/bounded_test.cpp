@@ -8,6 +8,10 @@
 //                              moving its element out: pushes still see
 //                              the room its ticket made, and a size that
 //                              counts the element as gone
+//   (Every mode runs on each topology, on the settled rings and on the
+//   rings of indices that the scq and wcq tags choose; wcq is the wait-free
+//   ring where the build has a one-instruction CAS2, scq's lock-free ring
+//   otherwise.)
 //   bounded_test sides         who waits for whom, on each tag, with a
 //                              push held inside its element's move
 //                              constructor and with a pop held inside its
@@ -101,6 +105,8 @@ const char* name(topology t) {
   case topology::spsc_inline: return "spsc_inline";
   case topology::mpsc: return "mpsc";
   case topology::spmc: return "spmc";
+  case topology::scq: return "scq";
+  case topology::wcq: return "wcq";
   case topology::spsc_settled: return "spsc_settled";
   case topology::mpsc_settled: return "mpsc_settled";
   case topology::spmc_settled: return "spmc_settled";
@@ -115,20 +121,23 @@ const char* name(wait_policy p) {
   }
 }
 
+// The rings of indices (scq, wcq) take any number on both sides, and no
+// operation of theirs waits for another thread.
+bool indexed(topology t) { return t == topology::scq || t == topology::wcq; }
 // The settled rings: a single side publishes after its cell's step.
 bool settled(topology t) {
   return t == topology::spsc_settled || t == topology::mpsc_settled || t == topology::spmc_settled;
 }
 bool manyP(topology t) {
-  return t == topology::mpsc || t == topology::generic || t == topology::mpsc_settled;
+  return t == topology::mpsc || t == topology::generic || t == topology::mpsc_settled || indexed(t);
 }
 bool manyC(topology t) {
-  return t == topology::spmc || t == topology::generic || t == topology::spmc_settled;
+  return t == topology::spmc || t == topology::generic || t == topology::spmc_settled || indexed(t);
 }
 
 constexpr topology kTags[] = {topology::spsc,         topology::mpsc,         topology::spmc,
                               topology::generic,      topology::spsc_settled, topology::mpsc_settled,
-                              topology::spmc_settled};
+                              topology::spmc_settled, topology::scq,          topology::wcq};
 constexpr wait_policy kPolicies[] = {wait_policy::spin, wait_policy::park, wait_policy::spin_then_park};
 
 // An element: the producer and its sequence number, and a payload that is
@@ -389,7 +398,7 @@ void sides() {
         side_held out;
         got = q.try_pop(out) ? out.id : 0;
       });
-      EXPECT(at_once == (settled(tag) && !manyP(tag)));
+      EXPECT(at_once == ((settled(tag) && !manyP(tag)) || indexed(tag)));
       if (at_once) EXPECT(got.load() == 0);  // empty: the held push has not taken effect
       g_side_hold.release();
       prod.call([] {});
@@ -424,7 +433,25 @@ void sides() {
       const bool one_settled_consumer = settled(tag) && !manyC(tag);
       if (one_settled_consumer) EXPECT(q.size() == 4);
       else EXPECT(q.size() == 3);
+      // The rings of indices: the held pop has taken effect and given the
+      // count back, a spare cell takes the push at once.
       std::atomic<int> ok{-1};
+      if (indexed(tag)) {
+        EXPECT(returns_while_held(prod, [&q, &ok] { ok = q.try_push(side_held(5)) ? 1 : 0; }));
+        EXPECT(ok.load() == 1);
+        EXPECT(q.size() == 4);
+        g_side_hold.release();
+        cons.call([] {});
+        cons.call([&] {
+          for (int i = 2; i <= 5; ++i) {
+            side_held out;
+            EXPECT(q.try_pop(out) && out.id == i);
+          }
+        });
+        std::printf("sides %s: push while a pop moves out, at capacity, answers at once and is taken\n",
+                    name(tag));
+        continue;
+      }
       const bool at_once = returns_while_held(prod, [&q, &ok] { ok = q.try_push(side_held(5)) ? 1 : 0; });
       EXPECT(at_once == one_settled_consumer);
       if (at_once) EXPECT(ok.load() == 0);  // full: the held pop has not taken effect
