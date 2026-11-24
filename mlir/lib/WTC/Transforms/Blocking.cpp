@@ -236,6 +236,17 @@ std::optional<BlockingSite> BlockingQuery::siteAt(Operation *op, bool inCallee) 
     if (auto p = dyn_cast<ProgressOpInterface>(op)) {
         if (p.getProgress() == Progress::blocking) return site(op, BlockingKind::Waits, p.getBlockingReason());
         if (p.mayCallAllocator()) return site(op, BlockingKind::Allocates, p.getBlockingReason());
+        const ProgressSpec spec = p.getProgressSpec(ThreadCounts::unknown());
+        // What the operation does the first time it runs blocks as the
+        // program's own would (docs/progress.md, "The table").
+        if (spec.firstUse & first_use_guard)
+            return site(op, BlockingKind::Waits,
+                        "takes, the first time it runs in the process, a static-initialisation lock");
+        if (spec.firstUse & first_use_tls)
+            return site(op, BlockingKind::Allocates,
+                        "takes a per-thread record the first time its thread runs it (hazard::tied_record), "
+                        "whose pthread_setspecific calls the allocator unless the key is among the C library's "
+                        "first 32");
         return std::nullopt;
     }
     if (auto asmOp = dyn_cast<cir::InlineAsmOp>(op)) {

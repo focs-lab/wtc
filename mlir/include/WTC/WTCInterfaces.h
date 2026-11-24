@@ -3,6 +3,7 @@
 
 #include "mlir/IR/OpDefinition.h"
 
+#include "WTC/Progress.h"
 #include "WTC/WTCAttrs.h"
 
 #include <string>

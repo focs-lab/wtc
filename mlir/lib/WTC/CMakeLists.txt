@@ -3,6 +3,8 @@ add_mlir_dialect_library(MLIRWTC
   WTCDialect.cpp
   WTCInterfaces.cpp
   WTCOps.cpp
+  Progress.cpp
+  ProgressTable.cpp
   WTCTypes.cpp
 
   DEPENDS

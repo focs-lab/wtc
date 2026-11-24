@@ -117,6 +117,10 @@ def QueuePushOp : WTC_ObjectOp<"queue_push"> {
         UnitAttr:$overrun,
         UnitAttr:$batch);
     let results = (outs Optional<AnyType>:$pushed);
+    let extraClassDeclaration = [{
+        // Which row of the progress table the push is (WTC/ProgressTable.h).
+        ::mlir::wtc::OpForm getForm();
+    }];
     let hasVerifier = 1;
 }
 
@@ -190,6 +194,8 @@ def QueuePopOp : WTC_ObjectOp<"queue_pop"> {
             auto a = getArgs();
             return a.size() > 1 && !getBatch() ? a[1] : ::mlir::Value();
         }
+        // Which row of the progress table the pop is (WTC/ProgressTable.h).
+        ::mlir::wtc::OpForm getForm();
     }];
     let hasVerifier = 1;
 }

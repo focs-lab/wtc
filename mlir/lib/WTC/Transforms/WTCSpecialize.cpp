@@ -588,7 +588,10 @@ public:
             auto id = root->getAttrOfType<IntegerAttr>(kQueueIdAttrName);
             if (!id) continue;
             Impl impl = Impl::generic;
-            if (auto tag = constructorTag(ctors); tag && *tag >= 0)
+            // Only the five every runtime has are read by their number: a
+            // tag beyond them is the runtime's own, whatever the compiler's
+            // enumeration says (WTC/ProgressTable.h).
+            if (auto tag = constructorTag(ctors); tag && *tag >= 0 && *tag <= static_cast<int64_t>(Impl::spmc))
                 if (auto known = symbolizeImpl(static_cast<uint32_t>(*tag))) impl = *known;
             implOf[id.getInt()] = impl;
         }

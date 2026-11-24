@@ -1,4 +1,5 @@
 #include "WTC/WTCOps.h"
+#include "WTC/ProgressTable.h"
 
 #include "clang/CIR/Dialect/IR/CIRAttrs.h"
 #include "clang/CIR/Dialect/IR/CIRDialect.h"
@@ -172,9 +173,10 @@ LogicalResult QueueBatchEndOp::verify() {
 }
 
 // ---------------------------------------------------------------------------
-// Progress (decisions/0004). One table: what each operation's algorithm can
-// wait for, and whether it may call the allocator, under the implementation
-// recorded on it. No #wtc.impl means the general-purpose implementation.
+// Progress (decisions/0004, docs/progress.md). Every operation answers from
+// one table (WTC/ProgressTable.h), by its form, the implementation recorded
+// on it and the counts it is asked under. No #wtc.impl means the
+// general-purpose implementation.
 
 namespace {
 
@@ -184,12 +186,8 @@ namespace {
 
 } // namespace
 
-// A delegated section waits for its mutex's server, and the section it
-// runs may do whatever the section as written did, the allocator included.
-Progress DelegateOp::getProgress() { return Progress::blocking; }
-bool DelegateOp::mayCallAllocator() { return true; }
-std::string DelegateOp::getBlockingReason() {
-    return "waits for the delegation server of a mutex to run a critical section";
+ProgressSpec DelegateOp::getProgressSpec(const ThreadCounts &counts) {
+    return progressSpecFor(OpForm::delegate, ::mlir::wtc::Impl::generic, counts);
 }
 
 // `section` must be the outlined section: a cir.func with a body, taking
@@ -206,163 +204,52 @@ LogicalResult DelegateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return success();
 }
 
-Progress LockOp::getProgress() { return Progress::blocking; }
-bool LockOp::mayCallAllocator() { return false; }
-std::string LockOp::getBlockingReason() { return "takes a mutex"; }
-
-Progress UnlockOp::getProgress() { return Progress::blocking; }
-bool UnlockOp::mayCallAllocator() { return false; }
-std::string UnlockOp::getBlockingReason() {
-    return "releases a mutex, which is half of a blocking protocol";
+ProgressSpec LockOp::getProgressSpec(const ThreadCounts &counts) {
+    return progressSpecFor(OpForm::lock, ::mlir::wtc::Impl::generic, counts);
+}
+ProgressSpec UnlockOp::getProgressSpec(const ThreadCounts &counts) {
+    return progressSpecFor(OpForm::unlock, ::mlir::wtc::Impl::generic, counts);
+}
+ProgressSpec LockBatchBeginOp::getProgressSpec(const ThreadCounts &counts) {
+    return progressSpecFor(OpForm::lock_batch_begin, ::mlir::wtc::Impl::generic, counts);
+}
+ProgressSpec LockBatchStepOp::getProgressSpec(const ThreadCounts &counts) {
+    return progressSpecFor(OpForm::lock_batch_step, ::mlir::wtc::Impl::generic, counts);
+}
+ProgressSpec LockBatchEndOp::getProgressSpec(const ThreadCounts &counts) {
+    return progressSpecFor(OpForm::lock_batch_end, ::mlir::wtc::Impl::generic, counts);
 }
 
-Progress LockBatchBeginOp::getProgress() { return Progress::blocking; }
-bool LockBatchBeginOp::mayCallAllocator() { return false; }
-std::string LockBatchBeginOp::getBlockingReason() { return "takes a mutex"; }
-
-Progress LockBatchStepOp::getProgress() { return Progress::blocking; }
-bool LockBatchStepOp::mayCallAllocator() { return false; }
-std::string LockBatchStepOp::getBlockingReason() {
-    return "lets a mutex go and takes it again every WTC_LOCK_BATCH_K sections";
+OpForm QueuePushOp::getForm() {
+    if (!getBounded()) return OpForm::push;
+    if (getBatch()) return OpForm::bounded_push_batch;
+    if (getWait()) return OpForm::bounded_push_wait;
+    if (getOverrun()) return OpForm::bounded_push_overrun;
+    return OpForm::bounded_try_push;
+}
+ProgressSpec QueuePushOp::getProgressSpec(const ThreadCounts &counts) {
+    return progressSpecFor(getForm(), implOf(getImpl()), counts);
 }
 
-Progress LockBatchEndOp::getProgress() { return Progress::blocking; }
-bool LockBatchEndOp::mayCallAllocator() { return false; }
-std::string LockBatchEndOp::getBlockingReason() {
-    return "releases a mutex, which is half of a blocking protocol";
-}
-
-// The segmented queues (general-purpose and mpsc) retry a push whose cell a
-// pop skipped, or whose segment another push is linking: lock-free.
-static bool segmented(::mlir::wtc::Impl impl) {
-    return impl == ::mlir::wtc::Impl::generic || impl == ::mlir::wtc::Impl::mpsc;
-}
-
-// A bounded queue (runtime/bounded_ring.hpp) takes a ticket and then may
-// wait for the operation of the previous lap, or for the push of its own
-// ticket, to finish with the cell: an operation in progress, but a wait.
-// It never allocates: the ring is built with the queue.
-Progress QueuePushOp::getProgress() {
-    if (getBounded()) return Progress::blocking;
-    return segmented(implOf(getImpl())) ? Progress::lock_free : Progress::wait_free;
-}
-bool QueuePushOp::mayCallAllocator() { return !getBounded(); }
-std::string QueuePushOp::getBlockingReason() {
+OpForm QueuePopOp::getForm() {
     if (getBounded()) {
-        std::string why = "may wait for the pop that last held its cell to finish moving the item out";
-        if (getWait()) return "waits while the queue is full, as its wait policy says; and " + why;
-        return why;
+        if (getBatch()) return OpForm::bounded_pop_batch;
+        if (getWait()) return getTimeout() ? OpForm::bounded_pop_wait_for : OpForm::bounded_pop_wait;
+        return getTransfer() ? OpForm::bounded_pop_transfer : OpForm::bounded_pop_shared;
     }
-    switch (implOf(getImpl())) {
-    case ::mlir::wtc::Impl::spsc:
-    case ::mlir::wtc::Impl::spsc_inline:
-        return "allocates a new block when the current one is full: the queue is unbounded";
-    default:
-        return "allocates a new segment when the current one is full: the queue is unbounded";
-    }
+    if (getWait()) return getTimeout() ? OpForm::pop_wait_for : OpForm::pop_wait;
+    return getTransfer() ? OpForm::pop_transfer : OpForm::pop_shared;
+}
+ProgressSpec QueuePopOp::getProgressSpec(const ThreadCounts &counts) {
+    return progressSpecFor(getForm(), implOf(getImpl()), counts);
 }
 
-// The general-purpose pop waits for a push that has reserved its cell. The
-// spmc pop claims a published cell with a compare-and-swap that fails only
-// when another consumer has claimed it: lock-free.
-Progress QueuePopOp::getProgress() {
-    // A waiting pop waits for a push by design, whatever the queue and its
-    // wait policy: spinning is waiting too.
-    if (getWait() || getBounded()) return Progress::blocking;
-    switch (implOf(getImpl())) {
-    case ::mlir::wtc::Impl::generic:
-        return Progress::blocking;
-    case ::mlir::wtc::Impl::spmc:
-        return Progress::lock_free;
-    default:
-        return Progress::wait_free;
-    }
+ProgressSpec QueueBatchBeginOp::getProgressSpec(const ThreadCounts &counts) {
+    return progressSpecFor(OpForm::batch_begin, implOf(getImpl()), counts);
 }
-// A pop that returns a shared_ptr allocates it, on the consumer's side,
-// from the element in the cell; a pop that moves the element out
-// (transfer) or lends it (spsc_inline) allocates nothing, and only the
-// queues made of segments (general-purpose, mpsc, spmc) then still free the
-// segments they move past.
-bool QueuePopOp::mayCallAllocator() {
-    if (getBounded()) return !getTransfer();
-    const ::mlir::wtc::Impl impl = implOf(getImpl());
-    if (getTransfer()) return segmented(impl) || impl == ::mlir::wtc::Impl::spmc;
-    return impl != ::mlir::wtc::Impl::spsc_inline;
+ProgressSpec QueuePushDeferredOp::getProgressSpec(const ThreadCounts &counts) {
+    return progressSpecFor(OpForm::push_deferred, implOf(getImpl()), counts);
 }
-std::string QueuePopOp::getBlockingReason() {
-    if (getBounded()) {
-        std::string why = "may wait for the push that took its cell to fill it";
-        if (getWait())
-            return (getTimeout() ? "waits for a push, for the queue to be closed, or for its time limit"
-                                 : "waits for a push or for the queue to be closed") +
-                   std::string(", as its wait policy says; and ") + why;
-        return why;
-    }
-    if (getWait()) {
-        std::string why = getTimeout() ? "waits for a push, for the queue to be closed, or for its "
-                                         "time limit, as its wait policy says: spinning, or asleep "
-                                         "in the kernel"
-                                       : "waits for a push or for the queue to be closed, as its "
-                                         "wait policy says: spinning, or asleep in the kernel";
-        switch (implOf(getImpl())) {
-        case ::mlir::wtc::Impl::generic:
-            return why + "; and frees the segments it moves past";
-        case ::mlir::wtc::Impl::mpsc:
-            return why + "; and frees the segments it moves past, and may allocate to note the "
-                         "cells it passes that a push has taken and not filled";
-        case ::mlir::wtc::Impl::spmc:
-            return why + "; and frees the segments it moves past";
-        default:
-            return why;
-        }
-    }
-    const bool shares = !getTransfer();
-    switch (implOf(getImpl())) {
-    case ::mlir::wtc::Impl::generic:
-        return std::string("waits for a push that has taken the cell it reads to fill it, and "
-                           "frees the segments it moves past") +
-               (shares ? ", and allocates the shared_ptr it returns" : "");
-    case ::mlir::wtc::Impl::mpsc:
-        return std::string("frees the segments it moves past, and may allocate to note the cells "
-                           "it passes that a push has taken and not filled") +
-               (shares ? ", and allocates the shared_ptr it returns" : "");
-    case ::mlir::wtc::Impl::spmc:
-        return std::string("frees the segments it moves past") +
-               (shares ? ", and allocates the shared_ptr it returns" : "");
-    case ::mlir::wtc::Impl::spsc:
-        return shares ? "allocates the shared_ptr it returns" : "";
-    default:
-        return "";
-    }
-}
-
-Progress QueueBatchBeginOp::getProgress() { return Progress::wait_free; }
-bool QueueBatchBeginOp::mayCallAllocator() { return false; }
-std::string QueueBatchBeginOp::getBlockingReason() { return ""; }
-
-Progress QueuePushDeferredOp::getProgress() {
-    return segmented(implOf(getImpl())) ? Progress::lock_free : Progress::wait_free;
-}
-bool QueuePushDeferredOp::mayCallAllocator() { return true; }
-std::string QueuePushDeferredOp::getBlockingReason() {
-    switch (implOf(getImpl())) {
-    case ::mlir::wtc::Impl::spsc:
-    case ::mlir::wtc::Impl::spsc_inline:
-        return "allocates a new block when the current one is full: the queue is unbounded";
-    case ::mlir::wtc::Impl::spmc:
-        return "allocates a new segment when the current one is full: the queue is unbounded";
-    default:
-        return "allocates a new segment when it publishes into a full one: the queue is "
-               "unbounded";
-    }
-}
-
-Progress QueueBatchEndOp::getProgress() {
-    return segmented(implOf(getImpl())) ? Progress::lock_free : Progress::wait_free;
-}
-bool QueueBatchEndOp::mayCallAllocator() { return segmented(implOf(getImpl())); }
-std::string QueueBatchEndOp::getBlockingReason() {
-    if (segmented(implOf(getImpl())))
-        return "allocates a new segment when it publishes the run into a full one";
-    return "";
+ProgressSpec QueueBatchEndOp::getProgressSpec(const ThreadCounts &counts) {
+    return progressSpecFor(OpForm::batch_end, implOf(getImpl()), counts);
 }

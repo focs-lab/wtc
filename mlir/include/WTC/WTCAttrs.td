@@ -35,9 +35,24 @@ def WTC_ImplSPSC       : I32EnumAttrCase<"spsc", 1>;
 def WTC_ImplSPSCInline : I32EnumAttrCase<"spsc_inline", 2>;
 def WTC_ImplMPSC       : I32EnumAttrCase<"mpsc", 3>;
 def WTC_ImplSPMC       : I32EnumAttrCase<"spmc", 4>;
+// Chosen only for a path's progress requirement (WTC/ProgressTable.h,
+// shim/topology.hpp): the bounded rings of indices, lock-free (scq) and
+// wait-free (wcq); the mpsc queue whose push takes its index from one
+// counter (jiffy); and the settled bounded rings, whose single side
+// publishes its counter only once its cell is filled or emptied. The tag a
+// constructor is given for one of them is the one the runtime announces
+// (WTCSpecialize.cpp, runtimeOffers), not the number here.
+def WTC_ImplSCQ        : I32EnumAttrCase<"scq", 5>;
+def WTC_ImplWCQ        : I32EnumAttrCase<"wcq", 6>;
+def WTC_ImplJiffy      : I32EnumAttrCase<"jiffy", 7>;
+def WTC_ImplSPSCSettled : I32EnumAttrCase<"spsc_settled", 8>;
+def WTC_ImplMPSCSettled : I32EnumAttrCase<"mpsc_settled", 9>;
+def WTC_ImplSPMCSettled : I32EnumAttrCase<"spmc_settled", 10>;
 
 def WTC_ImplEnum : I32EnumAttr<"Impl", "the implementation a queue object runs",
-    [WTC_ImplGeneric, WTC_ImplSPSC, WTC_ImplSPSCInline, WTC_ImplMPSC, WTC_ImplSPMC]> {
+    [WTC_ImplGeneric, WTC_ImplSPSC, WTC_ImplSPSCInline, WTC_ImplMPSC, WTC_ImplSPMC,
+     WTC_ImplSCQ, WTC_ImplWCQ, WTC_ImplJiffy, WTC_ImplSPSCSettled, WTC_ImplMPSCSettled,
+     WTC_ImplSPMCSettled]> {
   let cppNamespace = "::mlir::wtc";
   let genSpecializedAttr = 0;
 }

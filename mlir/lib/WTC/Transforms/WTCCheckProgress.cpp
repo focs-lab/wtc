@@ -1,6 +1,7 @@
 #include "WTC/Transforms/Blocking.h"
 #include "WTC/Transforms/Passes.h"
 #include "WTC/Transforms/Utils.h"
+#include "WTC/ProgressTable.h"
 #include "WTC/WTCOps.h"
 
 #include "clang/CIR/Dialect/IR/CIRDialect.h"
@@ -10,6 +11,8 @@
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Demangle/Demangle.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include <string>
 
@@ -36,6 +39,13 @@ using namespace mlir::wtc;
 // the destructor of the shared_ptr a pop returns, when the pop is borrowed
 // and its queue holds elements inline, frees nothing -- the shared_ptr
 // owns nothing -- and is not followed.
+
+// A build that wants its binary whatever the promises say (a test that
+// runs a program whose first-use effects fail them): the diagnostics stay,
+// the pass does not fail.
+static llvm::cl::opt<bool> clWarnOnly("wtc-progress-report-only",
+                                      llvm::cl::desc("Report what --wtc-check-progress finds without failing"),
+                                      llvm::cl::init(false));
 
 namespace {
 
@@ -81,7 +91,57 @@ public:
                 d.attachNote(f.getLoc()) << "and " << more << " more blocking site"
                                          << (more == 1 ? "" : "s") << ", not shown";
         });
-        if (failed) signalPassFailure();
+        if (failed && !clWarnOnly) signalPassFailure();
+        markAllAnalysesPreserved();
+    }
+};
+
+// Prints the progress table (WTC/ProgressTable.h), one row per form,
+// implementation and counts, as a Markdown table: what docs/progress.md
+// shows and a test checks, so that the prose is generated from the code.
+class WTCProgressTablePass : public PassWrapper<WTCProgressTablePass, OperationPass<ModuleOp>> {
+public:
+    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(WTCProgressTablePass)
+
+    StringRef getArgument() const final { return "wtc-progress-table"; }
+    StringRef getDescription() const final {
+        return "Print the progress of every wtc operation by form, implementation and thread counts";
+    }
+
+    // A bound in the counts, and its value where the row's counts are one.
+    static std::string withValue(const Bound &b, const ThreadCounts &c) {
+        std::string s = b.str();
+        if (b.dependsOnCounts())
+            if (auto v = b.instantiate(c)) s += " (= " + std::to_string(*v) + ")";
+        return s;
+    }
+
+    void runOnOperation() override {
+        llvm::raw_ostream &os = llvm::outs();
+        os << "| operation | impl | np | nc | level | bound | amortised | allocates | kernel | first use | element | "
+              "reason |\n";
+        os << "|---|---|---|---|---|---|---|---|---|---|---|---|\n";
+        for (unsigned f = 0; f <= static_cast<unsigned>(OpForm::delegate); ++f) {
+            const auto form = static_cast<OpForm>(f);
+            for (Impl impl : implsFor(form)) {
+                auto counts = isQueueForm(form) ? countsFor(impl) : llvm::SmallVector<ThreadCounts, 4>{ThreadCounts{
+                                                                        Count::unbounded(), Count::unbounded(),
+                                                                        Count::unbounded()}};
+                for (const ThreadCounts &c : counts) {
+                    ProgressSpec s = progressSpecFor(form, impl, c);
+                    auto side = [](const Count &n) { return n.isOne() ? std::string("1") : std::string("many"); };
+                    os << "| " << stringifyOpForm(form) << " | " << (isQueueForm(form) ? stringifyImpl(impl) : "-")
+                       << " | " << (isQueueForm(form) ? side(c.producers) : "-") << " | "
+                       << (isQueueForm(form) ? side(c.consumers) : "-") << " | " << (s.partial ? "partial(" : "")
+                       << stringifyLevel(s.level) << (s.partial ? ")" : "") << " | "
+                       << (s.level == Level::wait_free ? withValue(s.bound, c) : "-") << " | "
+                       << (s.amortised.kind == Bound::Kind::None ? "-" : withValue(s.amortised, c)) << " | "
+                       << s.alloc.str()
+                       << " | " << stringifyKernel(s.kernel) << " | " << describeFirstUse(s.firstUse) << " | "
+                       << describeElementCode(s.element) << " | " << (s.reason.empty() ? "-" : s.reason) << " |\n";
+                }
+            }
+        }
         markAllAnalysesPreserved();
     }
 };
@@ -89,5 +149,8 @@ public:
 } // namespace
 
 namespace mlir::wtc {
-void registerWTCCheckProgressPass() { PassRegistration<WTCCheckProgressPass>(); }
+void registerWTCCheckProgressPass() {
+    PassRegistration<WTCCheckProgressPass>();
+    PassRegistration<WTCProgressTablePass>();
+}
 } // namespace mlir::wtc

@@ -3,9 +3,9 @@
 // constructor's second argument, and the compiler still rewrites its
 // topology tag, the first: one producer and one consumer, spsc. On the
 // ring try_pop(T&) neither waits nor allocates, so the step that takes an
-// element only if there is one passes the check; the step that waits for
-// one fails it, with the wait as the reason. close(), called by the
-// producer, is neither side's operation and leaves the verdict alone.
+// element only if there is one passes; the step that waits for one fails
+// with the wait as the reason. close(), called by the producer, is
+// neither side's operation and leaves the verdict alone.
 //
 // RUN: %clangxx -std=c++17 -I%shim -fclangir -emit-cir %s -o %t.cir
 // RUN: not wtc-opt %t.cir --lift-cir-to-wtc --queue-ownership-analysis --wtc-specialize --wtc-check-progress -o /dev/null 2>&1 | FileCheck %s
