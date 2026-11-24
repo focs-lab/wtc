@@ -49,6 +49,10 @@ std::optional<ExternalBlocking> externalBlocking(cir::FuncOp f) {
                                        "|d[la]Pv[mj]?(St11align_val_t)?(RKSt9nothrow_t)?)$");
     if (isAllocator(f) || freeing.contains(mangled) || newDelete.match(mangled))
         return is(BlockingKind::Allocates, "calls the allocator");
+    // glibc's backtrace loads the unwinder with dlopen on its first call,
+    // and backtrace_symbols returns memory from malloc: both allocate.
+    if (mangled == "backtrace" || mangled == "backtrace_symbols" || mangled == "backtrace_symbols_fd")
+        return is(BlockingKind::Allocates, "calls the allocator: backtrace loads the unwinder and allocates");
 
     // The threading library: its locks, conditions, joins, one-time
     // initialisation and yields wait for another thread; the rest of it
@@ -60,6 +64,7 @@ std::optional<ExternalBlocking> externalBlocking(cir::FuncOp f) {
         if (mangled.starts_with(p)) return is(BlockingKind::Waits, "waits in the threading library", true);
     if (waits.contains(mangled) || mangled.contains("futex") || demangled.starts_with("std::call_once") ||
         demangled.starts_with("std::thread::join") || demangled.starts_with("std::condition_variable::wait") ||
+        demangled.starts_with("std::condition_variable::notify") ||
         demangled.contains("condition_variable_any::wait"))
         return is(BlockingKind::Waits, "waits in the threading library", true);
     if (mangled == "sched_yield" || mangled == "thrd_yield" || mangled == "pthread_yield")
@@ -215,8 +220,8 @@ bool onlyNonBlockingInstructions(llvm::StringRef text, bool inert) {
     return any || !inert;
 }
 
-BlockingQuery::BlockingQuery(ModuleOp module, BlockingKinds accepted, Extra extra)
-    : accepted(accepted), extra(std::move(extra)), elements(module) {
+BlockingQuery::BlockingQuery(ModuleOp module, BlockingKinds accepted, Extra extra, Accept accept)
+    : accepted(accepted), extra(std::move(extra)), acceptOp(std::move(accept)), elements(module) {
     module.walk([&](QueuePopOp pop) {
         if (pop.getBorrowed() && pop.getImpl() == Impl::spsc_inline && pop.getOut())
             ownerlessSlots.insert(pop.getOut());
@@ -357,6 +362,7 @@ std::optional<BlockingSite> BlockingQuery::site(Operation *leaf, BlockingKind ki
 }
 
 std::optional<BlockingSite> BlockingQuery::siteAt(Operation *op, bool inCallee) {
+    if (acceptOp && acceptOp(op)) return std::nullopt;
     if (extra)
         if (auto s = extra(op, inCallee)) return s;
     if (auto p = dyn_cast<ProgressOpInterface>(op)) {

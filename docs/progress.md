@@ -281,3 +281,73 @@ ClangIR does not carry an annotation's arguments, so the bound of
 decimal literal. A kernel entry (a futex wake after a publish) is
 reported in the remark and fails none of these: it waits for no thread
 of the program.
+
+### Requirements the program states without saying so
+
+- **A signal handler** interrupts its own thread anywhere, so what it
+  reaches must be async-signal-safe: lock-free, no allocation, no lock, no
+  static-initialisation guard, no per-thread first use. A handler is a
+  constant function installed by `signal()`, or stored into the
+  `sa_handler` or `sa_sigaction` of the `struct sigaction` a call of
+  `sigaction()` is handed. The check reports the first chain to what
+  blocks: the allocator (`backtrace` included, which loads the unwinder),
+  a mutex, a condition variable's wait or notify. A handler that pushes to
+  a queue is one more producer (it is address-taken, so the topology
+  already counts it as any number of threads), and a push it interrupts on
+  its own thread may hold a cell taken and not filled: only the
+  single-consumer queues' consumer (mpsc, jiffy) and the rings of indices
+  (scq, wcq, whose push publishes its index only once its cell is filled)
+  look past such a cell, so a handler's push to any other queue, the
+  bounded and settled rings included, is reported.
+- **A real-time thread** (`SCHED_FIFO` or `SCHED_RR`, set by
+  `pthread_setschedparam` on `pthread_self()` or on a thread whose id
+  `pthread_create` wrote, by `sched_setscheduler(0, ...)`, or by
+  `pthread_attr_setschedpolicy` with `PTHREAD_EXPLICIT_SCHED` on the
+  attributes `pthread_create` is handed) never yields to a thread of
+  lower priority on its processor. A thread that raises its own priority,
+  directly or through a helper, is at real-time priority from its start
+  routine on (pthread_create's and the shim's spawn entries, main, and
+  any function nothing here calls, such as a std::thread's `_M_run`); a
+  thread it starts with the default attributes, or without explicit
+  scheduling, inherits the policy and is checked as one of its own (a
+  std::thread it starts is reported as not followed). Its entry must be
+  wait-free apart from waits for data, and a wait for data must park and
+  take nothing on first use: a `pop_wait` on a queue whose policy spins
+  (the default) is refused, and so is a loop polling a queue; a lifted
+  wait is allowed where its waiter parks after its pause, that is where
+  every `wtc::lifted_wait::construct` of the condition variable it lives
+  in (a field by record and index, a global by name) passes paced as a
+  constant true, which the wait lifting does for a waiter a requirement
+  reaches; otherwise its step is refused, since the policy may spin and
+  then yield. What a lifted wait contains is still checked.
+
+  The attributes `pthread_create` is handed are followed through a
+  helper's parameter to what every call of the helper passes for it (a
+  few calls deep), so a helper that sets explicit scheduling and the
+  policy on its caller's attributes makes the thread real-time, as does
+  one that sets only the policy where main set explicit scheduling.
+  Attributes that cannot be followed to every thread they start (a
+  helper with external linkage, which another translation unit may call,
+  or one nothing here calls) are reported as not checked. A policy that
+  is not a constant here is not taken for a requirement (decided 28 Nov):
+  read as real-time, a policy from a configuration set on main made
+  everything main reaches, and every thread it starts, wait-free-required,
+  which refused batching and delegation and chose slower queues across
+  the program. It is reported instead, and a program that means it states
+  the requirement on the thread's entry (`WTC_WAIT_FREE`).
+
+These requirements are the program's, unstated: their violations are
+warnings, or errors under `--wtc-check-progress=inferred-errors=true`. A
+handler or a thread the analysis cannot name (a handler that is not a
+constant, a policy set on a `std::thread`'s native handle) is reported
+as not checked.
+
+Every requirement that reaches a function counts, not only the first one
+found: the passes that respect requirements take the strictest
+(`RequirementRoots::allReaching`, and `reaching` with a predicate).
+
+Assumed: a policy that is not a constant is not real-time (it is
+reported); the requirement of a thread that raises its own priority holds
+from its start routine; the Linux values of `SCHED_FIFO`, `SCHED_RR` and
+`PTHREAD_EXPLICIT_SCHED`; a handler that runs on a thread which blocks
+its signal is still checked.

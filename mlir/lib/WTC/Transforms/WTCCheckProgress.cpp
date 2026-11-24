@@ -4,6 +4,7 @@
 #include "WTC/Transforms/ProgressRequirements.h"
 #include "WTC/Transforms/Utils.h"
 #include "WTC/ProgressTable.h"
+#include "WTC/WTCAttrs.h"
 #include "WTC/WTCOps.h"
 
 #include "clang/CIR/Dialect/IR/CIRDialect.h"
@@ -125,6 +126,14 @@ public:
         registry.insert<cir::CIRDialect>();
     }
 
+    Option<bool> inferredErrors{
+        *this, "inferred-errors", llvm::cl::init(false),
+        llvm::cl::desc("Fail the build, rather than warn, when a signal handler or a real-time thread misses the "
+                       "requirement the program states without saying so (ProgressRequirements.h)")};
+
+    WTCCheckProgressPass() = default;
+    WTCCheckProgressPass(const WTCCheckProgressPass &other) : PassWrapper(other) {}
+
     void runOnOperation() override {
         ModuleOp module = getOperation();
         // A loop is judged by what its exit depends on (ProgressPaths.h):
@@ -143,13 +152,170 @@ public:
         BlockingQuery blocking(module, {BlockingKind::MayThrow}, loopSite);
         bool failed = false;
         PathComposer paths(module);
-        module.walk([&](cir::FuncOp f) {
-            if (f.getBody().empty()) return;
-            std::optional<Requirement> req = declaredRequirement(f);
-            if (!req) return;
+        RequirementRoots requirements(module);
+        auto ctorsOf = collectQueueConstructors(module);
+        llvm::DenseMap<int64_t, Operation *> rootOfId;
+        module.walk([&](Operation *op) {
+            if (auto id = op->getAttrOfType<IntegerAttr>(kQueueIdAttrName))
+                if (op->hasAttr(kTopologyAttrName)) rootOfId.try_emplace(id.getInt(), op);
+        });
+        // A waiting pop's wait policy, from its queue's constructor: the
+        // shim's queue takes it after the tag, and without it spins; a
+        // policy that is not a constant may be spin.
+        auto spins = [&](Operation *op) {
+            auto id = op->getAttrOfType<IntegerAttr>("queue_id");
+            Operation *root = id ? rootOfId.lookup(id.getInt()) : nullptr;
+            if (!root) return true;
+            llvm::SmallVector<cir::CallOp, 2> ctors;
+            if (auto c = dyn_cast<cir::CallOp>(root)) ctors.push_back(c);
+            else if (auto it = ctorsOf.find(root); it != ctorsOf.end()) ctors.assign(it->second.begin(), it->second.end());
+            if (ctors.size() != 1) return true;
+            cir::CallOp ctor = ctors.front();
+            cir::FuncOp callee = lookupCallee(ctor);
+            const std::string name = callee ? llvm::demangle(callee.getSymName().str()) : std::string();
+            const llvm::StringRef n(name);
+            // Where each constructor takes its policy: wtc::queue after
+            // its tag (and spins without one), wtc::bounded fourth; the
+            // lifted queues are built to spin, then park (shim/lifted.hpp).
+            // Any other constructor's is not known.
+            if (n.starts_with("wtc::lifted<") || n.starts_with("wtc::lifted_bounded<")) return false;
+            unsigned at = 0;
+            if (n.starts_with("wtc::queue<")) {
+                if (ctor.getNumOperands() == 2) return true;
+                at = 2;
+            } else if (n.starts_with("wtc::bounded<")) {
+                at = 4;
+            } else {
+                return true;
+            }
+            if (ctor.getNumOperands() <= at) return true;
+            auto k = ctor.getOperand(at).getDefiningOp<cir::ConstantOp>();
+            auto v = k ? dyn_cast<cir::IntAttr>(k.getValue()) : cir::IntAttr();
+            return !v || v.getSInt() == 0;
+        };
+        // A lifted wait's waiter, by the condition variable it lives in: a
+        // field by its record and index, a global by name. Its policy may
+        // spin, then yield, before it parks (shim/lifted.hpp,
+        // lifted_wait_policy), unless every construct of that waiter passes
+        // paced as a constant true, which the wait lifting does for a wait
+        // a requirement reaches (LiftWaits.cpp).
+        auto waiterKey = [](Value at) -> std::optional<std::string> {
+            Value r = traceToRoot(at);
+            if (auto gg = r.getDefiningOp<cir::GetGlobalOp>()) return "global " + gg.getName().str();
+            if (auto m = r.getDefiningOp<cir::GetMemberOp>()) {
+                std::string ty;
+                llvm::raw_string_ostream os(ty);
+                os << m.getAddr().getType();
+                return "member " + std::to_string(m.getIndex()) + " of " + ty;
+            }
+            return std::nullopt;
+        };
+        llvm::StringMap<bool> pacedWaiter;  // key -> every construct paced
+        // A construct of a waiter that cannot be named and is not paced may
+        // build any waiter: then none is known to park.
+        bool unnamedUnpaced = false;
+        module.walk([&](cir::CallOp c) {
+            if (!hasAnnotation(lookupCallee(c), "wtc_lifted_wait_construct")) return;
+            cir::BoolAttr b;
+            if (c.getNumOperands() >= 4) {
+                auto k = c.getOperand(3).getDefiningOp<cir::ConstantOp>();
+                b = k ? dyn_cast<cir::BoolAttr>(k.getValue()) : cir::BoolAttr();
+            }
+            const bool paced = b && b.getValue();
+            auto key = c.getNumOperands() >= 1 ? waiterKey(c.getOperand(0)) : std::nullopt;
+            if (!key) {
+                unnamedUnpaced |= !paced;
+                return;
+            }
+            auto [it, fresh] = pacedWaiter.try_emplace(*key, true);
+            it->second = it->second && paced;
+        });
+        auto liftedStep = [](Operation *op) {
+            cir::CallOp step;
+            op->walk([&](cir::CallOp c) {
+                if (hasAnnotation(lookupCallee(c), "wtc_lifted_wait_step")) step = c;
+            });
+            return step;
+        };
+        auto liftedParks = [&](cir::CallOp step) {
+            if (unnamedUnpaced || step.getNumOperands() < 1) return false;
+            auto key = waiterKey(step.getOperand(0));
+            if (!key) return false;
+            auto it = pacedWaiter.find(*key);
+            return it != pacedWaiter.end() && it->second;
+        };
+        // On a real-time thread a wait for data that parks is allowed, and
+        // so is a lifted wait whose waiter parks after its pause; nothing
+        // under either is hidden by it, since the walk still enters what it
+        // contains.
+        auto parks = [&](Operation *op) {
+            if (auto p = dyn_cast<ProgressOpInterface>(op)) {
+                const ProgressSpec spec = p.getProgressSpec(ThreadCounts::unknown());
+                return spec.partial && spec.level >= Level::wait_free && !spec.allocates() && !spec.firstUse &&
+                       !spins(op);
+            }
+            if (!isa<cir::LoopOpInterface>(op)) return false;
+            cir::CallOp step = liftedStep(op);
+            return step && liftedParks(step);
+        };
+        // On a real-time thread a lifted wait's step whose waiter may yield
+        // is refused where it is called, whatever the loop around it.
+        auto rtSite = [&](Operation *op, bool inCallee) -> std::optional<BlockingSite> {
+            cir::CallOp c = dyn_cast<cir::CallOp>(op);
+            if (!c && isa<cir::LoopOpInterface>(op)) c = liftedStep(op);
+            if (c)
+                if (hasAnnotation(lookupCallee(c), "wtc_lifted_wait_step") && !liftedParks(c))
+                    return BlockingSite{op, BlockingKind::Refused,
+                                        "waits in a lifted wait whose policy may spin, then yield, before it parks: "
+                                        "its waiter is not built paced everywhere (wtc::lifted_wait::construct), and "
+                                        "a real-time thread never yields to a producer of lower priority on its "
+                                        "processor",
+                                        cir::FuncOp(), false, {}, {}};
+            return loopSite(op, inCallee);
+        };
+        BlockingQuery rtBlocking(module, {BlockingKind::MayThrow}, rtSite, parks);
+        for (const auto &[at, why] : requirements.unresolved())
+            emitWarning(at->getLoc()) << "wtc: " << why << ", so what it runs is not checked";
+        for (const RequirementRoot &root : requirements.roots()) {
+            cir::FuncOp f = root.func;  // a copy: the handle is not const
+            const Requirement *req = &root.req;
             const std::string name = llvm::demangle(f.getSymName().str());
-            const std::string declared = "is declared " + req->describe();
-            auto sites = blocking.sitesIn(f);
+            // An inferred requirement is the program's own, unstated: a
+            // warning, unless the build asks for errors.
+            const bool hard = !root.inferred() || inferredErrors;
+            auto complain = [&](const llvm::Twine &text) -> InFlightDiagnostic {
+                if (hard) failed = true;
+                InFlightDiagnostic d = hard ? f.emitError() : f.emitWarning();
+                d << text;
+                return d;
+            };
+            const std::string declared =
+                root.inferred() ? "is " + root.why + ", so it must be " +
+                                      (root.source == RequirementRoot::Source::handler
+                                           ? std::string("async-signal-safe")
+                                           : std::string("wait-free but for waits for data"))
+                                : "is declared " + req->describe();
+            const bool realtime = root.source == RequirementRoot::Source::realtime;
+            auto sites = realtime ? rtBlocking.sitesIn(f) : blocking.sitesIn(f);
+            // On a real-time thread, why a wait for data is not allowed: it
+            // spins, or it takes a lock on first use.
+            if (realtime)
+                for (BlockingSite &site : sites) {
+                    auto p = dyn_cast<ProgressOpInterface>(site.leaf);
+                    if (!p || (!site.chain.empty() && !isa<cir::CallOp>(site.chain.back()))) continue;
+                    const ProgressSpec spec = p.getProgressSpec(ThreadCounts::unknown());
+                    if (!spec.partial || spec.level < Level::wait_free || spec.allocates()) continue;
+                    if (spins(site.leaf))
+                        site.why = "waits for a push by spinning (its queue's wait policy is spin): a real-time thread "
+                                   "never yields to a producer of lower priority on its processor";
+                    else if (spec.firstUse & first_use_guard)
+                        site.why = "takes, the first time it runs in the process, a static-initialisation lock";
+                }
+            for (BlockingSite &site : sites)
+                if (root.source == RequirementRoot::Source::realtime && isa<cir::LoopOpInterface>(site.leaf) &&
+                    llvm::StringRef(site.why).starts_with("waits for an element"))
+                    site.why += "; it spins, and a real-time thread never yields to a producer of lower priority on "
+                                "its processor";
             // What the function's paths guarantee, composed: the level, the
             // steps under the counts proved, and the effects beside them.
             const PathProgress path = paths.of(f);
@@ -157,22 +323,28 @@ public:
                 InFlightDiagnostic r = f.emitRemark() << "wtc: " << name << ": " << describePath(path);
                 if (path.weakest) r.attachNote(path.weakest->getLoc()) << "the weakest step: " << path.weakWhy;
             };
+            auto origin = [&](InFlightDiagnostic &d) {
+                if (root.origin) d.attachNote(root.origin->getLoc()) << "where the requirement comes from";
+            };
             if (!sites.empty()) {
-                failed = true;
-                InFlightDiagnostic d = f.emitError() << "wtc: " << name << " " << declared << " but can block";
+                InFlightDiagnostic d =
+                    complain("wtc: " + name + " " + declared + (root.inferred() ? ", but it can block" : " but can block"));
+                origin(d);
                 reportSites(d, f, sites);
                 d.report();
                 composed();
-                return;
+                continue;
             }
             // Nothing blocks. A stronger promise than lock-freedom asks the
             // composition the rest.
             std::string why;
             Operation *at = path.weakest;
-            if (req->kind >= Requirement::Kind::wait_free) {
+            if (root.source == RequirementRoot::Source::handler && path.firstUse)
+                why = "takes, on first use, a " + describeFirstUse(path.firstUse);
+            if (why.empty() && req->kind >= Requirement::Kind::wait_free) {
                 if (path.level < Level::wait_free)
                     why = std::string("is only ") + describeLevel(path.level).str();
-                else if (path.partial)
+                else if (path.partial && root.source != RequirementRoot::Source::realtime)
                     why = "waits for data";
                 else if (req->kind == Requirement::Kind::critical && !path.bound.isPoly())
                     why = "has a worst case " + path.bound.str();
@@ -188,18 +360,58 @@ public:
                 }
             }
             if (!why.empty()) {
-                failed = true;
-                InFlightDiagnostic d = f.emitError() << "wtc: " << name << " " << declared << " but " << why;
+                InFlightDiagnostic d = root.inferred() ? complain("wtc: " + name + " " + declared + ", but it " + why)
+                                                       : complain("wtc: " + name + " " + declared + " but " + why);
+                origin(d);
                 if (at) d.attachNote(at->getLoc()) << "the weakest step: " << path.weakWhy;
                 d.report();
                 composed();
-                return;
+                continue;
             }
-            if (req->kind == Requirement::Kind::lock_free)
+            if (root.inferred())
+                f.emitRemark() << "wtc: " << name << " " << declared << ": it is";
+            else if (req->kind == Requirement::Kind::lock_free)
                 f.emitRemark() << "wtc: " << name << " " << declared << ": nothing it reaches blocks";
             else
                 f.emitRemark() << "wtc: " << name << " " << declared << ": it is";
             composed();
+        }
+        // A handler that pushes interrupts its own thread, which may be in
+        // the middle of a push to the same queue: a cell taken and not yet
+        // filled. Only a consumer that looks past such a cell makes progress
+        // past it: the single-consumer queue's (mpsc, jiffy), and a ring of
+        // indices', whose push publishes its index only once its cell is
+        // filled (scq, wcq). Every other consumer waits for the push the
+        // handler interrupted, which cannot finish until the handler
+        // returns. A handler that then waits for the consumer (to flush a
+        // log) never returns.
+        module.walk([&](Operation *op) {
+            if (!isa<QueuePushOp, QueuePushDeferredOp, QueueBatchEndOp>(op)) return;
+            llvm::SmallVector<cir::CallOp, 4> chain;
+            const RequirementRoot *root =
+                requirements.reaching(op->getParentOfType<cir::FuncOp>(), &chain,
+                                      [](const RequirementRoot &r) { return r.source == RequirementRoot::Source::handler; });
+            if (!root) return;
+            std::optional<Impl> impl;
+            bool bounded = false;
+            if (auto p = dyn_cast<QueuePushOp>(op)) impl = p.getImpl(), bounded = p.getBounded();
+            else if (auto d = dyn_cast<QueuePushDeferredOp>(op)) impl = d.getImpl();
+            else impl = cast<QueueBatchEndOp>(op).getImpl();
+            const Impl i = impl.value_or(Impl::generic);
+            if (!bounded && (i == Impl::mpsc || i == Impl::jiffy)) return;
+            if (bounded && (i == Impl::scq || i == Impl::wcq)) return;
+            InFlightDiagnostic d = inferredErrors ? op->emitError() : op->emitWarning();
+            if (inferredErrors) failed = true;
+            cir::FuncOp handler = root->func;
+            d << "wtc: " << llvm::demangle(handler.getSymName().str()) << ", " << root->why
+              << ", pushes to a queue whose consumer waits for a push in progress ("
+              << (bounded ? "bounded" : stringifyImpl(i).str())
+              << "): a push the handler interrupts on its own thread holds a cell the consumer waits for until the "
+                 "handler returns; only the single-consumer queue (mpsc) and the rings of indices look past such a "
+                 "cell";
+            for (cir::CallOp c : chain)
+                d.attachNote(c.getLoc()) << "calls " << llvm::demangle(lookupCallee(c) ? lookupCallee(c).getSymName().str() : std::string("through a pointer"));
+            if (root->origin) d.attachNote(root->origin->getLoc()) << "where the handler is installed";
         });
         if (failed && !clWarnOnly) signalPassFailure();
         markAllAnalysesPreserved();

@@ -153,7 +153,12 @@ public:
     // (`inCallee`) in a function that code calls.
     using Extra = std::function<std::optional<BlockingSite>(Operation *op, bool inCallee)>;
 
-    explicit BlockingQuery(ModuleOp module, BlockingKinds accepted = {}, Extra extra = {});
+    // An operation the asking pass accepts outright (a wait for data that
+    // parks, on a real-time thread): no site, though what it contains, for
+    // an operation with regions, is still walked.
+    using Accept = std::function<bool(Operation *op)>;
+
+    explicit BlockingQuery(ModuleOp module, BlockingKinds accepted = {}, Extra extra = {}, Accept accept = {});
 
     // Whether op, or anything it calls, may block in a way not accepted.
     std::optional<BlockingSite> at(Operation *op) { return siteAt(op, /*inCallee=*/false); }
@@ -165,6 +170,7 @@ public:
 private:
     BlockingKinds accepted;
     Extra extra;
+    Accept acceptOp;
     llvm::DenseMap<Operation *, std::optional<BlockingSite>> memo;
     llvm::DenseSet<Operation *> inProgress;
     // Set when a walk met a function still being walked further up: its
