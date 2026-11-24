@@ -13,6 +13,10 @@
 //              uses hazard pointers: no allocator call, no guard, no
 //              thread-exit registration (the thread_local destructor that
 //              reaches the dynamic linker's lock) and no mutex.
+//   index_queue  pushes and pops on the bounded index queue, both
+//              variants, from threads other than the one that built it,
+//              many laps round its rings: none calls the allocator, nor
+//              anything else counted.
 //   retire     pops on each hazard-using queue across many segments, so
 //              that pops retire segments and scan: the only allocator
 //              calls a pop makes are the frees of segments.
@@ -39,6 +43,7 @@
 #include <cstring>
 #include <thread>
 
+#include "index_ring.hpp"
 #include "segment_queue.hpp"
 #include "spmc_queue.hpp"
 #include "spsc_ring.hpp"
@@ -237,6 +242,44 @@ void retire() {
     pops_free_only("mpsc pops over 40 segments", m, n);
   }).join();
 }
+void index_queue() {
+  for (bool exact : {false, true}) {
+    wtc::rt::index_queue<std::uint64_t> q(8, exact, 4);
+    std::thread prod([&] {
+      for (std::uint64_t i = 0; i < 20000; ++i) {
+        probe_result r{};
+        t_guards = t_allocs = t_frees = t_atexits = t_locks = 0;
+        t_on = true;
+        while (!q.try_push(i)) {
+        }
+        t_on = false;
+        r = {t_guards, t_allocs, t_frees, t_atexits, t_locks, 0};
+        if (!r.clean()) {
+          EXPECT(r.clean());
+          break;
+        }
+      }
+    });
+    std::thread cons([&] {
+      std::uint64_t v = 0, next = 0;
+      while (next < 20000) {
+        t_guards = t_allocs = t_frees = t_atexits = t_locks = 0;
+        t_on = true;
+        const bool got = q.try_pop(v);
+        t_on = false;
+        const probe_result r{t_guards, t_allocs, t_frees, t_atexits, t_locks, 0};
+        if (!r.clean()) {
+          EXPECT(r.clean());
+          break;
+        }
+        if (got) EXPECT(v == next++);
+      }
+    });
+    prod.join();
+    cons.join();
+    std::printf("index queue (%s): 20000 pushes and pops, none counted\n", exact ? "exact" : "plain");
+  }
+}
 
 void make_keys() {
   pthread_key_t k;
@@ -292,6 +335,7 @@ int main(int argc, char** argv) {
   if (!std::strcmp(mode, "tick_rate")) tick_rate();
   else if (!std::strcmp(mode, "first_ops")) first_ops();
   else if (!std::strcmp(mode, "retire")) retire();
+  else if (!std::strcmp(mode, "index_queue")) index_queue();
   else if (!std::strcmp(mode, "keys40")) keys40();
   else if (!std::strcmp(mode, "enomem")) enomem();
   else {

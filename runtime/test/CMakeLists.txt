@@ -494,7 +494,39 @@ if(NOT WTC_RT_SANITIZE)
   add_test(NAME first_use_keys40 COMMAND first_use_test keys40)
   add_test(NAME first_use_enomem COMMAND first_use_test enomem)
   add_test(NAME first_use_retire COMMAND first_use_test retire)
+  add_test(NAME first_use_index_queue COMMAND first_use_test index_queue)
 endif()
+
+# The bounded lock-free queue over rings of indices (index_ring.hpp), both
+# variants: answers against a sequential queue, three-thread histories
+# searched for a linearisation, a pop held inside its move, producers and
+# consumers frozen inside their operations while the others go on, and
+# stress. The model-checking configurations are in model/ (run.sh), run
+# under GenMC where it is installed, not here.
+add_executable(index_queue_test index_queue_test.cpp)
+target_link_libraries(index_queue_test PRIVATE wtc_rt_flags)
+if(WTC_RT_SANITIZE)
+  set(index_lin 2000)
+  set(index_stress 20000)
+  set(index_ring 200)
+else()
+  set(index_lin 20000)
+  set(index_stress 200000)
+  set(index_ring 2000)
+endif()
+add_test(NAME index_queue_model COMMAND index_queue_test model 20000)
+add_test(NAME index_queue_lin COMMAND index_queue_test lin ${index_lin})
+add_test(NAME index_queue_held COMMAND index_queue_test held)
+add_test(NAME index_queue_frozen COMMAND index_queue_test frozen)
+add_test(NAME index_queue_stress COMMAND index_queue_test stress ${index_stress})
+add_test(NAME index_queue_boundary COMMAND index_queue_test boundary)
+add_test(NAME index_queue_inflight COMMAND index_queue_test inflight)
+add_test(NAME index_queue_ring COMMAND index_queue_test ring ${index_ring})
+set_tests_properties(index_queue_model index_queue_lin index_queue_held index_queue_frozen
+                     index_queue_stress index_queue_ring PROPERTIES TIMEOUT 600)
+# The ring churn alone: with the other tests' threads on the processors
+# its own interleave less, and a threshold too small shows less often.
+set_tests_properties(index_queue_ring PROPERTIES RUN_SERIAL TRUE)
 
 # Hazard records under thread churn: ten thousand threads, sixteen at a
 # time, each pushing and popping; the records are reused, and every

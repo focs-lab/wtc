@@ -26,6 +26,7 @@ Every implementation carries, in its header comment:
 | `waiter.hpp` | nothing: how a pop that waits for an element waits (spin, park, or spin then park), and the wake-up a publish owes a sleeping consumer, shared by every queue above; also a wait whose loop is the caller's (`begin`, `step`, `end`), for a program's own wait lifted off its condition variable (`shim/lifted.hpp`) | none |
 | `bounded_ring.hpp` | a bounded ring a program wrote itself under a mutex (spdlog's `circular_q`), through `shim/bounded.hpp` | the ring's capacity and its answers to a full queue, read from its member functions (`docs/lifting.md`, "The bound"); with one producer or one consumer, that side is single |
 | `bounded_ring.hpp`, through `shim/c_queue.cpp` | a ring of pointers a C program wrote itself under a pthread mutex, with an end count (PARSEC ferret's and dedup's `queue.c`) | the ring's capacity, read from its initialisation; with one producer or one consumer, that side is single; batches with any number of producers and consumers (`docs/lifting.md`, "C queues") |
+| `index_ring.hpp` | nothing yet: a bounded queue no operation of which waits for another thread, for a path that requires it (`decisions/0004`) | at most the `threads` it was built for: operations in flight at once, an operation that an element's constructor, move or destructor starts on the same queue counting apart; the capacity semantics of the variant chosen (plain or exact, below) |
 | `delegate.hpp`, through `shim/delegate.cpp` | a critical section of one mutex, run under it by the thread that reaches it while the mutex is free or lightly contended, and by a server thread for the mutex while it is contended (`--wtc-delegate-sections`) | the section does not depend on the thread that runs it, waits for no thread but by locks it lets go again, takes no recursive mutex and lets no exception out (`docs/delegation.md`) |
 
 `spsc_ring<Slot, kSlots>` is an unbounded wait-free ring of blocks of 128 KiB
@@ -155,6 +156,35 @@ The shim's `wtc::bounded<T>` puts two waiters on it, one per side: a pop
 waits while it is empty, a push while it is full, and each publish wakes
 the other side's sleeper, with the same fences as the pop's waiter;
 `close()` closes both.
+
+`index_queue<T>` is a bounded queue over two rings of indices, the SCQ
+ring of "A scalable, portable, and memory-efficient lock-free FIFO queue"
+(DISC 2019) used with that paper's indirection: a push takes a free cell's
+index from one ring, constructs its element there and enqueues the index
+in the other; a pop dequeues an index, moves the element out and gives
+the index back. No operation waits for another thread: a producer stopped
+anywhere inside its push holds one cell and stops nobody, and the
+consumers take the other producers' elements past it, which is what the
+bounded ring cannot do with many producers; nothing allocates after
+construction. Every operation is lock-free. The price is two ring
+operations per queue operation and the capacity: the plain variant
+refuses a push when no cell is free, so pops and pushes in flight count
+against it; the exact variant keeps a count that a pop gives back as
+soon as it has its index, and has spare cells for the pops still moving
+out, so a pop held in its move does not make the queue look full, but a
+push in flight still counts for the pushes after it and not for the pops,
+and so does a pop between taking its element and giving its place back:
+its pops and accepted pushes
+are linearisable, and a refusal is justified by elements queued and
+places those operations hold together, which is not linearisable as a
+bounded queue (`index_queue_test inflight` shows the history for a push;
+the header says why a queue whose pushes build their elements cannot do
+better without helping). Its tests are `index_queue_test`
+(answers against a sequential queue, three-thread histories searched for
+a linearisation, a pop held in its move, the exact variant's spare cells
+all in use, frozen producers and consumers, the ring churned and drained,
+stress) and the GenMC configurations in `test/model/`, with deliberate
+bugs that each must catch.
 
 A queue may be destroyed only after every push to it has returned (its
 producers joined, or otherwise ordered before the destructor), not as
