@@ -17,6 +17,10 @@
 //   fork      a fork while eight threads hold records: in the child, eight
 //             new threads holding records at once take the records the
 //             parent's threads held, and no more are made.
+//   stalled   a pop held after protecting a segment while another thread
+//             moves the head on and retires fifty segments: the held
+//             segment survives, and the retiring thread keeps at most
+//             kSlots segments (the held reader's slots) after a scan.
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -89,6 +93,41 @@ void churn(long n) {
   std::printf("churn: %ld threads, %u records made\n", n, made);
   EXPECT(made >= kWave);
   EXPECT(made <= kWave + 1);
+}
+// Hooks: a pop holds at stage 1, after taking its cell, while t_hold is set.
+std::atomic<bool> g_at{false}, g_go{false};
+thread_local bool t_hold = false;
+struct hooks : wtc::rt::no_hooks {
+  static void pop_stage(unsigned stage) {
+    if (stage != 1 || !t_hold) return;
+    t_hold = false;
+    g_at.store(true);
+    while (!g_go.load()) std::this_thread::yield();
+  }
+};
+
+void stalled() {
+  wtc::rt::segment_queue<std::uint64_t, true, 8, 64, hooks> q;
+  for (std::uint64_t i = 0; i < 8; ++i) q.push(i);
+  std::uint64_t v = 0, held = ~std::uint64_t{0};
+  for (std::uint64_t i = 0; i < 7; ++i) EXPECT(q.try_pop(v) && v == i);
+  std::thread reader([&] {
+    t_hold = true;
+    EXPECT(q.try_pop(held));  // takes cell 7, the first segment's last, and is held
+  });
+  while (!g_at.load()) std::this_thread::yield();
+  for (std::uint64_t i = 0; i < 400; ++i) q.push(100 + i);
+  for (std::uint64_t i = 0; i < 400; ++i) EXPECT(q.try_pop(v) && v == 100 + i);
+  wtc::rt::hazard::record& me = wtc::rt::hazard::mine();
+  wtc::rt::hazard::scan(me);
+  std::printf("stalled: %zu segments kept by the retiring thread after a scan\n", me.retired_count);
+  EXPECT(me.retired_count >= 1);  // the held one
+  EXPECT(me.retired_count <= wtc::rt::hazard::kSlots);
+  g_go.store(true);
+  reader.join();
+  EXPECT(held == 7);
+  wtc::rt::hazard::scan(me);
+  EXPECT(me.retired_count == 0);
 }
 // A key whose destructor sets itself again, round after round, and makes
 // its operations in the round asked for.
@@ -220,6 +259,7 @@ int main(int argc, char** argv) {
   const char* mode = argc > 1 ? argv[1] : "churn";
   const long n = argc > 2 ? std::atol(argv[2]) : 10000;
   if (!std::strcmp(mode, "churn")) churn(n);
+  else if (!std::strcmp(mode, "stalled")) stalled();
   else if (!std::strcmp(mode, "fork")) forked();
   else if (!std::strcmp(mode, "late")) late();
   else if (!std::strcmp(mode, "late_two")) late_two();

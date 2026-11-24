@@ -13,6 +13,9 @@
 //              uses hazard pointers: no allocator call, no guard, no
 //              thread-exit registration (the thread_local destructor that
 //              reaches the dynamic linker's lock) and no mutex.
+//   retire     pops on each hazard-using queue across many segments, so
+//              that pops retire segments and scan: the only allocator
+//              calls a pop makes are the frees of segments.
 //   keys40     forty pthread keys created before any queue: the hazard
 //              key is past glibc's first 32, key_allocates() says so, and
 //              a fresh thread's first push makes the one allocation
@@ -195,6 +198,45 @@ void first_ops() {
   fresh("spmc pop, first in a fresh thread", [&] { EXPECT(s.try_pop(v)); });
   fresh("spmc pop, first in another fresh thread", [&] { EXPECT(s.try_pop(v)); });
 }
+// Every pop of n elements pushed into segments of four cells, one pop at
+// a time under the probe's counters: none may call anything but free, and
+// the frees, summed, are the segments the queue retired.
+template <class Q>
+void pops_free_only(const char* what, Q& q, int n) {
+  int max_allocs = 0, frees = 0, other = 0;
+  std::uint64_t v = 0;
+  for (int i = 0; i < n; ++i) {
+    t_guards = t_allocs = t_frees = t_atexits = t_locks = 0;
+    t_on = true;
+    const bool got = q.try_pop(v);
+    t_on = false;
+    EXPECT(got && v == static_cast<std::uint64_t>(i));
+    if (t_allocs > max_allocs) max_allocs = t_allocs;
+    frees += t_frees;
+    other += t_guards + t_atexits + t_locks;
+  }
+  std::printf("%-48s max allocs per pop %d, frees %d, other %d\n", what, max_allocs, frees, other);
+  EXPECT(max_allocs == 0);
+  EXPECT(other == 0);
+  EXPECT(frees > 0);  // the segments retired were freed, by these pops
+}
+
+void retire() {
+  constexpr int n = 4 * 40;
+  std::thread([&] {
+    wtc::rt::spmc_queue<std::uint64_t, 4> s;
+    wtc::rt::segment_queue<std::uint64_t, true, 4> g;
+    wtc::rt::segment_queue<std::uint64_t, false, 4> m;
+    for (int i = 0; i < n; ++i) {
+      s.push(std::uint64_t(i));
+      g.push(std::uint64_t(i));
+      m.push(std::uint64_t(i));
+    }
+    pops_free_only("spmc pops over 40 segments", s, n);
+    pops_free_only("generic pops over 40 segments", g, n);
+    pops_free_only("mpsc pops over 40 segments", m, n);
+  }).join();
+}
 
 void make_keys() {
   pthread_key_t k;
@@ -249,6 +291,7 @@ int main(int argc, char** argv) {
   const char* mode = argc > 1 ? argv[1] : "tick_rate";
   if (!std::strcmp(mode, "tick_rate")) tick_rate();
   else if (!std::strcmp(mode, "first_ops")) first_ops();
+  else if (!std::strcmp(mode, "retire")) retire();
   else if (!std::strcmp(mode, "keys40")) keys40();
   else if (!std::strcmp(mode, "enomem")) enomem();
   else {

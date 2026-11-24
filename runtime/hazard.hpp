@@ -76,7 +76,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <vector>
+#include <type_traits>
 
 namespace wtc::rt::hazard {
 
@@ -97,9 +97,15 @@ constexpr unsigned kPopSlot = 1;
 // nodes waiting are a few segments at most.
 constexpr std::size_t kScanAt = 8;
 
-struct retired {
-    void* p;
-    void (*free)(void*);
+// What a retired object carries, so that retiring it and scanning never
+// allocate: the retired nodes are an intrusive list through these fields,
+// which only the thread holding the retiring record touches. An object
+// that is retired derives from node and is freed with delete.
+struct node {
+    node* hp_next = nullptr;
+    void* hp_addr = nullptr;  // the address a slot holds while it is protected
+    void (*hp_free)(node*) = nullptr;
+    bool hp_held = false;     // a scan's mark
 };
 
 // Records per chunk: the threads that may hold records at once before a
@@ -113,7 +119,9 @@ constexpr unsigned kChunk = WTC_HAZARD_CHUNK;
 struct alignas(64) record {
     std::atomic<void*> slot[kSlots];
     std::atomic<bool> active{false};
-    std::vector<retired> retired_list;  // its holder's only
+    // Its holder's only: the nodes it retired and has not freed.
+    node* retired = nullptr;
+    std::size_t retired_count = 0;
 
     record() {
         for (auto& s : slot) s.store(nullptr, std::memory_order_relaxed);
@@ -222,19 +230,29 @@ inline record* acquire() {
 }
 
 // Frees every node this record retired that no slot in any record holds.
+// It allocates nothing: each slot is read once, and a slot that holds a
+// pointer marks the retired node it names. Its cost is the slots of the
+// records handed out plus, for each slot that holds anything, the nodes
+// waiting: at most kScanAt plus those held at the last scan.
 inline void scan(record& mine) {
-    std::vector<void*> held;
+    if (!mine.retired) return;
     for_each_record([&](record& r) {
         for (auto& s : r.slot)
-            if (void* p = s.load(std::memory_order_seq_cst)) held.push_back(p);
+            if (void* p = s.load(std::memory_order_seq_cst))
+                for (node* n = mine.retired; n; n = n->hp_next)
+                    if (n->hp_addr == p) n->hp_held = true;
     });
-    std::sort(held.begin(), held.end());
-    std::vector<retired> keep;
-    for (const retired& n : mine.retired_list) {
-        if (std::binary_search(held.begin(), held.end(), n.p)) keep.push_back(n);
-        else n.free(n.p);
+    node** link = &mine.retired;
+    while (node* n = *link) {
+        if (n->hp_held) {
+            n->hp_held = false;
+            link = &n->hp_next;
+        } else {
+            *link = n->hp_next;
+            --mine.retired_count;
+            n->hp_free(n);
+        }
     }
-    mine.retired_list.swap(keep);
 }
 
 // The key's destructor, at the thread's exit: clears the slots, frees what
@@ -345,11 +363,28 @@ T* protect(record& r, unsigned i, const std::atomic<T*>& src) {
 
 inline void clear(record& r, unsigned i) { r.slot[i].store(nullptr, std::memory_order_release); }
 
+// The node of an object that is retired: the object itself where it
+// derives from node, otherwise its member hp, which the object places
+// where it costs nothing (the segmented queues keep it in a line their
+// hot fields leave unused, so that their layout is the one they had
+// before they carried a node).
+template <class T>
+node& node_of(T* p) {
+    if constexpr (std::is_base_of_v<node, T>) return *p;
+    else return p->hp;
+}
+
 // p is unreachable from every shared pointer a reader could protect it
-// through; it is freed with free(p) once no slot holds it.
-inline void retire(record& r, void* p, void (*free)(void*)) {
-    r.retired_list.push_back({p, free});
-    if (r.retired_list.size() >= kScanAt) scan(r);
+// through; it is deleted once no slot holds it. Never allocates.
+template <class T>
+void retire(record& r, T* p) {
+    node* n = &node_of(p);
+    n->hp_addr = static_cast<void*>(p);
+    n->hp_free = [](node* x) { delete static_cast<T*>(x->hp_addr); };
+    n->hp_held = false;
+    n->hp_next = r.retired;
+    r.retired = n;
+    if (++r.retired_count >= kScanAt) scan(r);
 }
 
 }  // namespace wtc::rt::hazard

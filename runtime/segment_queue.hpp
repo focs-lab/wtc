@@ -121,8 +121,16 @@ class segment_queue {
     // a pop that followed its push closely took four line transfers per
     // element; kept apart, it takes the element's line and a sixteenth of
     // the states' line.
+    //
+    // The header keeps the layout it had before segments carried a hazard
+    // node: three lines, deq's, enq's and next's, before the states. The
+    // node (hazard::node_of), written once the segment is retired, sits in
+    // deq's line after deq; a header one line longer, with the node in front,
+    // cost the general-purpose queue a third of its throughput at one producer
+    // and one consumer.
     struct segment {
         alignas(kLine) std::atomic<std::uint64_t> deq{0};
+        hazard::node hp;
         alignas(kLine) std::atomic<std::uint64_t> enq{0};
         alignas(kLine) std::atomic<segment*> next{nullptr};
         alignas(kLine) std::atomic<std::uint32_t> state[kSegment];
@@ -131,8 +139,6 @@ class segment_queue {
             for (unsigned i = 0; i < kSegment; ++i) state[i].store(kEmpty, std::memory_order_relaxed);
         }
     };
-
-    static void free_segment(void* p) { delete static_cast<segment*>(p); }
 
     static void pause() {
 #if defined(__x86_64__) || defined(__i386__)
@@ -301,7 +307,7 @@ class segment_queue {
         } else {
             head_.store(next, std::memory_order_relaxed);
         }
-        hazard::retire(hp, h, &free_segment);
+        hazard::retire(hp, h);
     }
 
     template <class F>

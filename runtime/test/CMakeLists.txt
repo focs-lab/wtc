@@ -446,11 +446,13 @@ if(NOT WTC_RT_SANITIZE)
   # with that allocation failing.
   add_test(NAME first_use_keys40 COMMAND first_use_test keys40)
   add_test(NAME first_use_enomem COMMAND first_use_test enomem)
+  add_test(NAME first_use_retire COMMAND first_use_test retire)
 endif()
 
 # Hazard records under thread churn: ten thousand threads, sixteen at a
 # time, each pushing and popping; the records are reused, and every
-# element arrives once.
+# element arrives once. And a reader held on a segment while fifty are
+# retired past it: it keeps its segment, and no more than its slots' worth.
 add_executable(hazard_test hazard_test.cpp)
 target_link_libraries(hazard_test PRIVATE wtc_rt_flags)
 add_test(NAME hazard_churn COMMAND hazard_test churn 10000)
@@ -464,4 +466,5 @@ endif()
 if(WTC_RT_SANITIZE STREQUAL "thread")
   set_tests_properties(hazard_fork PROPERTIES ENVIRONMENT "TSAN_OPTIONS=die_after_fork=0")
 endif()
+add_test(NAME hazard_stalled COMMAND hazard_test stalled)
 set_tests_properties(hazard_churn PROPERTIES TIMEOUT 600)
