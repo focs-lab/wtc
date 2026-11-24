@@ -431,12 +431,37 @@ else()
 endif()
 
 # What a thread's and the process's first operation does beyond its
-# algorithm: guarded static initialisations, counted by wrapping the C++
-# runtime's entry point. Not under a sanitizer, whose interceptors would
+# algorithm: allocator calls (the allocator interposed), guarded static
+# initialisations, thread-exit registrations and mutexes (the entry points
+# wrapped at link time). Not under a sanitizer, whose interceptors would
 # be counted too.
 if(NOT WTC_RT_SANITIZE)
   add_executable(first_use_test first_use_test.cpp)
   target_link_libraries(first_use_test PRIVATE wtc_rt_flags)
-  target_link_options(first_use_test PRIVATE -Wl,--wrap=__cxa_guard_acquire)
+  target_link_options(first_use_test PRIVATE -Wl,--wrap=__cxa_guard_acquire
+                      -Wl,--wrap=__cxa_thread_atexit -Wl,--wrap=pthread_mutex_lock)
   add_test(NAME first_use_tick_rate COMMAND first_use_test tick_rate)
+  add_test(NAME first_use_first_ops COMMAND first_use_test first_ops)
+  # The hazard key past glibc's first 32 keys, with its allocation and
+  # with that allocation failing.
+  add_test(NAME first_use_keys40 COMMAND first_use_test keys40)
+  add_test(NAME first_use_enomem COMMAND first_use_test enomem)
 endif()
+
+# Hazard records under thread churn: ten thousand threads, sixteen at a
+# time, each pushing and popping; the records are reused, and every
+# element arrives once.
+add_executable(hazard_test hazard_test.cpp)
+target_link_libraries(hazard_test PRIVATE wtc_rt_flags)
+add_test(NAME hazard_churn COMMAND hazard_test churn 10000)
+add_test(NAME hazard_fork COMMAND hazard_test fork)
+# ThreadSanitizer tears its thread state down before glibc's later
+# key-destructor rounds, and faults on any access from them.
+if(NOT WTC_RT_SANITIZE STREQUAL "thread")
+  add_test(NAME hazard_late COMMAND hazard_test late)
+  add_test(NAME hazard_late_two COMMAND hazard_test late_two)
+endif()
+if(WTC_RT_SANITIZE STREQUAL "thread")
+  set_tests_properties(hazard_fork PROPERTIES ENVIRONMENT "TSAN_OPTIONS=die_after_fork=0")
+endif()
+set_tests_properties(hazard_churn PROPERTIES TIMEOUT 600)

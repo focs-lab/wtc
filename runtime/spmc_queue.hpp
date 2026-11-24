@@ -104,6 +104,7 @@ class spmc_queue {
 
  public:
     spmc_queue() {
+        hazard::prepare();
         segment* s = new segment;
         head_.store(s, std::memory_order_relaxed);
         tail_ = s;
@@ -166,7 +167,8 @@ class spmc_queue {
         static_assert(std::is_nothrow_invocable_v<F, Slot&&>,
                       "the taker runs with the element still in its cell, which is released after "
                       "it returns; it must not throw");
-        return pop(hazard::mine(), f);
+        const hazard::use rec;
+        return pop(rec, f);
     }
 
     bool try_pop(Slot& out) {

@@ -142,6 +142,7 @@ class segment_queue {
 
  public:
     segment_queue() {
+        hazard::prepare();
         segment* s = new segment;
         head_.store(s, std::memory_order_relaxed);
         tail_.store(s, std::memory_order_relaxed);
@@ -173,7 +174,8 @@ class segment_queue {
 
     // Pushes n elements in their order, moving them out of first[0..n).
     void push_run(Slot* first, std::size_t n) {
-        hazard::record& hp = hazard::mine();
+        const hazard::use rec;
+        hazard::record& hp = rec;
         std::size_t k = 0;
         while (k < n) {
             segment* t = hazard::protect(hp, kTail, tail_);
@@ -260,7 +262,8 @@ class segment_queue {
 #ifdef WTC_CHECK
         if constexpr (!kManyConsumers) claim_consumer();
 #endif
-        hazard::record& hp = hazard::mine();
+        const hazard::use rec;
+        hazard::record& hp = rec;
         bool got;
         if constexpr (kManyConsumers)
             got = pop_many(hp, f);
