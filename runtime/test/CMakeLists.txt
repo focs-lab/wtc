@@ -366,12 +366,12 @@ add_test(NAME delegate_churn COMMAND delegate_test churn ${delegate_churn})
 # four run, they block every signal, have their starting client's stack,
 # start afresh in a fork's child, and a section from a thread-local
 # destructor after the thread stopped being a client runs on it.
-foreach(mode ends cap signals stack fork tls_exit)
+foreach(mode ends cap signals stack fork tls_exit errno)
   add_test(NAME delegate_${mode} COMMAND delegate_test ${mode})
 endforeach()
 set_tests_properties(delegate_exclusion delegate_order delegate_servers delegate_park delegate_churn
                      delegate_ends delegate_cap delegate_signals delegate_stack delegate_fork
-                     delegate_tls_exit PROPERTIES TIMEOUT 300)
+                     delegate_tls_exit delegate_errno PROPERTIES TIMEOUT 300)
 # ThreadSanitizer's own runtime keeps a process whose main thread ended with
 # pthread_exit alive (a program with no server does the same), and refuses
 # to start a thread in the child of a multi-threaded fork unless told.

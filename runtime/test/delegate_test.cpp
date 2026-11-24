@@ -15,6 +15,7 @@
 //   delegate_test stack           a server's stack is its starting client's
 //   delegate_test fork            the child of a fork starts its own server
 //   delegate_test tls_exit        a section from a thread-local destructor
+//   delegate_test errno           a delegated section leaves errno as it was
 //
 // A section here is what the compiler outlines: the mutex's own lock, the
 // body, the unlock, in one function of the environment. Every test checks
@@ -32,6 +33,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -464,12 +466,28 @@ void tls_exit() {
     check(g.count == 2, "tls_exit: a section did not run");
     check(!on_server, "tls_exit: a section from an ended client ran on a server");
 }
+// A section the client waits for past its spin and its bounded park (the
+// futex wait returns ETIMEDOUT or EAGAIN), and the thread's first section
+// (its stack's size, the server's start): the client's errno is as it was
+// before each, as the original's lock and unlock leave it.
+void errno_kept() {
+    guarded g;
+    int changed = 0;
+    for (int i = 0; i < 20; ++i) {
+        errno = 12345;
+        slow_env e{&g, i == 0 ? 0u : 3000u};
+        wtc_delegate_run(&g.m, slow_section, &e);
+        changed += errno != 12345;
+    }
+    check(changed == 0, "errno: a delegated section changed the client's errno");
+    check(g.count == 20, "errno: the count");
+}
 }  // namespace
 
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::fprintf(stderr, "usage: delegate_test exclusion|results|order|nested|servers|park|churn|ends|main_exit|cap|"
-                             "signals|stack|fork|tls_exit [N]\n");
+                             "signals|stack|fork|tls_exit|errno [N]\n");
         return 2;
     }
     const std::string mode = argv[1];
@@ -488,6 +506,7 @@ int main(int argc, char** argv) {
     else if (mode == "stack") stack();
     else if (mode == "fork") fork_child();
     else if (mode == "tls_exit") tls_exit();
+    else if (mode == "errno") errno_kept();
     else {
         std::fprintf(stderr, "unknown mode %s\n", mode.c_str());
         return 2;

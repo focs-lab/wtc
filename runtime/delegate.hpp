@@ -135,6 +135,7 @@
 #include <signal.h>
 
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -158,7 +159,13 @@ public:
     // be had; its result either way.
     static int run(const void* key, section fn, void* env) {
         thread_state& me = state();
-        if (me.on_server || me.exiting || !become_client(me)) return fn(env);
+        if (me.on_server || me.exiting) return fn(env);
+        // The section does not touch errno (the compiler proves it), and
+        // neither may what runs it: the original's lock and unlock leave
+        // it as it was, where the runtime's own calls (the stack's size, a
+        // server's start, the futex a client parks on) may set it.
+        const errno_kept kept;
+        if (!become_client(me)) return fn(env);
         server* s = nullptr;
         if (me.last_key == key && me.gen == generation().load(std::memory_order_acquire)) {
             if (me.last_inline) return fn(env);
@@ -200,6 +207,11 @@ public:
     static bool on_server() { return state().on_server; }
 
 private:
+    struct errno_kept {
+        const int saved = errno;
+        ~errno_kept() { errno = saved; }
+    };
+
     // How long a client sleeps at most before it looks again (see
     // "Waiting" above).
     static constexpr std::chrono::nanoseconds kParkLimit{1000000};

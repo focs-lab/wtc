@@ -162,8 +162,11 @@ client's order, a section that reaches another delegated section, one
 server per mutex, clients and servers asleep between sections,
 short-lived clients whose waiters later threads take over; servers ending
 with the last client, a main that ends with `pthread_exit`, the bound on
-servers, their blocked signals and their stack, a fork's child, and a
-section from a thread-local destructor.
+servers, their blocked signals and their stack, a fork's child, a
+section from a thread-local destructor, and a client's errno, which a
+delegated section leaves as it was (the runtime's own calls, the futex
+a client parks on among them, may set it; the original's lock and
+unlock do not).
 
 ## The contract
 
