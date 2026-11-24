@@ -189,3 +189,50 @@ the variable changes while the loop runs is not judged, which is why a
 symbolic count is printed and never instantiated. A loop that leaves
 early runs fewer times, so a count is an upper bound; threads started on
 two arms of one branch are summed, which overstates.
+
+## Loops
+
+The check used to judge no loop: a spin on an atomic reaches nothing
+blocking and is still not lock-free. Each loop of the program's own code
+is now classified by what its exit depends on, the backward slice of its
+condition and of the conditions (an if's, a switch's) under which it
+breaks, returns or continues, through the variables it writes, declared
+before it or in it, and the calls it makes
+(`mlir/include/WTC/Transforms/ProgressPaths.h`):
+
+| class | exit depends on | level |
+|---|---|---|
+| counted | an induction variable against a bound the program fixes (a constant read with its signedness, or a variable read without synchronising) | the body's, its bound multiplied, the condition counted once more |
+| retry | the loop's own compare-and-swap of a value it read, and nothing else | lock-free; once, on a location no other thread writes |
+| wait | an atomic or volatile load, an exchange or fetch-and-op, a compare-and-swap of a constant (a spin lock), one inside a helper of the program's, or one the loop skips while what it read says the word is held | blocking |
+| dual | whether a queue had an element, or room | partial: a wait for data |
+| unknown | the thread's own data only | wait-free, no bound read |
+| forever | nothing: a constant true condition and no break or return | blocking: the path never completes |
+
+A function declared lock-free fails on a wait and on a dual wait. A goto
+is read as a loop over its function: a wait if the function reads what
+other threads write. The runtime's bodies are not read where a program
+uses them (its operations answer through the table), but read directly
+the classifier is not more optimistic than the table
+(`test/Transforms/Progress/runtime-loops.cpp`).
+
+Assumed, or approximated:
+
+- The program is free of data races. A plain load is no evidence of a
+  wait: no other thread writes, while the loop runs, what it reads without
+  synchronising. A spin on a plain flag is undefined behaviour, and is
+  read as a loop over the thread's own data.
+- A call's result depends on everything its callee reads atomically,
+  pops or compares-and-swaps; that is coarse, and only ever more
+  pessimistic.
+- A loop that tries a compare-and-swap of a constant on each element of a
+  list (the hazard records' scan) is read as a spin lock, a loop bounded
+  by a counter beside an atomic condition (`i < 64 && !flag.load()`) as a
+  wait, and a retry whose compare-and-swap is in a helper of the
+  program's as a spin lock: pessimistic, by design.
+- A retry is lock-free only when its exit depends on its compare-and-swap
+  alone: nothing it read decides whether it continues, skips the
+  compare-and-swap or leaves. What its body calls is judged on its own.
+- A summary read while a function of its call cycle is still being read
+  is not remembered, so the answer does not depend on the order in which
+  functions are asked about.

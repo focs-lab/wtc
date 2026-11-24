@@ -1,10 +1,12 @@
 #include "WTC/Transforms/Blocking.h"
 #include "WTC/Transforms/Passes.h"
+#include "WTC/Transforms/ProgressPaths.h"
 #include "WTC/Transforms/Utils.h"
 #include "WTC/ProgressTable.h"
 #include "WTC/WTCOps.h"
 
 #include "clang/CIR/Dialect/IR/CIRDialect.h"
+#include "clang/CIR/Interfaces/CIRLoopOpInterface.h"
 
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
@@ -34,9 +36,10 @@ using namespace mlir::wtc;
 // runs its copy or move constructor, a pop its move-assignment and
 // destructor, inside the operation.
 // A call that may throw is not itself a reason: what it throws with is in
-// the body, or is counted with it. A loop that spins on an atomic waiting
-// for another thread is not judged: the check is a necessary condition for
-// lock-freedom, not a proof of it.
+// the body, or is counted with it. A loop is judged by what its exit
+// depends on (ProgressPaths.h): one that spins until another thread writes
+// what it reads, or until a queue has an element, blocks; a retry on a
+// compare-and-swap is lock-free and passes.
 //
 // One exception, and it is what makes a consumer of an inline queue pass:
 // the destructor of the shared_ptr a pop returns, when the pop is borrowed
@@ -68,7 +71,20 @@ public:
 
     void runOnOperation() override {
         ModuleOp module = getOperation();
-        BlockingQuery blocking(module, {BlockingKind::MayThrow});
+        // A loop is judged by what its exit depends on (ProgressPaths.h):
+        // one that waits for another thread, or for an element of a queue,
+        // blocks; a retry, a counted loop and one over the thread's own
+        // data do not.
+        LoopClassifier loops(module);
+        auto loopSite = [&](Operation *op, bool) -> std::optional<BlockingSite> {
+            std::optional<LoopClass> c;
+            if (isa<cir::LoopOpInterface>(op)) c = loops.classify(op);
+            else if (auto go = dyn_cast<cir::GotoOp>(op)) c = loops.classifyGoto(go);
+            if (!c || (c->kind != LoopKind::Wait && c->kind != LoopKind::Dual && c->kind != LoopKind::Forever))
+                return std::nullopt;
+            return BlockingSite{op, BlockingKind::Refused, c->why, cir::FuncOp(), false, {}, {}};
+        };
+        BlockingQuery blocking(module, {BlockingKind::MayThrow}, loopSite);
         bool failed = false;
         module.walk([&](cir::FuncOp f) {
             if (!hasAnnotation(f, "wtc_progress_lock_free") || f.getBody().empty()) return;
