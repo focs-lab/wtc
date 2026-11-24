@@ -245,9 +245,10 @@ def DelegateOp : WTC_Op<"delegate", [
         The operation means `section(env)` called on this thread, which
         is the program as written. Lowered (--lower-wtc-to-cir), it is a
         call of the runtime's wtc_delegate_run, which runs `section(env)`
-        on the server of `mutex`, one thread per mutex, and returns once
-        it has returned; a server that reaches the operation runs the
-        section on its own thread. The section's writes happen before the
+        on this thread while the mutex is free or lightly contended, and
+        on the server of `mutex`, one thread per mutex, while it is
+        contended, and returns once it has returned; a server that
+        reaches the operation runs the section on its own thread. The section's writes happen before the
         operation returns, and what the thread did before the operation
         happens before the section, as the original's unlock and lock
         ordered them. The pass proves, before it builds one, that the

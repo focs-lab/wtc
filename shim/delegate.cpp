@@ -6,9 +6,10 @@
 //   wtc_delegate_run(key, fn, env)
 //
 // runs fn(env), a critical section outlined with its mutex's own lock and
-// unlock, on the server of the mutex at `key` (runtime/delegate.hpp), or
-// on the calling thread when it is a server itself; returns fn's result,
-// the exit by which the section left, once fn has returned.
+// unlock, on the calling thread while the mutex at `key` is free or
+// lightly contended, or when the calling thread is a server itself, and on
+// the mutex's server while it is contended (runtime/delegate.hpp); returns
+// fn's result, the exit by which the section left, once fn has returned.
 
 #include "../runtime/delegate.hpp"
 

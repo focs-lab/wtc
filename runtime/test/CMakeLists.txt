@@ -342,7 +342,9 @@ endif()
 # that run a section inline, results and writes coming back, each client's
 # order, a section that reaches another delegated one, one server per
 # mutex, clients and servers asleep between sections, and short-lived
-# clients whose waiters later threads take over.
+# clients whose waiters later threads take over. These run with every
+# section delegated (WTC_DELEGATE_MODE=always), and those that do not
+# depend on it again in the default, adaptive, mode (delegate_adaptive_*).
 add_executable(delegate_test delegate_test.cpp ../../shim/delegate.cpp)
 target_link_libraries(delegate_test PRIVATE wtc_rt_flags)
 if(WTC_RT_SANITIZE)
@@ -354,24 +356,64 @@ else()
   set(delegate_park 2000)
   set(delegate_churn 200)
 endif()
-add_test(NAME delegate_exclusion COMMAND delegate_test exclusion ${delegate_n})
-add_test(NAME delegate_results COMMAND delegate_test results)
-add_test(NAME delegate_order COMMAND delegate_test order ${delegate_n})
-add_test(NAME delegate_nested COMMAND delegate_test nested)
-add_test(NAME delegate_servers COMMAND delegate_test servers ${delegate_n})
+set(delegate_always)
+set(delegate_adaptive)
+foreach(mode exclusion order servers)
+  add_test(NAME delegate_${mode} COMMAND delegate_test ${mode} ${delegate_n})
+  list(APPEND delegate_always delegate_${mode})
+endforeach()
 add_test(NAME delegate_park COMMAND delegate_test park ${delegate_park})
 add_test(NAME delegate_churn COMMAND delegate_test churn ${delegate_churn})
+list(APPEND delegate_always delegate_park delegate_churn)
 # The servers' lives and how they are started: they end with the last
 # client (and a main that ends with pthread_exit ends the process), at most
 # four run, they block every signal, have their starting client's stack,
 # start afresh in a fork's child, and a section from a thread-local
 # destructor after the thread stopped being a client runs on it.
-foreach(mode ends cap signals stack fork tls_exit errno)
+foreach(mode results nested ends cap signals stack fork tls_exit errno)
   add_test(NAME delegate_${mode} COMMAND delegate_test ${mode})
+  list(APPEND delegate_always delegate_${mode})
 endforeach()
-set_tests_properties(delegate_exclusion delegate_order delegate_servers delegate_park delegate_churn
-                     delegate_ends delegate_cap delegate_signals delegate_stack delegate_fork
-                     delegate_tls_exit delegate_errno PROPERTIES TIMEOUT 300)
+foreach(mode exclusion order)
+  add_test(NAME delegate_adaptive_${mode} COMMAND delegate_test ${mode} ${delegate_n})
+  list(APPEND delegate_adaptive delegate_adaptive_${mode})
+endforeach()
+add_test(NAME delegate_adaptive_results COMMAND delegate_test results)
+add_test(NAME delegate_adaptive_park COMMAND delegate_test park ${delegate_park})
+add_test(NAME delegate_adaptive_churn COMMAND delegate_test churn ${delegate_churn})
+list(APPEND delegate_adaptive delegate_adaptive_results delegate_adaptive_park delegate_adaptive_churn)
+# Where the adaptive runtime runs a section: a free mutex on its client
+# with no server; a contended one as written, then delegated once hot, then
+# as written again once cooled, its server started on the way and ending
+# with the clients; with WTC_DELEGATE_HOT_NS=0, every contended section
+# delegated; the three ways mixed with threads outside the runtime; a
+# fork's child starting cold; the gate's average at two counter rates and
+# with a threshold of 60 ns; a cooled mutex's server ending and its place
+# going to the next hot one, and a hot one that can have none turning
+# cold; gates for colliding mutexes, up to 512; a mutex contended 1% of
+# the time staying cold, also from a thread that goes between it and
+# another; and a mutex hot in a burst and then idle giving its server up.
+add_test(NAME delegate_free COMMAND delegate_test free ${delegate_n})
+add_test(NAME delegate_mix COMMAND delegate_test mix ${delegate_n})
+foreach(mode contended trylock fork_cold average small_hot slots gates rare rare_alt idle_hot)
+  add_test(NAME delegate_${mode} COMMAND delegate_test ${mode})
+  list(APPEND delegate_adaptive delegate_${mode})
+endforeach()
+list(APPEND delegate_adaptive delegate_free delegate_mix)
+set_property(TEST ${delegate_always} APPEND PROPERTY ENVIRONMENT "WTC_DELEGATE_MODE=always")
+set_property(TEST delegate_trylock APPEND PROPERTY ENVIRONMENT "WTC_DELEGATE_HOT_NS=0")
+set_property(TEST delegate_contended APPEND PROPERTY ENVIRONMENT "WTC_DELEGATE_EPOCH=4")
+set_property(TEST delegate_mix APPEND PROPERTY ENVIRONMENT "WTC_DELEGATE_HOT_NS=200;WTC_DELEGATE_EPOCH=256")
+set_property(TEST delegate_small_hot APPEND PROPERTY ENVIRONMENT "WTC_DELEGATE_HOT_NS=60")
+set_property(TEST delegate_slots APPEND PROPERTY ENVIRONMENT "WTC_DELEGATE_MAX_SERVERS=1;WTC_DELEGATE_EPOCH=64")
+set_property(TEST delegate_idle_hot APPEND PROPERTY ENVIRONMENT "WTC_DELEGATE_MAX_SERVERS=1")
+# The first section reads the environment: an out-of-range number there
+# leaves errno as it was.
+add_test(NAME delegate_adaptive_errno COMMAND delegate_test errno)
+set_property(TEST delegate_adaptive_errno APPEND PROPERTY ENVIRONMENT
+             "WTC_DELEGATE_HOT_NS=99999999999999999999999;WTC_DELEGATE_EPOCH=99999999999999999999999")
+list(APPEND delegate_adaptive delegate_adaptive_errno)
+set_tests_properties(${delegate_always} ${delegate_adaptive} PROPERTIES TIMEOUT 300)
 # ThreadSanitizer's own runtime keeps a process whose main thread ended with
 # pthread_exit alive (a program with no server does the same), and refuses
 # to start a thread in the child of a multi-threaded fork unless told.
@@ -381,7 +423,9 @@ if(NOT WTC_RT_SANITIZE STREQUAL "thread")
   add_test(NAME delegate_fork_statics COMMAND delegate_test fork_statics)
   set_tests_properties(delegate_fork_statics PROPERTIES TIMEOUT 60)
   add_test(NAME delegate_main_exit COMMAND delegate_test main_exit)
-  set_tests_properties(delegate_main_exit PROPERTIES TIMEOUT 30 PASS_REGULAR_EXPRESSION "main_exit: ok")
+  add_test(NAME delegate_adaptive_main_exit COMMAND delegate_test main_exit)
+  set_tests_properties(delegate_main_exit delegate_adaptive_main_exit PROPERTIES TIMEOUT 30 PASS_REGULAR_EXPRESSION "main_exit: ok")
+  set_property(TEST delegate_main_exit APPEND PROPERTY ENVIRONMENT "WTC_DELEGATE_MODE=always")
 else()
-  set_tests_properties(delegate_fork PROPERTIES ENVIRONMENT "TSAN_OPTIONS=die_after_fork=0")
+  set_property(TEST delegate_fork delegate_fork_cold APPEND PROPERTY ENVIRONMENT "TSAN_OPTIONS=die_after_fork=0")
 endif()

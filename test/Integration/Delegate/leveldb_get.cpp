@@ -18,17 +18,20 @@
 // written with, a sixth of their keys never written, so that misses run
 // down the version's seeks and schedule compactions; a writer adds keys;
 // the objects' count must come back to the memtable and version alive at
-// the end. Run as written, delegated,
-// and delegated under ThreadSanitizer.
+// the end. Run as written, delegated (every section, and by the adaptive
+// runtime's choice), and delegated under ThreadSanitizer the same two
+// ways.
 //
 // RUN: %wtc_cc -O1 -fno-exceptions %s -o %t.plain.exe 2>&1 | FileCheck %s --allow-empty --check-prefix=PLAIN
 // RUN: %t.plain.exe | FileCheck %s
 // RUN: %wtc_cc -O1 -fno-exceptions --delegate DB::mutex_ --delegate-assume-uniform-threads %s -o %t.exe 2>&1 | FileCheck %s --check-prefix=BUILD
-// RUN: env WTC_DELEGATE_REPORT=1 %t.exe 2>&1 | FileCheck %s --check-prefixes=CHECK,SERVED
+// RUN: env WTC_DELEGATE_REPORT=1 WTC_DELEGATE_MODE=always %t.exe 2>&1 | FileCheck %s --check-prefixes=CHECK,SERVED
+// RUN: env WTC_DELEGATE_REPORT=1 %t.exe 2>&1 | FileCheck %s --check-prefixes=CHECK,ADAPT
 // RUN: %wtc_cc -O1 -fno-exceptions --delegate DB::mutex_ %s -o %t.strict.exe 2>&1 | FileCheck %s --check-prefix=STRICT
 // RUN: %t.strict.exe | FileCheck %s
 // RUN: %if tsan %{ %wtc_cc --tsan -O1 -g -fno-exceptions --delegate DB::mutex_ --delegate-assume-uniform-threads %s -o %t.tsan.exe 2>&1 | FileCheck %s --check-prefix=BUILD %}
-// RUN: %if tsan %{ env TSAN_OPTIONS=halt_on_error=1:symbolize=0 WTC_DELEGATE_REPORT=1 %t.tsan.exe 2>&1 | FileCheck %s --check-prefixes=TSAN,CHECK,SERVED %}
+// RUN: %if tsan %{ env TSAN_OPTIONS=halt_on_error=1:symbolize=0 WTC_DELEGATE_REPORT=1 WTC_DELEGATE_MODE=always %t.tsan.exe 2>&1 | FileCheck %s --check-prefixes=TSAN,CHECK,SERVED %}
+// RUN: %if tsan %{ env TSAN_OPTIONS=halt_on_error=1:symbolize=0 WTC_DELEGATE_REPORT=1 %t.tsan.exe 2>&1 | FileCheck %s --check-prefixes=TSAN,CHECK,ADAPT %}
 //
 // PLAIN-NOT: delegated section
 // BUILD-DAG: remark: wtc: delegated section DB::Get #1 on DB::mutex_ delegated
@@ -40,6 +43,7 @@
 // TSAN-NOT: ThreadSanitizer
 // CHECK: errors 0 live 2
 // SERVED: wtc-delegate: server 0 ran {{[1-9][0-9]*}} sections
+// ADAPT: wtc-delegate: clients: {{[1-9][0-9]*}} sections, free={{[0-9]+}} contended={{[0-9]+}} delegated={{[0-9]+}}
 
 #include <condition_variable>
 #include <cstdio>

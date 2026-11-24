@@ -1,21 +1,25 @@
 // A C program's global pthread mutex, delegated through the whole pipeline:
 // four threads add through a section the pass delegates, one through a
 // section it refuses (the section reads errno) and which runs under the
-// mutex as written, and the sums are exact. Run as written, delegated, and
-// delegated under ThreadSanitizer.
+// mutex as written, and the sums are exact. Run as written, delegated
+// (every section, and by the adaptive runtime's choice), and delegated
+// under ThreadSanitizer the same two ways.
 //
 // RUN: %wtc_cc -O1 %s -o %t.plain.exe
 // RUN: %t.plain.exe | FileCheck %s
 // RUN: %wtc_cc -O1 --delegate lock %s -o %t.exe 2>&1 | FileCheck %s --check-prefix=BUILD
-// RUN: env WTC_DELEGATE_REPORT=1 %t.exe 2>&1 | FileCheck %s --check-prefixes=CHECK,SERVED
+// RUN: env WTC_DELEGATE_REPORT=1 WTC_DELEGATE_MODE=always %t.exe 2>&1 | FileCheck %s --check-prefixes=CHECK,SERVED
+// RUN: env WTC_DELEGATE_REPORT=1 %t.exe 2>&1 | FileCheck %s --check-prefixes=CHECK,ADAPT
 // RUN: %if tsan %{ %wtc_cc --tsan -O1 -g --delegate lock %s -o %t.tsan.exe 2>&1 | FileCheck %s --check-prefix=BUILD %}
-// RUN: %if tsan %{ env TSAN_OPTIONS=halt_on_error=1:symbolize=0 %t.tsan.exe 2>&1 | FileCheck %s --check-prefixes=TSAN,CHECK %}
+// RUN: %if tsan %{ env TSAN_OPTIONS=halt_on_error=1:symbolize=0 WTC_DELEGATE_MODE=always %t.tsan.exe 2>&1 | FileCheck %s --check-prefixes=TSAN,CHECK %}
+// RUN: %if tsan %{ env TSAN_OPTIONS=halt_on_error=1:symbolize=0 WTC_DELEGATE_REPORT=1 %t.tsan.exe 2>&1 | FileCheck %s --check-prefixes=TSAN,CHECK,ADAPT %}
 //
 // BUILD-DAG: remark: wtc: delegated section add #1 on lock delegated
 // BUILD-DAG: remark: wtc: delegated section add_noting_errno #1 on lock not delegated: (a) depends on the thread that runs it: it calls __errno_location
 // TSAN-NOT: ThreadSanitizer
 // CHECK: total 25600250000 count 500000 ok 1
 // SERVED: wtc-delegate: server 0 ran 400000 sections
+// ADAPT: wtc-delegate: clients: 400000 sections, free={{[0-9]+}} contended={{[0-9]+}} delegated={{[0-9]+}}
 
 #include <errno.h>
 #include <pthread.h>
