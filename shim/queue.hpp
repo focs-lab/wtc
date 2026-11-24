@@ -62,7 +62,9 @@ using wait_policy = rt::wait_policy;
 // A pop runs the element's move (and, for try_pop(T&), the destructor of
 // the object it moves into) while the queue still holds the cell, so the
 // element type's move, copy and destructor may push to a wtc::queue but
-// must not pop from one (runtime/hazard.hpp, kPopSlot).
+// must not pop from one (runtime/hazard.hpp, kPopSlot); a push runs them
+// too, and pushes may nest so up to four deep inside one push, one inside
+// another, the fifth aborting (runtime/hazard.hpp, kNestedPushes).
 //
 // A run of pushes from one producer can be batched: batch_begin, then
 // push_deferred for each element, then batch_end. The elements become

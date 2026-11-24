@@ -152,8 +152,9 @@ then found still the head) cannot have been freed, so it cannot have been
 reused at the same address and become the head again, and finding it the
 head now means it is still the head and still protected. The slot is held
 continuously only if nothing else writes it between the two pops and
-during the taker. Pushes use the other slot (`hazard::kPushSlot`) on every
-queue, so a push from the taker (the element's move, or the destructor of
+during the taker. Pushes use other slots (`hazard::push_slot`, one per
+level of pushes nested in elements' code) on every queue, so a push from
+the taker (the element's move, or the destructor of
 the object it is moved over) leaves the pop's slot alone; a pop from the
 taker would overwrite it, and the element type's move, copy and destructor
 must therefore not pop from a queue, the rule the general-purpose queue

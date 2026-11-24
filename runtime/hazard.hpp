@@ -84,18 +84,77 @@
 
 namespace wtc::rt::hazard {
 
-constexpr unsigned kSlots = 2;
 // Which slot each queue operation protects its segment with, the same on
-// every queue: pushes use kPushSlot, pops kPopSlot. A pop runs the
+// every queue: pops use kPopSlot, pushes a push_slot. A pop runs the
 // program's code while it still needs its segment -- the taker, which moves
-// the element out and may destroy the destination's old value -- and that
-// code may push to any queue: a push never touches the pop's slot, so it
-// cannot unprotect the segment under the pop. A pop inside another pop's
-// taker would overwrite the slot and is not allowed (the shim states it as
-// a rule of the element type: its move, copy and destructor may push to a
-// wtc::queue but not pop from one).
-constexpr unsigned kPushSlot = 0;
-constexpr unsigned kPopSlot = 1;
+// the element out and may destroy the destination's old value -- and a
+// push runs it too, constructing its elements in their cells; that code
+// may push to any queue. A push never touches the pop's slot, so it cannot
+// unprotect the segment under the pop, and each push nested inside another
+// push's code takes the next of the push slots, so it cannot unprotect the
+// outer push's segment either (it used to share one slot, and clear it on
+// its way out under the outer push, which could then link a segment
+// through a freed one). There is a slot for an outer push and for up to
+// kNestedPushes pushes nested in it, one inside another; a push nested
+// deeper aborts. A pop inside another pop's taker would overwrite the pop slot
+// and is not allowed (the shim states it as a rule of the element type:
+// its move, copy and destructor may push to a wtc::queue but not pop from
+// one).
+//
+// A push of elements that are trivially copyable runs no element code, so
+// no push can be nested inside it: it takes a slot of its own, the last
+// (leaf_push_slot), with no depth to keep. It may itself be nested in
+// another push's or a pop's code, which hold other slots. Keeping the
+// depth cost such pushes, the most common, up to a fifth of a queue's
+// throughput.
+constexpr unsigned kPopSlot = 0;
+constexpr unsigned kNestedPushes = 4;
+constexpr unsigned kPushSlots = 1 + kNestedPushes;
+constexpr unsigned kLeafPushSlot = 1 + kPushSlots;
+constexpr unsigned kSlots = 2 + kPushSlots;
+
+struct record;
+inline void clear(record& r, unsigned i);
+inline unsigned& push_depth(record& r);
+
+// The slot of a push, for as long as the push lasts: the next push slot
+// of this thread.
+class push_slot {
+public:
+    explicit push_slot(record& r) : r_(r), slot_(1 + push_depth(r)) {
+        if (slot_ == 1 + kPushSlots) {
+            std::fprintf(stderr, "wtc: a push nested more than %u deep in elements' code run by pushes\n",
+                         kNestedPushes);
+            std::abort();
+        }
+        ++push_depth(r_);
+    }
+    ~push_slot() { --push_depth(r_); }
+    push_slot(const push_slot&) = delete;
+    push_slot& operator=(const push_slot&) = delete;
+    operator unsigned() const { return slot_; }
+
+private:
+    record& r_;
+    const unsigned slot_;
+};
+
+// The slot of a push whose elements run no code (see above).
+class leaf_push_slot {
+public:
+    explicit leaf_push_slot(record& r) : r_(r) {}
+    ~leaf_push_slot() { clear(r_, kLeafPushSlot); }
+    leaf_push_slot(const leaf_push_slot&) = delete;
+    leaf_push_slot& operator=(const leaf_push_slot&) = delete;
+    operator unsigned() const { return kLeafPushSlot; }
+
+private:
+    record& r_;
+};
+
+// The slot a push of Slot takes.
+template <class Slot>
+using push_slot_for = std::conditional_t<std::is_trivially_copyable_v<Slot>, leaf_push_slot, push_slot>;
 // A scan reads every record's slots, so it waits for this many retired
 // nodes. The queues retire one segment per thousand-odd elements, so the
 // nodes waiting are a few segments at most. Tests lower it, so that a node
@@ -135,6 +194,10 @@ constexpr unsigned kChunk = WTC_HAZARD_CHUNK;
 // Lines of its own: a reader's slot store does not take a neighbour's line.
 struct alignas(64) record {
     std::atomic<void*> slot[kSlots];
+    // Its holder's pushes in progress, one inside another's code
+    // (push_slot): kept here, in the slots' line, which the push writes
+    // anyway, rather than in a thread_local of its own.
+    unsigned push_depth = 0;
     // With a queue's mark in slot i, the count of that queue's retires
     // when the mark was published (protect_all).
     std::atomic<std::uint64_t> mark_seq[kSlots];
@@ -322,6 +385,7 @@ inline void after_fork() {
     for_each_record([](record& r) {
         if (&r == t_record || &r == t_untied || !r.active.load(std::memory_order_relaxed)) return;
         for (auto& s : r.slot) s.store(nullptr, std::memory_order_relaxed);
+        r.push_depth = 0;  // its holder may have been inside a push
         r.token.store(0, std::memory_order_release);
         r.active.store(false, std::memory_order_release);
     });
@@ -490,6 +554,7 @@ inline void protect_all(record& r, unsigned i, const void* domain, std::uint64_t
 }
 
 inline void clear(record& r, unsigned i) { r.slot[i].store(nullptr, std::memory_order_release); }
+inline unsigned& push_depth(record& r) { return r.push_depth; }
 
 // The node of an object that is retired: the object itself where it
 // derives from node, otherwise its member hp, which the object places

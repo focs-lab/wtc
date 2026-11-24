@@ -38,6 +38,18 @@
 //             the consumer retires three segments, then another held with
 //             its own while the consumer retires more: the scans under the
 //             second free the segments retired before its count.
+//   nested    a general-purpose push of a batch whose first element's move
+//             pushes to another queue, and whose third is held in its move
+//             on its way to a new segment, while another push links the
+//             next segment and pops drain the first and retire it: the
+//             nested push has its own slot, so the outer push's segment
+//             stays protected; with one shared slot it was freed under the
+//             outer push, which then linked its new segment through it:
+//             built as hazard_zero_test, which scans at every retire and
+//             zeroes freed memory, that link succeeds and the elements it
+//             carries are lost.
+//   deep      pushes nested in elements' moves, one inside another: four
+//             inside an outer push are fine, the fifth aborts.
 //   producers P N  P producers pushing N elements each, single and in
 //             runs, to the single-consumer queue the main thread drains:
 //             every element once, in its producer's order. Built as
@@ -57,6 +69,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -70,11 +83,17 @@
 #include "segment_queue.hpp"
 
 #ifdef WTC_TEST_POISON_FREED
-// Freed memory overwritten, so that a read of a freed segment shows. The
-// empty asm keeps the compiler from dropping the stores as dead.
+// Freed memory overwritten, so that a read of a freed segment shows, with
+// 0xdb (pointers that fault) or with WTC_TEST_POISON_BYTE (0: a freed
+// segment then looks like the last one, and a push that links through it
+// loses what it links). The empty asm keeps the compiler from dropping the
+// stores as dead.
+#ifndef WTC_TEST_POISON_BYTE
+#define WTC_TEST_POISON_BYTE 0xdb
+#endif
 void operator delete(void* p) noexcept {
   if (p) {
-    std::memset(p, 0xdb, malloc_usable_size(p));
+    std::memset(p, WTC_TEST_POISON_BYTE, malloc_usable_size(p));
     __asm__ __volatile__("" : : "r"(p) : "memory");
   }
   std::free(p);
@@ -324,6 +343,95 @@ void tail() {
   std::printf("tail: a segment retired while the tail named it, then 36 pushes and pops\n");
 }
 
+// The nested test's elements: 102's move pushes to another queue, 104's
+// is held until the test lets it go.
+std::atomic<bool> g_nest_armed{false}, g_nest_inside{false}, g_nest_go{false};
+wtc::rt::segment_queue<int, true, 4>* g_nest_other = nullptr;
+struct nest_elem {
+  int v = 0;
+  nest_elem() = default;
+  explicit nest_elem(int x) : v(x) {}
+  nest_elem(nest_elem&& o) noexcept : v(o.v) {
+    if (!g_nest_armed.load()) return;
+    if (v == 102) g_nest_other->push(1);
+    if (v == 104) {
+      g_nest_inside.store(true);
+      while (!g_nest_go.load()) std::this_thread::yield();
+    }
+  }
+  nest_elem& operator=(nest_elem&& o) noexcept {
+    v = o.v;
+    return *this;
+  }
+};
+
+void nested() {
+  wtc::rt::segment_queue<int, true, 4> other;
+  g_nest_other = &other;
+  wtc::rt::segment_queue<nest_elem, true, 4> q;
+  q.push(nest_elem(0));
+  q.push(nest_elem(1));
+  std::thread p([&] {
+    nest_elem run[4] = {nest_elem(102), nest_elem(103), nest_elem(104), nest_elem(105)};
+    g_nest_armed.store(true);
+    q.push_run(run, 4);  // cells 2 and 3, then a new segment for 104 and 105
+  });
+  while (!g_nest_inside.load()) std::this_thread::yield();
+  g_nest_armed.store(false);
+  q.push(nest_elem(7));  // links the next segment first
+  nest_elem out;
+  std::vector<int> got;
+  for (int k = 0; k < 5; ++k)
+    if (q.try_pop(out)) got.push_back(out.v);
+  for (int i = 0; i < 16; ++i) {  // more retires and scans
+    q.push(nest_elem(200 + i));
+    if (q.try_pop(out)) got.push_back(out.v);
+  }
+  g_nest_go.store(true);
+  p.join();
+  while (q.try_pop(out)) got.push_back(out.v);
+  int v = 0;
+  EXPECT(other.try_pop(v) && v == 1);
+  // Every element once: 0 1 102 103, 7, 200..215, 104 105.
+  std::vector<int> want = {0, 1, 102, 103, 7, 104, 105};
+  for (int i = 0; i < 16; ++i) want.push_back(200 + i);
+  std::sort(got.begin(), got.end());
+  std::sort(want.begin(), want.end());
+  std::printf("nested: %zu elements popped, %s\n", got.size(), got == want ? "each once" : "NOT each once");
+  EXPECT(got == want);
+}
+
+// A push in a move, in a move, ...: the fifth nested push has no slot.
+wtc::rt::segment_queue<struct deep_elem, true, 4>* g_deep = nullptr;
+struct deep_elem {
+  int depth = 0;
+  deep_elem() = default;
+  explicit deep_elem(int d) : depth(d) {}
+  // Only the move into a cell pushes: the element pushed is built in
+  // place, not moved, on its way in.
+  deep_elem(deep_elem&& o) noexcept : depth(o.depth) {
+    if (depth == 0) return;
+    deep_elem inner(depth - 1);
+    g_deep->push_run(&inner, 1);
+  }
+  deep_elem& operator=(deep_elem&& o) noexcept {
+    depth = o.depth;
+    return *this;
+  }
+};
+
+void deep() {
+  wtc::rt::segment_queue<deep_elem, true, 4> q;
+  g_deep = &q;
+  deep_elem four(4);
+  q.push_run(&four, 1);  // a push and four nested in it: fine
+  std::printf("deep: four nested pushes done\n");
+  std::fflush(stdout);
+  deep_elem five(5);
+  q.push_run(&five, 1);  // five nested: aborts
+  std::printf("deep: five nested pushes done\n");
+}
+
 void overlap(unsigned p, int secs) {
   wtc::rt::segment_queue<int, false, 64, 64, wtc::rt::no_hooks, kOne> q;
   std::atomic<bool> stop{false};
@@ -488,6 +596,8 @@ int main(int argc, char** argv) {
   else if (!std::strcmp(mode, "relay")) relay();
   else if (!std::strcmp(mode, "overlap"))
     overlap(argc > 2 ? static_cast<unsigned>(std::atoi(argv[2])) : 8, argc > 3 ? std::atoi(argv[3]) : 2);
+  else if (!std::strcmp(mode, "nested")) nested();
+  else if (!std::strcmp(mode, "deep")) deep();
   else if (!std::strcmp(mode, "producers"))
     producers(argc > 2 ? static_cast<unsigned>(std::atoi(argv[2])) : 4, argc > 3 ? std::atol(argv[3]) : 100000);
   else {

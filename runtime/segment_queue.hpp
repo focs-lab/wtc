@@ -139,7 +139,7 @@ class segment_queue {
     // it. kTaken: the single consumer took the element out of order (see
     // pop_one), and its in-order walk passes the cell when it gets there.
     enum : std::uint32_t { kEmpty = 0, kFull = 1, kSkipped = 2, kTaken = 3 };
-    enum : unsigned { kTail = hazard::kPushSlot, kHead = hazard::kPopSlot };
+    enum : unsigned { kHead = hazard::kPopSlot };
     // How long a pop waits, in pause instructions, for a push to reserve
     // the cell it took before it skips the cell.
     static constexpr unsigned kPatience = 64;
@@ -270,9 +270,10 @@ class segment_queue {
         }
         const hazard::use rec;
         hazard::record& hp = rec;
+        const hazard::push_slot_for<Slot> tail_slot(hp);
         std::size_t k = 0;
         while (k < n) {
-            segment* t = hazard::protect(hp, kTail, tail_);
+            segment* t = hazard::protect(hp, tail_slot, tail_);
             std::uint64_t want = n - k;
             std::uint64_t i = t->enq.fetch_add(want, std::memory_order_relaxed);
             Hooks::reserved();
@@ -339,7 +340,7 @@ class segment_queue {
             tail_.compare_exchange_strong(t, next, std::memory_order_release,
                                           std::memory_order_relaxed);
         }
-        hazard::clear(hp, kTail);
+        hazard::clear(hp, tail_slot);
     }
 
     // Pops the oldest element into f, which is called once, with the
@@ -416,16 +417,17 @@ class segment_queue {
     void push_one(Slot* first, std::size_t n) {
         const hazard::use rec;
         hazard::record& hp = rec;
-        segment* t = hazard::try_protect(hp, kTail, tail_, kProtectTries);
+        const hazard::push_slot_for<Slot> tail_slot(hp);
+        segment* t = hazard::try_protect(hp, tail_slot, tail_, kProtectTries);
         const std::uint64_t i = counters_.enq.fetch_add(n, std::memory_order_seq_cst);
         Hooks::reserved();
         bool all = false;
-        if (!t) t = hold_all(hp, all);
+        if (!t) t = hold_all(hp, tail_slot, all);
         std::size_t k = 0;
         while (k < n) {
             const std::uint64_t j = i + k;
-            segment* s = locate(hp, t, j, all);
-            hazard::clear(hp, kTail);
+            segment* s = locate(hp, tail_slot, t, j, all);
+            hazard::clear(hp, tail_slot);
             all = false;
             std::uint64_t c = j - s->base;
             // The second cell's push links the next segment, while its own
@@ -437,7 +439,7 @@ class segment_queue {
             }
             // The rest of a batch is in later segments; s may be freed
             // once its cells are taken, so start again from the tail.
-            if (k < n) t = read_tail(hp, all);
+            if (k < n) t = read_tail(hp, tail_slot, all);
         }
     }
 
@@ -452,20 +454,20 @@ class segment_queue {
     // The tail, protected: by the push slot if one of kProtectTries reloads
     // finds it unchanged, otherwise by holding every segment of this queue.
     // Only after the push has taken its index.
-    segment* read_tail(hazard::record& hp, bool& all) {
+    segment* read_tail(hazard::record& hp, unsigned tail_slot, bool& all) {
         if (all) return tail_.load(std::memory_order_seq_cst);
-        if (segment* t = hazard::try_protect(hp, kTail, tail_, kProtectTries)) return t;
-        return hold_all(hp, all);
+        if (segment* t = hazard::try_protect(hp, tail_slot, tail_, kProtectTries)) return t;
+        return hold_all(hp, tail_slot, all);
     }
-    segment* hold_all(hazard::record& hp, bool& all) {
-        hazard::protect_all(hp, kTail, this, counters_.retires.load(std::memory_order_seq_cst));
+    segment* hold_all(hazard::record& hp, unsigned tail_slot, bool& all) {
+        hazard::protect_all(hp, tail_slot, this, counters_.retires.load(std::memory_order_seq_cst));
         all = true;
         return tail_.load(std::memory_order_seq_cst);
     }
 
     // The segment that holds index j, found from the protected tail t; t is
     // left protected, at wherever the tail was last read.
-    segment* locate(hazard::record& hp, segment*& t, std::uint64_t j, bool& all) {
+    segment* locate(hazard::record& hp, unsigned tail_slot, segment*& t, std::uint64_t j, bool& all) {
         for (;;) {
             if (j >= t->base + kSegment) {
                 segment* next = t->next.load(std::memory_order_acquire);
@@ -473,7 +475,7 @@ class segment_queue {
                 Hooks::segment_step(1);
                 segment* expected = t;
                 tail_.compare_exchange_strong(expected, next, std::memory_order_seq_cst);
-                t = read_tail(hp, all);
+                t = read_tail(hp, tail_slot, all);
                 continue;
             }
             // Behind the tail: back through prev, every segment from here

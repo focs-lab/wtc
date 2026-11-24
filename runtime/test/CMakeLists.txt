@@ -639,6 +639,10 @@ if(WTC_RT_SANITIZE STREQUAL "thread")
 endif()
 add_test(NAME hazard_stalled COMMAND hazard_test stalled)
 add_test(NAME hazard_tail COMMAND hazard_test tail)
+add_test(NAME hazard_nested COMMAND hazard_test nested)
+# Four nested pushes must work and the fifth abort.
+add_test(NAME hazard_deep_is_caught
+         COMMAND sh -c "o=$($<TARGET_FILE:hazard_test> deep 2>&1); echo \"$o\" | grep -q 'four nested pushes done' && echo \"$o\" | grep -q 'a push nested more than 4 deep'")
 add_test(NAME hazard_producers COMMAND hazard_test producers 4 100000)
 set_tests_properties(hazard_churn hazard_producers PROPERTIES TIMEOUT 600)
 # The same with a scan at every retire and freed memory overwritten, so
@@ -653,12 +657,22 @@ foreach(v eager jiffy all)
     target_compile_definitions(hazard_${v}_test PRIVATE WTC_TEST_POISON_FREED=1)
   endif()
   add_test(NAME hazard_${v}_tail COMMAND hazard_${v}_test tail)
+  add_test(NAME hazard_${v}_nested COMMAND hazard_${v}_test nested)
   add_test(NAME hazard_${v}_churn COMMAND hazard_${v}_test churn 2000)
   add_test(NAME hazard_${v}_producers COMMAND hazard_${v}_test producers 4 100000)
   set_tests_properties(hazard_${v}_churn hazard_${v}_producers PROPERTIES TIMEOUT 600)
 endforeach()
 target_compile_definitions(hazard_jiffy_test PRIVATE WTC_TEST_ONE_COUNTER=1)
 target_compile_definitions(hazard_all_test PRIVATE WTC_TEST_PROTECT_TRIES=0 WTC_TEST_ONE_COUNTER=1)
+# A push nested in an element's move, with freed memory zeroed: a push
+# that went on through a segment freed under it would lose elements.
+add_executable(hazard_zero_test hazard_test.cpp)
+target_link_libraries(hazard_zero_test PRIVATE wtc_rt_flags)
+target_compile_definitions(hazard_zero_test PRIVATE WTC_HAZARD_SCAN_AT=1)
+if(NOT WTC_RT_SANITIZE)
+  target_compile_definitions(hazard_zero_test PRIVATE WTC_TEST_POISON_FREED=1 WTC_TEST_POISON_BYTE=0)
+endif()
+add_test(NAME hazard_zero_nested COMMAND hazard_zero_test nested)
 add_test(NAME hazard_all_pin COMMAND hazard_all_test pin)
 add_test(NAME hazard_all_relay COMMAND hazard_all_test relay)
 if(NOT WTC_RT_SANITIZE)  # timed, and needs the threads to overlap
