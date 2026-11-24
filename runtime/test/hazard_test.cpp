@@ -24,6 +24,31 @@
 //             retire (WTC_HAZARD_SCAN_AT=1) and freed memory is
 //             overwritten, so that such a push crashes; with the usual
 //             threshold the segment outlives the window.
+//   overlap P S  in hazard_all_test (scans at every retire, every push
+//             marking): P producers push for S seconds while the main
+//             thread pops, the producers keeping the backlog under 4096
+//             elements; the marks of pushes overlap at nearly every
+//             scan, and the consumer's list of retired segments stays
+//             within the queue's backlog, not its history: a scan keeps
+//             only those retired since the oldest mark's count, which lie
+//             below that mark's push's index. A producer preempted while
+//             it holds its mark (more threads than processors) makes that
+//             the whole backlog of the moment it took its index.
+//   relay     in hazard_all_test: a push held with the queue's mark while
+//             the consumer retires three segments, then another held with
+//             its own while the consumer retires more: the scans under the
+//             second free the segments retired before its count.
+//   producers P N  P producers pushing N elements each, single and in
+//             runs, to the single-consumer queue the main thread drains:
+//             every element once, in its producer's order. Built as
+//             hazard_all_test too, with no try at protecting the tail
+//             (WTC_TEST_PROTECT_TRIES=0), so that every push marks its
+//             queue's segments to be kept instead (hazard::protect_all),
+//             scans at every retire, and freed memory overwritten.
+//   pin       in hazard_all_test: a push of one queue held while it marks
+//             that queue's segments, and another queue's thousands of
+//             segments pushed through and retired meanwhile: they are
+//             freed, as the mark is the first queue's alone.
 //   stalled   a pop held after protecting a segment while another thread
 //             moves the head on and retires fifty segments: the held
 //             segment survives, and the retiring thread keeps at most
@@ -33,6 +58,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -58,6 +84,13 @@ void operator delete(void* p, std::align_val_t) noexcept { operator delete(p); }
 void operator delete(void* p, std::size_t, std::align_val_t) noexcept { operator delete(p); }
 #endif
 
+// WTC_TEST_ONE_COUNTER: the single-consumer queues take the one-counter
+// push (the shim's jiffy).
+#ifndef WTC_TEST_ONE_COUNTER
+#define WTC_TEST_ONE_COUNTER 0
+#endif
+constexpr bool kOne = WTC_TEST_ONE_COUNTER;
+
 namespace {
 int failures = 0;
 
@@ -75,7 +108,7 @@ void churn(long n) {
   // Eight cells a segment: segments are retired all the time, by threads
   // that then exit with some of them still in their records.
   wtc::rt::segment_queue<std::uint64_t, true, 8> g;
-  wtc::rt::segment_queue<std::uint64_t, false, 8> m;
+  wtc::rt::segment_queue<std::uint64_t, false, 8, 64, wtc::rt::no_hooks, kOne> m;
   std::atomic<long> popped{0};
   std::uint64_t sum_in = 0, sum_out = 0;
   long got = 0;
@@ -157,7 +190,7 @@ void stalled() {
 pthread_key_t g_late_key;
 long g_late_round = 4;
 wtc::rt::segment_queue<std::uint64_t, true, 8>* g_late_g = nullptr;
-wtc::rt::segment_queue<std::uint64_t, false, 8>* g_late_m = nullptr;
+wtc::rt::segment_queue<std::uint64_t, false, 8, 64, wtc::rt::no_hooks, kOne>* g_late_m = nullptr;
 void late_dtor(void* p) {
   const long round = reinterpret_cast<long>(p);
   if (round == g_late_round) {
@@ -171,7 +204,7 @@ void late_dtor(void* p) {
 
 void late() {
   wtc::rt::segment_queue<std::uint64_t, true, 8> g;
-  wtc::rt::segment_queue<std::uint64_t, false, 8> m;
+  wtc::rt::segment_queue<std::uint64_t, false, 8, 64, wtc::rt::no_hooks, kOne> m;
   g_late_g = &g;
   g_late_m = &m;
   EXPECT(pthread_key_create(&g_late_key, late_dtor) == 0);
@@ -240,7 +273,7 @@ void late_two() {
 }
 
 void forked() {
-  wtc::rt::segment_queue<std::uint64_t, false> q;
+  wtc::rt::segment_queue<std::uint64_t, false, 1024, 64, wtc::rt::no_hooks, kOne> q;
   std::atomic<bool> stop{false};
   std::atomic<int> ready{0};
   std::vector<std::thread> holders;
@@ -277,7 +310,7 @@ void forked() {
 }
 
 void tail() {
-  wtc::rt::segment_queue<std::uint64_t, false, 4> q;
+  wtc::rt::segment_queue<std::uint64_t, false, 4, 64, wtc::rt::no_hooks, kOne> q;
   // Four cells in the first segment; the push of the second links the
   // next, and no push has gone past the first, so the tail stays there.
   for (std::uint64_t i = 0; i < 4; ++i) q.push(i);
@@ -291,6 +324,155 @@ void tail() {
   std::printf("tail: a segment retired while the tail named it, then 36 pushes and pops\n");
 }
 
+void overlap(unsigned p, int secs) {
+  wtc::rt::segment_queue<int, false, 64, 64, wtc::rt::no_hooks, kOne> q;
+  std::atomic<bool> stop{false};
+  std::vector<std::thread> ps;
+  // The producers keep the backlog under kBacklog elements, so that the
+  // list the marks may keep is bounded while the queue's history grows.
+  // pushed is counted before each push, so that pushed - pops is at least
+  // the backlog.
+  constexpr long kBacklog = 4096;
+  std::atomic<long> pushed{0}, popped{0};
+  for (unsigned t = 0; t < p; ++t)
+    ps.emplace_back([&] {
+      for (int k = 0; !stop.load(std::memory_order_relaxed); ++k) {
+        while (pushed.load(std::memory_order_relaxed) - popped.load(std::memory_order_relaxed) > kBacklog &&
+               !stop.load(std::memory_order_relaxed))
+          std::this_thread::yield();
+        pushed.fetch_add(1, std::memory_order_relaxed);
+        q.push(k);
+      }
+    });
+  wtc::rt::hazard::record& me = wtc::rt::hazard::mine();
+  std::size_t most = 0;
+  long pops = 0, backlog = 0;
+  const auto t0 = std::chrono::steady_clock::now();
+  while (std::chrono::steady_clock::now() - t0 < std::chrono::seconds(secs)) {
+    int v;
+    if (q.try_pop(v)) popped.store(++pops, std::memory_order_relaxed);
+    if (me.retired_count > most) most = me.retired_count;
+    const long b = pushed.load(std::memory_order_relaxed) - pops;
+    if (b > backlog) backlog = b;
+  }
+  stop = true;
+  for (auto& t : ps) t.join();
+  int v;
+  while (q.try_pop(v)) ++pops;
+  // The segments the largest backlog spanned, one more for its ends, and
+  // the segments the records' slots name.
+  const std::size_t bound = static_cast<std::size_t>(backlog / 64 + 2) + p + 1;
+  std::printf("overlap: %u producers, %ld pops (%ld segments), at most %zu segments waiting to be freed, "
+              "the backlog at most %ld elements (bound %zu)\n",
+              p, pops, pops / 64, most, backlog, bound);
+  EXPECT(most <= bound);
+}
+
+// A push of queue a held at its first step to a later segment, while it
+// holds a's mark (in hazard_all_test every push does); queue b's segments
+// are counted.
+std::atomic<bool> g_pin_at{false}, g_pin_go{false};
+thread_local bool t_pin = false;
+std::atomic<long> g_b_bodies{0};
+struct pin_hooks : wtc::rt::no_hooks {
+  static void segment_step(int) {
+    if (!t_pin) return;
+    t_pin = false;
+    g_pin_at.store(true);
+    while (!g_pin_go.load()) std::this_thread::yield();
+  }
+};
+struct count_hooks : wtc::rt::no_hooks {
+  static void body(int d) { g_b_bodies.fetch_add(d); }
+};
+
+void pin() {
+  wtc::rt::segment_queue<std::uint64_t, false, 4, 64, pin_hooks, kOne> a;
+  wtc::rt::segment_queue<std::uint64_t, false, 4, 64, count_hooks, kOne> b;
+  for (std::uint64_t i = 0; i < 4; ++i) a.push(i);  // the tail stays at the first segment
+  std::thread p([&] {
+    t_pin = true;
+    a.push(std::uint64_t{4});  // walks on to the second segment, and is held there
+  });
+  while (!g_pin_at.load()) std::this_thread::yield();
+  long most = 0;
+  std::uint64_t v = 0;
+  for (std::uint64_t i = 0; i < 40000; ++i) {
+    b.push(i);
+    EXPECT(b.try_pop(v) && v == i);
+    const long now = g_b_bodies.load();
+    if (now > most) most = now;
+  }
+  std::printf("pin: a push of one queue held with its mark; the other's segments alive at most %ld\n", most);
+  EXPECT(most <= 16);
+  g_pin_go.store(true);
+  p.join();
+  for (std::uint64_t i = 0; i < 5; ++i) EXPECT(a.try_pop(v) && v == i);
+}
+
+// A push held with the queue's mark while the consumer retires segments,
+// then another held with its own mark while the consumer retires more:
+// the segments retired under the first mark only are freed by the scans
+// under the second, which keep only what was retired after its count.
+void relay() {
+  wtc::rt::segment_queue<std::uint64_t, false, 4, 64, pin_hooks, kOne> q;
+  auto held_push = [&q](std::uint64_t x) {
+    g_pin_at = false;
+    g_pin_go = false;
+    std::thread t([&q, x] {
+      t_pin = true;
+      q.push(x);  // walks on to the next segment, and is held there with its mark
+    });
+    while (!g_pin_at.load()) std::this_thread::yield();
+    return t;
+  };
+  wtc::rt::hazard::record& me = wtc::rt::hazard::mine();
+  std::uint64_t v = 0;
+  for (std::uint64_t i = 0; i < 16; ++i) q.push(i);
+  std::thread a = held_push(16);
+  for (std::uint64_t i = 0; i < 16; ++i) EXPECT(q.try_pop(v) && v == i);
+  const std::size_t kept = me.retired_count;  // retired under the first mark
+  g_pin_go = true;
+  a.join();
+  for (std::uint64_t i = 17; i < 20; ++i) q.push(i);
+  std::thread b = held_push(20);
+  for (std::uint64_t i = 16; i < 20; ++i) EXPECT(q.try_pop(v) && v == i);
+  const std::size_t after = me.retired_count;
+  g_pin_go = true;
+  b.join();
+  EXPECT(q.try_pop(v) && v == 20);
+  std::printf("relay: %zu segments retired under the first mark, %zu waiting under the second\n", kept, after);
+  EXPECT(kept >= 3);
+  EXPECT(after <= 2);
+}
+
+void producers(unsigned p, long n) {
+  wtc::rt::segment_queue<std::uint64_t, false, 8, 64, wtc::rt::no_hooks, kOne> q;
+  std::vector<std::thread> ts;
+  for (unsigned t = 0; t < p; ++t)
+    ts.emplace_back([&, t] {
+      std::uint64_t run[3];
+      for (long s = 0; s < n;) {
+        const long k = (s % 5 == 0 && s + 3 <= n) ? 3 : 1;
+        for (long j = 0; j < k; ++j) run[j] = std::uint64_t{t} << 40 | static_cast<std::uint64_t>(s + j);
+        q.push_run(run, static_cast<std::size_t>(k));
+        s += k;
+      }
+    });
+  std::vector<long> next(p, 0);
+  long got = 0;
+  std::uint64_t v;
+  while (got < static_cast<long>(p) * n) {
+    if (!q.try_pop(v)) continue;
+    const unsigned t = static_cast<unsigned>(v >> 40);
+    EXPECT(t < p && static_cast<long>(v & ((std::uint64_t{1} << 40) - 1)) == next[t]);
+    if (t < p) ++next[t];
+    ++got;
+  }
+  for (auto& t : ts) t.join();
+  EXPECT(!q.try_pop(v));
+  std::printf("producers: %u producers, %ld elements each, every one once and in order\n", p, n);
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -302,6 +484,12 @@ int main(int argc, char** argv) {
   else if (!std::strcmp(mode, "late")) late();
   else if (!std::strcmp(mode, "late_two")) late_two();
   else if (!std::strcmp(mode, "tail")) tail();
+  else if (!std::strcmp(mode, "pin")) pin();
+  else if (!std::strcmp(mode, "relay")) relay();
+  else if (!std::strcmp(mode, "overlap"))
+    overlap(argc > 2 ? static_cast<unsigned>(std::atoi(argv[2])) : 8, argc > 3 ? std::atoi(argv[3]) : 2);
+  else if (!std::strcmp(mode, "producers"))
+    producers(argc > 2 ? static_cast<unsigned>(std::atoi(argv[2])) : 4, argc > 3 ? std::atol(argv[3]) : 100000);
   else {
     std::fprintf(stderr, "hazard_test: unknown mode %s\n", mode);
     return 2;

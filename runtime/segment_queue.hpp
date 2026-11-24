@@ -51,6 +51,37 @@
 // If a pop skipped one of them in the race described above, the cells after
 // it are given up and the rest of the batch is pushed again, so that no
 // element of the batch overtakes an earlier one.
+//
+// The single-consumer form's push is that push, lock-free: its index can
+// fall past its segment's end again and again while other pushes fill
+// whole segments between its steps. Built with kOneCounter (the shim's
+// jiffy tag), its push takes its index from one counter for the
+// whole queue instead, as "Jiffy: a fast, memory efficient, wait-free
+// multi-producers single-consumer queue" (arXiv 2010.14189) does: with the
+// segment's own counter, a push whose index fell past the segment's end
+// moved on and took another, and other pushes could fill a whole segment
+// between its two steps, so the moves had no bound in its own steps
+// (lock-free only). With one counter the index is final; the push then
+// finds the segment that holds it (push_one): forward from the tail,
+// linking segments that are not there yet, or back from it through the
+// segments' prev links when the tail has moved past it meanwhile. Index i
+// is cell i - base of the segment whose base is the multiple of kSegment
+// below it. Its steps: one fetch-and-add; each time it protects the tail,
+// at most kProtectTries + 1 reads of it, and then, rather than a
+// protection that can be made to retry for ever, one store that holds
+// this queue's segments and one more read (push_one); the segments between
+// the tail and its index, which only the pushes in flight put there (the
+// queue never holds a gap a finished push left); and the segments linked
+// after its fetch-and-add if it was preempted before it read the tail
+// again: wait-free, bounded by the pushes in flight when it is not
+// preempted, and in any case by the segments linked while it was. The
+// push of a segment's second cell links the next segment, so that most
+// pushes that cross into one find it already there. It is a form of its
+// own, not the default, because it costs: with several producers the
+// consumer meets cells taken and not yet filled more often and stays in
+// its out-of-order path (0.54-0.72 of the default's throughput at two to
+// eight producers, one machine of two), so it is what a program gets only
+// where a path requires the push to be wait-free.
 #pragma once
 
 #include <atomic>
@@ -92,11 +123,15 @@ struct no_hooks {
     static void look() {}
     // In the single consumer's pop, when it retires a segment.
     static void retire() {}
+    // In the single-consumer form's push, at each segment it moves through
+    // on its way to its index's: forward (1) or back (-1).
+    static void segment_step(int) {}
 };
 
 template <class Slot, bool kManyConsumers = true, unsigned kSegment = 1024, unsigned kLine = 64,
-          class Hooks = no_hooks>
+          class Hooks = no_hooks, bool kOneCounter = false>
 class segment_queue {
+    static_assert(!kOneCounter || !kManyConsumers, "the one-counter push is the single-consumer form's");
     // kSkipped: a multi-consumer pop passed the cell before any push took
     // it. kTaken: the single consumer took the element out of order (see
     // pop_one), and its in-order walk passes the cell when it gets there.
@@ -127,14 +162,19 @@ class segment_queue {
     // The header keeps the layout it had before segments carried a hazard
     // node: three lines, deq's, enq's and next's, before the states. The
     // node (hazard::node_of), written once the segment is retired, sits in
-    // deq's line after deq; a header one line longer, with the node in front,
-    // cost the general-purpose queue a third of its throughput at one producer
+    // deq's line after deq, and the single-consumer form's fields in
+    // next's line; a header one line longer, with the node in front, cost
+    // the general-purpose queue a third of its throughput at one producer
     // and one consumer.
     struct segment {
         alignas(kLine) std::atomic<std::uint64_t> deq{0};
         hazard::node hp;
         alignas(kLine) std::atomic<std::uint64_t> enq{0};
         alignas(kLine) std::atomic<segment*> next{nullptr};
+        // The single-consumer form's: the index of cell 0, and the segment
+        // before, both set before the segment is linked.
+        std::uint64_t base = 0;
+        segment* prev = nullptr;
         alignas(kLine) std::atomic<std::uint32_t> state[kSegment];
         alignas(kLine) cell cells[kSegment];
         segment() {
@@ -191,6 +231,10 @@ class segment_queue {
 
     // Pushes n elements in their order, moving them out of first[0..n).
     void push_run(Slot* first, std::size_t n) {
+        if constexpr (kOneCounter) {
+            push_one(first, n);
+            return;
+        }
         const hazard::use rec;
         hazard::record& hp = rec;
         std::size_t k = 0;
@@ -304,6 +348,125 @@ class segment_queue {
     }
 
  private:
+    // The single-consumer form's push (see the top). The tail is read
+    // before the fetch-and-add: whoever moved it to a segment had an index
+    // at or past that segment's base from a fetch-and-add before the move
+    // (a push linking or moving to the segment for its index, or the
+    // consumer retiring the segment before, which it does only once its
+    // walk has seen an index there), so the tail's base is at or below this
+    // push's index. A segment from the tail on to the index's own is not
+    // freed while the push is at it: the index's cell is not filled yet, so
+    // the consumer's head is at or before that segment.
+    //
+    // Each protection of the tail reads it at most kProtectTries + 1 times (a
+    // first read and a reload after each of kProtectTries slot stores), where
+    // protect() would read it for as long as other pushes keep moving it. If it
+    // moved after each, the push takes its index first and then holds every
+    // segment of this queue (hazard::protect_all with the queue's mark, one
+    // store, and one more read of the tail) until it has found the segment of
+    // its index: a segment retired before that was unlinked from the tail
+    // before the push read it, and is behind both the tail and the push's own
+    // segment, so the walks below never reach it. The mark keeps only this
+    // queue's segments, and of those only the ones retired after the count it
+    // carries (counters_.retires, read before the mark is published): other
+    // queues' scans do not see it, and marks of pushes that overlap keep what
+    // was retired since the oldest of them, not the queue's history. What the
+    // consumer retires while one push holds its mark is below that push's
+    // unfilled index, which the consumer cannot pass: at most the segments that
+    // held cells below that index when the push took it, the queue's backlog
+    // then, which a push preempted while it holds the mark keeps back for as
+    // long as it is preempted. The push lets go of the tail before it
+    // constructs its elements: the segment of its index is
+    // kept by its own unfilled cell, so the program's code (an element's
+    // constructor, which may stop or push) never runs with the mark or a
+    // protection held.
+    void push_one(Slot* first, std::size_t n) {
+        const hazard::use rec;
+        hazard::record& hp = rec;
+        segment* t = hazard::try_protect(hp, kTail, tail_, kProtectTries);
+        const std::uint64_t i = counters_.enq.fetch_add(n, std::memory_order_seq_cst);
+        Hooks::reserved();
+        bool all = false;
+        if (!t) t = hold_all(hp, all);
+        std::size_t k = 0;
+        while (k < n) {
+            const std::uint64_t j = i + k;
+            segment* s = locate(hp, t, j, all);
+            hazard::clear(hp, kTail);
+            all = false;
+            std::uint64_t c = j - s->base;
+            // The second cell's push links the next segment, while its own
+            // cell, still unfilled, keeps s from being freed.
+            if (c == 1 && !s->next.load(std::memory_order_acquire)) link_after(s);
+            for (; c < kSegment && k < n; ++c, ++k) {
+                ::new (static_cast<void*>(s->cells[c].raw)) Slot(std::move(first[k]));
+                s->state[c].store(kFull, std::memory_order_release);
+            }
+            // The rest of a batch is in later segments; s may be freed
+            // once its cells are taken, so start again from the tail.
+            if (k < n) t = read_tail(hp, all);
+        }
+    }
+
+    // How many times a push reads the tail to protect it before it holds
+    // every segment instead (push_one). A test sets it to 0, so that every
+    // push holds them all.
+#ifndef WTC_TEST_PROTECT_TRIES
+#define WTC_TEST_PROTECT_TRIES 4
+#endif
+    static constexpr unsigned kProtectTries = WTC_TEST_PROTECT_TRIES;
+
+    // The tail, protected: by the push slot if one of kProtectTries reloads
+    // finds it unchanged, otherwise by holding every segment of this queue.
+    // Only after the push has taken its index.
+    segment* read_tail(hazard::record& hp, bool& all) {
+        if (all) return tail_.load(std::memory_order_seq_cst);
+        if (segment* t = hazard::try_protect(hp, kTail, tail_, kProtectTries)) return t;
+        return hold_all(hp, all);
+    }
+    segment* hold_all(hazard::record& hp, bool& all) {
+        hazard::protect_all(hp, kTail, this, counters_.retires.load(std::memory_order_seq_cst));
+        all = true;
+        return tail_.load(std::memory_order_seq_cst);
+    }
+
+    // The segment that holds index j, found from the protected tail t; t is
+    // left protected, at wherever the tail was last read.
+    segment* locate(hazard::record& hp, segment*& t, std::uint64_t j, bool& all) {
+        for (;;) {
+            if (j >= t->base + kSegment) {
+                segment* next = t->next.load(std::memory_order_acquire);
+                if (!next) next = link_after(t);
+                Hooks::segment_step(1);
+                segment* expected = t;
+                tail_.compare_exchange_strong(expected, next, std::memory_order_seq_cst);
+                t = read_tail(hp, all);
+                continue;
+            }
+            // Behind the tail: back through prev, every segment from here
+            // to j's alive (see push_one).
+            segment* s = t;
+            while (j < s->base) {
+                s = s->prev;
+                Hooks::segment_step(-1);
+            }
+            return s;
+        }
+    }
+
+    // Links a segment after t, whose base is t's next, unless another push
+    // has; returns the one linked.
+    segment* link_after(segment* t) {
+        segment* fresh = new segment;
+        fresh->base = t->base + kSegment;
+        fresh->prev = t;
+        segment* none = nullptr;
+        if (t->next.compare_exchange_strong(none, fresh, std::memory_order_release, std::memory_order_acquire))
+            return fresh;
+        delete fresh;
+        return none;
+    }
+
     // Moves the head past a drained segment and retires it. The tail is
     // moved past it first, so that no push can find it through tail_ once
     // it is retired. Both exchanges are sequentially consistent, as the
@@ -441,7 +604,12 @@ class segment_queue {
     // to the next hole, or to where the walk stopped (move_head), rather
     // than stepping over the cells taken meanwhile; a pop retires at most
     // one segment (retire_one). So a pop is bounded by the holes, O(h^2)
-    // looks plus the O(h) erase, whatever went through the queue before.
+    // looks plus the O(h) erase, whatever went through the queue before,
+    // and by the scan that retire may start (hazard::scan): the records'
+    // slots times the segments waiting to be freed, at most kScanAt and
+    // those slots name, and while pushes hold this queue's mark those
+    // retired since the oldest mark's count (push_one): at most the queue's
+    // backlog when that mark's push took its index.
     // h counts cells, filled or not, that the consumer has passed and not
     // yet taken: at most the cells reserved by pushes in flight, one per
     // single push and up to its length for a batch, so a poll behind a
@@ -558,7 +726,15 @@ class segment_queue {
         segment* t = s;
         tail_.compare_exchange_strong(t, next, std::memory_order_seq_cst);
         Hooks::retire();
-        hazard::retire(hp, s);
+        if constexpr (kOneCounter) {
+            // Counted after the unlink: a push that reads the count before
+            // it marks (hold_all) cannot reach a segment counted below it.
+            const std::uint64_t n = counters_.retires.load(std::memory_order_relaxed) + 1;
+            counters_.retires.store(n, std::memory_order_seq_cst);
+            hazard::retire(hp, s, this, n);
+        } else {
+            hazard::retire(hp, s);
+        }
     }
 
     // Walks on from where the last walk stopped, among the cells pushes
@@ -570,7 +746,15 @@ class segment_queue {
         segment* s = one_.walk.seg;
         std::uint64_t j = one_.walk.index;
         for (;;) {
-            std::uint64_t taken = s->enq.load(std::memory_order_acquire);
+            // The cells of s pushes have taken: from the queue's counter
+            // with one counter, from the segment's otherwise.
+            std::uint64_t taken;
+            if constexpr (kOneCounter) {
+                const std::uint64_t all = counters_.enq.load(std::memory_order_seq_cst);
+                taken = all > s->base ? all - s->base : 0;
+            } else {
+                taken = s->enq.load(std::memory_order_acquire);
+            }
             std::uint64_t end = taken < kSegment ? taken : kSegment;
             for (; j < end; ++j) {
                 one_.holes.push_back({s, j});
@@ -633,6 +817,14 @@ class segment_queue {
 
     alignas(kLine) std::atomic<segment*> head_;
     alignas(kLine) std::atomic<segment*> tail_;
+    // The one-counter form's: indices handed out to pushes, and the
+    // segments the consumer has retired, which a push's mark is read
+    // against (hold_all). Absent from the other forms.
+    struct counters {
+        alignas(kLine) std::atomic<std::uint64_t> enq{0};
+        alignas(kLine) std::atomic<std::uint64_t> retires{0};
+    };
+    [[no_unique_address]] std::conditional_t<kOneCounter, counters, no_state> counters_;
     char pad_[kLine];
 };
 

@@ -63,7 +63,29 @@ does not wait, and costs O(h²) in the h cells it has passed and not taken
 (filled or not: a batch still being filled leaves up to its length of
 them), allocating past 64 of them, plus at most one segment retired: when
 the earliest of those cells is taken the head moves past every cell taken
-meanwhile at once, so no pop pays for the history behind a stalled push. A producer that stops for ever between
+meanwhile at once, so no pop pays for the history behind a stalled push.
+Its pushes take their cells from the segment's own counter and retry in
+the next segment when other pushes filled the one they took a cell in, so
+a push is lock-free. Built with `kOneCounter` (the shim's `jiffy` tag),
+its pushes take their indices from one counter for the whole queue, as
+Jiffy's do, and then find the segment that holds the index, so a push is
+wait-free; that form costs throughput with several producers (the
+consumer meets taken and unfilled cells more often), so it is what a
+program gets only where a path requires a wait-free push. Each time it protects the tail it reads
+it at most five times (a first read and four reloads), since a hazard
+pointer's read retries for as long as other pushes keep moving the tail,
+and otherwise marks every segment of its own queue to be kept
+(`hazard::protect_all`, one store and one more read) until it has found
+the segment of its index. The mark carries the queue's count of retired
+segments when it was published, so it keeps only what the consumer
+retires after that, and other queues are not affected; the consumer
+cannot pass the push's unfilled cell meanwhile, so one push keeps back at
+most the segments below that cell, the queue's backlog when it took its
+index, overlapping pushes those retired since the oldest one's mark; a
+push preempted while it holds the mark keeps them that long. The push
+lets go before it constructs its
+elements, so no program code runs while it holds the mark.
+A producer that stops for ever between
 reserving and filling a cell keeps the consumer's head there, so the
 segments after it are never freed.
 

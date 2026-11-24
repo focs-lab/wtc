@@ -56,7 +56,14 @@ constexpr unsigned kConsumers = 1;
 constexpr bool kMany = true;
 constexpr unsigned kConsumers = 4;
 #endif
-using queue = wtc::rt::segment_queue<std::shared_ptr<payload>, kMany, 64, 64, hooks>;
+// WTC_STRESS_ONE_COUNTER: the single-consumer form with the one-counter
+// push (the shim's jiffy).
+#ifdef WTC_STRESS_ONE_COUNTER
+constexpr bool kOne = true;
+#else
+constexpr bool kOne = false;
+#endif
+using queue = wtc::rt::segment_queue<std::shared_ptr<payload>, kMany, 64, 64, hooks, kOne>;
 constexpr unsigned kProducers = 4;
 
 }  // namespace

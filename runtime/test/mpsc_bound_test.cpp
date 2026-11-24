@@ -17,6 +17,15 @@
 //   holes P     P producers pausing at random between taking a cell and
 //               filling it: looks per pop stay within a multiple of P,
 //               whatever the number of elements.
+//   push_steps P  (mpsc_jiffy_bound_test, the one-counter push) P
+//               producers pushing single elements and runs of up to 8
+//               into segments of 64 cells, pausing at random after taking
+//               their index: every element once and in its producer's
+//               order, and the segments a push moves through to its
+//               index's, forward and back, counted. Forward steps are
+//               bounded by the pushes in flight, at most 1 + P * 8 / 64
+//               segments; steps back by the segments linked while a push
+//               was preempted, which the pauses make happen.
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -59,7 +68,12 @@ thread_local gate* t_stall = nullptr;
 thread_local unsigned t_jitter = 0;
 thread_local std::uint64_t t_looks = 0, t_retires = 0;
 
+thread_local std::uint64_t t_fwd = 0, t_back = 0;
 struct hooks : wtc::rt::no_hooks {
+  static void segment_step(int d) {
+    if (d > 0) ++t_fwd;
+    else ++t_back;
+  }
   static void reserved() {
     if (gate* g = t_stall) {
       t_stall = nullptr;
@@ -77,7 +91,12 @@ struct hooks : wtc::rt::no_hooks {
   static void look() { ++t_looks; }
   static void retire() { ++t_retires; }
 };
-using Q = wtc::rt::segment_queue<std::uint64_t, false, 1024, 64, hooks>;
+// WTC_TEST_ONE_COUNTER: the one-counter push (the shim's jiffy).
+#ifndef WTC_TEST_ONE_COUNTER
+#define WTC_TEST_ONE_COUNTER 0
+#endif
+constexpr bool kOne = WTC_TEST_ONE_COUNTER;
+using Q = wtc::rt::segment_queue<std::uint64_t, false, 1024, 64, hooks, kOne>;
 using clk = std::chrono::steady_clock;
 
 // Looks a pop may make with h holes: the walk's and the re-looks' of
@@ -222,6 +241,59 @@ void holes(unsigned producers, std::uint64_t total) {
   EXPECT(cost.looks <= 4ull * producers * producers + 8);
   EXPECT(cost.retires <= 1);
 }
+void push_steps(unsigned producers, long per) {
+  wtc::rt::segment_queue<std::uint64_t, false, 64, 64, hooks, kOne> q;
+  std::atomic<bool> go{false};
+  std::atomic<unsigned> left{producers};
+  std::atomic<std::uint64_t> fwd{0}, back{0}, back_total{0};
+  std::vector<std::thread> ts;
+  for (unsigned k = 0; k < producers; ++k)
+    ts.emplace_back([&, k] {
+      t_jitter = 29u + k;
+      std::mt19937 r(k + 1);
+      while (!go.load()) {
+      }
+      std::uint64_t worst_f = 0, worst_b = 0, sum_b = 0;
+      for (long i = 0; i < per;) {
+        std::uint64_t run[8];
+        long m = r() % 4 == 0 ? 1 + static_cast<long>(r() % 8) : 1;
+        if (i + m > per) m = per - i;
+        for (long j = 0; j < m; ++j) run[j] = std::uint64_t{k} << 40 | static_cast<std::uint64_t>(i + j);
+        t_fwd = t_back = 0;
+        q.push_run(run, static_cast<std::size_t>(m));
+        if (t_fwd > worst_f) worst_f = t_fwd;
+        if (t_back > worst_b) worst_b = t_back;
+        sum_b += t_back;
+        i += m;
+      }
+      std::uint64_t w = fwd.load();
+      while (worst_f > w && !fwd.compare_exchange_weak(w, worst_f)) {
+      }
+      w = back.load();
+      while (worst_b > w && !back.compare_exchange_weak(w, worst_b)) {
+      }
+      back_total.fetch_add(sum_b);
+      left.fetch_sub(1);
+    });
+  go.store(true);
+  std::vector<long> next(producers, 0);
+  std::uint64_t v = 0, got = 0;
+  while (got < producers * static_cast<std::uint64_t>(per)) {
+    if (q.try_pop(v)) {
+      const unsigned k = static_cast<unsigned>(v >> 40);
+      EXPECT(static_cast<long>(v & ((std::uint64_t{1} << 40) - 1)) == next[k]);
+      ++next[k];
+      ++got;
+    }
+  }
+  for (auto& t : ts) t.join();
+  EXPECT(!q.try_pop(v));
+  std::printf("push_steps P=%2u: %llu elements; per push at most %llu segments forward, %llu back "
+              "(%llu back in all)\n",
+              producers, (unsigned long long)got, (unsigned long long)fwd.load(),
+              (unsigned long long)back.load(), (unsigned long long)back_total.load());
+  EXPECT(fwd.load() <= 1 + producers * 8 / 64 + 1);
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -232,6 +304,10 @@ int main(int argc, char** argv) {
     const unsigned p = argc > 2 ? static_cast<unsigned>(std::atoi(argv[2])) : 4;
     const std::uint64_t n = argc > 3 ? std::strtoull(argv[3], nullptr, 10) : 400000;
     holes(p, n);
+  } else if (!std::strcmp(mode, "push_steps")) {
+    const unsigned p = argc > 2 ? static_cast<unsigned>(std::atoi(argv[2])) : 4;
+    const long n = argc > 3 ? std::atol(argv[3]) : 200000;
+    push_steps(p, n);
   } else {
     std::fprintf(stderr, "mpsc_bound_test: unknown mode %s\n", mode);
     return 2;

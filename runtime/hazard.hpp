@@ -109,8 +109,17 @@ struct node {
     node* hp_next = nullptr;
     void* hp_addr = nullptr;  // the address a slot holds while it is protected
     void (*hp_free)(node*) = nullptr;
+    const void* hp_domain = nullptr;  // the queue that retired it (protect_all)
+    std::uint64_t hp_seq = 0;         // that queue's count of retires, this one included
     bool hp_held = false;     // a scan's mark
 };
+
+// What a slot holds to keep every node one queue retires from being freed
+// (protect_all): the queue's address, which is even, with its low bit set.
+// A node's own address is even, so the two never meet.
+inline void* hold_mark(const void* domain) {
+    return reinterpret_cast<void*>(reinterpret_cast<std::uintptr_t>(domain) | 1);
+}
 
 // Records per chunk: the threads that may hold records at once before a
 // first operation allocates.
@@ -119,9 +128,12 @@ struct node {
 #endif
 constexpr unsigned kChunk = WTC_HAZARD_CHUNK;
 
-// One line each: a reader's slot store does not take a neighbour's line.
+// Lines of its own: a reader's slot store does not take a neighbour's line.
 struct alignas(64) record {
     std::atomic<void*> slot[kSlots];
+    // With a queue's mark in slot i, the count of that queue's retires
+    // when the mark was published (protect_all).
+    std::atomic<std::uint64_t> mark_seq[kSlots];
     std::atomic<bool> active{false};
     // Its holder's only: the nodes it retired and has not freed.
     node* retired = nullptr;
@@ -129,6 +141,7 @@ struct alignas(64) record {
 
     record() {
         for (auto& s : slot) s.store(nullptr, std::memory_order_relaxed);
+        for (auto& m : mark_seq) m.store(0, std::memory_order_relaxed);
     }
 };
 
@@ -237,14 +250,27 @@ inline record* acquire() {
 // It allocates nothing: each slot is read once, and a slot that holds a
 // pointer marks the retired node it names. Its cost is the slots of the
 // records handed out plus, for each slot that holds anything, the nodes
-// waiting: at most kScanAt plus those held at the last scan.
+// waiting: at most kScanAt plus those held at the last scan, and, while a
+// slot holds a queue's mark (protect_all), the nodes that queue retired
+// after the mark's publication.
 inline void scan(record& mine) {
     if (!mine.retired) return;
     for_each_record([&](record& r) {
-        for (auto& s : r.slot)
-            if (void* p = s.load(std::memory_order_seq_cst))
+        for (unsigned i = 0; i < kSlots; ++i)
+            if (void* p = r.slot[i].load(std::memory_order_seq_cst)) {
+                const std::uintptr_t v = reinterpret_cast<std::uintptr_t>(p);
+                if (v & 1) {  // a queue's mark: the nodes it retired since
+                    const void* domain = reinterpret_cast<const void*>(v & ~std::uintptr_t{1});
+                    // Read after the slot, so it is this publication's
+                    // count or a later one's, made when this one had ended.
+                    const std::uint64_t since = r.mark_seq[i].load(std::memory_order_seq_cst);
+                    for (node* n = mine.retired; n; n = n->hp_next)
+                        if (n->hp_domain == domain && n->hp_seq > since) n->hp_held = true;
+                    continue;
+                }
                 for (node* n = mine.retired; n; n = n->hp_next)
                     if (n->hp_addr == p) n->hp_held = true;
+            }
     });
     node** link = &mine.retired;
     while (node* n = *link) {
@@ -354,6 +380,9 @@ inline unsigned records_made() {
 // Reads src and keeps what it read from being freed until clear(i): the
 // value returned was reachable from src after the slot was published, so a
 // thread that unlinks it afterwards will find the slot when it scans.
+//
+// Lock-free, not wait-free: it reads src again for as long as src keeps
+// changing between its store and its reload.
 template <class T>
 T* protect(record& r, unsigned i, const std::atomic<T*>& src) {
     T* p = src.load(std::memory_order_relaxed);
@@ -363,6 +392,42 @@ T* protect(record& r, unsigned i, const std::atomic<T*>& src) {
         if (again == p) return p;
         p = again;
     }
+}
+
+// protect() with at most `tries` reloads: nullptr if src changed after
+// every one of them, with the slot holding nothing that matters.
+template <class T>
+T* try_protect(record& r, unsigned i, const std::atomic<T*>& src, unsigned tries) {
+    T* p = src.load(std::memory_order_relaxed);
+    for (unsigned k = 0; k < tries; ++k) {
+        r.slot[i].store(p, std::memory_order_seq_cst);
+        T* again = src.load(std::memory_order_seq_cst);
+        if (again == p) return p;
+        p = again;
+    }
+    return nullptr;
+}
+
+// Publishes domain's mark (hold_mark) in slot i, with since, the count of
+// the domain's retires the caller read before: until the slot is cleared,
+// no node the domain retires after that count (hp_seq > since) is freed;
+// other nodes are not affected. A reader that publishes it and then reads
+// a shared pointer of that domain may use the node it read, and any node
+// of the domain it reaches from there that had not been retired when it
+// read the count: a node retired before was unlinked before the count
+// moved past it (the domain's retiring thread unlinks, then counts, then
+// retires), so before the reader's read of the pointer, which cannot
+// return it, and one retired after is kept. Which links lead only to such
+// nodes is the queue's to show. One store and no reload, so it cannot be
+// made to retry; the price is that the domain's retiring thread keeps the
+// nodes it retires while the mark is held, and while marks of several
+// readers overlap, those retired since the oldest one's count: a queue
+// holds a mark only for a bounded stretch of its own steps, and only
+// where the nodes that can be retired meanwhile are bounded too
+// (segment_queue.hpp's push_one says where).
+inline void protect_all(record& r, unsigned i, const void* domain, std::uint64_t since) {
+    r.mark_seq[i].store(since, std::memory_order_seq_cst);
+    r.slot[i].store(hold_mark(domain), std::memory_order_seq_cst);
 }
 
 inline void clear(record& r, unsigned i) { r.slot[i].store(nullptr, std::memory_order_release); }
@@ -379,11 +444,16 @@ node& node_of(T* p) {
 }
 
 // p is unreachable from every shared pointer a reader could protect it
-// through; it is deleted once no slot holds it. Never allocates.
+// through; it is deleted once no slot holds it, nor domain's mark. Never
+// allocates. domain is the queue p belongs to and seq its count of
+// retires with this one, where that queue protects with its mark
+// (protect_all).
 template <class T>
-void retire(record& r, T* p) {
+void retire(record& r, T* p, const void* domain = nullptr, std::uint64_t seq = 0) {
     node* n = &node_of(p);
     n->hp_addr = static_cast<void*>(p);
+    n->hp_domain = domain;
+    n->hp_seq = seq;
     n->hp_free = [](node* x) { delete static_cast<T*>(x->hp_addr); };
     n->hp_held = false;
     n->hp_next = r.retired;

@@ -27,18 +27,50 @@ still reach `malloc`, which can -- but the check treats a yes to either as
 blocking. The answers, by the implementation recorded on the operation
 (`#wtc.impl`; none means general-purpose):
 
-| operation | generic | spsc | spsc_inline | mpsc | spmc |
-|---|---|---|---|---|---|
-| push | lock-free; allocates a new segment when one fills | wait-free; allocates a new block when one fills | wait-free; allocates a new block when one fills | lock-free; allocates a new segment when one fills | wait-free; allocates a new segment when one fills |
-| pop | blocks: waits for a push that has taken its cell; frees drained segments | wait-free | wait-free; lends the element, allocates nothing | wait-free: O(h²) in the h cells it has passed and not taken, h at most the cells reserved by pushes in flight, plus one segment retired; frees the segments it moves past, and allocates when it has passed more than 64 such cells | lock-free: its claim fails only to another consumer's; frees the segments it moves past |
-| waiting pop | blocks: waits for a push or a close; frees drained segments | blocks: waits for a push or a close | blocks: waits for a push or a close | blocks: waits for a push or a close; frees and may allocate as the pop above | blocks: waits for a push or a close; frees the segments it moves past |
-| lock, unlock | blocks | | | | |
+| operation | generic | spsc | spsc_inline | mpsc | jiffy | spmc |
+|---|---|---|---|---|---|---|
+| push | lock-free; allocates a new segment when one fills | wait-free; allocates a new block when one fills | wait-free; allocates a new block when one fills | lock-free: an index past its segment's end moves it to the next segment for another, and other pushes can fill whole segments between its steps; allocates a new segment when one fills | wait-free: one fetch-and-add, at most five reads of the tail each time it protects it (then one store and one more read), then the segments between the tail and its index; allocates a segment when it links one | wait-free; allocates a new segment when one fills |
+| pop | blocks: waits for a push that has taken its cell; frees drained segments | wait-free | wait-free; lends the element, allocates nothing | wait-free: O(h²) in the h cells it has passed and not taken, h at most the cells reserved by pushes in flight, plus one segment retired and the scan that retiring may start, which walks the segments waiting to be freed (a few); frees the segments it moves past, and allocates when it has passed more than 64 such cells | wait-free: O(h²) in the h cells it has passed and not taken, h at most the cells reserved by pushes in flight, plus one segment retired and the scan that retiring may start, which walks the segments waiting to be freed (a few, and while pushes hold their queue's mark the segments retired since the oldest of those marks was published: at most the segments the queue held when that mark's push took its index, kept for as long as the push holds the mark, a bounded stretch of its own steps, which a preemption there stretches in time without bound); frees the segments it moves past, and allocates when it has passed more than 64 such cells | lock-free: its claim fails only to another consumer's; frees the segments it moves past |
+| waiting pop | blocks: waits for a push or a close; frees drained segments | blocks: waits for a push or a close | blocks: waits for a push or a close | blocks: waits for a push or a close; frees and may allocate as the pop above | blocks: waits for a push or a close; frees and may allocate as the pop above | blocks: waits for a push or a close; frees the segments it moves past |
+| lock, unlock | blocks |  |  |  |  |  |
 
 The generic and mpsc columns are as of 22 Oct 2026, when both became the
 segmented queue (`runtime/segment_queue.hpp`); until then the general-purpose
 queue blocked on its mutexes on both sides and the mpsc list's push was one
-exchange. A push to either retries when a pop skipped its cell or another
+exchange. A generic push retries when a pop skipped its cell or another
 push is linking the next segment, hence lock-free rather than wait-free.
+The mpsc push retries likewise when its index falls past its segment's
+end, so it is lock-free too. The jiffy column (24 Nov 2026) is the mpsc
+form built with one counter (`kOneCounter`, the shim's `jiffy` tag): its
+push takes its index from one counter for the whole queue and then finds
+the segment that holds it, forward from the tail or back through the
+segments' prev links: wait-free, its steps
+bounded by the pushes in flight when it is not preempted between reading
+the tail and its fetch-and-add, and by the segments linked meanwhile when
+it is; no bound in the thread count is claimed for the latter. Reading
+the tail under a hazard pointer is a loop that retries while the tail
+moves, which other pushes can make it do for ever, so the push reads it
+at most five times (a first read and four reloads) and, if it moved after
+each, marks its own queue's segments to be kept (`hazard::protect_all`,
+one store and one more read) until it has found the segment of its index.
+The mark is the queue's, and carries the queue's count of retired
+segments when it was published: other queues' scans ignore it, and the
+queue's scans keep only the segments retired after that count, so marks
+of pushes that overlap one another keep the segments retired since the
+oldest of them, not the queue's history. The consumer cannot pass a
+push's unfilled cell meanwhile, so what one push's mark keeps is at most
+the segments below that cell: the segments the queue held when the push
+took its index, kept while the push holds the mark. That is a bounded
+stretch of the push's own steps, but a push preempted there keeps them for
+as long as it is preempted (eight producers on two processors kept 700 to
+1200 segments of 64 cells waiting at once, the queue's backlog then); the
+push lets go before it constructs its
+elements, so a push stopped in the program's code holds nothing back.
+It is not the mpsc default (decided 25 Nov 2026): with two to eight
+producers its consumer meets cells taken and not yet filled more often
+and stays in its out-of-order path, and the queue ran at 0.54 to 0.72 of
+the mpsc form's throughput on one machine of two, so a program gets it
+only where a path requires the push to be wait-free.
 The mpsc pop never waits, but past a cell a push has taken and not yet
 filled it notes every cell it passes and does not take (h of them, filled
 or not: one batch still being filled can leave as many as its length, so
