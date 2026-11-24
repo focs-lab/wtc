@@ -1,0 +1,18 @@
+{
+  "leg": "d4-adapt", "date": "2026-11-24T12:52:16Z", "end": "2026-11-24T13:23:49Z",
+  "git_sha": "fc9e6b9063ab2fdd0e4829ccccfe0e10f0ef57df", "git_dirty": false,
+  "kernel": "6.8.0-40-generic",
+  "cpu_model": "Intel(R) Xeon(R) w9-3495X",
+  "sockets": "1", "numa_nodes": "1",
+  "allowed_cpus": "4-27",
+  "smt_control": "on",
+  "smt_siblings": "offline or reserved",
+  "load_average": "9.01 15.10 15.61",
+  "build": "orig=clang++-18 -O2 (Ubuntu 18.1.3), LevelDB 7ee830d, CMake Release (the 24 Nov binary); wtc and deleg=the 24 Nov leg's binaries (bf2be4a; wtc-cc -O2 -fno-exceptions -fno-rtti, every file through ClangIR; deleg with --delegate leveldb::DBImpl::mutex_ --delegate-assume-uniform-threads); adapt and deleg-always=one binary built the same way at fc9e6b9 (Get #1, Get #2, GetSnapshot #1 delegated, 33 sections refused), deleg-always run with WTC_DELEGATE_MODE=always; LiTL 916469c, pthread_create and pthread_mutex_trylock exported at GLIBC_2.34",
+  "governor": "performance",
+  "no_turbo": "1",
+  "freq_khz": "1899961-1900038",
+  "llvm_sha": "1ebf89d8c5e61f9184431eb4e5c9a6966b5c0748",
+  "glibc": "2.39-0ubuntu8.5",
+  "reps": 10
+}
