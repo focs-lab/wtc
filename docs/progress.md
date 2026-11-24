@@ -466,3 +466,66 @@ is left alone, as before.
   interrupted inside the same wait, is not proven safe for that, so
   keeping the original keeps whatever the program had. The progress check
   refuses a spinning `pop_wait` on a real-time thread in the same spirit.
+
+## Assumptions, in one place
+
+What the analysis takes on trust, each stated where it is used above:
+
+- the program is free of data races: a plain load is no evidence of a
+  wait;
+- a special member of the element absent from the module is trivial;
+- a symbolic thread count names a loop's bound as read when the loop runs,
+  and is never instantiated;
+- the allocator is a leaf, as in decisions/0004, and is still counted as
+  blocking for every requirement;
+- a futex wake is a kernel entry that waits for no thread of the program
+  (on a stock kernel; on PREEMPT_RT its hash-bucket lock sleeps);
+- the Linux values of `SCHED_FIFO`, `SCHED_RR`, `PTHREAD_EXPLICIT_SCHED`
+  and `PTHREAD_PRIO_NONE`; a scheduling policy that is not a constant is
+  not real-time (it is reported), and a priority-inheritance protocol that
+  is not a constant may be one;
+- a handler installed for a signal the thread blocks is still checked;
+- a requirement inferred for a thread that raises its own priority holds
+  from its start routine, and threads it starts without explicit
+  scheduling inherit it (a std::thread it starts is not followed, and is
+  reported);
+- a loop whose exit depends on anything but its own compare-and-swap, or
+  that skips the compare-and-swap on what it read, waits; a loop with no
+  exit never completes;
+- first-use effects (a static-initialisation guard, a per-thread record)
+  block, in the runtime's operations as in the program's; the per-thread
+  record allocates only under conditions known at run time (a pthread key
+  past the C library's first 32, more than 256 threads holding records),
+  and is counted whatever they are;
+- push batching tells queues apart by type, lock batching mutexes by the
+  global or the record field they are, and a mutex reached through a
+  pointer may be any;
+- a bound counts synchronising steps; arithmetic saturates to a finite
+  bound that is not instantiated past 64 bits;
+- wCQ's bound is not instantiated (its paper gives no closed form), its
+  wait-freedom holds only under its two conditions (a double-width
+  compare-and-swap that is one instruction, at most 128 threads alive at
+  once that have operated on it) and while no thread runs without a slot
+  (one untied from its hazard key, an operation from a key destructor
+  after its thread's exit), and only two of its six GenMC
+  configurations are checked to completion; jiffy's push and pop have no
+  bound in the counts;
+- an implementation built for a number of threads is shown within it by
+  the sum of the producers and consumers proved, and an element with no
+  code of its own;
+- wait-freedom of fetch-and-add and of a double-width compare-and-swap is
+  that of x86-64, and of AArch64 with LSE; LL/SC targets are not modelled;
+- steps are not time: page faults, interrupts and cache misses are outside
+  the model.
+
+Left for later: the single-writer proof of a retry covers locals and
+thread-local globals only, not a location the topology proves one
+thread writes; a loop bounded by a counter beside an atomic condition is
+read as a wait; the per-thread record of a thread's first operation is
+counted as a first-use effect even where the process's keys would let it
+take one without the allocator, which keeps jiffy and wcq from being
+chosen; wcq cannot be built in a wtc-cc build until ClangIR compiles the
+double-width compare-and-swap; a lifted wait's step reads the tick rate
+through a function that measures it, behind a clock the analysis cannot
+see into, when no queue has measured it yet, so a real-time thread's
+lifted wait is still reported.

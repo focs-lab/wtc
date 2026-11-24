@@ -8,6 +8,11 @@ function, and inline assembly that cannot wait is cleared (both under
 value in every implementation since 24 Oct; the facts are shared with the
 batching passes ("The same facts for batching").
 
+Superseded in part 2026-11-24: the table under "What an operation
+guarantees", its jiffy column included, is replaced by decisions/0007 and
+the table it generates (docs/progress.md); loops are now judged. The rest
+stands.
+
 Revised 2026-10-29: the waiting pop (`pop_wait`, `pop_wait_for`) blocks on
 every implementation; see its row in the table.
 
@@ -39,8 +44,8 @@ implementations the compiler substitutes for it (spsc, spsc_inline, mpsc,
 spmc) and the one-counter mpsc form (jiffy). The bounded ring, its
 settled forms (spsc_settled, mpsc_settled, spmc_settled) and the rings of
 indices (scq, wcq) are described, with what each operation can wait for,
-in `runtime/README.md`; the full table is to move to `decisions/0007`
-with PR #70.
+in `runtime/README.md`; their rows, with the unbounded ones read again,
+are in the table `decisions/0007` keeps as code (docs/progress.md).
 
 The generic and mpsc columns are as of 22 Oct 2026, when both became the
 segmented queue (`runtime/segment_queue.hpp`); until then the general-purpose
