@@ -450,3 +450,19 @@ is left alone, as before.
   name, a member by its record and field (a mutex is held by value, so
   members of different records or fields are different objects); one
   reached through a pointer may be any.
+- **Lifting waits** (`--wtc-lift-locked-queues`, docs/lifting.md "Lifting a
+  wait"): the lifted wait's policy may spin and then yield before it
+  parks, chosen at run time from the counts, which a waiter at real-time
+  priority must not do (a yield keeps a producer of lower priority off
+  its processor; the runtime's own check of the scheduling policy reads
+  the thread that builds the class, not the waiter). A wait whose
+  function a real-time thread or a declared requirement reaches is lifted
+  with the policy that parks after its pause, as a paced producer's is,
+  and the remark says so with the chain. That keeps the original's
+  guarantee: the condition variable's waiter sleeps, and so does this one,
+  after a bounded pause. A wait a signal handler reaches is not lifted:
+  the original's wait was already the handler's to answer for, and the
+  eventcount's state, which a handler could reenter on the thread it
+  interrupted inside the same wait, is not proven safe for that, so
+  keeping the original keeps whatever the program had. The progress check
+  refuses a spinning `pop_wait` on a real-time thread in the same spirit.

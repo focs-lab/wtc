@@ -1,4 +1,5 @@
 #include "WTC/Transforms/LiftWaits.h"
+#include "WTC/Transforms/ProgressRequirements.h"
 #include "WTC/Transforms/LiftNames.h"
 #include "WTC/Transforms/Refusal.h"
 #include "WTC/Transforms/ThreadInstances.h"
@@ -178,6 +179,9 @@ struct Wait {
     int producers = 0, waiters = 0;
     cir::AllocaOp waitersSlot;
     bool paced = false;
+    // A waiter on a path with a requirement of progress (a real-time
+    // thread, a declared one): the policy must never spin past its pause.
+    bool noSpin = false;
     std::string ends;
     explicit Wait(Location l) : loc(l) {}
     std::string fn(Operation *op) const { return shortName(op->getParentOfType<cir::FuncOp>()); }
@@ -188,6 +192,7 @@ public:
     Lifter(ModuleOp m, const ClosedWorld &w, llvm::ArrayRef<QueueClassForWaits> q) : module(m), world(w), queues(q) {}
 
     std::string run(bool rewrite) {
+        RequirementRoots requirements(module);
         llvm::SetVector<cir::RecordType> recs;
         module.walk([&](cir::GetMemberOp gm) {
             auto pt = dyn_cast<cir::PointerType>(gm.getAddr().getType());
@@ -204,6 +209,40 @@ public:
             if (w.v.refused()) {
                 w.v.emitRefusals(w.loc);
                 continue;
+            }
+            // Progress (docs/progress.md, "What a requirement refuses"). The
+            // policy may spin and then yield before it parks, which a thread
+            // at real-time priority, or one under a declared requirement,
+            // must not do: a yield keeps a producer of lower priority off
+            // its processor. Such a wait is lifted with the policy that
+            // parks after its pause, as the original's condition variable
+            // sleeps at once. A wait a signal handler reaches is not lifted
+            // at all: the original's wait was already the handler's to
+            // answer for, and the eventcount's state, which the handler
+            // could reenter on the thread it interrupted inside the same
+            // wait, is not proven safe for that; keeping the original keeps
+            // whatever the program had.
+            {
+                llvm::SmallVector<cir::CallOp, 4> chain;
+                // A handler anywhere among the requirements decides first.
+                const RequirementRoot *r = requirements.reaching(
+                    w.waitFn, &chain, [](const RequirementRoot &q) { return q.source == RequirementRoot::Source::handler; });
+                if (!r) r = requirements.reaching(w.waitFn, &chain);
+                if (r) {
+                    std::string via;
+                    for (cir::CallOp c : chain)
+                        if (cir::FuncOp t = lookupCallee(c)) via += (via.empty() ? " through " : ", ") + shortName(t);
+                    cir::FuncOp rf = r->func;
+                    const std::string from = shortName(rf) + via + ", " + r->why;
+                    if (r->source == RequirementRoot::Source::handler) {
+                        w.v.emitRefusal(w.loc, "the wait is reached from " + from +
+                                                   ": the eventcount is not proven safe to reenter from a handler, "
+                                                   "so the original wait is kept");
+                        continue;
+                    }
+                    w.noSpin = true;
+                    w.ends += "; it parks after its pause, never spinning on, since a waiter is reached from " + from;
+                }
             }
             llvm::StringMap<cir::FuncOp> rt = runtimeFor(rec);
             if (rt.empty()) {
@@ -1277,7 +1316,11 @@ private:
                 Value n = cir::LoadOp::create(b, op.getLoc(), w.waitersSlot.getResult());
                 waiters = n.getType() == ct[2] ? n : cir::CastOp::create(b, op.getLoc(), ct[2], cir::CastKind::integral, n).getResult();
             }
-            auto paced = cir::ConstantOp::create(b, op.getLoc(), ct[3], cir::BoolAttr::get(ctx, cast<cir::BoolType>(ct[3]), w.paced));
+            // A paced wait parks after its pause whatever the counts
+            // (shim/lifted.hpp, lifted_wait_policy): what a waiter with a
+            // requirement needs too.
+            auto paced = cir::ConstantOp::create(b, op.getLoc(), ct[3],
+                                                 cir::BoolAttr::get(ctx, cast<cir::BoolType>(ct[3]), w.paced || w.noSpin));
             call(b, op.getLoc(), "construct", {op.getOperand(0), i0.getResult(), waiters, paced.getResult()});
             op.erase();
         }

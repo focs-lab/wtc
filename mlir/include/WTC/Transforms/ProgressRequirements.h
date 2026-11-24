@@ -101,8 +101,10 @@ public:
     // allReaching: a pass that must respect the strictest asks that.
     //
     // The passes that would make a path slower for another thread's sake
-    // ask it: the delegation of critical sections and the batching of
-    // pushes and of locks.
+    // ask it: the delegation of critical sections, the batching of pushes
+    // and of locks, and the lifting of waits, which gives a waiter with a
+    // requirement a policy that parks after its pause and lifts no wait a
+    // handler reaches (LiftWaits.cpp).
     const RequirementRoot *reaching(cir::FuncOp f, llvm::SmallVectorImpl<cir::CallOp> *chain = nullptr,
                                     llvm::function_ref<bool(const RequirementRoot &)> which = {}) const;
     llvm::SmallVector<const RequirementRoot *, 2> allReaching(cir::FuncOp f) const;
