@@ -266,3 +266,18 @@ non-blocking inline assembly of the program's own code. Plain
 computation takes none, so a bound says nothing of the time spent
 between those steps. Where several objects with different counts meet on
 one path, np stands for the largest of them.
+
+## Requirements
+
+| annotation (`shim/progress.hpp`) | the function is held to |
+|---|---|
+| `WTC_LOCK_FREE` | nothing it reaches blocks (decisions/0004), first-use effects included, and no loop waits or runs without end |
+| `WTC_WAIT_FREE` | that, and the composed level is wait-free: no retry another thread can make fail, no operation only lock-free under the counts proved, no wait for data |
+| `WTC_WAIT_FREE_WITHIN(k)` | that, and the worst case is a number of steps, at most k |
+| `WTC_PROGRESS_CRITICAL` | wait-free, a worst case that is a polynomial in the counts (an amortised bound is not enough), no first-use effect |
+
+ClangIR does not carry an annotation's arguments, so the bound of
+`WTC_WAIT_FREE_WITHIN(k)` is part of the annotation's name and must be a
+decimal literal. A kernel entry (a futex wake after a publish) is
+reported in the remark and fails none of these: it waits for no thread
+of the program.

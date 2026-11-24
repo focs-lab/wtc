@@ -1,6 +1,7 @@
 #include "WTC/Transforms/Blocking.h"
 #include "WTC/Transforms/Passes.h"
 #include "WTC/Transforms/ProgressPaths.h"
+#include "WTC/Transforms/ProgressRequirements.h"
 #include "WTC/Transforms/Utils.h"
 #include "WTC/ProgressTable.h"
 #include "WTC/WTCOps.h"
@@ -23,7 +24,10 @@ using namespace mlir;
 using namespace mlir::wtc;
 
 // Holds a function declared lock-free (WTC_LOCK_FREE, shim/progress.hpp)
-// to its promise: nothing it can reach may block. That is a reachability
+// to its promise: nothing it can reach may block. A function declared
+// wait-free (WTC_WAIT_FREE, WTC_WAIT_FREE_WITHIN(k)) or progress-critical
+// (WTC_PROGRESS_CRITICAL) is held to that and to what its composed paths
+// must then be (ProgressRequirements.h). That is a reachability
 // question over the call graph, and the answer is far more use as a call
 // chain than as a latency spike in production.
 //
@@ -69,6 +73,28 @@ std::string describeBound(const Bound &b) {
     return "at most " + b.str() + " steps";
 }
 
+// One chain for each blocking site, as the error's notes.
+void reportSites(InFlightDiagnostic &d, cir::FuncOp f, llvm::MutableArrayRef<BlockingSite> sites) {
+    // Enough chains to act on; the rest are counted, not listed.
+    constexpr size_t kMaxSites = 8;
+    for (BlockingSite &found : sites.take_front(kMaxSites)) {
+        for (auto [call, target] : llvm::zip(found.chain, found.via)) {
+            const std::string callee = llvm::demangle(target.getSymName().str());
+            auto c = dyn_cast<cir::CallOp>(call);
+            if (!c) {
+                d.attachNote(call->getLoc()) << "runs the element's " << describeSpecialMember(target) << ", "
+                                             << callee;
+                continue;
+            }
+            d.attachNote(call->getLoc()) << "calls " << callee << (!lookupCallee(c) ? " through a pointer" : "");
+        }
+        d.attachNote(found.leaf->getLoc()) << "which " << found.why;
+    }
+    if (const size_t more = sites.size() > kMaxSites ? sites.size() - kMaxSites : 0)
+        d.attachNote(f.getLoc()) << "and " << more << " more blocking site" << (more == 1 ? "" : "s")
+                                 << ", not shown";
+}
+
 // What a path guarantees, in words, for a remark.
 std::string describePath(const PathProgress &p) {
     std::string s;
@@ -91,8 +117,8 @@ public:
 
     StringRef getArgument() const final { return "wtc-check-progress"; }
     StringRef getDescription() const final {
-        return "Fail the build when a function declared lock-free can reach a blocking operation "
-               "(run after --wtc-specialize)";
+        return "Fail the build when a function declared lock-free, wait-free or progress-critical can reach a "
+               "blocking operation or its paths do not meet the promise (run after --wtc-specialize)";
     }
     void getDependentDialects(DialectRegistry &registry) const override {
         registry.insert<mlir::wtc::WTCDialect>();
@@ -118,8 +144,11 @@ public:
         bool failed = false;
         PathComposer paths(module);
         module.walk([&](cir::FuncOp f) {
-            if (!hasAnnotation(f, "wtc_progress_lock_free") || f.getBody().empty()) return;
+            if (f.getBody().empty()) return;
+            std::optional<Requirement> req = declaredRequirement(f);
+            if (!req) return;
             const std::string name = llvm::demangle(f.getSymName().str());
+            const std::string declared = "is declared " + req->describe();
             auto sites = blocking.sitesIn(f);
             // What the function's paths guarantee, composed: the level, the
             // steps under the counts proved, and the effects beside them.
@@ -128,32 +157,48 @@ public:
                 InFlightDiagnostic r = f.emitRemark() << "wtc: " << name << ": " << describePath(path);
                 if (path.weakest) r.attachNote(path.weakest->getLoc()) << "the weakest step: " << path.weakWhy;
             };
-            if (sites.empty()) {
-                f.emitRemark() << "wtc: " << name << " is declared lock-free: nothing it reaches blocks";
+            if (!sites.empty()) {
+                failed = true;
+                InFlightDiagnostic d = f.emitError() << "wtc: " << name << " " << declared << " but can block";
+                reportSites(d, f, sites);
+                d.report();
                 composed();
                 return;
             }
-            failed = true;
-            InFlightDiagnostic d = f.emitError() << "wtc: " << name << " is declared lock-free but can block";
-            // Enough chains to act on; the rest are counted, not listed.
-            constexpr size_t kMaxSites = 8;
-            for (BlockingSite &found : llvm::MutableArrayRef(sites).take_front(kMaxSites)) {
-                for (auto [call, target] : llvm::zip(found.chain, found.via)) {
-                    const std::string callee = llvm::demangle(target.getSymName().str());
-                    auto c = dyn_cast<cir::CallOp>(call);
-                    if (!c) {
-                        d.attachNote(call->getLoc()) << "runs the element's " << describeSpecialMember(target)
-                                                     << ", " << callee;
-                        continue;
-                    }
-                    d.attachNote(call->getLoc()) << "calls " << callee << (!lookupCallee(c) ? " through a pointer" : "");
+            // Nothing blocks. A stronger promise than lock-freedom asks the
+            // composition the rest.
+            std::string why;
+            Operation *at = path.weakest;
+            if (req->kind >= Requirement::Kind::wait_free) {
+                if (path.level < Level::wait_free)
+                    why = std::string("is only ") + describeLevel(path.level).str();
+                else if (path.partial)
+                    why = "waits for data";
+                else if (req->kind == Requirement::Kind::critical && !path.bound.isPoly())
+                    why = "has a worst case " + path.bound.str();
+                else if (req->kind == Requirement::Kind::critical && path.firstUse)
+                    why = "takes, on first use, a " + describeFirstUse(path.firstUse);
+                else if (req->within) {
+                    auto v = path.bound.instantiate(ThreadCounts::unknown());
+                    if (!v)
+                        why = "has a bound that is not a number here: " + path.bound.str() +
+                              (path.counts.empty() ? "" : ", with " + llvm::join(path.counts, ", "));
+                    else if (*v > *req->within)
+                        why = "may take " + std::to_string(*v) + " steps (" + path.bound.str() + ")";
                 }
-                d.attachNote(found.leaf->getLoc()) << "which " << found.why;
             }
-            if (const size_t more = sites.size() > kMaxSites ? sites.size() - kMaxSites : 0)
-                d.attachNote(f.getLoc()) << "and " << more << " more blocking site"
-                                         << (more == 1 ? "" : "s") << ", not shown";
-            d.report();
+            if (!why.empty()) {
+                failed = true;
+                InFlightDiagnostic d = f.emitError() << "wtc: " << name << " " << declared << " but " << why;
+                if (at) d.attachNote(at->getLoc()) << "the weakest step: " << path.weakWhy;
+                d.report();
+                composed();
+                return;
+            }
+            if (req->kind == Requirement::Kind::lock_free)
+                f.emitRemark() << "wtc: " << name << " " << declared << ": nothing it reaches blocks";
+            else
+                f.emitRemark() << "wtc: " << name << " " << declared << ": it is";
             composed();
         });
         if (failed && !clWarnOnly) signalPassFailure();

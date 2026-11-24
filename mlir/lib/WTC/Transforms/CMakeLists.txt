@@ -11,6 +11,7 @@ add_mlir_library(MLIRWTCTransforms
   LiftedBounded.cpp
   LowerWTCToCIR.cpp
   ProgressPaths.cpp
+  ProgressRequirements.cpp
   QueueOwnershipAnalysis.cpp
   ThreadInstances.cpp
   WTCAlignByOwner.cpp
