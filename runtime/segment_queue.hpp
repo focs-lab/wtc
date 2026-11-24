@@ -90,6 +90,8 @@ struct no_hooks {
     static void between_looks() {}
     // In the single consumer's pop, at each cell it looks at past its head.
     static void look() {}
+    // In the single consumer's pop, when it retires a segment.
+    static void retire() {}
 };
 
 template <class Slot, bool kManyConsumers = true, unsigned kSegment = 1024, unsigned kLine = 64,
@@ -156,6 +158,15 @@ class segment_queue {
     }
 
     ~segment_queue() {
+        // The single consumer's segments left to retire hold no element.
+        if constexpr (!kManyConsumers) {
+            segment* h = head_.load(std::memory_order_relaxed);
+            for (segment* s = one_.retire_from; s && s != h;) {
+                segment* next = s->next.load(std::memory_order_relaxed);
+                delete s;
+                s = next;
+            }
+        }
         segment* s = head_.load(std::memory_order_relaxed);
         std::uint64_t from = s->deq.load(std::memory_order_relaxed);
         while (s) {
@@ -299,14 +310,12 @@ class segment_queue {
     // readers' publish-and-reload is: a reader whose reload still saw the
     // segment is then ordered before them, and the scan that frees the
     // segment, later in this thread, finds the reader's slot.
+    // The multi-consumer form's; the single consumer retires through
+    // retire_one.
     void advance_head(hazard::record& hp, segment* h, segment* next) {
         segment* t = h;
         tail_.compare_exchange_strong(t, next, std::memory_order_seq_cst);
-        if constexpr (kManyConsumers) {
-            if (!head_.compare_exchange_strong(h, next, std::memory_order_seq_cst)) return;
-        } else {
-            head_.store(next, std::memory_order_relaxed);
-        }
+        if (!head_.compare_exchange_strong(h, next, std::memory_order_seq_cst)) return;
         hazard::retire(hp, h);
     }
 
@@ -426,32 +435,39 @@ class segment_queue {
     // "Jiffy: a fast, memory efficient, wait-free multi-producers
     // single-consumer queue" (arXiv 2010.14189), with the holes kept in a
     // list. It never waits. A pop looks at each of the h holes up to h
-    // times while the look keeps finding earlier ones, so O(h^2), and
-    // otherwise costs O(1) amortised: the walk ahead and the step over
-    // taken cells each pass a cell once, and a segment's count is read
-    // once per segment walked into. h counts cells, filled or not, that
-    // the consumer has passed and not yet taken: one batch still being
-    // filled leaves up to its length of them, so a poll behind it costs
-    // O(batch). Past kHolesReserved holes the list allocates. A push that
-    // never fills its cell keeps the head where it is for ever, so the
-    // segments after it are never freed. Only this thread retires
-    // segments, so the segments it reads ahead need no hazard pointer.
+    // times while the look keeps finding earlier ones, so O(h^2); the walk
+    // ahead passes only cells it adds to the holes and the full one it
+    // stops at, and when the earliest hole is taken the head moves at once
+    // to the next hole, or to where the walk stopped (move_head), rather
+    // than stepping over the cells taken meanwhile; a pop retires at most
+    // one segment (retire_one). So a pop is bounded by the holes, O(h^2)
+    // looks plus the O(h) erase, whatever went through the queue before.
+    // h counts cells, filled or not, that the consumer has passed and not
+    // yet taken: at most the cells reserved by pushes in flight, one per
+    // single push and up to its length for a batch, so a poll behind a
+    // batch still being filled costs O(batch). Past kHolesReserved holes
+    // the list allocates. A push that never fills its cell keeps the
+    // earliest hole where it is for ever, so the segments after it are
+    // never freed. Only this thread retires segments, so the segments it
+    // reads ahead need no hazard pointer.
     template <class F>
     bool pop_one(hazard::record& hp, F& f) {
+        retire_one(hp);
         for (;;) {
             segment* h = head_.load(std::memory_order_relaxed);
             std::uint64_t i = h->deq.load(std::memory_order_relaxed);
             if (i >= kSegment) {
                 segment* next = h->next.load(std::memory_order_acquire);
                 if (!next) return false;
-                advance_head(hp, h, next);
+                // Retired by the next pops, one each (retire_one).
+                if (!one_.retire_from) one_.retire_from = h;
+                head_.store(next, std::memory_order_relaxed);
                 continue;
             }
+            // The head is never at a cell taken out of order: it is the
+            // earliest hole while there are holes, and where the walk
+            // stopped once there are none (move_head).
             std::uint32_t st = h->state[i].load(std::memory_order_acquire);
-            if (st == kTaken) {
-                h->deq.store(i + 1, std::memory_order_relaxed);
-                continue;
-            }
             if (one_.holes.empty()) {
                 if (st == kFull) {
                     slip_one(h, i);
@@ -509,7 +525,40 @@ class segment_queue {
         one_.holes.erase(one_.holes.begin() + static_cast<std::ptrdiff_t>(k));
         take(c.seg, c.index, f);
         c.seg->state[c.index].store(kTaken, std::memory_order_relaxed);
+        if (k == 0) move_head();
         return true;
+    }
+
+    // After the earliest hole was taken: every cell from the head up to the
+    // next hole, or up to where the walk stopped if there is none, has been
+    // taken (each cell the walk passed is a hole until it is taken), so the
+    // head moves there at once rather than stepping over them one pop at a
+    // time later, which after a long-stalled push cost one call time linear
+    // in the cells taken meanwhile. The segments it moves past are retired
+    // by the next pops, one each.
+    void move_head() {
+        const position to = one_.holes.empty() ? one_.walk : one_.holes.front();
+        segment* h = head_.load(std::memory_order_relaxed);
+        if (to.seg != h) {
+            if (!one_.retire_from) one_.retire_from = h;
+            head_.store(to.seg, std::memory_order_relaxed);
+        }
+        to.seg->deq.store(to.index, std::memory_order_relaxed);
+    }
+
+    // Retires the oldest segment the head has moved past, if any: at most
+    // one per pop, so a pop's cost does not depend on how far the head
+    // moved. As advance_head does, the tail is moved past the segment
+    // first, so that no push finds it through tail_ once it is retired.
+    void retire_one(hazard::record& hp) {
+        segment* s = one_.retire_from;
+        if (!s) return;
+        segment* next = s->next.load(std::memory_order_acquire);
+        one_.retire_from = next == head_.load(std::memory_order_relaxed) ? nullptr : next;
+        segment* t = s;
+        tail_.compare_exchange_strong(t, next, std::memory_order_seq_cst);
+        Hooks::retire();
+        hazard::retire(hp, s);
     }
 
     // Walks on from where the last walk stopped, among the cells pushes
@@ -556,6 +605,9 @@ class segment_queue {
     struct one_state {
         std::vector<position> holes;
         position walk;
+        // The oldest segment the head has moved past and not yet retired;
+        // the ones after it up to the head follow through next.
+        segment* retire_from = nullptr;
         bool streaming = false;
         stream_gate gate;  // built with the queue, so its rate is measured then
     };

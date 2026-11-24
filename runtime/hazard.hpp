@@ -94,8 +94,12 @@ constexpr unsigned kPushSlot = 0;
 constexpr unsigned kPopSlot = 1;
 // A scan reads every record's slots, so it waits for this many retired
 // nodes. The queues retire one segment per thousand-odd elements, so the
-// nodes waiting are a few segments at most.
-constexpr std::size_t kScanAt = 8;
+// nodes waiting are a few segments at most. Tests lower it, so that a node
+// retired while still reachable is freed at once.
+#ifndef WTC_HAZARD_SCAN_AT
+#define WTC_HAZARD_SCAN_AT 8
+#endif
+constexpr std::size_t kScanAt = WTC_HAZARD_SCAN_AT;
 
 // What a retired object carries, so that retiring it and scanning never
 // allocate: the retired nodes are an intrusive list through these fields,

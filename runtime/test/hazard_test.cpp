@@ -17,10 +17,18 @@
 //   fork      a fork while eight threads hold records: in the child, eight
 //             new threads holding records at once take the records the
 //             parent's threads held, and no more are made.
+//   tail      the single consumer retires a segment while the tail still
+//             names it (no push has gone past it yet): it must move the
+//             tail on first, or the next push protects the freed segment.
+//             Built as hazard_eager_test, where a scan runs at every
+//             retire (WTC_HAZARD_SCAN_AT=1) and freed memory is
+//             overwritten, so that such a push crashes; with the usual
+//             threshold the segment outlives the window.
 //   stalled   a pop held after protecting a segment while another thread
 //             moves the head on and retires fifty segments: the held
 //             segment survives, and the retiring thread keeps at most
 //             kSlots segments (the held reader's slots) after a scan.
+#include <malloc.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -34,6 +42,21 @@
 
 #include "hazard.hpp"
 #include "segment_queue.hpp"
+
+#ifdef WTC_TEST_POISON_FREED
+// Freed memory overwritten, so that a read of a freed segment shows. The
+// empty asm keeps the compiler from dropping the stores as dead.
+void operator delete(void* p) noexcept {
+  if (p) {
+    std::memset(p, 0xdb, malloc_usable_size(p));
+    __asm__ __volatile__("" : : "r"(p) : "memory");
+  }
+  std::free(p);
+}
+void operator delete(void* p, std::size_t) noexcept { operator delete(p); }
+void operator delete(void* p, std::align_val_t) noexcept { operator delete(p); }
+void operator delete(void* p, std::size_t, std::align_val_t) noexcept { operator delete(p); }
+#endif
 
 namespace {
 int failures = 0;
@@ -253,6 +276,21 @@ void forked() {
   for (auto& t : holders) t.join();
 }
 
+void tail() {
+  wtc::rt::segment_queue<std::uint64_t, false, 4> q;
+  // Four cells in the first segment; the push of the second links the
+  // next, and no push has gone past the first, so the tail stays there.
+  for (std::uint64_t i = 0; i < 4; ++i) q.push(i);
+  std::uint64_t v = 0;
+  for (std::uint64_t i = 0; i < 4; ++i) EXPECT(q.try_pop(v) && v == i);
+  EXPECT(!q.try_pop(v));  // the head moves on to the second segment
+  EXPECT(!q.try_pop(v));  // and the first is retired
+  for (std::uint64_t i = 4; i < 40; ++i) q.push(i);
+  for (std::uint64_t i = 4; i < 40; ++i) EXPECT(q.try_pop(v) && v == i);
+  EXPECT(!q.try_pop(v));
+  std::printf("tail: a segment retired while the tail named it, then 36 pushes and pops\n");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -263,6 +301,7 @@ int main(int argc, char** argv) {
   else if (!std::strcmp(mode, "fork")) forked();
   else if (!std::strcmp(mode, "late")) late();
   else if (!std::strcmp(mode, "late_two")) late_two();
+  else if (!std::strcmp(mode, "tail")) tail();
   else {
     std::fprintf(stderr, "hazard_test: unknown mode %s\n", mode);
     return 2;

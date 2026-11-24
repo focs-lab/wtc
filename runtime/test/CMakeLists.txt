@@ -151,6 +151,24 @@ add_executable(segment_queue_empty_test segment_queue_empty_test.cpp)
 target_link_libraries(segment_queue_empty_test PRIVATE wtc_rt_flags)
 add_test(NAME segment_queue_empty_test COMMAND segment_queue_empty_test)
 
+# The single consumer's pop bounded by the reservations in flight: after a
+# long-held push fills, no pop makes more than a few looks or retires more
+# than one segment, and its time does not grow with the cells taken while
+# it was held; two held pushes far apart; looks per pop against the
+# producers pausing at random.
+add_executable(mpsc_bound_test mpsc_bound_test.cpp)
+target_link_libraries(mpsc_bound_test PRIVATE wtc_rt_flags)
+add_test(NAME mpsc_bound_late_fill COMMAND mpsc_bound_test late_fill)
+add_test(NAME mpsc_bound_two_holes COMMAND mpsc_bound_test two_holes)
+foreach(p 1 4 16)
+  add_test(NAME mpsc_bound_holes_${p} COMMAND mpsc_bound_test holes ${p} 400000)
+endforeach()
+set_tests_properties(mpsc_bound_late_fill mpsc_bound_two_holes mpsc_bound_holes_1 mpsc_bound_holes_4
+                     mpsc_bound_holes_16 PROPERTIES TIMEOUT 300)
+# late_fill compares a pop's time with the first one's: alone, so that
+# the other tests' load does not make one pop slow.
+set_tests_properties(mpsc_bound_late_fill PROPERTIES RUN_SERIAL TRUE)
+
 # Producers that stop between taking a cell and filling it, for both forms;
 # the single consumer checks each of its empty answers.
 add_executable(segment_queue_stall_stress segment_queue_stress.cpp)
@@ -468,4 +486,16 @@ if(WTC_RT_SANITIZE STREQUAL "thread")
   set_tests_properties(hazard_fork PROPERTIES ENVIRONMENT "TSAN_OPTIONS=die_after_fork=0")
 endif()
 add_test(NAME hazard_stalled COMMAND hazard_test stalled)
+add_test(NAME hazard_tail COMMAND hazard_test tail)
 set_tests_properties(hazard_churn PROPERTIES TIMEOUT 600)
+# The same with a scan at every retire and freed memory overwritten, so
+# that a segment freed while a push can still reach it shows.
+add_executable(hazard_eager_test hazard_test.cpp)
+target_link_libraries(hazard_eager_test PRIVATE wtc_rt_flags)
+target_compile_definitions(hazard_eager_test PRIVATE WTC_HAZARD_SCAN_AT=1)
+if(NOT WTC_RT_SANITIZE)
+  target_compile_definitions(hazard_eager_test PRIVATE WTC_TEST_POISON_FREED=1)
+endif()
+add_test(NAME hazard_eager_tail COMMAND hazard_eager_test tail)
+add_test(NAME hazard_eager_churn COMMAND hazard_eager_test churn 2000)
+set_tests_properties(hazard_eager_churn PROPERTIES TIMEOUT 600)

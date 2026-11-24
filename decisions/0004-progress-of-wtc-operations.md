@@ -30,7 +30,7 @@ blocking. The answers, by the implementation recorded on the operation
 | operation | generic | spsc | spsc_inline | mpsc | spmc |
 |---|---|---|---|---|---|
 | push | lock-free; allocates a new segment when one fills | wait-free; allocates a new block when one fills | wait-free; allocates a new block when one fills | lock-free; allocates a new segment when one fills | wait-free; allocates a new segment when one fills |
-| pop | blocks: waits for a push that has taken its cell; frees drained segments | wait-free | wait-free; lends the element, allocates nothing | wait-free: past a cell a push has taken and not filled, O(h²) in the h cells it has passed and not taken, otherwise O(1) amortised; frees the segments it moves past, and allocates when it has passed more than 64 such cells | lock-free: its claim fails only to another consumer's; frees the segments it moves past |
+| pop | blocks: waits for a push that has taken its cell; frees drained segments | wait-free | wait-free; lends the element, allocates nothing | wait-free: O(h²) in the h cells it has passed and not taken, h at most the cells reserved by pushes in flight, plus one segment retired; frees the segments it moves past, and allocates when it has passed more than 64 such cells | lock-free: its claim fails only to another consumer's; frees the segments it moves past |
 | waiting pop | blocks: waits for a push or a close; frees drained segments | blocks: waits for a push or a close | blocks: waits for a push or a close | blocks: waits for a push or a close; frees and may allocate as the pop above | blocks: waits for a push or a close; frees the segments it moves past |
 | lock, unlock | blocks | | | | |
 
@@ -43,12 +43,15 @@ The mpsc pop never waits, but past a cell a push has taken and not yet
 filled it notes every cell it passes and does not take (h of them, filled
 or not: one batch still being filled can leave as many as its length, so
 a poll behind it costs O(batch)) and looks at them up to h times, while
-each look finds an earlier full one; the walk ahead and the step over
-cells it has taken out of order pass each cell once (since 26 Oct 2026,
-`decisions/0003`). The list of noted cells has room for 64 and allocates
-past that, which the progress check reports. A producer that never fills
-its cell keeps the consumer's head there for ever, and the segments after
-it are then never freed.
+each look finds an earlier full one (since 26 Oct 2026,
+`decisions/0003`). Since 24 Nov 2026 the bound holds for every call, not
+on average: when the earliest such cell is taken the head moves at once
+past the cells taken meanwhile, and a pop retires at most one segment;
+before, the pop after a long-stalled push stepped over every cell taken
+in the meantime, 11.5 ms after eight million. The list of noted cells has
+room for 64 and allocates past that, which the progress check reports. A
+producer that never fills its cell keeps the consumer's head there for
+ever, and the segments after it are then never freed.
 
 A waiting pop (`pop_wait(T&)`, `pop_wait_for`; `queue_pop` marked
 `wait`) waits for another thread by design: while the queue is empty it

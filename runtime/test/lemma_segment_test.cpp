@@ -21,6 +21,14 @@
 //   segment_kept_for_reader  a pop held between taking the last cell of a
 //                            segment and reading it, while other threads
 //                            move the head on and retire many segments.
+//   head_moves_past_taken    the single-consumer form: a push held in its
+//                            cell while the consumer takes the cells of
+//                            many segments after it out of order; once it
+//                            fills, the pop that takes its element moves
+//                            the head past every taken cell at once, the
+//                            segments it passes are retired one per pop
+//                            or freed by the destructor, and no element is
+//                            lost, duplicated or left alive.
 //   stress                   producers held at random in a move, batches,
 //                            consumers held at random at the hook points;
 //                            every element once, each producer's elements
@@ -249,6 +257,33 @@ void segment_kept_for_reader() {
   EXPECT(lemma::live.load() == 0);
 }
 
+void head_moves_past_taken() {
+  for (int pops_after : {0, 3, 1000}) {
+    {
+      wtc::rt::segment_queue<item, false, 8, 64, hooks> q;
+      lemma::arm_stall(1, 1);  // the move into the cell
+      std::thread p([&] {
+        item a(1, 1, 0);
+        q.push_run(&a, 1);
+      });
+      lemma::stall_gate.wait_arrival();
+      for (long i = 0; i < 200; ++i) q.push(item(0, 2, i));
+      item v;
+      for (long i = 0; i < 200; ++i) EXPECT(q.try_pop(v) && v.producer == 2 && v.seq == i);
+      EXPECT(!q.try_pop(v));
+      lemma::stall_gate.release();
+      p.join();
+      EXPECT(q.try_pop(v) && v.producer == 1);
+      // Some pops retire some of the twenty-five segments passed; the
+      // destructor frees the rest.
+      for (int i = 0; i < pops_after; ++i) EXPECT(!q.try_pop(v));
+      for (long i = 0; i < 20; ++i) q.push(item(0, 3, i));
+      for (long i = 0; i < 10; ++i) EXPECT(q.try_pop(v) && v.producer == 3 && v.seq == i);
+    }
+    EXPECT(lemma::live.load() == 0);
+  }
+}
+
 void destroyed_with_elements_left() {
   {
     queue q;
@@ -320,6 +355,7 @@ int main(int argc, char** argv) {
   pop_waits_for_late_push();
   batch_torn_by_a_skip();
   segment_kept_for_reader();
+  head_moves_past_taken();
   destroyed_with_elements_left();
   stress<true>(n);
   stress<false>(n);

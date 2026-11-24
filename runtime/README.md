@@ -59,9 +59,11 @@ cell waits for it to be filled, so that a batch is never torn; the
 single-consumer form never skips and takes no read-modify-write on its
 side, and at a reserved cell takes the earliest full cell past it, so that
 it never answers empty while a finished push's element is in the queue; it
-does not wait, and costs O(1) amortised plus O(h²) in the h cells it has
-passed and not taken (filled or not: a batch still being filled leaves up
-to its length of them), allocating past 64 of them. A producer that stops for ever between
+does not wait, and costs O(h²) in the h cells it has passed and not taken
+(filled or not: a batch still being filled leaves up to its length of
+them), allocating past 64 of them, plus at most one segment retired: when
+the earliest of those cells is taken the head moves past every cell taken
+meanwhile at once, so no pop pays for the history behind a stalled push. A producer that stops for ever between
 reserving and filling a cell keeps the consumer's head there, so the
 segments after it are never freed.
 
