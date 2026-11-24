@@ -147,3 +147,23 @@ throughput (`runtime/README.md`); their rows are read from the runtime:
   case is likewise not bounded in the counts, and the mpsc pop's bound is
   its amortised one.
 
+## The element's code
+
+A queue operation runs the element's own code: a push its copy or move
+constructor, on the producer's side, and a pop its move-assignment (or,
+in the shared_ptr form, its move constructor) and the destructor of what
+is left in the cell, on the consumer's. The table records which; the
+progress check follows each as a call the operation makes. So a consumer
+of `wtc::queue<std::string>` that transfers on the spsc ring, whose own
+steps neither wait nor allocate, fails `WTC_LOCK_FREE` with the string's
+move-assignment in the chain, and a consumer of a trivially copyable
+struct passes.
+
+The element type is read from the operation (the pointee of the value a
+push is handed, or of the object a transfer moves into), and for a pop
+that returns a shared_ptr from the queue's other operations; when it
+cannot be read, the operation is counted as blocking. A member is found
+by ClangIR's record of special members (`func_info` on `cir.func`).
+Assumed: a member that is not in the module is trivial, since the
+runtime's template, instantiated for the element, calls every member that
+is not and so makes it at least a declaration here.

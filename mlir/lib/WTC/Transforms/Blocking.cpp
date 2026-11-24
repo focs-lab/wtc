@@ -3,6 +3,9 @@
 #include "WTC/WTCAttrs.h"
 #include "WTC/WTCInterfaces.h"
 #include "WTC/WTCOps.h"
+#include "WTC/WTCTypes.h"
+
+#include "mlir/IR/SymbolTable.h"
 
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
@@ -218,6 +221,115 @@ BlockingQuery::BlockingQuery(ModuleOp module, BlockingKinds accepted, Extra extr
         if (pop.getBorrowed() && pop.getImpl() == Impl::spsc_inline && pop.getOut())
             ownerlessSlots.insert(pop.getOut());
     });
+    // The element's special members, by the record they belong to. A
+    // trivial one does nothing a check could see. One that is not trivial
+    // and that the runtime instantiated for a queue of this element is
+    // here, with its body or as a declaration: the runtime's template calls
+    // it. So a member absent from the module is trivial, or never run.
+    for (cir::FuncOp f : module.getOps<cir::FuncOp>()) {
+        Attribute info = f.getFuncInfoAttr();
+        if (!info || f.isCxxTrivialMemberFunction()) continue;
+        if (auto c = dyn_cast<cir::CXXCtorAttr>(info)) {
+            if (c.getCtorKind() == cir::CtorKind::Copy) members[c.getType()].push_back({element_copy_ctor, f});
+            if (c.getCtorKind() == cir::CtorKind::Move) members[c.getType()].push_back({element_move_ctor, f});
+        } else if (auto a = dyn_cast<cir::CXXAssignAttr>(info)) {
+            // A move-assignment falls back to the copy-assignment for a
+            // type without one; both count.
+            members[a.getType()].push_back({element_move_assign, f});
+        } else if (auto d = dyn_cast<cir::CXXDtorAttr>(info)) {
+            members[d.getType()].push_back({element_dtor, f});
+        }
+    }
+    // The element of each queue type, from the shim's operations that take
+    // one: (this, T&) or (this, const T&) or (this, T&&).
+    for (cir::FuncOp f : module.getOps<cir::FuncOp>()) {
+        const SemanticOpKind k = getSemanticKind(f);
+        if (k != SemanticOpKind::QueuePush && k != SemanticOpKind::QueueTryPopInto &&
+            k != SemanticOpKind::QueuePopWait && k != SemanticOpKind::QueuePopWaitFor)
+            continue;
+        auto args = f.getFunctionType().getInputs();
+        if (args.size() < 2) continue;
+        auto self = dyn_cast<cir::PointerType>(args[0]);
+        auto elem = dyn_cast<cir::PointerType>(args[1]);
+        if (self && elem) elementOfQueue.try_emplace(self.getPointee(), elem.getPointee());
+    }
+}
+
+Type queueElementType(Operation *op, const llvm::DenseMap<Type, Type> &byQueue) {
+    auto pointee = [](Value v) -> Type {
+        if (!v) return Type();
+        if (auto p = dyn_cast<cir::PointerType>(v.getType())) return p.getPointee();
+        return v.getType();
+    };
+    Value queue;
+    if (auto push = dyn_cast<QueuePushOp>(op)) {
+        if (!push.getBatch()) return pointee(push.getValue());
+        queue = push.getQueue();
+    } else if (auto d = dyn_cast<QueuePushDeferredOp>(op)) {
+        return pointee(d.getValue());
+    } else if (auto pop = dyn_cast<QueuePopOp>(op)) {
+        if (pop.getTransfer() && !pop.getBatch()) return pointee(pop.getOut());
+        queue = pop.getQueue();
+    } else {
+        return Type();
+    }
+    // A run of a C queue moves its ring's elements: what the ring holds is
+    // where `value` (or `out`) points, an element of it.
+    if (auto push = dyn_cast<QueuePushOp>(op)) {
+        Type ring = pointee(push.getValue());
+        if (auto p = dyn_cast_or_null<cir::PointerType>(ring)) return p.getPointee();
+        return ring;
+    }
+    auto pop = cast<QueuePopOp>(op);
+    if (pop.getBatch()) {
+        Type ring = pointee(pop.getOut());
+        if (auto p = dyn_cast_or_null<cir::PointerType>(ring)) return p.getPointee();
+        return ring;
+    }
+    auto qt = dyn_cast<QueueType>(queue.getType());
+    if (!qt) return Type();
+    if (auto it = byQueue.find(qt.getElementType()); it != byQueue.end()) return it->second;
+    return Type();
+}
+
+std::string describeSpecialMember(cir::FuncOp f) {
+    Attribute info = f.getFuncInfoAttr();
+    if (auto c = dyn_cast_or_null<cir::CXXCtorAttr>(info))
+        return c.getCtorKind() == cir::CtorKind::Move ? "move constructor" : "copy constructor";
+    if (auto a = dyn_cast_or_null<cir::CXXAssignAttr>(info))
+        return a.getAssignKind() == cir::AssignKind::Move ? "move-assignment" : "copy-assignment";
+    if (isa_and_nonnull<cir::CXXDtorAttr>(info)) return "destructor";
+    return "special member";
+}
+
+std::optional<BlockingSite> BlockingQuery::elementSite(Operation *op, unsigned flags) {
+    // A push of a const reference copies; one of an rvalue reference moves,
+    // or copies for a type without a move constructor. Read from the shim
+    // function the push came from; without one, either.
+    if (auto push = dyn_cast<QueuePushOp>(op); push && (flags & element_copy_ctor) && (flags & element_move_ctor))
+        if (auto impl = push.getFallbackImplAttr())
+            if (auto f = SymbolTable::lookupNearestSymbolFrom<cir::FuncOp>(op, impl)) {
+                const std::string name = llvm::demangle(f.getSymName().str());
+                if (!llvm::StringRef(name).contains("&&")) flags &= ~element_move_ctor;
+            }
+    Type elem = queueElementType(op, elementOfQueue);
+    if (!elem)
+        return site(op, BlockingKind::Opaque,
+                    "runs the element's " + describeElementCode(flags) +
+                        ", and the element type is not known here, so it is counted as blocking");
+    // A scalar or a pointer runs no code of its own.
+    if (!isa<cir::RecordType>(elem)) return std::nullopt;
+    auto it = members.find(elem);
+    if (it == members.end()) return std::nullopt;
+    // In the order the operation runs them: the producer's constructor, the
+    // consumer's assignment, then the destructor of what is left in the
+    // cell.
+    for (unsigned flag : {element_copy_ctor, element_move_ctor, element_move_assign, element_dtor})
+        for (auto [kind, f] : it->second) {
+            if (kind != flag || !(flags & flag)) continue;
+            if (auto s = enter(op, f, /*nothrow=*/true)) return s;
+        }
+    return std::nullopt;
 }
 
 bool BlockingQuery::ownerless(Value v) const {
@@ -237,6 +349,9 @@ std::optional<BlockingSite> BlockingQuery::siteAt(Operation *op, bool inCallee) 
         if (p.getProgress() == Progress::blocking) return site(op, BlockingKind::Waits, p.getBlockingReason());
         if (p.mayCallAllocator()) return site(op, BlockingKind::Allocates, p.getBlockingReason());
         const ProgressSpec spec = p.getProgressSpec(ThreadCounts::unknown());
+        // What the operation runs of the element's own code, in it.
+        if (spec.element)
+            if (auto s = elementSite(op, spec.element)) return s;
         // What the operation does the first time it runs blocks as the
         // program's own would (docs/progress.md, "The table").
         if (spec.firstUse & first_use_guard)
@@ -274,30 +389,41 @@ std::optional<BlockingSite> BlockingQuery::callSite(cir::CallOp call) {
         if (targets.empty())
             return site(call, BlockingKind::UnknownTarget, "makes an indirect call whose target is not known here");
     }
-    for (cir::FuncOp t : targets) {
-        // A weak or non-ODR linkonce body, or a common or extern_weak
-        // symbol, may be replaced at link time by another translation
-        // unit's, which may do anything: such a body is not followed.
-        if (t.getBody().empty() || cir::isInterposableLinkage(t.getLinkage())) {
-            auto ext = externalBlocking(t);
-            auto make = [&](BlockingKind kind, std::string why) {
-                return BlockingSite{call, kind, std::move(why), t, ext && ext->threading, {}, {}};
-            };
-            // A wait is the reason that matters most, then a throw, which
-            // leaves without passing what follows, then the rest.
-            const bool waits = ext && (ext->kind == BlockingKind::Waits || ext->kind == BlockingKind::Threading);
-            if (waits && !accepted.contains(ext->kind)) return make(ext->kind, ext->what);
-            if (!call.getNothrow() && !accepted.contains(BlockingKind::MayThrow))
-                return make(BlockingKind::MayThrow, "may throw (" + llvm::demangle(t.getSymName().str()) + ")");
-            if (ext && !accepted.contains(ext->kind)) return make(ext->kind, ext->what);
-            continue;
-        }
-        if (auto f = firstIn(t)) {
-            BlockingSite out = *f;
-            out.chain.insert(out.chain.begin(), call);
-            out.via.insert(out.via.begin(), t);
-            return out;
-        }
+    for (cir::FuncOp t : targets)
+        if (auto s = enter(call, t, call.getNothrow())) return s;
+    return std::nullopt;
+}
+
+std::optional<BlockingSite> BlockingQuery::enter(Operation *from, cir::FuncOp t, bool nothrow) {
+    // A weak or non-ODR linkonce body, or a common or extern_weak
+    // symbol, may be replaced at link time by another translation
+    // unit's, which may do anything: such a body is not followed.
+    if (t.getBody().empty() || cir::isInterposableLinkage(t.getLinkage())) {
+        auto ext = externalBlocking(t);
+        auto make = [&](BlockingKind kind, std::string why) {
+            BlockingSite s{from, kind, std::move(why), t, ext && ext->threading, {}, {}};
+            // The leaf of a site reached through an operation is the
+            // member it runs, named in the chain.
+            if (!isa<cir::CallOp>(from)) {
+                s.chain.push_back(from);
+                s.via.push_back(t);
+            }
+            return s;
+        };
+        // A wait is the reason that matters most, then a throw, which
+        // leaves without passing what follows, then the rest.
+        const bool waits = ext && (ext->kind == BlockingKind::Waits || ext->kind == BlockingKind::Threading);
+        if (waits && !accepted.contains(ext->kind)) return make(ext->kind, ext->what);
+        if (!nothrow && !accepted.contains(BlockingKind::MayThrow))
+            return make(BlockingKind::MayThrow, "may throw (" + llvm::demangle(t.getSymName().str()) + ")");
+        if (ext && !accepted.contains(ext->kind)) return make(ext->kind, ext->what);
+        return std::nullopt;
+    }
+    if (auto f = firstIn(t)) {
+        BlockingSite out = *f;
+        out.chain.insert(out.chain.begin(), from);
+        out.via.insert(out.via.begin(), t);
+        return out;
     }
     return std::nullopt;
 }

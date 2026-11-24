@@ -15,6 +15,9 @@
 //
 //   - a wtc operation answers for itself, through ProgressOpInterface: its
 //     implementation, as recorded on it, can wait or may call the allocator;
+//     and the element's special members it runs (a push's copy or move
+//     constructor, a pop's move-assignment and destructor) are followed as
+//     calls the operation makes, since they run inside it;
 //   - a call to a function without a body here is read by its name: the
 //     allocator, the threading library, other waits (a System V
 //     semaphore, a file lock, a descriptor, a child, a signal, a DPDK
@@ -109,7 +112,8 @@ bool onlyNonBlockingInstructions(llvm::StringRef text, bool inert = false);
 
 // One operation that may block, and how it is reached: the calls from the
 // code asked about to it (`chain`), and the function each of them enters
-// (`via`). `callee` is the function without a body the leaf calls, if it
+// (`via`). A link of the chain may be a wtc operation rather than a call:
+// the operation runs the element's special member it enters. `callee` is the function without a body the leaf calls, if it
 // is such a call.
 struct BlockingSite {
     Operation *leaf;
@@ -154,6 +158,30 @@ private:
     std::optional<BlockingSite> callSite(cir::CallOp call);
     std::optional<BlockingSite> firstIn(cir::FuncOp f);
     std::optional<BlockingSite> site(Operation *leaf, BlockingKind kind, std::string why) const;
+    // Entering t from `from`: t's own answer when it has no body here or
+    // one that may be replaced, else the first site in its body, with
+    // `from` and t put in front of the chain.
+    std::optional<BlockingSite> enter(Operation *from, cir::FuncOp t, bool nothrow);
+
+    // The element's special members a queue operation runs, followed as
+    // calls it makes.
+    std::optional<BlockingSite> elementSite(Operation *op, unsigned flags);
+    // For each record type, its special members that are not trivial,
+    // with the ElementCode flag each stands for.
+    llvm::DenseMap<Type, llvm::SmallVector<std::pair<unsigned, cir::FuncOp>, 4>> members;
+    // For each queue's record type, its element type, read from the shim's
+    // operations on it.
+    llvm::DenseMap<Type, Type> elementOfQueue;
 };
+
+// The element type of a queue operation: the pointee of the value a push
+// is handed or of the object a transfer moves into, or, for a pop that
+// returns a shared_ptr, the element of the queue's other operations
+// (`byQueue`). Null when it cannot be read.
+Type queueElementType(Operation *op, const llvm::DenseMap<Type, Type> &byQueue);
+
+// The special member a link of a blocking chain enters, in words, for a
+// note: "the element's move-assignment".
+std::string describeSpecialMember(cir::FuncOp f);
 
 } // namespace mlir::wtc

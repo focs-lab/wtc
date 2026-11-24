@@ -29,7 +29,10 @@ using namespace mlir::wtc;
 // may call the allocator, a call to a function without a body here that is
 // known to block or cannot be seen into, an indirect call whose targets
 // are not known, a throw, and inline assembly not made only of instructions
-// that cannot wait. A call to a function with a body is followed into it.
+// that cannot wait. A call to a function with a body is followed into it,
+// and so is the element's special member a queue operation runs: a push
+// runs its copy or move constructor, a pop its move-assignment and
+// destructor, inside the operation.
 // A call that may throw is not itself a reason: what it throws with is in
 // the body, or is counted with it. A loop that spins on an atomic waiting
 // for another thread is not judged: the check is a necessary condition for
@@ -81,9 +84,14 @@ public:
             constexpr size_t kMaxSites = 8;
             for (BlockingSite &found : llvm::MutableArrayRef(sites).take_front(kMaxSites)) {
                 for (auto [call, target] : llvm::zip(found.chain, found.via)) {
-                    const bool indirect = !lookupCallee(cast<cir::CallOp>(call));
-                    d.attachNote(call->getLoc()) << "calls " << llvm::demangle(target.getSymName().str())
-                                                 << (indirect ? " through a pointer" : "");
+                    const std::string callee = llvm::demangle(target.getSymName().str());
+                    auto c = dyn_cast<cir::CallOp>(call);
+                    if (!c) {
+                        d.attachNote(call->getLoc()) << "runs the element's " << describeSpecialMember(target)
+                                                     << ", " << callee;
+                        continue;
+                    }
+                    d.attachNote(call->getLoc()) << "calls " << callee << (!lookupCallee(c) ? " through a pointer" : "");
                 }
                 d.attachNote(found.leaf->getLoc()) << "which " << found.why;
             }
