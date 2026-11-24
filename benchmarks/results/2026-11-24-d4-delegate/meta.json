@@ -1,0 +1,18 @@
+{
+  "leg": "d4-delegate", "date": "2026-11-24T04:36:23Z", "end": "2026-11-24T05:25:40Z",
+  "git_sha": "bf2be4a2db1b18d0a3953df13efd0645311e3490", "git_dirty": false,
+  "kernel": "6.8.0-40-generic",
+  "cpu_model": "Intel(R) Xeon(R) w9-3495X",
+  "sockets": "1", "numa_nodes": "1",
+  "allowed_cpus": "4-27",
+  "smt_control": "on",
+  "smt_siblings": "offline or reserved",
+  "load_average": "2.82 4.53 3.02",
+  "build": "orig=clang++-18 -O2 (Ubuntu 18.1.3), LevelDB 7ee830d, CMake Release; hand=the same with probe Q4's hand delegation of DBImpl::Get; wtc=tools/wtc-cc -O2 -fno-exceptions -fno-rtti, every file through ClangIR, nothing delegated; deleg=the same with --delegate leveldb::DBImpl::mutex_ --delegate-assume-uniform-threads (Get #1, Get #2, GetSnapshot #1 delegated, 33 sections refused); LiTL 916469c, pthread_create and pthread_mutex_trylock exported at GLIBC_2.34",
+  "governor": "performance",
+  "no_turbo": "1",
+  "freq_khz": "1899961-1900038",
+  "llvm_sha": "1ebf89d8c5e61f9184431eb4e5c9a6966b5c0748",
+  "glibc": "2.39-0ubuntu8.5",
+  "reps": 10
+}
