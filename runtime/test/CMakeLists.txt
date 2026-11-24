@@ -429,3 +429,14 @@ if(NOT WTC_RT_SANITIZE STREQUAL "thread")
 else()
   set_property(TEST delegate_fork delegate_fork_cold APPEND PROPERTY ENVIRONMENT "TSAN_OPTIONS=die_after_fork=0")
 endif()
+
+# What a thread's and the process's first operation does beyond its
+# algorithm: guarded static initialisations, counted by wrapping the C++
+# runtime's entry point. Not under a sanitizer, whose interceptors would
+# be counted too.
+if(NOT WTC_RT_SANITIZE)
+  add_executable(first_use_test first_use_test.cpp)
+  target_link_libraries(first_use_test PRIVATE wtc_rt_flags)
+  target_link_options(first_use_test PRIVATE -Wl,--wrap=__cxa_guard_acquire)
+  add_test(NAME first_use_tick_rate COMMAND first_use_test tick_rate)
+endif()

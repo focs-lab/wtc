@@ -278,7 +278,10 @@ class segment_queue {
     // waits entered, and slip points at which the producers read as a
     // stream.
     std::uint64_t slips() const { return slips_; }
-    std::uint64_t streams() const { return gate_.streams(); }
+    std::uint64_t streams() const {
+        if constexpr (kManyConsumers) return 0;
+        else return one_.gate.streams();
+    }
 
  private:
     // Moves the head past a drained segment and retires it. The tail is
@@ -360,19 +363,18 @@ class segment_queue {
     static constexpr unsigned kSlipPauses = 64;
     static constexpr unsigned kSlipGapMax = 4;
     unsigned batch_ = 1;
-    stream_gate gate_;
     std::uint64_t slips_ = 0;
 
     void slip_one(segment* h, std::uint64_t i) {
         if (i % kSlipMax != 0) return;
-        if (!gate_.should_wait(kSlipMax)) {
+        if (!one_.gate.should_wait(kSlipMax)) {
             batch_ = 1;
             return;
         }
-        if (gate_.probing() && batch_ < 2) batch_ = 2;
+        if (one_.gate.probing() && batch_ < 2) batch_ = 2;
         std::uint64_t last = i + batch_ - 1;
         if (last >= kSegment) {
-            gate_.waited(false);
+            one_.gate.waited(false);
             return;
         }
         if (h->state[last].load(std::memory_order_acquire) == kFull) {
@@ -380,7 +382,7 @@ class segment_queue {
             if (batch_ < kSlipMax && ahead < kSegment &&
                 h->state[ahead].load(std::memory_order_acquire) == kFull)
                 batch_ *= 2;
-            gate_.waited(true);
+            one_.gate.waited(true);
             return;
         }
         ++slips_;
@@ -389,12 +391,12 @@ class segment_queue {
             for (unsigned k = 0; k < gap; ++k) pause();
             waited += gap;
             if (h->state[last].load(std::memory_order_acquire) == kFull) {
-                gate_.waited(true);
+                one_.gate.waited(true);
                 return;
             }
         }
         if (batch_ > 1) batch_ /= 2;
-        gate_.waited(false);
+        one_.gate.waited(false);
     }
 
     // The single consumer takes the cells in index order while they are
@@ -546,6 +548,7 @@ class segment_queue {
         std::vector<position> holes;
         position walk;
         bool streaming = false;
+        stream_gate gate;  // built with the queue, so its rate is measured then
     };
     struct no_state {};
     [[no_unique_address]] std::conditional_t<kManyConsumers, no_state, one_state> one_;

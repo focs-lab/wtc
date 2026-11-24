@@ -38,9 +38,13 @@
 // producer gets out within kProbeMax catch-ups of entering, at once if it
 // enters from a stream.
 //
-// The tick counter's rate is measured once per process, on first use,
-// against the steady clock, rather than assumed: a time-stamp counter runs
-// at the processor's nominal clock, from under 2 GHz to over 4.
+// The tick counter's rate is measured once per process against the steady
+// clock, rather than assumed: a time-stamp counter runs at the processor's
+// nominal clock, from under 2 GHz to over 4. It is measured when the first
+// queue that needs it is built, never inside a queue operation: the
+// measurement spins for 200 µs, and a function-local static behind it
+// would put a guard (__cxa_guard_acquire, a lock another thread's first
+// catch-up waits on) on the first pop of the process.
 
 #ifndef WTC_RUNTIME_STREAM_GATE_HPP
 #define WTC_RUNTIME_STREAM_GATE_HPP
@@ -107,20 +111,32 @@ inline std::uint64_t measure_ticks_per_ms() {
 #endif
 }
 
-// Measured on first use, by whichever queue first needs it; nothing runs
-// at program start. Kept in a constant-initialised atomic rather than a
-// function-local static: the static's guard is a lock, and a fork taken
-// while another thread measures (200 microseconds) would leave the child
-// waiting on it for ever. Two threads that both find it unset both
-// measure; either result will do.
+// Zero until measured. A constant-initialised atomic rather than a
+// function-local static: reading it takes no guard, and the static's guard
+// is a lock, so a fork taken while another thread measured (200
+// microseconds) would have left the child waiting on it for ever.
 inline std::atomic<std::uint64_t> ticks_per_ms_measured{0};
+
+// Measures the rate if no thread has, and returns it. Called where a queue
+// or a waiter that needs the rate is built, so that every operation on it
+// finds the rate measured (the construction happens before them). Two
+// threads that build their first queues at once may both measure; either
+// rate does, and no thread waits for the other.
+inline std::uint64_t ensure_ticks_per_ms() {
+  std::uint64_t r = ticks_per_ms_measured.load(std::memory_order_relaxed);
+  if (r) return r;
+  r = measure_ticks_per_ms();
+  ticks_per_ms_measured.store(r, std::memory_order_relaxed);
+  return r;
+}
+
+// The rate, as measured when the first queue was built: one relaxed load.
+// Code that runs without a queue built first (the delegation, a test
+// driving a gate of its own) can find it unmeasured, and measures it then,
+// with no guard.
 inline std::uint64_t ticks_per_ms() {
-  std::uint64_t rate = ticks_per_ms_measured.load(std::memory_order_relaxed);
-  if (!rate) {
-    rate = measure_ticks_per_ms();
-    ticks_per_ms_measured.store(rate, std::memory_order_relaxed);
-  }
-  return rate;
+  const std::uint64_t r = ticks_per_ms_measured.load(std::memory_order_relaxed);
+  return r ? r : ensure_ticks_per_ms();
 }
 
 class stream_gate {
@@ -134,7 +150,10 @@ public:
   // fast as a held-back producer fills it, a few hundred nanoseconds with
   // the drain, and not when it filled as a paced producer does.
   static constexpr std::uint64_t kProbeSeed = 4;
-  stream_gate() = default;
+  // Measures the counter's rate if no queue has yet (ensure_ticks_per_ms):
+  // the gate is built with its queue, so the rate is known at its first
+  // catch-up.
+  stream_gate() : thr_(kStreamNs * ensure_ticks_per_ms()) {}
   // With a given counter rate, for tests that drive the gate with their
   // own tick sequence through should_wait_at.
   explicit stream_gate(std::uint64_t ticks_per_ms) : thr_(kStreamNs * ticks_per_ms) {}
@@ -147,7 +166,6 @@ public:
   }
 
   bool should_wait_at(std::uint64_t arrived, std::uint64_t now) {
-    if (thr_ == 0) thr_ = kStreamNs * ticks_per_ms();
     // A counter read on another core can be behind: skip such a sample.
     // An unchanged counter is a zero interval, which a coarse counter
     // gives often; its arrivals still count.
@@ -206,7 +224,7 @@ private:
   // does not stall at the few ticks a coarse counter gives per catch-up.
   static constexpr unsigned kFrac = 4;
 
-  std::uint64_t thr_ = 0;  // kStreamNs * ticks per ms, once known
+  std::uint64_t thr_;  // kStreamNs * ticks per ms
   std::uint64_t t_ = 0;
   bool started_ = false;
   std::uint64_t t_sum_ = 0;

@@ -92,10 +92,11 @@
 // takes from about ten cycles to over a hundred depending on the processor,
 // so a count would mean a different wait on every host. It is kept in
 // processor ticks, converted from nanoseconds with the rate stream_gate.hpp
-// measures once per process. The default, kSpinNs, is about the cost of a
-// park and its wake-up together, so a consumer that spins and then parks
-// never pays more than twice what the better of the two choices would have
-// cost it (the classic competitive argument for spin-then-block).
+// measures once per process, when the first waiter or queue is built. The
+// default, kSpinNs, is about the cost of a park and its wake-up together,
+// so a consumer that spins and then parks never pays more than twice what
+// the better of the two choices would have cost it (the classic
+// competitive argument for spin-then-block).
 //
 // Wake-ups. A push wakes one sleeper; a batch's publish wakes as many as it
 // published. A sleeper that wakes and finds the queue already emptied by a
@@ -208,7 +209,11 @@ public:
     // parks; 0 parks once the pause is over.
     explicit waiter(wait_policy policy = wait_policy::spin, std::uint64_t spin_ns = kSpinNs,
                     std::uint64_t yield_ns = 0)
-        : policy_(policy), spin_ns_(spin_ns), yield_ns_(yield_ns) {}
+        : policy_(policy), spin_ns_(spin_ns), yield_ns_(yield_ns) {
+        // A spin budget and a time limit are kept in ticks: the rate is
+        // measured here, not at the first wait.
+        ensure_ticks_per_ms();
+    }
 
     waiter(const waiter&) = delete;
     waiter& operator=(const waiter&) = delete;
