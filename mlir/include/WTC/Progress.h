@@ -152,6 +152,11 @@ struct Bound {
     // The bound's value under the counts, when it is a polynomial and every
     // count it mentions has a number.
     std::optional<uint64_t> instantiate(const ThreadCounts &counts) const;
+    // The bound with every count that has a number put in: a term whose
+    // counts all have one becomes a constant, the rest keep their
+    // variables. Two terms of different objects then add: np stands for
+    // the largest count among them.
+    Bound substitute(const ThreadCounts &counts) const;
 
     // Sequence (the steps add), alternative (the larger, termwise: every
     // term is non-negative, so the termwise maximum bounds both), and

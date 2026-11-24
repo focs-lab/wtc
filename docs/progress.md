@@ -236,3 +236,33 @@ Assumed, or approximated:
 - A summary read while a function of its call cycle is still being read
   is not remembered, so the answer does not depend on the order in which
   functions are asked about.
+
+## Composing a path
+
+For each function with a requirement, the check composes what its paths
+guarantee (`PathComposer`, `ProgressPaths.h`) and reports it in a remark
+beside its verdict:
+
+    wtc: take_four(int*): wait-free, at most 652 steps (268 + 384 slip pauses)
+    wtc: take_in(int&): wait-free, at most 49·n² + 70·n + 148301 + 68 slip
+         pauses steps; allocates (may); on first use, a per-thread record;
+         with np = 3 for @in
+
+In sequence the level is the weaker and the steps add; over the arms of
+an if, a ternary or a switch the level is the weakest and the steps the
+larger (termwise, which bounds both, and summed over a switch's cases,
+which may fall through); a loop is taken by its class; a call is its
+callee's composition, once per function, and a recursion's depth is not
+read. A counted loop's condition runs once more than its body. A composition
+made while a function of its call cycle is still being composed is not
+remembered. A queue operation contributes its row under its object's counts,
+with each count that has a number put in, and the element's special
+members as calls. A note names the weakest step: what made the level what
+it is, or the bound not a polynomial.
+
+The steps counted are the synchronising ones: the queue operations by
+their rows, and one for each atomic or volatile access and each fence or
+non-blocking inline assembly of the program's own code. Plain
+computation takes none, so a bound says nothing of the time spent
+between those steps. Where several objects with different counts meet on
+one path, np stands for the largest of them.

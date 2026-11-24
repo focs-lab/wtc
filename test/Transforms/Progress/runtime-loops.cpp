@@ -33,6 +33,7 @@
 // CHECK-DAG: error: wtc: jiffy_push(int) is declared lock-free but can block
 // CHECK-DAG: error: wtc: generic_pop(int&) is declared lock-free but can block
 // CHECK-DAG: remark: wtc: spsc_pop(int&) is declared lock-free: nothing it reaches blocks
+// CHECK-DAG: remark: wtc: spsc_pop(int&): wait-free, finite, not instantiated (a loop over the thread's own data)
 // CHECK-DAG: bounded_ring.hpp:{{[0-9]+}}:{{[0-9]+}}: note: which spins until another thread changes what it reads (an atomic or volatile load): it waits for another thread
 // CHECK-DAG: index_ring.hpp:{{[0-9]+}}:{{[0-9]+}}: note: which retries a compare-and-swap only when what it read says the location is free, and otherwise skips it: it waits on the value it read, as a spin lock does
 // CHECK-DAG: hazard.hpp:{{[0-9]+}}:{{[0-9]+}}: note: which takes a static-initialisation lock (__cxa_guard_acquire)

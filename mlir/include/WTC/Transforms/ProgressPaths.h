@@ -49,6 +49,7 @@
 // listed in docs/progress.md.
 
 #include "WTC/Progress.h"
+#include "WTC/Transforms/Blocking.h"
 
 #include "clang/CIR/Dialect/IR/CIRDialect.h"
 
@@ -57,6 +58,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 
+#include <memory>
 #include <optional>
 #include <string>
 
@@ -122,6 +124,83 @@ private:
     ModuleOp module;
     llvm::DenseMap<Operation *, unsigned> summaries;
     llvm::DenseSet<Operation *> inProgress;
+};
+
+// The progress of a path: what a function guarantees, composed from what
+// it runs (docs/progress.md, "Composing a path").
+//
+//   in sequence   the level is the weaker, the steps add;
+//   alternatives  (the arms of an if, a ternary, the cases of a switch)
+//                 the level is the weakest, the steps are the larger,
+//                 termwise;
+//   a loop        by its class: a counted loop multiplies its body's steps,
+//                 a retry makes the path lock-free without a bound, a wait
+//                 makes it blocking, a dual wait partial, and a loop over
+//                 the thread's own data leaves its steps finite but not
+//                 read, unless its body takes none;
+//   a call        the callee's composition, once per function; a call
+//                 into a function without a body here is read as the
+//                 progress check reads it (Blocking.h): one that touches
+//                 only its arguments takes no step, any other blocks;
+//   a wtc op      its row of the table under the counts proved for its
+//                 object (wtc.producers_count, wtc.consumers_count on the
+//                 queue's root), with the element's special members it
+//                 runs composed as calls.
+//
+// Steps are the synchronising ones: the operations on wtc objects, by
+// their rows, and one for each atomic access of the program's own code.
+// Plain computation takes none.
+struct PathProgress {
+    Level level = Level::wait_free;
+    bool partial = false;
+    Bound bound = Bound::zero();
+    Bound amortised = Bound::zero();  // the amortised bound where a row has one, else the worst case
+    Alloc alloc;
+    Kernel kernel = Kernel::none;
+    unsigned firstUse = first_use_none;
+    // The step that made the level what it is, and why; the step that made
+    // the bound what it is when it is not a polynomial.
+    Operation *weakest = nullptr;
+    std::string weakWhy;
+    // The counts the steps were instantiated with, in words, for a remark:
+    // "np = 3 for @q".
+    llvm::SmallVector<std::string, 2> counts;
+};
+
+class PathComposer {
+public:
+    explicit PathComposer(ModuleOp module);
+    PathProgress of(cir::FuncOp f);
+    // The counts of the object a wtc operation acts on, from its queue's
+    // root; unknown when it may act on several, or its queue has none.
+    ThreadCounts countsOf(Operation *op) const;
+    // The queue a wtc operation acts on, by the name its root gives it.
+    std::string queueName(Operation *op) const;
+    LoopClassifier &loops() { return classifier; }
+
+private:
+    PathProgress op(Operation *op);
+    PathProgress region(Region &r);
+    PathProgress call(cir::CallOp call);
+    PathProgress loop(Operation *loop);
+    PathProgress enter(cir::FuncOp f);
+    static PathProgress seq(PathProgress a, const PathProgress &b);
+    static PathProgress alt(PathProgress a, const PathProgress &b);
+    static PathProgress blocked(Operation *at, Level level, std::string why);
+
+    ModuleOp module;
+    LoopClassifier classifier;
+    llvm::DenseMap<int64_t, Operation *> roots;  // queue_id -> root
+    llvm::DenseMap<Operation *, PathProgress> memo;
+    llvm::DenseSet<Operation *> inProgress;
+    // Set when a composition met a function still being composed further
+    // up: what it found is provisional and is not remembered.
+    bool metCycle = false;
+    ElementMembers elements;
+    // Stack slots holding the shared_ptr of a borrowed pop of an inline
+    // queue, which owns nothing: its members run nothing, as the progress
+    // check reads them (BlockingQuery).
+    llvm::DenseSet<Value> ownerlessSlots;
 };
 
 } // namespace mlir::wtc

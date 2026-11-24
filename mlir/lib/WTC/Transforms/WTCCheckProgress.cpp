@@ -12,6 +12,7 @@
 #include "mlir/Pass/Pass.h"
 
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/Demangle/Demangle.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
@@ -55,6 +56,35 @@ static llvm::cl::opt<bool> clWarnOnly("wtc-progress-report-only",
 
 namespace {
 
+// A bound, in words: its value when it has one, with the polynomial it
+// came from where that says more.
+std::string describeBound(const Bound &b) {
+    if (!b.isPoly()) return b.str();
+    if (auto v = b.instantiate(ThreadCounts::unknown())) {
+        std::string s = "at most " + std::to_string(*v) + " steps";
+        const std::string poly = b.str();
+        if (poly != std::to_string(*v)) s += " (" + poly + ")";
+        return s;
+    }
+    return "at most " + b.str() + " steps";
+}
+
+// What a path guarantees, in words, for a remark.
+std::string describePath(const PathProgress &p) {
+    std::string s;
+    if (p.partial) s += "partial (it waits for data), ";
+    s += describeLevel(p.level).str();
+    if (p.level == Level::wait_free) {
+        s += ", " + describeBound(p.bound);
+        if (p.amortised.str() != p.bound.str()) s += "; amortised " + describeBound(p.amortised);
+    }
+    if (p.alloc.kind != Alloc::Kind::never) s += "; allocates (" + p.alloc.str() + ")";
+    if (p.kernel != Kernel::none) s += "; may enter the kernel (" + stringifyKernel(p.kernel).str() + ")";
+    if (p.firstUse) s += "; on first use, a " + describeFirstUse(p.firstUse);
+    if (!p.counts.empty()) s += "; with " + llvm::join(p.counts, ", ");
+    return s;
+}
+
 class WTCCheckProgressPass : public PassWrapper<WTCCheckProgressPass, OperationPass<ModuleOp>> {
 public:
     MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(WTCCheckProgressPass)
@@ -86,12 +116,21 @@ public:
         };
         BlockingQuery blocking(module, {BlockingKind::MayThrow}, loopSite);
         bool failed = false;
+        PathComposer paths(module);
         module.walk([&](cir::FuncOp f) {
             if (!hasAnnotation(f, "wtc_progress_lock_free") || f.getBody().empty()) return;
             const std::string name = llvm::demangle(f.getSymName().str());
             auto sites = blocking.sitesIn(f);
+            // What the function's paths guarantee, composed: the level, the
+            // steps under the counts proved, and the effects beside them.
+            const PathProgress path = paths.of(f);
+            auto composed = [&]() {
+                InFlightDiagnostic r = f.emitRemark() << "wtc: " << name << ": " << describePath(path);
+                if (path.weakest) r.attachNote(path.weakest->getLoc()) << "the weakest step: " << path.weakWhy;
+            };
             if (sites.empty()) {
                 f.emitRemark() << "wtc: " << name << " is declared lock-free: nothing it reaches blocks";
+                composed();
                 return;
             }
             failed = true;
@@ -114,6 +153,8 @@ public:
             if (const size_t more = sites.size() > kMaxSites ? sites.size() - kMaxSites : 0)
                 d.attachNote(f.getLoc()) << "and " << more << " more blocking site"
                                          << (more == 1 ? "" : "s") << ", not shown";
+            d.report();
+            composed();
         });
         if (failed && !clWarnOnly) signalPassFailure();
         markAllAnalysesPreserved();

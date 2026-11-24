@@ -6,8 +6,9 @@
 // move-assignment, which frees the buffer it held. A consumer of a
 // trivially copyable struct, or of one whose members only count, runs
 // nothing of the element's that blocks, and the ring's own steps neither
-// wait nor allocate, so it passes. A member without a body here is
-// opaque, as any call is.
+// wait nor allocate, so it passes, with the counting member's steps added
+// to the ring's bound. A member without a body here is opaque, as any
+// call is.
 //
 // RUN: %clangxx -std=c++17 -I%shim -fclangir -emit-cir %s -o %t.cir
 // RUN: not wtc-opt %t.cir --lift-cir-to-wtc --queue-ownership-analysis --wtc-specialize --wtc-check-progress -o /dev/null 2>&1 | FileCheck %s
@@ -17,7 +18,9 @@
 // CHECK: note: runs the element's move-assignment, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>::operator=(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>&&)
 // CHECK: note: which calls the allocator
 // CHECK-LABEL: remark: wtc: take_point(Point&) is declared lock-free: nothing it reaches blocks
+// CHECK: remark: wtc: take_point(Point&): wait-free, at most 163 steps (67 + 96 slip pauses)
 // CHECK-LABEL: remark: wtc: take_counted(Counted&) is declared lock-free: nothing it reaches blocks
+// CHECK: remark: wtc: take_counted(Counted&): wait-free, at most 173 steps (77 + 96 slip pauses)
 // CHECK-LABEL: error: wtc: take_opaque(Opaque&) is declared lock-free but can block
 // CHECK: note: runs the element's move-assignment, Opaque::operator=(Opaque&&)
 // CHECK: note: which calls Opaque::operator=(Opaque&&), whose body is not visible here, so it is counted as blocking

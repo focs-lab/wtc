@@ -143,6 +143,28 @@ std::optional<uint64_t> Bound::instantiate(const ThreadCounts &counts) const {
     return sum;
 }
 
+Bound Bound::substitute(const ThreadCounts &counts) const {
+    if (kind != Kind::Poly) return *this;
+    Bound r = zero();
+    for (Term t : terms) {
+        bool overflow = false;
+        auto put = [&](uint8_t &e, const Count &c) {
+            if (!e) return;
+            auto v = c.value();
+            if (!v) return;
+            for (unsigned i = 0; i < e; ++i)
+                if (mulOver(t.coeff, *v, t.coeff)) overflow = true;
+            e = 0;
+        };
+        put(t.np, counts.producers);
+        put(t.nc, counts.consumers);
+        put(t.n, counts.domain);
+        if (overflow) return tooLarge();
+        if (t.coeff) r = r.plus(Bound{Kind::Poly, {t}, {}});
+    }
+    return r;
+}
+
 // The weaker of two non-polynomial kinds: a history-dependent bound is no
 // bound in the counts, a finite one has at least no thread stretching it.
 static Bound::Kind weaker(Bound::Kind a, Bound::Kind b) {

@@ -125,6 +125,28 @@ struct BlockingSite {
     llvm::SmallVector<cir::FuncOp, 8> via;
 };
 
+// The special members of a queue operation's element that the operation
+// runs (ProgressSpec::element), found in the module through ClangIR's
+// record of special members.
+class ElementMembers {
+public:
+    explicit ElementMembers(ModuleOp module);
+    struct Found {
+        unsigned flags = 0;  // what the operation runs, narrowed by the push's form
+        bool unknown = false;  // the element type could not be read
+        llvm::SmallVector<cir::FuncOp, 4> funcs;  // in the order the operation runs them
+    };
+    Found of(Operation *op, unsigned flags);
+
+private:
+    // For each record type, its special members that are not trivial,
+    // with the ElementCode flag each stands for.
+    llvm::DenseMap<Type, llvm::SmallVector<std::pair<unsigned, cir::FuncOp>, 4>> members;
+    // For each queue's record type, its element type, read from the shim's
+    // operations on it.
+    llvm::DenseMap<Type, Type> elementOfQueue;
+};
+
 class BlockingQuery {
 public:
     // A pass's own refusal at an operation: in the code it asked about, or
@@ -166,12 +188,7 @@ private:
     // The element's special members a queue operation runs, followed as
     // calls it makes.
     std::optional<BlockingSite> elementSite(Operation *op, unsigned flags);
-    // For each record type, its special members that are not trivial,
-    // with the ElementCode flag each stands for.
-    llvm::DenseMap<Type, llvm::SmallVector<std::pair<unsigned, cir::FuncOp>, 4>> members;
-    // For each queue's record type, its element type, read from the shim's
-    // operations on it.
-    llvm::DenseMap<Type, Type> elementOfQueue;
+    ElementMembers elements;
 };
 
 // The element type of a queue operation: the pointee of the value a push

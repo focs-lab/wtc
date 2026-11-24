@@ -216,43 +216,11 @@ bool onlyNonBlockingInstructions(llvm::StringRef text, bool inert) {
 }
 
 BlockingQuery::BlockingQuery(ModuleOp module, BlockingKinds accepted, Extra extra)
-    : accepted(accepted), extra(std::move(extra)) {
+    : accepted(accepted), extra(std::move(extra)), elements(module) {
     module.walk([&](QueuePopOp pop) {
         if (pop.getBorrowed() && pop.getImpl() == Impl::spsc_inline && pop.getOut())
             ownerlessSlots.insert(pop.getOut());
     });
-    // The element's special members, by the record they belong to. A
-    // trivial one does nothing a check could see. One that is not trivial
-    // and that the runtime instantiated for a queue of this element is
-    // here, with its body or as a declaration: the runtime's template calls
-    // it. So a member absent from the module is trivial, or never run.
-    for (cir::FuncOp f : module.getOps<cir::FuncOp>()) {
-        Attribute info = f.getFuncInfoAttr();
-        if (!info || f.isCxxTrivialMemberFunction()) continue;
-        if (auto c = dyn_cast<cir::CXXCtorAttr>(info)) {
-            if (c.getCtorKind() == cir::CtorKind::Copy) members[c.getType()].push_back({element_copy_ctor, f});
-            if (c.getCtorKind() == cir::CtorKind::Move) members[c.getType()].push_back({element_move_ctor, f});
-        } else if (auto a = dyn_cast<cir::CXXAssignAttr>(info)) {
-            // A move-assignment falls back to the copy-assignment for a
-            // type without one; both count.
-            members[a.getType()].push_back({element_move_assign, f});
-        } else if (auto d = dyn_cast<cir::CXXDtorAttr>(info)) {
-            members[d.getType()].push_back({element_dtor, f});
-        }
-    }
-    // The element of each queue type, from the shim's operations that take
-    // one: (this, T&) or (this, const T&) or (this, T&&).
-    for (cir::FuncOp f : module.getOps<cir::FuncOp>()) {
-        const SemanticOpKind k = getSemanticKind(f);
-        if (k != SemanticOpKind::QueuePush && k != SemanticOpKind::QueueTryPopInto &&
-            k != SemanticOpKind::QueuePopWait && k != SemanticOpKind::QueuePopWaitFor)
-            continue;
-        auto args = f.getFunctionType().getInputs();
-        if (args.size() < 2) continue;
-        auto self = dyn_cast<cir::PointerType>(args[0]);
-        auto elem = dyn_cast<cir::PointerType>(args[1]);
-        if (self && elem) elementOfQueue.try_emplace(self.getPointee(), elem.getPointee());
-    }
 }
 
 Type queueElementType(Operation *op, const llvm::DenseMap<Type, Type> &byQueue) {
@@ -302,7 +270,43 @@ std::string describeSpecialMember(cir::FuncOp f) {
     return "special member";
 }
 
-std::optional<BlockingSite> BlockingQuery::elementSite(Operation *op, unsigned flags) {
+ElementMembers::ElementMembers(ModuleOp module) {
+    // The element's special members, by the record they belong to. A
+    // trivial one does nothing a check could see. One that is not trivial
+    // and that the runtime instantiated for a queue of this element is
+    // here, with its body or as a declaration: the runtime's template calls
+    // it. So a member absent from the module is trivial, or never run.
+    for (cir::FuncOp f : module.getOps<cir::FuncOp>()) {
+        Attribute info = f.getFuncInfoAttr();
+        if (!info || f.isCxxTrivialMemberFunction()) continue;
+        if (auto c = dyn_cast<cir::CXXCtorAttr>(info)) {
+            if (c.getCtorKind() == cir::CtorKind::Copy) members[c.getType()].push_back({element_copy_ctor, f});
+            if (c.getCtorKind() == cir::CtorKind::Move) members[c.getType()].push_back({element_move_ctor, f});
+        } else if (auto a = dyn_cast<cir::CXXAssignAttr>(info)) {
+            // A move-assignment falls back to the copy-assignment for a
+            // type without one; both count.
+            members[a.getType()].push_back({element_move_assign, f});
+        } else if (auto d = dyn_cast<cir::CXXDtorAttr>(info)) {
+            members[d.getType()].push_back({element_dtor, f});
+        }
+    }
+    // The element of each queue type, from the shim's operations that take
+    // one: (this, T&) or (this, const T&) or (this, T&&).
+    for (cir::FuncOp f : module.getOps<cir::FuncOp>()) {
+        const SemanticOpKind k = getSemanticKind(f);
+        if (k != SemanticOpKind::QueuePush && k != SemanticOpKind::QueueTryPopInto &&
+            k != SemanticOpKind::QueuePopWait && k != SemanticOpKind::QueuePopWaitFor)
+            continue;
+        auto args = f.getFunctionType().getInputs();
+        if (args.size() < 2) continue;
+        auto self = dyn_cast<cir::PointerType>(args[0]);
+        auto elem = dyn_cast<cir::PointerType>(args[1]);
+        if (self && elem) elementOfQueue.try_emplace(self.getPointee(), elem.getPointee());
+    }
+}
+
+ElementMembers::Found ElementMembers::of(Operation *op, unsigned flags) {
+    Found out;
     // A push of a const reference copies; one of an rvalue reference moves,
     // or copies for a type without a move constructor. Read from the shim
     // function the push came from; without one, either.
@@ -312,23 +316,33 @@ std::optional<BlockingSite> BlockingQuery::elementSite(Operation *op, unsigned f
                 const std::string name = llvm::demangle(f.getSymName().str());
                 if (!llvm::StringRef(name).contains("&&")) flags &= ~element_move_ctor;
             }
+    out.flags = flags;
     Type elem = queueElementType(op, elementOfQueue);
-    if (!elem)
-        return site(op, BlockingKind::Opaque,
-                    "runs the element's " + describeElementCode(flags) +
-                        ", and the element type is not known here, so it is counted as blocking");
+    if (!elem) {
+        out.unknown = true;
+        return out;
+    }
     // A scalar or a pointer runs no code of its own.
-    if (!isa<cir::RecordType>(elem)) return std::nullopt;
+    if (!isa<cir::RecordType>(elem)) return out;
     auto it = members.find(elem);
-    if (it == members.end()) return std::nullopt;
+    if (it == members.end()) return out;
     // In the order the operation runs them: the producer's constructor, the
     // consumer's assignment, then the destructor of what is left in the
     // cell.
     for (unsigned flag : {element_copy_ctor, element_move_ctor, element_move_assign, element_dtor})
-        for (auto [kind, f] : it->second) {
-            if (kind != flag || !(flags & flag)) continue;
-            if (auto s = enter(op, f, /*nothrow=*/true)) return s;
-        }
+        for (auto [kind, f] : it->second)
+            if (kind == flag && (flags & flag)) out.funcs.push_back(f);
+    return out;
+}
+
+std::optional<BlockingSite> BlockingQuery::elementSite(Operation *op, unsigned flags) {
+    ElementMembers::Found found = elements.of(op, flags);
+    if (found.unknown)
+        return site(op, BlockingKind::Opaque,
+                    "runs the element's " + describeElementCode(found.flags) +
+                        ", and the element type is not known here, so it is counted as blocking");
+    for (cir::FuncOp f : found.funcs)
+        if (auto s = enter(op, f, /*nothrow=*/true)) return s;
     return std::nullopt;
 }
 
