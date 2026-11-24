@@ -142,8 +142,11 @@ The servers' lives, and what each is started with:
 - **The affinity and scheduling of its starting client,** unless
   `WTC_DELEGATE_CPU` pins it.
 - **None in a fork's child:** the child's runtime starts empty
-  (`pthread_atfork`), and its first delegated section starts a server of
-  its own.
+  (`pthread_atfork`, registered while the program starts), and its first
+  delegated section starts a server of its own. No state of the runtime's
+  is a function-local static with a dynamic initialiser, whose guard a
+  fork could leave taken by a thread the child does not have; the tick
+  rate the waiters use is kept the same way.
 
 The environment:
 
@@ -163,7 +166,8 @@ server per mutex, clients and servers asleep between sections,
 short-lived clients whose waiters later threads take over; servers ending
 with the last client, a main that ends with `pthread_exit`, the bound on
 servers, their blocked signals and their stack, a fork's child, a
-section from a thread-local destructor, and a client's errno, which a
+section from a thread-local destructor, forks taken while threads start
+their first sections, and a client's errno, which a
 delegated section leaves as it was (the runtime's own calls, the futex
 a client parks on among them, may set it; the original's lock and
 unlock do not).

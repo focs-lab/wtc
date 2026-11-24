@@ -16,6 +16,9 @@
 //   delegate_test fork            the child of a fork starts its own server
 //   delegate_test tls_exit        a section from a thread-local destructor
 //   delegate_test errno           a delegated section leaves errno as it was
+//   delegate_test fork_statics    forks taken while threads start their first
+//                                 sections: no child waits on a lock or a
+//                                 static's guard a parent thread held
 //
 // A section here is what the compiler outlines: the mutex's own lock, the
 // body, the unlock, in one function of the environment. Every test checks
@@ -482,12 +485,52 @@ void errno_kept() {
     check(changed == 0, "errno: a delegated section changed the client's errno");
     check(g.count == 20, "errno: the count");
 }
+// Two threads start delegating, the runtime made on their first
+// sections, while the main thread forks children for 3 ms; each child
+// delegates from two threads of its own. A child that waits on a lock, or
+// on a function-local static's guard, that a parent thread held at the
+// fork never ends; its alarm kills it, and that is a failure.
+void fork_statics() {
+    static guarded parent, child;
+    std::atomic<bool> stop{false};
+    std::vector<std::thread> ts;
+    for (int t = 0; t < 2; ++t) ts.emplace_back([&] {
+        while (!stop.load()) {
+            add_env e{&parent, 1, -1};
+            wtc_delegate_run(&parent.m, add_section, &e);
+        }
+    });
+    std::vector<pid_t> kids;
+    const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(3);
+    while (std::chrono::steady_clock::now() < until) {
+        const pid_t pid = fork();
+        if (pid == 0) {
+            alarm(10);
+            std::thread a([] { for (int i = 0; i < 200; ++i) { add_env e{&child, 1, -1}; wtc_delegate_run(&child.m, add_section, &e); } });
+            std::thread b([] { for (int i = 0; i < 200; ++i) { add_env e{&child, 1, -1}; wtc_delegate_run(&child.m, add_section, &e); } });
+            a.join();
+            b.join();
+            std::_Exit(child.count == 400 ? 0 : 3);
+        }
+        if (pid > 0) kids.push_back(pid);
+    }
+    stop = true;
+    for (auto& t : ts) t.join();
+    int bad = 0;
+    for (pid_t k : kids) {
+        int status = 0;
+        waitpid(k, &status, 0);
+        bad += !(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    }
+    check(!kids.empty(), "fork_statics: no child was forked");
+    check(bad == 0, "fork_statics: a child hung or lost a section");
+}
 }  // namespace
 
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::fprintf(stderr, "usage: delegate_test exclusion|results|order|nested|servers|park|churn|ends|main_exit|cap|"
-                             "signals|stack|fork|tls_exit|errno [N]\n");
+                             "signals|stack|fork|tls_exit|errno|fork_statics [N]\n");
         return 2;
     }
     const std::string mode = argv[1];
@@ -507,6 +550,7 @@ int main(int argc, char** argv) {
     else if (mode == "fork") fork_child();
     else if (mode == "tls_exit") tls_exit();
     else if (mode == "errno") errno_kept();
+    else if (mode == "fork_statics") fork_statics();
     else {
         std::fprintf(stderr, "unknown mode %s\n", mode.c_str());
         return 2;

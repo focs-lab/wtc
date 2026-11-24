@@ -45,6 +45,7 @@
 #ifndef WTC_RUNTIME_STREAM_GATE_HPP
 #define WTC_RUNTIME_STREAM_GATE_HPP
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 
@@ -106,10 +107,19 @@ inline std::uint64_t measure_ticks_per_ms() {
 #endif
 }
 
-// Measured on first use, once per process, by whichever queue first needs
-// it; nothing runs at program start.
+// Measured on first use, by whichever queue first needs it; nothing runs
+// at program start. Kept in a constant-initialised atomic rather than a
+// function-local static: the static's guard is a lock, and a fork taken
+// while another thread measures (200 microseconds) would leave the child
+// waiting on it for ever. Two threads that both find it unset both
+// measure; either result will do.
+inline std::atomic<std::uint64_t> ticks_per_ms_measured{0};
 inline std::uint64_t ticks_per_ms() {
-  static const std::uint64_t rate = measure_ticks_per_ms();
+  std::uint64_t rate = ticks_per_ms_measured.load(std::memory_order_relaxed);
+  if (!rate) {
+    rate = measure_ticks_per_ms();
+    ticks_per_ms_measured.store(rate, std::memory_order_relaxed);
+  }
   return rate;
 }
 

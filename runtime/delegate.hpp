@@ -271,30 +271,50 @@ private:
 
     // A fork's child starts with an empty runtime: a new registry and pool
     // (the old ones, whose locks another thread may have held, are left).
-    static std::atomic<unsigned>& generation() {
-        static std::atomic<unsigned> g{0};
-        return g;
-    }
-    static std::atomic<registry*>& reg_ptr() {
-        static std::atomic<registry*> p{new registry};
+    //
+    // No state of the runtime's is a function-local static with a dynamic
+    // initialiser: its guard is a lock, and a fork taken while another
+    // thread is inside the initialiser leaves the child waiting on it for
+    // ever. These are constant-initialised atomics, made on first use by
+    // whichever thread gets there first.
+    static inline std::atomic<unsigned> generation_{0};
+    static inline std::atomic<registry*> registry_{nullptr};
+    static std::atomic<unsigned>& generation() { return generation_; }
+    template <class T>
+    static std::atomic<T*>& made(std::atomic<T*>& p) {
+        if (!p.load(std::memory_order_acquire)) {
+            T* fresh = new T;
+            T* none = nullptr;
+            if (!p.compare_exchange_strong(none, fresh, std::memory_order_acq_rel, std::memory_order_acquire))
+                delete fresh;
+        }
         return p;
     }
+    static std::atomic<registry*>& reg_ptr() { return made(registry_); }
     static registry& reg() { return *reg_ptr().load(std::memory_order_acquire); }
 
     struct waiter_pool {
         std::mutex m;
         std::vector<waiter*> free;
     };
-    static std::atomic<waiter_pool*>& pool_ptr() {
-        static std::atomic<waiter_pool*> p{new waiter_pool};
-        return p;
-    }
+    static inline std::atomic<waiter_pool*> pool_{nullptr};
+    static std::atomic<waiter_pool*>& pool_ptr() { return made(pool_); }
 
     static void after_fork_in_child() {
         reg_ptr().store(new registry, std::memory_order_release);
         pool_ptr().store(new waiter_pool, std::memory_order_release);
         generation().fetch_add(1, std::memory_order_acq_rel);
     }
+    // Registered while the program starts, before any thread can hold the
+    // registry's or the pool's lock: registered later, by the first
+    // client, a fork taken before it would leave the child with the
+    // parent's runtime, its locks perhaps held by threads the child has
+    // not.
+    static bool hook_fork() noexcept {
+        pthread_atfork(nullptr, nullptr, after_fork_in_child);
+        return true;
+    }
+    static inline const bool fork_hooked_ = hook_fork();
 
     // A client's waiter, from a pool that is never freed: a thread that
     // ends gives its waiter back, and a later thread takes it over. The
@@ -361,13 +381,20 @@ private:
             }
     }
 
+    // Read on first use; ~0 until then (see the statics above).
+    static inline std::atomic<std::uint64_t> spin_ns_{~std::uint64_t{0}};
     static std::uint64_t spin_ns() {
-        static const std::uint64_t ns = [] {
+        std::uint64_t ns = spin_ns_.load(std::memory_order_relaxed);
+        if (ns == ~std::uint64_t{0}) {
             const char* e = std::getenv("WTC_DELEGATE_SPIN_NS");
-            return e && *e ? std::strtoull(e, nullptr, 10) : std::uint64_t{50000};
-        }();
+            ns = e && *e ? std::strtoull(e, nullptr, 10) : std::uint64_t{50000};
+            if (ns == ~std::uint64_t{0}) --ns;
+            spin_ns_.store(ns, std::memory_order_relaxed);
+        }
         return ns;
     }
+
+    static inline std::atomic<bool> hooked_{false};
 
     static void read_env(registry& g) {
         if (g.read_env) return;
@@ -385,11 +412,9 @@ private:
                 p = *end == ',' ? end + 1 : end;
             }
         }
-        static std::once_flag once;
-        std::call_once(once, [&] {
-            pthread_atfork(nullptr, nullptr, after_fork_in_child);
-            if (g.report) std::atexit(report);
-        });
+        // Once per process, not per registry; with an atomic rather than
+        // std::call_once, whose flag a fork could leave taken.
+        if (g.report && !hooked_.exchange(true, std::memory_order_relaxed)) std::atexit(report);
     }
 
     static void report() {

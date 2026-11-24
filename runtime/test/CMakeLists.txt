@@ -376,6 +376,10 @@ set_tests_properties(delegate_exclusion delegate_order delegate_servers delegate
 # pthread_exit alive (a program with no server does the same), and refuses
 # to start a thread in the child of a multi-threaded fork unless told.
 if(NOT WTC_RT_SANITIZE STREQUAL "thread")
+  # Many forks of a process whose threads are running: ThreadSanitizer's own
+  # runtime is not fork-safe that way.
+  add_test(NAME delegate_fork_statics COMMAND delegate_test fork_statics)
+  set_tests_properties(delegate_fork_statics PROPERTIES TIMEOUT 60)
   add_test(NAME delegate_main_exit COMMAND delegate_test main_exit)
   set_tests_properties(delegate_main_exit PROPERTIES TIMEOUT 30 PASS_REGULAR_EXPRESSION "main_exit: ok")
 else()
