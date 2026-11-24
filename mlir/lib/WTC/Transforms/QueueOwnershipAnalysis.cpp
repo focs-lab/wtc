@@ -110,6 +110,21 @@ struct SideInfo {
     llvm::SmallSetVector<unsigned, 4> threads;
     llvm::SmallVector<Access, 4> accesses;
     bool anyMany = false;
+    // How many dynamic threads each of `threads` stands for (Instance::
+    // threadCount); two instances of one thread that disagree make it
+    // unbounded, which a sum can only overstate.
+    llvm::DenseMap<unsigned, Count> threadCounts;
+    void noteCount(const Instance &inst) {
+        auto [it, fresh] = threadCounts.try_emplace(inst.thread, inst.threadCount);
+        if (!fresh && !(it->second == inst.threadCount)) it->second = Count::unbounded();
+    }
+    // The side's threads as a number: the sum over its threads, in the
+    // order they were met.
+    Count total() const {
+        Count n = Count::zero();
+        for (unsigned t : threads) n = n + threadCounts.lookup(t);
+        return n;
+    }
     // 0 if nobody touches this side, 2 for "many", else 1.
     unsigned count() const {
         if (threads.empty()) return 0;
@@ -2179,6 +2194,17 @@ void QueueOwnershipAnalysisPass::writeVerdicts(bool capExceeded) {
         Operation *carrier = library ? nullptr : whole ? root : carrierOf(key, noCarrier);
         if (carrier) {
             carrier->setAttr(kTopologyAttrName, TopologyAttr::get(ctx, t));
+            // The counts, for the progress check: one side's threads as a
+            // number where the program fixes it. A side counted as one
+            // although several of its threads are seen (started on the arms
+            // of one branch) is one; a queue whose topology is unknown has
+            // no counts.
+            if (t != Topology::unknown)
+                for (auto [n, side, attr] : {std::tuple{p, &info.producers, kProducersCountAttrName},
+                                             std::tuple{c, &info.consumers, kConsumersCountAttrName}}) {
+                    const Count k = n == 0 ? Count::zero() : n == 1 ? Count::one() : side->total();
+                    carrier->setAttr(attr, StringAttr::get(ctx, k.str()));
+                }
             carrier->setAttr(kQueueIdAttrName, IntegerAttr::get(IntegerType::get(ctx, 64), idOf(key)));
             if (!whole) carrier->setAttr(kQueueNameAttrName, StringAttr::get(ctx, label));
         }
@@ -2637,6 +2663,7 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
             if (push && push.getOverrun()) {
                 SideInfo &also = info.consumers;
                 also.threads.insert(inst->thread);
+                also.noteCount(*inst);
                 Access b = accessOf(op, *inst);
                 b.oneOf = rs.size() > 1;
                 also.accesses.push_back(b);
@@ -2644,6 +2671,7 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
             }
             SideInfo &side = isConsumerOp(op) ? info.consumers : info.producers;
             side.threads.insert(inst->thread);
+            side.noteCount(*inst);
             Access a = accessOf(op, *inst);
             a.oneOf = rs.size() > 1;
             // Credit the thread to its loop only when that run of the loop
@@ -2712,6 +2740,7 @@ void QueueOwnershipAnalysisPass::runOnOperation() {
             SideInfo &side = roots[k].producers;
             libraryKeys.insert(k);
             side.threads.insert(u.inst->thread);
+            side.noteCount(*u.inst);
             Access a = accessOf(u.op, *u.inst);
             a.oneOf = true;
             a.poolWhy = u.why;

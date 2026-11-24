@@ -1,5 +1,7 @@
 #pragma once
 
+#include "WTC/Progress.h"
+
 #include "clang/CIR/Dialect/IR/CIRDialect.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
@@ -289,6 +291,13 @@ struct CountedLoop {
     bool inclusive = false; // i <= bound
 };
 std::optional<CountedLoop> countedLoop(cir::ForOp loop);
+
+// How many times a loop's body runs at most: for a counted loop whose bound
+// is a constant, that number (bound - first, plus one when inclusive, zero
+// when negative); for one whose bound is a variable (countedLoop), the
+// variable, by name, as a symbolic count; for any other loop, unbounded.
+// The loop may leave earlier, so the count is an upper bound.
+Count loopTrips(cir::ForOp loop);
 
 // Whether the queue whose root this is was found spsc, or would be once each
 // counted loop recorded on it (kProducersLoopAttrName, kConsumersLoopAttrName)

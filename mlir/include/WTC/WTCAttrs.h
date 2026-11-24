@@ -51,6 +51,11 @@ inline constexpr llvm::StringLiteral kSpawnLoopAttrName = "wtc.spawn_loop";
 inline constexpr llvm::StringLiteral kProducersViaAttrName = "wtc.producers_via";
 inline constexpr llvm::StringLiteral kConsumersViaAttrName = "wtc.consumers_via";
 inline constexpr llvm::StringLiteral kSpawnViaAttrName = "wtc.spawn_via";
+// On a queue's root, how many threads each side stands for, as a Count
+// reads it back (WTC/Progress.h): "1", "4", "nthreads", "unbounded".
+// Absent means unknown, which is unbounded.
+inline constexpr llvm::StringLiteral kProducersCountAttrName = "wtc.producers_count";
+inline constexpr llvm::StringLiteral kConsumersCountAttrName = "wtc.consumers_count";
 
 } // namespace mlir::wtc
 

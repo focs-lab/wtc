@@ -872,31 +872,90 @@ std::optional<int64_t> constructorTag(llvm::ArrayRef<cir::CallOp> ctors) {
     return v.getSInt();
 }
 
-std::optional<CountedLoop> countedLoop(cir::ForOp loop) {
+// The induction variable of a loop's condition `i < bound` (or <=, or the
+// mirror with > and >=): the load of i and the bound's operand.
+static bool loopCompare(cir::ForOp loop, cir::LoadOp &ind, Value &bound, bool &inclusive) {
     Region &cond = loop.getCond();
-    if (!cond.hasOneBlock()) return std::nullopt;
+    if (!cond.hasOneBlock()) return false;
     auto term = dyn_cast<cir::ConditionOp>(cond.front().getTerminator());
     auto cmp = term ? term.getCondition().getDefiningOp<cir::CmpOp>() : cir::CmpOp();
-    if (!cmp || !isa<cir::IntType>(cmp.getLhs().getType())) return std::nullopt;
-    auto lhs = cmp.getLhs().getDefiningOp<cir::LoadOp>();
-    auto rhs = cmp.getRhs().getDefiningOp<cir::LoadOp>();
-    if (!lhs || !rhs) return std::nullopt;
-    // i on the left of < or <=, or on the right of > or >=.
-    cir::LoadOp ind, bound;
-    bool inclusive = false;
+    if (!cmp || !isa<cir::IntType>(cmp.getLhs().getType())) return false;
+    inclusive = false;
+    Value i;
     switch (cmp.getKind()) {
     case cir::CmpOpKind::le: inclusive = true; [[fallthrough]];
-    case cir::CmpOpKind::lt: ind = lhs; bound = rhs; break;
+    case cir::CmpOpKind::lt: i = cmp.getLhs(); bound = cmp.getRhs(); break;
     case cir::CmpOpKind::ge: inclusive = true; [[fallthrough]];
-    case cir::CmpOpKind::gt: ind = rhs; bound = lhs; break;
-    default: return std::nullopt;
+    case cir::CmpOpKind::gt: i = cmp.getRhs(); bound = cmp.getLhs(); break;
+    default: return false;
     }
+    ind = i.getDefiningOp<cir::LoadOp>();
+    return static_cast<bool>(ind);
+}
+
+// Where i starts, when only the loop's step writes it inside the loop, by
+// one, and the nearest store before the loop sets it to a constant.
+static std::optional<int64_t> stepsByOneFrom(cir::ForOp loop, cir::AllocaOp slot);
+
+std::optional<CountedLoop> countedLoop(cir::ForOp loop) {
+    cir::LoadOp ind;
+    Value boundVal;
+    bool inclusive = false;
+    if (!loopCompare(loop, ind, boundVal, inclusive)) return std::nullopt;
+    auto bound = boundVal.getDefiningOp<cir::LoadOp>();
+    if (!bound) return std::nullopt;
     auto slot = ind.getAddr().getDefiningOp<cir::AllocaOp>();
     if (!slot) return std::nullopt;
     Value boundAddr = bound.getAddr();
     if (boundAddr == slot.getResult() ||
         !(boundAddr.getDefiningOp<cir::GetGlobalOp>() || boundAddr.getDefiningOp<cir::AllocaOp>()))
         return std::nullopt;
+    auto first = stepsByOneFrom(loop, slot);
+    if (!first) return std::nullopt;
+    return CountedLoop{loop, bound, *first, inclusive};
+}
+
+Count loopTrips(cir::ForOp loop) {
+    cir::LoadOp ind;
+    Value boundVal;
+    bool inclusive = false;
+    if (!loopCompare(loop, ind, boundVal, inclusive)) return Count::unbounded();
+    if (auto c = boundVal.getDefiningOp<cir::ConstantOp>()) {
+        auto k = dyn_cast<cir::IntAttr>(c.getValue());
+        auto slot = ind.getAddr().getDefiningOp<cir::AllocaOp>();
+        auto ty = k ? dyn_cast<cir::IntType>(k.getType()) : cir::IntType();
+        if (!k || !slot || !ty) return Count::unbounded();
+        auto first = stepsByOneFrom(loop, slot);
+        if (!first) return Count::unbounded();
+        // Read with the comparison's signedness: an unsigned bound of 2^31
+        // or more is that number, not a negative one. The first value was
+        // stored into i, of the same type.
+        const __int128 bound = ty.isSigned() ? static_cast<__int128>(k.getSInt()) : static_cast<__int128>(k.getUInt());
+        const __int128 from =
+            ty.isSigned() ? static_cast<__int128>(*first)
+                          : static_cast<__int128>(static_cast<uint64_t>(*first) &
+                                                  (ty.getWidth() >= 64 ? ~uint64_t(0) : (uint64_t(1) << ty.getWidth()) - 1));
+        const __int128 n = bound - from + (inclusive ? 1 : 0);
+        if (n > static_cast<__int128>(~uint64_t(0))) return Count::unbounded();
+        return Count::constant(n > 0 ? static_cast<uint64_t>(n) : 0);
+    }
+    auto l = countedLoop(loop);
+    if (!l) return Count::unbounded();
+    // A bound read atomically or as volatile is one another thread may
+    // change while the loop runs: no count.
+    if (l->bound.getMemOrder() || l->bound.getIsVolatile()) return Count::unbounded();
+    // The bound's name: the variable, or the global, demangled.
+    std::string name;
+    Value addr = l->bound.getAddr();
+    if (auto a = addr.getDefiningOp<cir::AllocaOp>()) name = a.getName().str();
+    else if (auto g = addr.getDefiningOp<cir::GetGlobalOp>()) name = llvm::demangle(g.getName().str());
+    if (name.empty()) name = "the loop's bound";
+    if (l->first != 0) name += (l->first > 0 ? " - " : " + ") + std::to_string(l->first > 0 ? l->first : -l->first);
+    if (l->inclusive) name += " + 1";
+    return Count::symbolic(name);
+}
+
+static std::optional<int64_t> stepsByOneFrom(cir::ForOp loop, cir::AllocaOp slot) {
     // i is read and written directly and nowhere else (its lifetime marks
     // at -O1 aside), and inside the loop only the step writes it, once,
     // adding one.
@@ -929,7 +988,7 @@ std::optional<CountedLoop> countedLoop(cir::ForOp loop) {
             auto c = st.getValue().getDefiningOp<cir::ConstantOp>();
             auto v = c ? dyn_cast<cir::IntAttr>(c.getValue()) : cir::IntAttr();
             if (!v) return std::nullopt;
-            return CountedLoop{loop, bound, v.getSInt(), inclusive};
+            return v.getSInt();
         }
         bool writes = false;
         op->walk([&](cir::StoreOp st) { writes |= st.getAddr() == slot.getResult(); });

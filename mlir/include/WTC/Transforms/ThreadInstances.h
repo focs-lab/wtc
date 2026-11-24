@@ -20,13 +20,17 @@
 // Roots of the walk: main; the functions global constructors run (on the
 // main thread, once); every function whose address is taken other than as a
 // spawn entry, which may be called from any thread any number of times; any
-// remaining externally visible function nobody in this translation unit
-// calls; and, when the client says another translation unit may call it
+// remaining externally visible function nobody in this module calls; and,
+// when the client says another translation unit may call it
 // (setCallableElsewhere), an externally visible function this one calls as
 // well. Each of the last three stands for any number of threads the module
-// cannot account for. Which other units exist is the client's to say: the
-// walk sees one translation unit, and docs/audit.md says what the queue
-// analysis assumes of the rest of the program and what it checks.
+// cannot account for. The walk sees one module: the linked module of the
+// program's units when wtc-cc builds several (wtc-link), or one translation
+// unit. Which other units exist beyond it is the client's to say, and
+// docs/audit.md says what the queue analysis assumes of the rest of the
+// program and what it checks.
+
+#include "WTC/Progress.h"
 
 #include "clang/CIR/Dialect/IR/CIRDialect.h"
 
@@ -124,6 +128,17 @@ struct Instance {
     // credits a thread to the loop of the object it touches compares this
     // with the instance that built the object.
     const Instance *countLoopInst = nullptr;
+    // How many dynamic threads this instance's thread stands for, and how
+    // many times the function runs over all of them, as a number where the
+    // program fixes one (WTC/Progress.h, Count): one for main, the product
+    // of the trip counts of the counted loops around each spawn and call
+    // on the chain (loopTrips in Utils.h), symbolic where such a loop's
+    // bound is a variable, unbounded for a root standing for any number of
+    // threads, a recursion, a goto, or any other loop. threadMult and
+    // execMult say Many whenever these are more than one, and stay what
+    // the clients that need no number read.
+    Count threadCount = Count::unbounded();
+    Count execCount = Count::unbounded();
 };
 
 // Where a handle points, as far as the walk can read it: a root (a
@@ -298,6 +313,12 @@ public:
     // guess; a client that would turn it into a claim treats it as unknown.
     Mult siteMult(Operation *op, cir::FuncOp f);
     Mult siteMult(Operation *op, cir::FuncOp f, bool &known);
+    // siteMult as a number: how many times the operation runs per run of
+    // f, at most. One outside any loop of a structured function; the
+    // product of loopTrips over the loops around it; unbounded in a
+    // function with a goto, around a loop that is not counted, or for a
+    // launch on every DPDK lcore.
+    Count siteCount(Operation *op, cir::FuncOp f);
 
     // Whether some call that can spawn a thread comes before this operation
     // in its function. An operation inside a loop that contains a spawn

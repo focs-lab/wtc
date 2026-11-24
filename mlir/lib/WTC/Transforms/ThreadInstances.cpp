@@ -26,7 +26,10 @@ Instance &ThreadInstanceWalk::addInstance(Instance inst) {
     // its accesses repeat however the call that reached it was placed. The
     // walk skips the recursive instance itself, and before this the
     // function counted as running once, which made a pair it touched cold.
-    if (isRecursive(inst.func)) inst.execMult = Mult::Many;
+    if (isRecursive(inst.func)) {
+        inst.execMult = Mult::Many;
+        inst.execCount = Count::unbounded();
+    }
     instances_.push_back(inst);
     threadRoot_.try_emplace(inst.thread, &instances_.back());
     return instances_.back();
@@ -659,6 +662,25 @@ Mult ThreadInstanceWalk::siteMult(Operation *op, cir::FuncOp f, bool &known) {
 Mult ThreadInstanceWalk::siteMult(Operation *op, cir::FuncOp f) {
     bool known;
     return siteMult(op, f, known);
+}
+
+Count ThreadInstanceWalk::siteCount(Operation *op, cir::FuncOp f) {
+    if (auto call = dyn_cast<cir::CallOp>(op))
+        if (cir::FuncOp callee = lookupCallee(call); callee && callee.getSymName() == "rte_eal_mp_remote_launch")
+            return Count::unbounded();
+    if (isUnstructured(f)) return Count::unbounded();
+    Count n = Count::one();
+    for (Operation *p = op->getParentOp(); p && p != f.getOperation(); p = p->getParentOp()) {
+        if (!isa<cir::LoopOpInterface>(p)) continue;
+        auto forOp = dyn_cast<cir::ForOp>(p);
+        if (!forOp) return Count::unbounded();
+        // The step and the condition run once more than the body; a site
+        // there is not counted.
+        if (!forOp.getBody().isAncestor(op->getParentRegion())) return Count::unbounded();
+        n = n * loopTrips(forOp);
+        if (n.isUnbounded()) return n;
+    }
+    return n;
 }
 
 // Whether an indirect call could reach a spawn at all: does this module
@@ -2358,8 +2380,9 @@ void ThreadInstanceWalk::addRootsForModule() {
     // main, once, on the main thread.
     if (auto mainFn = module_.lookupSymbol<cir::FuncOp>("main"))
         if (!mainFn.getBody().empty())
-            addIfRoom({mainFn, nextThread_++, Mult::One, Mult::One, nullptr, nullptr, false,
-                       !ctorSpawns});
+            if (Instance *m = addIfRoom({mainFn, nextThread_++, Mult::One, Mult::One, nullptr, nullptr, false,
+                                         !ctorSpawns}))
+                m->threadCount = m->execCount = Count::one();
     const unsigned mainThread = nextThread_ ? 0 : nextThread_++;
 
     // Global constructors run once each, on the main thread, before main.
@@ -2372,8 +2395,9 @@ void ThreadInstanceWalk::addRootsForModule() {
             if (!ctor) continue;
             if (auto f = module_.lookupSymbol<cir::FuncOp>(ctor.getName()))
                 if (!f.getBody().empty())
-                    addIfRoom({f, mainThread, Mult::One, Mult::One, nullptr, nullptr, false,
-                               !ctorSpawns});
+                    if (Instance *c = addIfRoom({f, mainThread, Mult::One, Mult::One, nullptr, nullptr, false,
+                                                 !ctorSpawns}))
+                        c->threadCount = c->execCount = Count::one();
         }
     }
 
@@ -2406,6 +2430,8 @@ void ThreadInstanceWalk::expand(Instance &inst) {
             child->execUnknown = !certainlyMany && (!known || inst.execUnknown);
             child->countLoop = inst.countLoop;
             child->countLoopInst = inst.countLoopInst;
+            child->threadCount = inst.threadCount;
+            child->execCount = inst.execCount * siteCount(call.getOperation(), f);
             // In an unstructured function that can spawn, "no spawn precedes
             // this call" is a guess: the goto may jump over the spawn or
             // back behind it.
@@ -2474,6 +2500,7 @@ void ThreadInstanceWalk::expand(Instance &inst) {
                                                  inst.speculative, false})) {
                     child->execUnknown = !certainlyMany && (!known || inst.execUnknown);
                     child->countLoop = countingLoop(call.getOperation(), inst, &child->countLoopInst);
+                    child->threadCount = child->execCount = inst.execCount * siteCount(call.getOperation(), f);
                 }
                 // rte_eal_mp_remote_launch(f, arg, CALL_MAIN) also runs f on the
                 // calling lcore once the workers are started; SKIP_MAIN (0) does
@@ -2565,8 +2592,10 @@ void ThreadInstanceWalk::run(llvm::function_ref<void(Instance &)> visit,
                 inst.countLoop = nullptr;
                 inst.countLoopInst = nullptr;
                 inst.threadMult = inst.execMult = Mult::Many;
+                inst.threadCount = inst.execCount = Count::unbounded();
             } else {
                 inst.execMult = Mult::Many;
+                inst.execCount = Count::unbounded();
             }
             // Each function's recurrence is expanded once in the whole walk:
             // unrolling every cycle once per path made the walk exponential

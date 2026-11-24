@@ -167,3 +167,25 @@ by ClangIR's record of special members (`func_info` on `cir.func`).
 Assumed: a member that is not in the module is trivial, since the
 runtime's template, instantiated for the element, calls every member that
 is not and so makes it at least a declaration here.
+
+## Thread counts
+
+A bound in np or nc can be given a number only where the analysis proves
+one. The thread-instance walk counts each thread as `Count`: one for main
+and the global constructors; for a spawn, the runs of the spawning
+function times the trip count of the loops around the spawn; for a call,
+the same on the caller's thread. A `for` loop whose induction variable
+only its step writes, by one, from a constant, against a constant bound,
+runs that many times; against a variable bound it runs as many times as
+the variable says, a symbolic count named after it; any other loop, a
+goto, a recursion, a launch on every DPDK lcore, and a root standing for
+any number of threads (a function whose address is taken, one another
+translation unit may call) give no number. A side of a queue is the sum
+of its threads' counts, and the ownership analysis leaves it on the
+queue's root (`wtc.producers_count`, `wtc.consumers_count`).
+
+Assumed: a symbolic count names the bound as the loop reads it; whether
+the variable changes while the loop runs is not judged, which is why a
+symbolic count is printed and never instantiated. A loop that leaves
+early runs fewer times, so a count is an upper bound; threads started on
+two arms of one branch are summed, which overstates.
