@@ -86,8 +86,12 @@ push preempted while it holds the mark keeps them that long. The push
 lets go before it constructs its
 elements, so no program code runs while it holds the mark.
 A producer that stops for ever between
-reserving and filling a cell keeps the consumer's head there, so the
-segments after it are never freed.
+reserving and filling a cell keeps the consumer's head there. In the
+one-counter form the segments after it whose every cell the consumer has
+taken are folded, as Jiffy folds its buffers: their states and cells are
+freed, and only a small record per segment stays until the head passes
+them. The default form keeps them whole, since reaching the cells
+through a separate body cost it a tenth of its throughput.
 
 `waiter` is what a waiting pop (`pop_wait`, `pop_wait_for` in the shim)
 adds to a queue, the same for every implementation and without changing

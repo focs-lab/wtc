@@ -17,6 +17,12 @@
 //   holes P     P producers pausing at random between taking a cell and
 //               filling it: looks per pop stay within a multiple of P,
 //               whatever the number of elements.
+//   fold N      (mpsc_jiffy_bound_test: the one-counter form folds) a
+//               push stopped for ever (until the end) after taking its
+//               index while another producer pushes N elements, which the
+//               consumer takes past it: the segments' states and cells
+//               allocated at once stay at a handful, where without folding
+//               every segment after the stopped one kept its own.
 //   push_steps P  (mpsc_jiffy_bound_test, the one-counter push) P
 //               producers pushing single elements and runs of up to 8
 //               into segments of 64 cells, pausing at random after taking
@@ -69,7 +75,14 @@ thread_local unsigned t_jitter = 0;
 thread_local std::uint64_t t_looks = 0, t_retires = 0;
 
 thread_local std::uint64_t t_fwd = 0, t_back = 0;
+std::atomic<long> g_bodies{0}, g_bodies_peak{0};
 struct hooks : wtc::rt::no_hooks {
+  static void body(int d) {
+    const long now = g_bodies.fetch_add(d) + d;
+    long peak = g_bodies_peak.load();
+    while (now > peak && !g_bodies_peak.compare_exchange_weak(peak, now)) {
+    }
+  }
   static void segment_step(int d) {
     if (d > 0) ++t_fwd;
     else ++t_back;
@@ -241,6 +254,43 @@ void holes(unsigned producers, std::uint64_t total) {
   EXPECT(cost.looks <= 4ull * producers * producers + 8);
   EXPECT(cost.retires <= 1);
 }
+void fold(long n) {
+  long peak_while_stopped = 0;
+  {
+    Q q;
+    gate g;
+    std::thread stalled([&] {
+      t_stall = &g;
+      q.push(std::uint64_t{0});
+    });
+    while (!g.at.load()) std::this_thread::yield();
+    g_bodies_peak.store(g_bodies.load());
+    std::atomic<bool> done{false};
+    std::thread prod([&] {
+      for (long i = 1; i <= n; ++i) q.push(static_cast<std::uint64_t>(i));
+      done = true;
+    });
+    std::uint64_t v = 0, expect = 1;
+    while (expect <= static_cast<std::uint64_t>(n))
+      if (q.try_pop(v)) EXPECT(v == expect++);
+    prod.join();
+    peak_while_stopped = g_bodies_peak.load();
+    const long now = g_bodies.load();
+    std::printf("fold: %ld elements past a stopped push: %ld segment bodies allocated at the end, %ld at "
+                "most (without folding: %ld)\n",
+                n, now, peak_while_stopped, n / 1024 + 1);
+    // The stopped push's segment (the head's), the walk's, the tail's and
+    // the one linked ahead of it, and the producer's lead over the consumer.
+    EXPECT(now <= 6);
+    g.go.store(true);
+    stalled.join();
+    EXPECT(q.try_pop(v) && v == 0);
+    EXPECT(!q.try_pop(v));
+  }
+  EXPECT(g_bodies.load() == 0);
+  (void)peak_while_stopped;
+}
+
 void push_steps(unsigned producers, long per) {
   wtc::rt::segment_queue<std::uint64_t, false, 64, 64, hooks, kOne> q;
   std::atomic<bool> go{false};
@@ -304,6 +354,8 @@ int main(int argc, char** argv) {
     const unsigned p = argc > 2 ? static_cast<unsigned>(std::atoi(argv[2])) : 4;
     const std::uint64_t n = argc > 3 ? std::strtoull(argv[3], nullptr, 10) : 400000;
     holes(p, n);
+  } else if (!std::strcmp(mode, "fold")) {
+    fold(argc > 2 ? std::atol(argv[2]) : 10000000);
   } else if (!std::strcmp(mode, "push_steps")) {
     const unsigned p = argc > 2 ? static_cast<unsigned>(std::atoi(argv[2])) : 4;
     const long n = argc > 3 ? std::atol(argv[3]) : 200000;

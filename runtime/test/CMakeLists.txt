@@ -177,6 +177,15 @@ set_tests_properties(mpsc_bound_late_fill mpsc_bound_two_holes mpsc_bound_holes_
 # late_fill compares a pop's time with the first one's: alone, so that
 # the other tests' load does not make one pop slow.
 set_tests_properties(mpsc_bound_late_fill PROPERTIES RUN_SERIAL TRUE)
+# A hundred million elements past a push stopped for ever: the segments'
+# memory stays at a handful (fold, the one-counter form's).
+if(WTC_RT_SANITIZE)
+  set(fold_n 200000)
+else()
+  set(fold_n 100000000)
+endif()
+add_test(NAME mpsc_bound_fold COMMAND mpsc_jiffy_bound_test fold ${fold_n})
+set_tests_properties(mpsc_bound_fold PROPERTIES TIMEOUT 600)
 
 # Producers that stop between taking a cell and filling it, for both forms;
 # the single consumer checks each of its empty answers.

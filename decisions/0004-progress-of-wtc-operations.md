@@ -83,7 +83,11 @@ before, the pop after a long-stalled push stepped over every cell taken
 in the meantime, 11.5 ms after eight million. The list of noted cells has
 room for 64 and allocates past that, which the progress check reports. A
 producer that never fills its cell keeps the consumer's head there for
-ever, and the segments after it are then never freed.
+ever; in the jiffy form (24 Nov 2026) the segments after it are folded
+once the consumer has taken all their cells (their cells' memory freed,
+a small record each kept). The mpsc form keeps them whole (decided 25 Nov
+2026: reaching the cells through a separate body cost it a tenth of its
+throughput at four and eight producers).
 
 A waiting pop (`pop_wait(T&)`, `pop_wait_for`; `queue_pop` marked
 `wait`) waits for another thread by design: while the queue is empty it
