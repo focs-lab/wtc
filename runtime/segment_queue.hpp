@@ -136,8 +136,10 @@ template <class Slot, bool kManyConsumers = true, unsigned kSegment = 1024, unsi
 class segment_queue {
     static_assert(!kOneCounter || !kManyConsumers, "the one-counter push is the single-consumer form's");
     // kSkipped: a multi-consumer pop passed the cell before any push took
-    // it. kTaken: the single consumer took the element out of order (see
-    // pop_one), and its in-order walk passes the cell when it gets there.
+    // it, or the push that took it gave it up, its element's move or an
+    // allocation having thrown (give_up, abandon); a pop passes it. kTaken:
+    // the single consumer took the element out of order (see pop_one), and
+    // its in-order walk passes the cell when it gets there.
     enum : std::uint32_t { kEmpty = 0, kFull = 1, kSkipped = 2, kTaken = 3 };
     enum : unsigned { kHead = hazard::kPopSlot };
     // How long a pop waits, in pause instructions, for a push to reserve
@@ -283,7 +285,15 @@ class segment_queue {
                 std::uint64_t j = i;
                 for (; j < stop; ++j, ++k) {
                     cell& c = B(t).cells[j];
-                    ::new (static_cast<void*>(c.raw)) Slot(std::move(first[k]));
+                    try {
+                        ::new (static_cast<void*>(c.raw)) Slot(std::move(first[k]));
+                    } catch (...) {
+                        // The element's move threw: give this cell and the
+                        // rest this push reserved up, so that no pop waits
+                        // for them, and let the exception out.
+                        give_up(t, j, stop);
+                        throw;
+                    }
                     if constexpr (kManyConsumers) {
                         std::uint32_t e = kEmpty;
                         if (B(t).state[j].compare_exchange_strong(e, kFull, std::memory_order_release,
@@ -294,11 +304,7 @@ class segment_queue {
                         // and push the rest again.
                         first[k] = std::move(*c.slot());
                         c.slot()->~Slot();
-                        for (std::uint64_t r = j + 1; r < stop; ++r) {
-                            std::uint32_t z = kEmpty;
-                            B(t).state[r].compare_exchange_strong(z, kSkipped,
-                                                                std::memory_order_relaxed);
-                        }
+                        give_up(t, j + 1, stop);
                         break;
                     } else {
                         B(t).state[j].store(kFull, std::memory_order_release);
@@ -317,9 +323,15 @@ class segment_queue {
             if (!next) {
                 segment* fresh = new segment;
                 std::uint64_t m = 0;
-                for (; m < kSegment && k + m < n; ++m) {
-                    ::new (static_cast<void*>(B(fresh).cells[m].raw)) Slot(std::move(first[k + m]));
-                    B(fresh).state[m].store(kFull, std::memory_order_relaxed);
+                try {
+                    for (; m < kSegment && k + m < n; ++m) {
+                        ::new (static_cast<void*>(B(fresh).cells[m].raw)) Slot(std::move(first[k + m]));
+                        B(fresh).state[m].store(kFull, std::memory_order_relaxed);
+                    }
+                } catch (...) {
+                    // Nothing of fresh is linked yet: put back what it took.
+                    take_back(fresh, first + k, m);
+                    throw;
                 }
                 fresh->enq.store(m, std::memory_order_relaxed);
                 segment* none = nullptr;
@@ -330,17 +342,34 @@ class segment_queue {
                     k += m;
                     continue;
                 }
-                for (std::uint64_t r = 0; r < m; ++r) {
-                    first[k + r] = std::move(*B(fresh).cells[r].slot());
-                    B(fresh).cells[r].slot()->~Slot();
-                }
-                delete fresh;
+                take_back(fresh, first + k, m);
                 next = none;
             }
             tail_.compare_exchange_strong(t, next, std::memory_order_release,
                                           std::memory_order_relaxed);
         }
         hazard::clear(hp, tail_slot);
+    }
+
+    // Gives up cells [from, to) of t that this push reserved and did not
+    // fill: a pop that finds one skipped passes it (pop_many, and pop_one
+    // for the single consumer), where it would wait for a reserved cell.
+    // A pop may have skipped one already, hence the compare-and-swap.
+    static void give_up(segment* t, std::uint64_t from, std::uint64_t to) noexcept {
+        for (std::uint64_t r = from; r < to; ++r) {
+            std::uint32_t z = kEmpty;
+            B(t).state[r].compare_exchange_strong(z, kSkipped, std::memory_order_release, std::memory_order_relaxed);
+        }
+    }
+
+    // Moves the m elements a segment not yet linked holds back to dst and
+    // frees it. noexcept: a move that throws here ends the program.
+    static void take_back(segment* fresh, Slot* dst, std::uint64_t m) noexcept {
+        for (std::uint64_t r = 0; r < m; ++r) {
+            dst[r] = std::move(*B(fresh).cells[r].slot());
+            B(fresh).cells[r].slot()->~Slot();
+        }
+        delete fresh;
     }
 
     // Pops the oldest element into f, which is called once, with the
@@ -424,23 +453,45 @@ class segment_queue {
         bool all = false;
         if (!t) t = hold_all(hp, tail_slot, all);
         std::size_t k = 0;
-        while (k < n) {
-            const std::uint64_t j = i + k;
-            segment* s = locate(hp, tail_slot, t, j, all);
-            hazard::clear(hp, tail_slot);
-            all = false;
-            std::uint64_t c = j - s->base;
-            // The second cell's push links the next segment, while its own
-            // cell, still unfilled, keeps s from being freed.
-            if (c == 1 && !s->next.load(std::memory_order_acquire)) link_after(s);
-            for (; c < kSegment && k < n; ++c, ++k) {
-                ::new (static_cast<void*>(B(s).cells[c].raw)) Slot(std::move(first[k]));
-                B(s).state[c].store(kFull, std::memory_order_release);
+        try {
+            while (k < n) {
+                const std::uint64_t j = i + k;
+                segment* s = locate(hp, tail_slot, t, j, all);
+                hazard::clear(hp, tail_slot);
+                all = false;
+                std::uint64_t c = j - s->base;
+                // The second cell's push links the next segment, while its
+                // own cell, still unfilled, keeps s from being freed.
+                if (c == 1 && !s->next.load(std::memory_order_acquire)) link_after(s);
+                for (; c < kSegment && k < n; ++c, ++k) {
+                    ::new (static_cast<void*>(B(s).cells[c].raw)) Slot(std::move(first[k]));
+                    B(s).state[c].store(kFull, std::memory_order_release);
+                }
+                // The rest of a batch is in later segments; s may be freed
+                // once its cells are taken, so start again from the tail.
+                if (k < n) t = read_tail(hp, tail_slot, all);
             }
-            // The rest of a batch is in later segments; s may be freed
-            // once its cells are taken, so start again from the tail.
-            if (k < n) t = read_tail(hp, tail_slot, all);
+        } catch (...) {
+            // An element's move, or a segment's allocation, threw: the
+            // indices this push took and did not fill are given up, so
+            // that the consumer passes them rather than keeping its head
+            // at the first for ever, and the exception goes out.
+            abandon(hp, tail_slot, i + k, i + n);
+            throw;
         }
+    }
+
+    // Marks indices [from, to), taken by this push and not filled, given
+    // up. noexcept: an allocation that fails here, to link a segment for
+    // one of them, ends the program.
+    void abandon(hazard::record& hp, unsigned tail_slot, std::uint64_t from, std::uint64_t to) noexcept {
+        bool all = false;
+        segment* t = read_tail(hp, tail_slot, all);
+        for (std::uint64_t j = from; j < to; ++j) {
+            segment* s = locate(hp, tail_slot, t, j, all);
+            B(s).state[j - s->base].store(kSkipped, std::memory_order_release);
+        }
+        hazard::clear(hp, tail_slot);
     }
 
     // How many times a push reads the tail to protect it before it holds
@@ -680,6 +731,10 @@ class segment_queue {
                     one_.streaming = true;
                     return true;
                 }
+                if (st == kSkipped) {  // given up by its push: passed
+                    h->deq.store(i + 1, std::memory_order_relaxed);
+                    continue;
+                }
                 // While a stream is being taken, the next cell is most
                 // likely about to be filled: give it a few pauses on this
                 // cell's line before reading the count, the producers'
@@ -689,7 +744,7 @@ class segment_queue {
                         pause();
                         st = B(h).state[i].load(std::memory_order_acquire);
                     }
-                    if (st == kFull) continue;
+                    if (st != kEmpty) continue;
                 }
                 one_.walk = {h, i};
             }
@@ -703,36 +758,44 @@ class segment_queue {
         std::uint64_t index = 0;
     };
 
+    // Whether a cell is done with: filled, or given up by its push.
     bool full(position p) {
         Hooks::look();
-        return B(p.seg).state[p.index].load(std::memory_order_acquire) == kFull;
+        return B(p.seg).state[p.index].load(std::memory_order_acquire) != kEmpty;
     }
 
     // Pops the earliest full cell at or past the head, as pop_one says, or
-    // answers empty.
+    // answers empty. A cell its push gave up counts as full here and is
+    // passed as if taken, without an element, and the look goes on: each
+    // such cell is passed once.
     template <class F>
     bool pop_ahead(F& f) {
-        std::size_t k = 0;
-        while (k < one_.holes.size() && !full(one_.holes[k])) ++k;
-        if (k == one_.holes.size()) {
-            if (!walk_on()) return false;
-            k = one_.holes.size() - 1;  // the full cell the walk stopped at
-        }
-        Hooks::between_looks();
         for (;;) {
-            std::size_t m = 0;
-            while (m < k && !full(one_.holes[m])) ++m;
-            if (m == k) break;
-            k = m;
+            std::size_t k = 0;
+            while (k < one_.holes.size() && !full(one_.holes[k])) ++k;
+            if (k == one_.holes.size()) {
+                if (!walk_on()) return false;
+                k = one_.holes.size() - 1;  // the full cell the walk stopped at
+            }
+            Hooks::between_looks();
+            for (;;) {
+                std::size_t m = 0;
+                while (m < k && !full(one_.holes[m])) ++m;
+                if (m == k) break;
+                k = m;
+            }
+            position c = one_.holes[k];
+            one_.holes.erase(one_.holes.begin() + static_cast<std::ptrdiff_t>(k));
+            const bool given_up = B(c.seg).state[c.index].load(std::memory_order_acquire) == kSkipped;
+            if (!given_up) {
+                take(c.seg, c.index, f);
+                B(c.seg).state[c.index].store(kTaken, std::memory_order_relaxed);
+            }
+            ++c.seg->taken_out;
+            if (k == 0) move_head();
+            fold(c.seg);
+            if (!given_up) return true;
         }
-        position c = one_.holes[k];
-        one_.holes.erase(one_.holes.begin() + static_cast<std::ptrdiff_t>(k));
-        take(c.seg, c.index, f);
-        B(c.seg).state[c.index].store(kTaken, std::memory_order_relaxed);
-        ++c.seg->taken_out;
-        if (k == 0) move_head();
-        fold(c.seg);
-        return true;
     }
 
     // Folding ("Jiffy", as above; the one-counter form only, which is the

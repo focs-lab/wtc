@@ -118,7 +118,8 @@ inline void clear(record& r, unsigned i);
 inline unsigned& push_depth(record& r);
 
 // The slot of a push, for as long as the push lasts: the next push slot
-// of this thread.
+// of this thread, cleared when the push ends, also when an element's
+// constructor throws out of it.
 class push_slot {
 public:
     explicit push_slot(record& r) : r_(r), slot_(1 + push_depth(r)) {
@@ -129,7 +130,10 @@ public:
         }
         ++push_depth(r_);
     }
-    ~push_slot() { --push_depth(r_); }
+    ~push_slot() {
+        clear(r_, slot_);
+        --push_depth(r_);
+    }
     push_slot(const push_slot&) = delete;
     push_slot& operator=(const push_slot&) = delete;
     operator unsigned() const { return slot_; }

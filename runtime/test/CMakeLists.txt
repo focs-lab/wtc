@@ -119,6 +119,20 @@ endif()
 # The segmented queue: many producers and many consumers, then the
 # single-consumer form, and the latter's test that must fail: a second
 # consumer.
+# A push whose element's move or whose segment's allocation throws: the
+# cells it took are given up, and no pop waits on them.
+add_executable(throw_test throw_test.cpp)
+target_link_libraries(throw_test PRIVATE wtc_rt_flags)
+foreach(mode generic batch mpsc jiffy hole hole_jiffy)
+  add_test(NAME throw_${mode} COMMAND throw_test ${mode})
+  set_tests_properties(throw_${mode} PROPERTIES TIMEOUT 60)  # a pop that waits on a given-up cell hangs
+endforeach()
+if(NOT WTC_RT_SANITIZE)
+  target_compile_definitions(throw_test PRIVATE WTC_TEST_FAIL_NEW=1)
+  add_test(NAME throw_alloc COMMAND throw_test alloc)
+  add_test(NAME throw_alloc_jiffy COMMAND throw_test alloc_jiffy)
+endif()
+
 add_executable(segment_queue_test segment_queue_test.cpp)
 target_link_libraries(segment_queue_test PRIVATE wtc_rt_flags)
 add_test(NAME segment_queue_test COMMAND segment_queue_test)
