@@ -1,0 +1,23 @@
+{
+  "leg": "progress-rt", "date": "2026-11-26T00:00:07Z", "end": "2026-11-26T00:19:32Z",
+  "commits": {"main": "83270b5243ac113af0b688e95592f077b0bd779b", "pr": "e7ba58403f82b8f6c61c4a9759681e1a533d4caa"},
+  "git_sha": "e7ba58403f82b8f6c61c4a9759681e1a533d4caa", "git_dirty": false,
+  "arms": {"main": "83270b5", "main-aa": "83270b5, a second build of the same export (byte-identical binaries)", "pr": "e7ba584"},
+  "kernel": "6.8.0-40-generic",
+  "cpu_model": "Intel(R) Xeon(R) w9-3495X",
+  "sockets": "1", "numa_nodes": "1",
+  "allowed_cpus": "4-27",
+  "smt_control": "on",
+  "smt_siblings": "offline or reserved",
+  "load_average": "0.31 0.66 0.42",
+  "build": "benchmarks/scripts/progress_rt_leg/build.sh on a clean git archive of each commit: benchmarks/ with clang++-18 (Ubuntu 18.1.3), CMake 3.28.3, Release, -march=native, TBB found; wb_bounded with w9_mpmc_scaling's compile command (pr: -DWB_HAVE_INDEX=1, main: without)",
+  "governor": "performance",
+  "no_turbo": "1",
+  "freq_khz": "1899961-1900038",
+  "glibc": "2.39-0ubuntu8.5",
+  "reps": 10,
+  "cells": 22,
+  "cell_list": "benchmarks/scripts/progress_rt_leg/cells.txt",
+  "binaries": "$PR72_BIN/<arm>/",
+  "gate": "mean busy share of the processors outside 4-27 over each run, limit 0.10"
+}

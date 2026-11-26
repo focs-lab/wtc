@@ -1,0 +1,678 @@
+=== pr72 leg timed reps=10 cells=22 set=4-27 start 2026-11-26T00:00:07Z load ['0.31', '0.66', '0.42']
+  allowed cpus           4-27 (24)
+  governor               performance 
+  intel_pstate/no_turbo  1
+  cur freq cpu4          1900000 kHz
+  smt (machine-wide)     on
+  smt siblings           offline or reserved
+  load average           0.31 0.66 0.42
+  environment acceptable
+[2026-11-26T00:00:10Z] warmup rep=-1 W1 shim_generic E64 main rc=0 6.4688 wall=3.31 busy_out=0.005
+[2026-11-26T00:00:13Z] warmup rep=-1 W1 shim_generic E64 main rc=0 6.26994 wall=3.41 busy_out=0.002
+[2026-11-26T00:00:17Z] control-start rep=900 W1 shim_generic E64 main rc=0 6.39111 wall=3.35 busy_out=0.002
+[2026-11-26T00:00:20Z] control-start rep=900 W1 shim_generic E64 main rc=0 6.10546 wall=3.49 busy_out=0.002
+[2026-11-26T00:00:24Z] control-start rep=900 W1 shim_generic E64 main rc=0 6.59679 wall=3.24 busy_out=0.002
+[2026-11-26T00:00:27Z] timed rep=0 W1 shim_generic E64 main rc=0 6.38265 wall=3.35 busy_out=0.001
+[2026-11-26T00:00:30Z] timed rep=0 W1 shim_generic E64 main-aa rc=0 6.86619 wall=3.13 busy_out=0.003
+[2026-11-26T00:00:33Z] timed rep=0 W1 shim_generic E64 pr rc=0 6.98207 wall=3.08 busy_out=0.001
+[2026-11-26T00:00:37Z] timed rep=0 W1 shim_generic_move E64 main rc=0 4.84852 wall=4.34 busy_out=0.001
+[2026-11-26T00:00:42Z] timed rep=0 W1 shim_generic_move E64 main-aa rc=0 4.84517 wall=4.34 busy_out=0.004
+[2026-11-26T00:00:46Z] timed rep=0 W1 shim_generic_move E64 pr rc=0 5.42663 wall=3.90 busy_out=0.002
+[2026-11-26T00:00:47Z] timed rep=0 W1 shim_spsc E64 main rc=0 30.3904 wall=0.87 busy_out=0.001
+[2026-11-26T00:00:47Z] timed rep=0 W1 shim_spsc E64 main-aa rc=0 31.6112 wall=0.85 busy_out=0.002
+[2026-11-26T00:00:48Z] timed rep=0 W1 shim_spsc E64 pr rc=0 34.1105 wall=0.80 busy_out=0.002
+[2026-11-26T00:00:56Z] timed rep=0 W10 mpmc_cell E64 main rc=0 5.03198 wall=8.16 busy_out=0.002
+[2026-11-26T00:01:05Z] timed rep=0 W10 mpmc_cell E64 main-aa rc=0 4.83684 wall=8.49 busy_out=0.002
+[2026-11-26T00:01:11Z] timed rep=0 W10 mpmc_cell E64 pr rc=0 6.40819 wall=6.45 busy_out=0.003
+[2026-11-26T00:01:15Z] timed rep=0 W10 spsc_cell E64 main rc=0 32.3478 wall=3.30 busy_out=0.003
+[2026-11-26T00:01:17Z] timed rep=0 W10 spsc_cell E64 main-aa rc=0 40.1183 wall=2.71 busy_out=0.002
+[2026-11-26T00:01:21Z] timed rep=0 W10 spsc_cell E64 pr rc=0 33.3511 wall=3.21 busy_out=0.001
+[2026-11-26T00:01:21Z] timed rep=0 W9 split shim_generic 2:2 main rc=0 6.33804 wall=0.84 busy_out=0.004
+[2026-11-26T00:01:22Z] timed rep=0 W9 split shim_generic 2:2 main-aa rc=0 6.47837 wall=0.83 busy_out=0.000
+[2026-11-26T00:01:23Z] timed rep=0 W9 split shim_generic 2:2 pr rc=0 6.27211 wall=0.85 busy_out=0.003
+[2026-11-26T00:01:24Z] timed rep=0 W9 split shim_generic 4:4 main rc=0 8.67594 wall=1.13 busy_out=0.002
+[2026-11-26T00:01:25Z] timed rep=0 W9 split shim_generic 4:4 main-aa rc=0 8.8025 wall=1.12 busy_out=0.002
+[2026-11-26T00:01:26Z] timed rep=0 W9 split shim_generic 4:4 pr rc=0 8.70357 wall=1.13 busy_out=0.000
+[2026-11-26T00:01:27Z] timed rep=0 W9 split shim_generic 1:2 main rc=0 11.7586 wall=0.38 busy_out=0.003
+[2026-11-26T00:01:28Z] timed rep=0 W9 split shim_generic 1:2 main-aa rc=0 2.89084 wall=0.90 busy_out=0.003
+[2026-11-26T00:01:29Z] timed rep=0 W9 split shim_generic 1:2 pr rc=0 3.0576 wall=0.87 busy_out=0.003
+[2026-11-26T00:01:29Z] timed rep=0 W9 split shim_mpsc 1:1 main rc=0 15.0526 wall=0.35 busy_out=0.002
+[2026-11-26T00:01:29Z] timed rep=0 W9 split shim_mpsc 1:1 main-aa rc=0 14.9128 wall=0.35 busy_out=0.001
+[2026-11-26T00:01:30Z] timed rep=0 W9 split shim_mpsc 1:1 pr rc=0 14.8747 wall=0.35 busy_out=0.002
+[2026-11-26T00:01:30Z] timed rep=0 W9 split shim_mpsc 2:1 main rc=0 8.0007 wall=0.71 busy_out=0.001
+[2026-11-26T00:01:31Z] timed rep=0 W9 split shim_mpsc 2:1 main-aa rc=0 7.88776 wall=0.72 busy_out=0.001
+[2026-11-26T00:01:32Z] timed rep=0 W9 split shim_mpsc 2:1 pr rc=0 8.1573 wall=0.70 busy_out=0.003
+[2026-11-26T00:01:33Z] timed rep=0 W9 split shim_mpsc 4:1 main rc=0 12.3434 wall=0.86 busy_out=0.001
+[2026-11-26T00:01:34Z] timed rep=0 W9 split shim_mpsc 4:1 main-aa rc=0 12.6958 wall=0.84 busy_out=0.001
+[2026-11-26T00:01:34Z] timed rep=0 W9 split shim_mpsc 4:1 pr rc=0 12.567 wall=0.85 busy_out=0.002
+[2026-11-26T00:01:36Z] timed rep=0 W9 split shim_mpsc 8:1 main rc=0 13.3939 wall=1.41 busy_out=0.001
+[2026-11-26T00:01:37Z] timed rep=0 W9 split shim_mpsc 8:1 main-aa rc=0 13.1626 wall=1.43 busy_out=0.001
+[2026-11-26T00:01:39Z] timed rep=0 W9 split shim_mpsc 8:1 pr rc=0 13.457 wall=1.40 busy_out=0.005
+[2026-11-26T00:01:40Z] timed rep=0 W9 split orig_mpsc 2:1 main rc=0 2.8127 wall=1.63 busy_out=0.008
+[2026-11-26T00:01:42Z] timed rep=0 W9 split orig_mpsc 2:1 main-aa rc=0 2.89451 wall=1.59 busy_out=0.004
+[2026-11-26T00:01:43Z] timed rep=0 W9 split orig_mpsc 2:1 pr rc=0 2.8595 wall=1.60 busy_out=0.001
+[2026-11-26T00:01:44Z] timed rep=0 W9 split shim_spmc 1:2 main rc=0 12.2018 wall=0.38 busy_out=0.002
+[2026-11-26T00:01:44Z] timed rep=0 W9 split shim_spmc 1:2 main-aa rc=0 11.9364 wall=0.38 busy_out=0.002
+[2026-11-26T00:01:45Z] timed rep=0 W9 split shim_spmc 1:2 pr rc=0 12.4461 wall=0.37 busy_out=0.000
+[2026-11-26T00:01:46Z] timed rep=0 W11 cell_mpmc E64 w1 main rc=0 5.40238 wall=1.32 busy_out=0.003
+[2026-11-26T00:01:47Z] timed rep=0 W11 cell_mpmc E64 w1 main-aa rc=0 4.77115 wall=1.32 busy_out=0.001
+[2026-11-26T00:01:49Z] timed rep=0 W11 cell_mpmc E64 w1 pr rc=0 4.99005 wall=1.32 busy_out=0.001
+[2026-11-26T00:01:50Z] timed rep=0 W11 cell_mpmc E64 w4 main rc=0 3.08915 wall=1.32 busy_out=0.001
+[2026-11-26T00:01:51Z] timed rep=0 W11 cell_mpmc E64 w4 main-aa rc=0 3.09485 wall=1.32 busy_out=0.002
+[2026-11-26T00:01:52Z] timed rep=0 W11 cell_mpmc E64 w4 pr rc=0 3.07806 wall=1.32 busy_out=0.003
+[2026-11-26T00:01:54Z] timed rep=0 W11 cell_spmc E64 w1 main rc=0 33.9299 wall=1.34 busy_out=0.003
+[2026-11-26T00:01:55Z] timed rep=0 W11 cell_spmc E64 w1 main-aa rc=0 34.0251 wall=1.34 busy_out=0.001
+[2026-11-26T00:01:57Z] timed rep=0 W11 cell_spmc E64 w1 pr rc=0 33.5609 wall=1.34 busy_out=0.002
+[2026-11-26T00:01:58Z] timed rep=0 WB split bounded_spsc 1:1 main rc=0 3.44175 wall=1.37 busy_out=0.001
+[2026-11-26T00:01:59Z] timed rep=0 WB split bounded_spsc 1:1 main-aa rc=0 4.05486 wall=1.20 busy_out=0.001
+[2026-11-26T00:02:00Z] timed rep=0 WB split bounded_spsc 1:1 pr rc=0 3.368 wall=1.40 busy_out=0.002
+[2026-11-26T00:02:02Z] timed rep=0 WB split bounded_mpsc 2:1 main rc=0 3.41951 wall=1.38 busy_out=0.003
+[2026-11-26T00:02:03Z] timed rep=0 WB split bounded_mpsc 2:1 main-aa rc=0 3.72795 wall=1.29 busy_out=0.005
+[2026-11-26T00:02:04Z] timed rep=0 WB split bounded_mpsc 2:1 pr rc=0 4.57406 wall=1.08 busy_out=0.010
+[2026-11-26T00:02:05Z] timed rep=0 WB split bounded_spmc 1:2 main rc=0 5.3301 wall=0.96 busy_out=0.002
+[2026-11-26T00:02:06Z] timed rep=0 WB split bounded_spmc 1:2 main-aa rc=0 4.85993 wall=1.03 busy_out=0.002
+[2026-11-26T00:02:07Z] timed rep=0 WB split bounded_spmc 1:2 pr rc=0 6.95424 wall=0.79 busy_out=0.019
+[2026-11-26T00:02:08Z] timed rep=0 WB split bounded_spmc 1:4 main rc=0 4.27722 wall=1.15 busy_out=0.006
+[2026-11-26T00:02:09Z] timed rep=0 WB split bounded_spmc 1:4 main-aa rc=0 5.08192 wall=1.00 busy_out=0.005
+[2026-11-26T00:02:10Z] timed rep=0 WB split bounded_spmc 1:4 pr rc=0 4.05316 wall=1.20 busy_out=0.001
+[2026-11-26T00:02:11Z] timed rep=0 WB split bounded_generic 1:1 main rc=0 4.45673 wall=1.11 busy_out=0.001
+[2026-11-26T00:02:13Z] timed rep=0 WB split bounded_generic 1:1 main-aa rc=0 4.31073 wall=1.14 busy_out=0.003
+[2026-11-26T00:02:14Z] timed rep=0 WB split bounded_generic 1:1 pr rc=0 4.21191 wall=1.16 busy_out=0.007
+[2026-11-26T00:02:17Z] timed rep=1 W1 shim_generic E64 main-aa rc=0 6.76812 wall=3.17 busy_out=0.003
+[2026-11-26T00:02:20Z] timed rep=1 W1 shim_generic E64 pr rc=0 6.9957 wall=3.08 busy_out=0.001
+[2026-11-26T00:02:24Z] timed rep=1 W1 shim_generic E64 main rc=0 6.10483 wall=3.48 busy_out=0.004
+[2026-11-26T00:02:28Z] timed rep=1 W1 shim_generic_move E64 main-aa rc=0 4.33935 wall=4.82 busy_out=0.003
+[2026-11-26T00:02:33Z] timed rep=1 W1 shim_generic_move E64 pr rc=0 4.42481 wall=4.73 busy_out=0.001
+[2026-11-26T00:02:38Z] timed rep=1 W1 shim_generic_move E64 main rc=0 4.37146 wall=4.79 busy_out=0.002
+[2026-11-26T00:02:39Z] timed rep=1 W1 shim_spsc E64 main-aa rc=0 32.6814 wall=0.82 busy_out=0.003
+[2026-11-26T00:02:39Z] timed rep=1 W1 shim_spsc E64 pr rc=0 34.4783 wall=0.79 busy_out=0.002
+[2026-11-26T00:02:40Z] timed rep=1 W1 shim_spsc E64 main rc=0 32.7898 wall=0.82 busy_out=0.001
+[2026-11-26T00:02:49Z] timed rep=1 W10 mpmc_cell E64 main-aa rc=0 4.54455 wall=9.01 busy_out=0.002
+[2026-11-26T00:02:59Z] timed rep=1 W10 mpmc_cell E64 pr rc=0 4.34107 wall=9.43 busy_out=0.002
+[2026-11-26T00:03:08Z] timed rep=1 W10 mpmc_cell E64 main rc=0 4.42891 wall=9.24 busy_out=0.002
+[2026-11-26T00:03:09Z] timed rep=1 W10 spsc_cell E64 main-aa rc=0 126.747 wall=1.00 busy_out=0.003
+[2026-11-26T00:03:10Z] timed rep=1 W10 spsc_cell E64 pr rc=0 123.585 wall=1.02 busy_out=0.007
+[2026-11-26T00:03:11Z] timed rep=1 W10 spsc_cell E64 main rc=0 125.316 wall=1.01 busy_out=0.002
+[2026-11-26T00:03:12Z] timed rep=1 W9 split shim_generic 2:2 main-aa rc=0 6.52948 wall=0.82 busy_out=0.001
+[2026-11-26T00:03:13Z] timed rep=1 W9 split shim_generic 2:2 pr rc=0 6.55663 wall=0.82 busy_out=0.001
+[2026-11-26T00:03:14Z] timed rep=1 W9 split shim_generic 2:2 main rc=0 6.36105 wall=0.84 busy_out=0.001
+[2026-11-26T00:03:15Z] timed rep=1 W9 split shim_generic 4:4 main-aa rc=0 8.45086 wall=1.16 busy_out=0.001
+[2026-11-26T00:03:16Z] timed rep=1 W9 split shim_generic 4:4 pr rc=0 8.70106 wall=1.13 busy_out=0.005
+[2026-11-26T00:03:17Z] timed rep=1 W9 split shim_generic 4:4 main rc=0 8.56138 wall=1.15 busy_out=0.002
+[2026-11-26T00:03:17Z] timed rep=1 W9 split shim_generic 1:2 main-aa rc=0 12.5636 wall=0.37 busy_out=0.007
+[2026-11-26T00:03:18Z] timed rep=1 W9 split shim_generic 1:2 pr rc=0 12.0056 wall=0.38 busy_out=0.003
+[2026-11-26T00:03:19Z] timed rep=1 W9 split shim_generic 1:2 main rc=0 2.83828 wall=0.92 busy_out=0.002
+[2026-11-26T00:03:19Z] timed rep=1 W9 split shim_mpsc 1:1 main-aa rc=0 14.4008 wall=0.35 busy_out=0.003
+[2026-11-26T00:03:19Z] timed rep=1 W9 split shim_mpsc 1:1 pr rc=0 14.2169 wall=0.35 busy_out=0.003
+[2026-11-26T00:03:20Z] timed rep=1 W9 split shim_mpsc 1:1 main rc=0 14.3132 wall=0.35 busy_out=0.000
+[2026-11-26T00:03:20Z] timed rep=1 W9 split shim_mpsc 2:1 main-aa rc=0 8.04537 wall=0.71 busy_out=0.001
+[2026-11-26T00:03:21Z] timed rep=1 W9 split shim_mpsc 2:1 pr rc=0 8.18169 wall=0.70 busy_out=0.002
+[2026-11-26T00:03:22Z] timed rep=1 W9 split shim_mpsc 2:1 main rc=0 8.19457 wall=0.70 busy_out=0.002
+[2026-11-26T00:03:23Z] timed rep=1 W9 split shim_mpsc 4:1 main-aa rc=0 12.3631 wall=0.86 busy_out=0.000
+[2026-11-26T00:03:24Z] timed rep=1 W9 split shim_mpsc 4:1 pr rc=0 12.1518 wall=0.87 busy_out=0.002
+[2026-11-26T00:03:24Z] timed rep=1 W9 split shim_mpsc 4:1 main rc=0 12.4933 wall=0.85 busy_out=0.003
+[2026-11-26T00:03:26Z] timed rep=1 W9 split shim_mpsc 8:1 main-aa rc=0 13.4602 wall=1.40 busy_out=0.003
+[2026-11-26T00:03:27Z] timed rep=1 W9 split shim_mpsc 8:1 pr rc=0 13.3649 wall=1.41 busy_out=0.003
+[2026-11-26T00:03:29Z] timed rep=1 W9 split shim_mpsc 8:1 main rc=0 13.7969 wall=1.37 busy_out=0.001
+[2026-11-26T00:03:30Z] timed rep=1 W9 split orig_mpsc 2:1 main-aa rc=0 3.05989 wall=1.51 busy_out=0.001
+[2026-11-26T00:03:32Z] timed rep=1 W9 split orig_mpsc 2:1 pr rc=0 3.07314 wall=1.51 busy_out=0.001
+[2026-11-26T00:03:33Z] timed rep=1 W9 split orig_mpsc 2:1 main rc=0 3.23789 wall=1.44 busy_out=0.002
+[2026-11-26T00:03:33Z] timed rep=1 W9 split shim_spmc 1:2 main-aa rc=0 12.8016 wall=0.37 busy_out=0.003
+[2026-11-26T00:03:34Z] timed rep=1 W9 split shim_spmc 1:2 pr rc=0 12.5269 wall=0.37 busy_out=0.002
+[2026-11-26T00:03:34Z] timed rep=1 W9 split shim_spmc 1:2 main rc=0 12.1363 wall=0.38 busy_out=0.003
+[2026-11-26T00:03:35Z] timed rep=1 W11 cell_mpmc E64 w1 main-aa rc=0 4.31656 wall=1.32 busy_out=0.006
+[2026-11-26T00:03:37Z] timed rep=1 W11 cell_mpmc E64 w1 pr rc=0 4.09782 wall=1.32 busy_out=0.016
+[2026-11-26T00:03:38Z] timed rep=1 W11 cell_mpmc E64 w1 main rc=0 4.28017 wall=1.32 busy_out=0.010
+[2026-11-26T00:03:39Z] timed rep=1 W11 cell_mpmc E64 w4 main-aa rc=0 3.18974 wall=1.32 busy_out=0.013
+[2026-11-26T00:03:41Z] timed rep=1 W11 cell_mpmc E64 w4 pr rc=0 3.1096 wall=1.32 busy_out=0.016
+[2026-11-26T00:03:42Z] timed rep=1 W11 cell_mpmc E64 w4 main rc=0 3.18216 wall=1.32 busy_out=0.018
+[2026-11-26T00:03:43Z] timed rep=1 W11 cell_spmc E64 w1 main-aa rc=0 38.9713 wall=1.35 busy_out=0.017
+[2026-11-26T00:03:45Z] timed rep=1 W11 cell_spmc E64 w1 pr rc=0 38.0484 wall=1.35 busy_out=0.017
+[2026-11-26T00:03:46Z] timed rep=1 W11 cell_spmc E64 w1 main rc=0 39.1182 wall=1.35 busy_out=0.019
+[2026-11-26T00:03:47Z] timed rep=1 WB split bounded_spsc 1:1 main-aa rc=0 3.93928 wall=1.23 busy_out=0.016
+[2026-11-26T00:03:48Z] timed rep=1 WB split bounded_spsc 1:1 pr rc=0 4.34764 wall=1.13 busy_out=0.019
+[2026-11-26T00:03:50Z] timed rep=1 WB split bounded_spsc 1:1 main rc=0 3.53477 wall=1.34 busy_out=0.016
+[2026-11-26T00:03:51Z] timed rep=1 WB split bounded_mpsc 2:1 main-aa rc=0 4.22934 wall=1.15 busy_out=0.017
+[2026-11-26T00:03:52Z] timed rep=1 WB split bounded_mpsc 2:1 pr rc=0 4.51378 wall=1.09 busy_out=0.016
+[2026-11-26T00:03:53Z] timed rep=1 WB split bounded_mpsc 2:1 main rc=0 4.31437 wall=1.14 busy_out=0.017
+[2026-11-26T00:03:54Z] timed rep=1 WB split bounded_spmc 1:2 main-aa rc=0 5.60939 wall=0.92 busy_out=0.017
+[2026-11-26T00:03:55Z] timed rep=1 WB split bounded_spmc 1:2 pr rc=0 5.39597 wall=0.95 busy_out=0.019
+[2026-11-26T00:03:56Z] timed rep=1 WB split bounded_spmc 1:2 main rc=0 6.95494 wall=0.79 busy_out=0.016
+[2026-11-26T00:03:57Z] timed rep=1 WB split bounded_spmc 1:4 main-aa rc=0 4.19703 wall=1.16 busy_out=0.018
+[2026-11-26T00:03:58Z] timed rep=1 WB split bounded_spmc 1:4 pr rc=0 4.55249 wall=1.09 busy_out=0.014
+[2026-11-26T00:03:59Z] timed rep=1 WB split bounded_spmc 1:4 main rc=0 4.72643 wall=1.06 busy_out=0.015
+[2026-11-26T00:04:00Z] timed rep=1 WB split bounded_generic 1:1 main-aa rc=0 5.30053 wall=0.97 busy_out=0.016
+[2026-11-26T00:04:01Z] timed rep=1 WB split bounded_generic 1:1 pr rc=0 4.06634 wall=1.19 busy_out=0.016
+[2026-11-26T00:04:03Z] timed rep=1 WB split bounded_generic 1:1 main rc=0 3.53397 wall=1.34 busy_out=0.017
+[2026-11-26T00:04:07Z] timed rep=2 W1 shim_generic E64 pr rc=0 4.48217 wall=4.67 busy_out=0.019
+[2026-11-26T00:04:12Z] timed rep=2 W1 shim_generic E64 main rc=0 4.35119 wall=4.81 busy_out=0.014
+[2026-11-26T00:04:17Z] timed rep=2 W1 shim_generic E64 main-aa rc=0 4.49478 wall=4.66 busy_out=0.010
+[2026-11-26T00:04:22Z] timed rep=2 W1 shim_generic_move E64 pr rc=0 4.23531 wall=4.94 busy_out=0.013
+[2026-11-26T00:04:27Z] timed rep=2 W1 shim_generic_move E64 main rc=0 4.32733 wall=4.84 busy_out=0.018
+[2026-11-26T00:04:32Z] timed rep=2 W1 shim_generic_move E64 main-aa rc=0 4.2675 wall=4.90 busy_out=0.017
+[2026-11-26T00:04:32Z] timed rep=2 W1 shim_spsc E64 pr rc=0 35.0334 wall=0.78 busy_out=0.016
+[2026-11-26T00:04:33Z] timed rep=2 W1 shim_spsc E64 main rc=0 32.5977 wall=0.83 busy_out=0.017
+[2026-11-26T00:04:34Z] timed rep=2 W1 shim_spsc E64 main-aa rc=0 31.4786 wall=0.85 busy_out=0.019
+[2026-11-26T00:04:43Z] timed rep=2 W10 mpmc_cell E64 pr rc=0 4.61346 wall=8.88 busy_out=0.017
+[2026-11-26T00:04:52Z] timed rep=2 W10 mpmc_cell E64 main rc=0 4.71213 wall=8.70 busy_out=0.017
+[2026-11-26T00:05:01Z] timed rep=2 W10 mpmc_cell E64 main-aa rc=0 4.31824 wall=9.47 busy_out=0.019
+[2026-11-26T00:05:02Z] timed rep=2 W10 spsc_cell E64 pr rc=0 126.509 wall=1.00 busy_out=0.020
+[2026-11-26T00:05:03Z] timed rep=2 W10 spsc_cell E64 main rc=0 125.417 wall=1.01 busy_out=0.017
+[2026-11-26T00:05:04Z] timed rep=2 W10 spsc_cell E64 main-aa rc=0 128.884 wall=0.99 busy_out=0.018
+[2026-11-26T00:05:05Z] timed rep=2 W9 split shim_generic 2:2 pr rc=0 6.56642 wall=0.82 busy_out=0.016
+[2026-11-26T00:05:06Z] timed rep=2 W9 split shim_generic 2:2 main rc=0 6.3323 wall=0.84 busy_out=0.014
+[2026-11-26T00:05:07Z] timed rep=2 W9 split shim_generic 2:2 main-aa rc=0 6.27199 wall=0.85 busy_out=0.007
+[2026-11-26T00:05:08Z] timed rep=2 W9 split shim_generic 4:4 pr rc=0 8.48062 wall=1.16 busy_out=0.008
+[2026-11-26T00:05:09Z] timed rep=2 W9 split shim_generic 4:4 main rc=0 8.61615 wall=1.14 busy_out=0.007
+[2026-11-26T00:05:10Z] timed rep=2 W9 split shim_generic 4:4 main-aa rc=0 8.58427 wall=1.14 busy_out=0.012
+[2026-11-26T00:05:11Z] timed rep=2 W9 split shim_generic 1:2 pr rc=0 3.06396 wall=0.86 busy_out=0.017
+[2026-11-26T00:05:12Z] timed rep=2 W9 split shim_generic 1:2 main rc=0 2.94253 wall=0.89 busy_out=0.019
+[2026-11-26T00:05:13Z] timed rep=2 W9 split shim_generic 1:2 main-aa rc=0 3.12683 wall=0.85 busy_out=0.008
+[2026-11-26T00:05:13Z] timed rep=2 W9 split shim_mpsc 1:1 pr rc=0 14.2405 wall=0.35 busy_out=0.006
+[2026-11-26T00:05:13Z] timed rep=2 W9 split shim_mpsc 1:1 main rc=0 14.4325 wall=0.35 busy_out=0.007
+[2026-11-26T00:05:14Z] timed rep=2 W9 split shim_mpsc 1:1 main-aa rc=0 14.3135 wall=0.35 busy_out=0.011
+[2026-11-26T00:05:14Z] timed rep=2 W9 split shim_mpsc 2:1 pr rc=0 8.46332 wall=0.69 busy_out=0.008
+[2026-11-26T00:05:15Z] timed rep=2 W9 split shim_mpsc 2:1 main rc=0 7.82606 wall=0.72 busy_out=0.016
+[2026-11-26T00:05:16Z] timed rep=2 W9 split shim_mpsc 2:1 main-aa rc=0 8.11241 wall=0.71 busy_out=0.018
+[2026-11-26T00:05:17Z] timed rep=2 W9 split shim_mpsc 4:1 pr rc=0 11.9202 wall=0.88 busy_out=0.017
+[2026-11-26T00:05:18Z] timed rep=2 W9 split shim_mpsc 4:1 main rc=0 12.4402 wall=0.86 busy_out=0.017
+[2026-11-26T00:05:18Z] timed rep=2 W9 split shim_mpsc 4:1 main-aa rc=0 12.6268 wall=0.85 busy_out=0.019
+[2026-11-26T00:05:20Z] timed rep=2 W9 split shim_mpsc 8:1 pr rc=0 13.8886 wall=1.36 busy_out=0.016
+[2026-11-26T00:05:21Z] timed rep=2 W9 split shim_mpsc 8:1 main rc=0 13.2776 wall=1.42 busy_out=0.019
+[2026-11-26T00:05:23Z] timed rep=2 W9 split shim_mpsc 8:1 main-aa rc=0 13.1314 wall=1.43 busy_out=0.017
+[2026-11-26T00:05:24Z] timed rep=2 W9 split orig_mpsc 2:1 pr rc=0 3.22839 wall=1.45 busy_out=0.017
+[2026-11-26T00:05:26Z] timed rep=2 W9 split orig_mpsc 2:1 main rc=0 3.10615 wall=1.49 busy_out=0.019
+[2026-11-26T00:05:27Z] timed rep=2 W9 split orig_mpsc 2:1 main-aa rc=0 2.91951 wall=1.58 busy_out=0.017
+[2026-11-26T00:05:27Z] timed rep=2 W9 split shim_spmc 1:2 pr rc=0 13.0306 wall=0.37 busy_out=0.017
+[2026-11-26T00:05:28Z] timed rep=2 W9 split shim_spmc 1:2 main rc=0 12.9293 wall=0.37 busy_out=0.016
+[2026-11-26T00:05:28Z] timed rep=2 W9 split shim_spmc 1:2 main-aa rc=0 12.4131 wall=0.37 busy_out=0.018
+[2026-11-26T00:05:30Z] timed rep=2 W11 cell_mpmc E64 w1 pr rc=0 4.2224 wall=1.32 busy_out=0.017
+[2026-11-26T00:05:31Z] timed rep=2 W11 cell_mpmc E64 w1 main rc=0 4.52945 wall=1.32 busy_out=0.016
+[2026-11-26T00:05:32Z] timed rep=2 W11 cell_mpmc E64 w1 main-aa rc=0 4.32415 wall=1.32 busy_out=0.017
+[2026-11-26T00:05:33Z] timed rep=2 W11 cell_mpmc E64 w4 pr rc=0 3.15452 wall=1.32 busy_out=0.018
+[2026-11-26T00:05:35Z] timed rep=2 W11 cell_mpmc E64 w4 main rc=0 3.17348 wall=1.32 busy_out=0.017
+[2026-11-26T00:05:36Z] timed rep=2 W11 cell_mpmc E64 w4 main-aa rc=0 3.18144 wall=1.32 busy_out=0.017
+[2026-11-26T00:05:37Z] timed rep=2 W11 cell_spmc E64 w1 pr rc=0 38.0732 wall=1.35 busy_out=0.018
+[2026-11-26T00:05:39Z] timed rep=2 W11 cell_spmc E64 w1 main rc=0 38.8623 wall=1.35 busy_out=0.017
+[2026-11-26T00:05:40Z] timed rep=2 W11 cell_spmc E64 w1 main-aa rc=0 38.9167 wall=1.35 busy_out=0.019
+[2026-11-26T00:05:41Z] timed rep=2 WB split bounded_spsc 1:1 pr rc=0 4.29418 wall=1.14 busy_out=0.018
+[2026-11-26T00:05:43Z] timed rep=2 WB split bounded_spsc 1:1 main rc=0 3.99041 wall=1.21 busy_out=0.017
+[2026-11-26T00:05:44Z] timed rep=2 WB split bounded_spsc 1:1 main-aa rc=0 3.38821 wall=1.39 busy_out=0.017
+[2026-11-26T00:05:45Z] timed rep=2 WB split bounded_mpsc 2:1 pr rc=0 4.80214 wall=1.04 busy_out=0.017
+[2026-11-26T00:05:46Z] timed rep=2 WB split bounded_mpsc 2:1 main rc=0 4.66423 wall=1.07 busy_out=0.017
+[2026-11-26T00:05:47Z] timed rep=2 WB split bounded_mpsc 2:1 main-aa rc=0 4.65485 wall=1.05 busy_out=0.016
+[2026-11-26T00:05:48Z] timed rep=2 WB split bounded_spmc 1:2 pr rc=0 5.365 wall=0.96 busy_out=0.015
+[2026-11-26T00:05:49Z] timed rep=2 WB split bounded_spmc 1:2 main rc=0 6.95132 wall=0.79 busy_out=0.017
+[2026-11-26T00:05:50Z] timed rep=2 WB split bounded_spmc 1:2 main-aa rc=0 5.82144 wall=0.90 busy_out=0.018
+[2026-11-26T00:05:52Z] timed rep=2 WB split bounded_spmc 1:4 pr rc=0 2.34732 wall=1.91 busy_out=0.019
+[2026-11-26T00:05:54Z] timed rep=2 WB split bounded_spmc 1:4 main rc=0 2.3817 wall=1.89 busy_out=0.018
+[2026-11-26T00:05:55Z] timed rep=2 WB split bounded_spmc 1:4 main-aa rc=0 4.73203 wall=1.06 busy_out=0.018
+[2026-11-26T00:05:56Z] timed rep=2 WB split bounded_generic 1:1 pr rc=0 5.26171 wall=0.97 busy_out=0.018
+[2026-11-26T00:05:57Z] timed rep=2 WB split bounded_generic 1:1 main rc=0 3.3448 wall=1.41 busy_out=0.017
+[2026-11-26T00:05:58Z] timed rep=2 WB split bounded_generic 1:1 main-aa rc=0 4.11658 wall=1.18 busy_out=0.017
+[2026-11-26T00:06:02Z] timed rep=3 W1 shim_generic E64 main rc=0 4.93221 wall=4.27 busy_out=0.017
+[2026-11-26T00:06:07Z] timed rep=3 W1 shim_generic E64 main-aa rc=0 5.13471 wall=4.11 busy_out=0.017
+[2026-11-26T00:06:11Z] timed rep=3 W1 shim_generic E64 pr rc=0 4.6512 wall=4.52 busy_out=0.017
+[2026-11-26T00:06:16Z] timed rep=3 W1 shim_generic_move E64 main rc=0 4.32717 wall=4.84 busy_out=0.018
+[2026-11-26T00:06:20Z] timed rep=3 W1 shim_generic_move E64 main-aa rc=0 4.54009 wall=4.62 busy_out=0.017
+[2026-11-26T00:06:25Z] timed rep=3 W1 shim_generic_move E64 pr rc=0 4.53335 wall=4.62 busy_out=0.018
+[2026-11-26T00:06:26Z] timed rep=3 W1 shim_spsc E64 main rc=0 31.663 wall=0.84 busy_out=0.017
+[2026-11-26T00:06:27Z] timed rep=3 W1 shim_spsc E64 main-aa rc=0 31.6112 wall=0.85 busy_out=0.017
+[2026-11-26T00:06:28Z] timed rep=3 W1 shim_spsc E64 pr rc=0 34.9781 wall=0.78 busy_out=0.017
+[2026-11-26T00:06:37Z] timed rep=3 W10 mpmc_cell E64 main rc=0 4.51991 wall=9.06 busy_out=0.017
+[2026-11-26T00:06:46Z] timed rep=3 W10 mpmc_cell E64 main-aa rc=0 4.48215 wall=9.14 busy_out=0.017
+[2026-11-26T00:06:55Z] timed rep=3 W10 mpmc_cell E64 pr rc=0 4.53336 wall=9.03 busy_out=0.016
+[2026-11-26T00:06:56Z] timed rep=3 W10 spsc_cell E64 main rc=0 124.126 wall=1.02 busy_out=0.004
+[2026-11-26T00:06:57Z] timed rep=3 W10 spsc_cell E64 main-aa rc=0 127.017 wall=1.00 busy_out=0.005
+[2026-11-26T00:06:58Z] timed rep=3 W10 spsc_cell E64 pr rc=0 124.94 wall=1.01 busy_out=0.002
+[2026-11-26T00:06:59Z] timed rep=3 W9 split shim_generic 2:2 main rc=0 6.405 wall=0.84 busy_out=0.002
+[2026-11-26T00:07:00Z] timed rep=3 W9 split shim_generic 2:2 main-aa rc=0 6.58534 wall=0.82 busy_out=0.004
+[2026-11-26T00:07:00Z] timed rep=3 W9 split shim_generic 2:2 pr rc=0 6.39767 wall=0.84 busy_out=0.012
+[2026-11-26T00:07:02Z] timed rep=3 W9 split shim_generic 4:4 main rc=0 8.54355 wall=1.15 busy_out=0.015
+[2026-11-26T00:07:03Z] timed rep=3 W9 split shim_generic 4:4 main-aa rc=0 8.63884 wall=1.14 busy_out=0.011
+[2026-11-26T00:07:04Z] timed rep=3 W9 split shim_generic 4:4 pr rc=0 8.53058 wall=1.15 busy_out=0.018
+[2026-11-26T00:07:05Z] timed rep=3 W9 split shim_generic 1:2 main rc=0 3.13329 wall=0.85 busy_out=0.016
+[2026-11-26T00:07:06Z] timed rep=3 W9 split shim_generic 1:2 main-aa rc=0 2.98666 wall=0.88 busy_out=0.020
+[2026-11-26T00:07:06Z] timed rep=3 W9 split shim_generic 1:2 pr rc=0 3.16794 wall=0.84 busy_out=0.017
+[2026-11-26T00:07:07Z] timed rep=3 W9 split shim_mpsc 1:1 main rc=0 14.399 wall=0.35 busy_out=0.016
+[2026-11-26T00:07:07Z] timed rep=3 W9 split shim_mpsc 1:1 main-aa rc=0 14.3664 wall=0.35 busy_out=0.021
+[2026-11-26T00:07:07Z] timed rep=3 W9 split shim_mpsc 1:1 pr rc=0 14.2342 wall=0.35 busy_out=0.018
+[2026-11-26T00:07:08Z] timed rep=3 W9 split shim_mpsc 2:1 main rc=0 7.85818 wall=0.72 busy_out=0.013
+[2026-11-26T00:07:09Z] timed rep=3 W9 split shim_mpsc 2:1 main-aa rc=0 7.9176 wall=0.72 busy_out=0.015
+[2026-11-26T00:07:10Z] timed rep=3 W9 split shim_mpsc 2:1 pr rc=0 8.47892 wall=0.68 busy_out=0.016
+[2026-11-26T00:07:10Z] timed rep=3 W9 split shim_mpsc 4:1 main rc=0 12.5525 wall=0.85 busy_out=0.014
+[2026-11-26T00:07:11Z] timed rep=3 W9 split shim_mpsc 4:1 main-aa rc=0 12.4017 wall=0.86 busy_out=0.009
+[2026-11-26T00:07:12Z] timed rep=3 W9 split shim_mpsc 4:1 pr rc=0 12.2294 wall=0.87 busy_out=0.017
+[2026-11-26T00:07:14Z] timed rep=3 W9 split shim_mpsc 8:1 main rc=0 14.0072 wall=1.35 busy_out=0.021
+[2026-11-26T00:07:15Z] timed rep=3 W9 split shim_mpsc 8:1 main-aa rc=0 13.7613 wall=1.37 busy_out=0.019
+[2026-11-26T00:07:16Z] timed rep=3 W9 split shim_mpsc 8:1 pr rc=0 13.414 wall=1.41 busy_out=0.017
+[2026-11-26T00:07:18Z] timed rep=3 W9 split orig_mpsc 2:1 main rc=0 3.22639 wall=1.45 busy_out=0.018
+[2026-11-26T00:07:19Z] timed rep=3 W9 split orig_mpsc 2:1 main-aa rc=0 3.09915 wall=1.50 busy_out=0.019
+[2026-11-26T00:07:21Z] timed rep=3 W9 split orig_mpsc 2:1 pr rc=0 3.25264 wall=1.44 busy_out=0.016
+[2026-11-26T00:07:21Z] timed rep=3 W9 split shim_spmc 1:2 main rc=0 13.0038 wall=0.37 busy_out=0.017
+[2026-11-26T00:07:21Z] timed rep=3 W9 split shim_spmc 1:2 main-aa rc=0 12.5813 wall=0.37 busy_out=0.016
+[2026-11-26T00:07:22Z] timed rep=3 W9 split shim_spmc 1:2 pr rc=0 12.4918 wall=0.37 busy_out=0.016
+[2026-11-26T00:07:23Z] timed rep=3 W11 cell_mpmc E64 w1 main rc=0 4.37298 wall=1.32 busy_out=0.016
+[2026-11-26T00:07:24Z] timed rep=3 W11 cell_mpmc E64 w1 main-aa rc=0 4.31277 wall=1.32 busy_out=0.019
+[2026-11-26T00:07:26Z] timed rep=3 W11 cell_mpmc E64 w1 pr rc=0 3.97425 wall=1.32 busy_out=0.017
+[2026-11-26T00:07:27Z] timed rep=3 W11 cell_mpmc E64 w4 main rc=0 3.18282 wall=1.32 busy_out=0.016
+[2026-11-26T00:07:28Z] timed rep=3 W11 cell_mpmc E64 w4 main-aa rc=0 3.14056 wall=1.32 busy_out=0.018
+[2026-11-26T00:07:30Z] timed rep=3 W11 cell_mpmc E64 w4 pr rc=0 3.16814 wall=1.32 busy_out=0.017
+[2026-11-26T00:07:31Z] timed rep=3 W11 cell_spmc E64 w1 main rc=0 38.9886 wall=1.35 busy_out=0.016
+[2026-11-26T00:07:32Z] timed rep=3 W11 cell_spmc E64 w1 main-aa rc=0 38.8148 wall=1.35 busy_out=0.018
+[2026-11-26T00:07:34Z] timed rep=3 W11 cell_spmc E64 w1 pr rc=0 38.0787 wall=1.35 busy_out=0.017
+[2026-11-26T00:07:35Z] timed rep=3 WB split bounded_spsc 1:1 main rc=0 3.99045 wall=1.21 busy_out=0.017
+[2026-11-26T00:07:36Z] timed rep=3 WB split bounded_spsc 1:1 main-aa rc=0 5.21554 wall=0.98 busy_out=0.017
+[2026-11-26T00:07:37Z] timed rep=3 WB split bounded_spsc 1:1 pr rc=0 5.24862 wall=0.97 busy_out=0.015
+[2026-11-26T00:07:38Z] timed rep=3 WB split bounded_mpsc 2:1 main rc=0 3.45541 wall=1.37 busy_out=0.016
+[2026-11-26T00:07:39Z] timed rep=3 WB split bounded_mpsc 2:1 main-aa rc=0 4.53181 wall=1.10 busy_out=0.018
+[2026-11-26T00:07:41Z] timed rep=3 WB split bounded_mpsc 2:1 pr rc=0 3.54445 wall=1.34 busy_out=0.017
+[2026-11-26T00:07:42Z] timed rep=3 WB split bounded_spmc 1:2 main rc=0 5.60633 wall=0.93 busy_out=0.014
+[2026-11-26T00:07:43Z] timed rep=3 WB split bounded_spmc 1:2 main-aa rc=0 4.86966 wall=1.03 busy_out=0.017
+[2026-11-26T00:07:43Z] timed rep=3 WB split bounded_spmc 1:2 pr rc=0 6.88927 wall=0.79 busy_out=0.017
+[2026-11-26T00:07:45Z] timed rep=3 WB split bounded_spmc 1:4 main rc=0 4.61179 wall=1.08 busy_out=0.017
+[2026-11-26T00:07:46Z] timed rep=3 WB split bounded_spmc 1:4 main-aa rc=0 4.06137 wall=1.20 busy_out=0.014
+[2026-11-26T00:07:47Z] timed rep=3 WB split bounded_spmc 1:4 pr rc=0 4.25674 wall=1.15 busy_out=0.014
+[2026-11-26T00:07:48Z] timed rep=3 WB split bounded_generic 1:1 main rc=0 4.16855 wall=1.17 busy_out=0.016
+[2026-11-26T00:07:49Z] timed rep=3 WB split bounded_generic 1:1 main-aa rc=0 3.43882 wall=1.37 busy_out=0.016
+[2026-11-26T00:07:51Z] timed rep=3 WB split bounded_generic 1:1 pr rc=0 4.36492 wall=1.13 busy_out=0.014
+[2026-11-26T00:07:55Z] timed rep=4 W1 shim_generic E64 main-aa rc=0 4.53121 wall=4.63 busy_out=0.015
+[2026-11-26T00:08:00Z] timed rep=4 W1 shim_generic E64 pr rc=0 4.79243 wall=4.39 busy_out=0.015
+[2026-11-26T00:08:04Z] timed rep=4 W1 shim_generic E64 main rc=0 4.69883 wall=4.47 busy_out=0.016
+[2026-11-26T00:08:09Z] timed rep=4 W1 shim_generic_move E64 main-aa rc=0 4.2767 wall=4.89 busy_out=0.009
+[2026-11-26T00:08:14Z] timed rep=4 W1 shim_generic_move E64 pr rc=0 4.41984 wall=4.74 busy_out=0.013
+[2026-11-26T00:08:19Z] timed rep=4 W1 shim_generic_move E64 main rc=0 4.32226 wall=4.84 busy_out=0.015
+[2026-11-26T00:08:19Z] timed rep=4 W1 shim_spsc E64 main-aa rc=0 31.0625 wall=0.86 busy_out=0.012
+[2026-11-26T00:08:20Z] timed rep=4 W1 shim_spsc E64 pr rc=0 35.181 wall=0.78 busy_out=0.009
+[2026-11-26T00:08:21Z] timed rep=4 W1 shim_spsc E64 main rc=0 31.2645 wall=0.85 busy_out=0.017
+[2026-11-26T00:08:30Z] timed rep=4 W10 mpmc_cell E64 main-aa rc=0 4.52611 wall=9.05 busy_out=0.014
+[2026-11-26T00:08:40Z] timed rep=4 W10 mpmc_cell E64 pr rc=0 4.28394 wall=9.55 busy_out=0.015
+[2026-11-26T00:08:49Z] timed rep=4 W10 mpmc_cell E64 main rc=0 4.59562 wall=8.91 busy_out=0.014
+[2026-11-26T00:08:50Z] timed rep=4 W10 spsc_cell E64 main-aa rc=0 124.678 wall=1.01 busy_out=0.018
+[2026-11-26T00:08:51Z] timed rep=4 W10 spsc_cell E64 pr rc=0 124.943 wall=1.01 busy_out=0.014
+[2026-11-26T00:08:52Z] timed rep=4 W10 spsc_cell E64 main rc=0 131.24 wall=0.97 busy_out=0.012
+[2026-11-26T00:08:52Z] timed rep=4 W9 split shim_generic 2:2 main-aa rc=0 6.51093 wall=0.83 busy_out=0.012
+[2026-11-26T00:08:53Z] timed rep=4 W9 split shim_generic 2:2 pr rc=0 6.65767 wall=0.81 busy_out=0.014
+[2026-11-26T00:08:54Z] timed rep=4 W9 split shim_generic 2:2 main rc=0 6.5006 wall=0.83 busy_out=0.011
+[2026-11-26T00:08:55Z] timed rep=4 W9 split shim_generic 4:4 main-aa rc=0 8.65036 wall=1.14 busy_out=0.004
+[2026-11-26T00:08:56Z] timed rep=4 W9 split shim_generic 4:4 pr rc=0 8.58785 wall=1.14 busy_out=0.005
+[2026-11-26T00:08:57Z] timed rep=4 W9 split shim_generic 4:4 main rc=0 8.70025 wall=1.13 busy_out=0.002
+[2026-11-26T00:08:58Z] timed rep=4 W9 split shim_generic 1:2 main-aa rc=0 3.09008 wall=0.86 busy_out=0.002
+[2026-11-26T00:08:59Z] timed rep=4 W9 split shim_generic 1:2 pr rc=0 2.96804 wall=0.89 busy_out=0.002
+[2026-11-26T00:09:00Z] timed rep=4 W9 split shim_generic 1:2 main rc=0 2.89109 wall=0.90 busy_out=0.003
+[2026-11-26T00:09:00Z] timed rep=4 W9 split shim_mpsc 1:1 main-aa rc=0 14.3423 wall=0.35 busy_out=0.001
+[2026-11-26T00:09:01Z] timed rep=4 W9 split shim_mpsc 1:1 pr rc=0 14.1798 wall=0.35 busy_out=0.011
+[2026-11-26T00:09:01Z] timed rep=4 W9 split shim_mpsc 1:1 main rc=0 14.3153 wall=0.35 busy_out=0.006
+[2026-11-26T00:09:02Z] timed rep=4 W9 split shim_mpsc 2:1 main-aa rc=0 8.00917 wall=0.71 busy_out=0.003
+[2026-11-26T00:09:03Z] timed rep=4 W9 split shim_mpsc 2:1 pr rc=0 8.14793 wall=0.70 busy_out=0.011
+[2026-11-26T00:09:03Z] timed rep=4 W9 split shim_mpsc 2:1 main rc=0 8.07364 wall=0.71 busy_out=0.007
+[2026-11-26T00:09:04Z] timed rep=4 W9 split shim_mpsc 4:1 main-aa rc=0 12.3017 wall=0.86 busy_out=0.003
+[2026-11-26T00:09:05Z] timed rep=4 W9 split shim_mpsc 4:1 pr rc=0 12.5106 wall=0.85 busy_out=0.002
+[2026-11-26T00:09:06Z] timed rep=4 W9 split shim_mpsc 4:1 main rc=0 12.717 wall=0.84 busy_out=0.002
+[2026-11-26T00:09:07Z] timed rep=4 W9 split shim_mpsc 8:1 main-aa rc=0 13.3611 wall=1.41 busy_out=0.003
+[2026-11-26T00:09:09Z] timed rep=4 W9 split shim_mpsc 8:1 pr rc=0 13.4193 wall=1.40 busy_out=0.001
+[2026-11-26T00:09:10Z] timed rep=4 W9 split shim_mpsc 8:1 main rc=0 13.3233 wall=1.41 busy_out=0.003
+[2026-11-26T00:09:12Z] timed rep=4 W9 split orig_mpsc 2:1 main-aa rc=0 2.98312 wall=1.55 busy_out=0.003
+[2026-11-26T00:09:13Z] timed rep=4 W9 split orig_mpsc 2:1 pr rc=0 3.07446 wall=1.51 busy_out=0.004
+[2026-11-26T00:09:15Z] timed rep=4 W9 split orig_mpsc 2:1 main rc=0 2.98022 wall=1.55 busy_out=0.002
+[2026-11-26T00:09:15Z] timed rep=4 W9 split shim_spmc 1:2 main-aa rc=0 12.7611 wall=0.37 busy_out=0.015
+[2026-11-26T00:09:15Z] timed rep=4 W9 split shim_spmc 1:2 pr rc=0 12.2605 wall=0.38 busy_out=0.020
+[2026-11-26T00:09:16Z] timed rep=4 W9 split shim_spmc 1:2 main rc=0 12.691 wall=0.37 busy_out=0.013
+[2026-11-26T00:09:17Z] timed rep=4 W11 cell_mpmc E64 w1 main-aa rc=0 4.3429 wall=1.32 busy_out=0.008
+[2026-11-26T00:09:18Z] timed rep=4 W11 cell_mpmc E64 w1 pr rc=0 4.14428 wall=1.32 busy_out=0.010
+[2026-11-26T00:09:20Z] timed rep=4 W11 cell_mpmc E64 w1 main rc=0 4.46376 wall=1.32 busy_out=0.017
+[2026-11-26T00:09:21Z] timed rep=4 W11 cell_mpmc E64 w4 main-aa rc=0 3.18326 wall=1.32 busy_out=0.015
+[2026-11-26T00:09:22Z] timed rep=4 W11 cell_mpmc E64 w4 pr rc=0 3.12706 wall=1.32 busy_out=0.016
+[2026-11-26T00:09:24Z] timed rep=4 W11 cell_mpmc E64 w4 main rc=0 3.1792 wall=1.32 busy_out=0.018
+[2026-11-26T00:09:25Z] timed rep=4 W11 cell_spmc E64 w1 main-aa rc=0 39.042 wall=1.35 busy_out=0.015
+[2026-11-26T00:09:26Z] timed rep=4 W11 cell_spmc E64 w1 pr rc=0 37.929 wall=1.35 busy_out=0.008
+[2026-11-26T00:09:28Z] timed rep=4 W11 cell_spmc E64 w1 main rc=0 38.9852 wall=1.35 busy_out=0.006
+[2026-11-26T00:09:29Z] timed rep=4 WB split bounded_spsc 1:1 main-aa rc=0 3.42429 wall=1.38 busy_out=0.007
+[2026-11-26T00:09:30Z] timed rep=4 WB split bounded_spsc 1:1 pr rc=0 3.45448 wall=1.37 busy_out=0.008
+[2026-11-26T00:09:32Z] timed rep=4 WB split bounded_spsc 1:1 main rc=0 3.44844 wall=1.37 busy_out=0.004
+[2026-11-26T00:09:33Z] timed rep=4 WB split bounded_mpsc 2:1 main-aa rc=0 4.05403 wall=1.20 busy_out=0.002
+[2026-11-26T00:09:34Z] timed rep=4 WB split bounded_mpsc 2:1 pr rc=0 3.32108 wall=1.41 busy_out=0.002
+[2026-11-26T00:09:36Z] timed rep=4 WB split bounded_mpsc 2:1 main rc=0 3.53037 wall=1.34 busy_out=0.005
+[2026-11-26T00:09:37Z] timed rep=4 WB split bounded_spmc 1:2 main-aa rc=0 5.48998 wall=0.94 busy_out=0.004
+[2026-11-26T00:09:38Z] timed rep=4 WB split bounded_spmc 1:2 pr rc=0 5.40949 wall=0.95 busy_out=0.004
+[2026-11-26T00:09:38Z] timed rep=4 WB split bounded_spmc 1:2 main rc=0 6.95807 wall=0.79 busy_out=0.008
+[2026-11-26T00:09:40Z] timed rep=4 WB split bounded_spmc 1:4 main-aa rc=0 4.69968 wall=1.06 busy_out=0.004
+[2026-11-26T00:09:41Z] timed rep=4 WB split bounded_spmc 1:4 pr rc=0 4.02319 wall=1.21 busy_out=0.009
+[2026-11-26T00:09:42Z] timed rep=4 WB split bounded_spmc 1:4 main rc=0 4.72151 wall=1.06 busy_out=0.007
+[2026-11-26T00:09:43Z] timed rep=4 WB split bounded_generic 1:1 main-aa rc=0 3.50836 wall=1.35 busy_out=0.015
+[2026-11-26T00:09:45Z] timed rep=4 WB split bounded_generic 1:1 pr rc=0 3.28312 wall=1.43 busy_out=0.014
+[2026-11-26T00:09:46Z] timed rep=4 WB split bounded_generic 1:1 main rc=0 4.4212 wall=1.12 busy_out=0.013
+[2026-11-26T00:09:50Z] timed rep=5 W1 shim_generic E64 pr rc=0 4.464 wall=4.69 busy_out=0.014
+[2026-11-26T00:09:55Z] timed rep=5 W1 shim_generic E64 main rc=0 4.39426 wall=4.76 busy_out=0.014
+[2026-11-26T00:10:00Z] timed rep=5 W1 shim_generic E64 main-aa rc=0 4.44828 wall=4.71 busy_out=0.018
+[2026-11-26T00:10:05Z] timed rep=5 W1 shim_generic_move E64 pr rc=0 4.39011 wall=4.77 busy_out=0.014
+[2026-11-26T00:10:10Z] timed rep=5 W1 shim_generic_move E64 main rc=0 4.25179 wall=4.92 busy_out=0.005
+[2026-11-26T00:10:14Z] timed rep=5 W1 shim_generic_move E64 main-aa rc=0 4.25031 wall=4.92 busy_out=0.004
+[2026-11-26T00:10:15Z] timed rep=5 W1 shim_spsc E64 pr rc=0 35.1818 wall=0.78 busy_out=0.003
+[2026-11-26T00:10:16Z] timed rep=5 W1 shim_spsc E64 main rc=0 32.4425 wall=0.83 busy_out=0.009
+[2026-11-26T00:10:17Z] timed rep=5 W1 shim_spsc E64 main-aa rc=0 32.5585 wall=0.83 busy_out=0.007
+[2026-11-26T00:10:26Z] timed rep=5 W10 mpmc_cell E64 pr rc=0 4.41548 wall=9.27 busy_out=0.003
+[2026-11-26T00:10:35Z] timed rep=5 W10 mpmc_cell E64 main rc=0 4.61478 wall=8.88 busy_out=0.004
+[2026-11-26T00:10:44Z] timed rep=5 W10 mpmc_cell E64 main-aa rc=0 4.48105 wall=9.14 busy_out=0.003
+[2026-11-26T00:10:45Z] timed rep=5 W10 spsc_cell E64 pr rc=0 125.51 wall=1.01 busy_out=0.002
+[2026-11-26T00:10:46Z] timed rep=5 W10 spsc_cell E64 main rc=0 126.738 wall=1.00 busy_out=0.002
+[2026-11-26T00:10:47Z] timed rep=5 W10 spsc_cell E64 main-aa rc=0 127.799 wall=0.99 busy_out=0.005
+[2026-11-26T00:10:48Z] timed rep=5 W9 split shim_generic 2:2 pr rc=0 6.54625 wall=0.82 busy_out=0.002
+[2026-11-26T00:10:49Z] timed rep=5 W9 split shim_generic 2:2 main rc=0 6.64813 wall=0.81 busy_out=0.001
+[2026-11-26T00:10:50Z] timed rep=5 W9 split shim_generic 2:2 main-aa rc=0 6.34669 wall=0.84 busy_out=0.001
+[2026-11-26T00:10:51Z] timed rep=5 W9 split shim_generic 4:4 pr rc=0 8.49431 wall=1.15 busy_out=0.002
+[2026-11-26T00:10:52Z] timed rep=5 W9 split shim_generic 4:4 main rc=0 8.6159 wall=1.14 busy_out=0.004
+[2026-11-26T00:10:53Z] timed rep=5 W9 split shim_generic 4:4 main-aa rc=0 8.52015 wall=1.15 busy_out=0.004
+[2026-11-26T00:10:54Z] timed rep=5 W9 split shim_generic 1:2 pr rc=0 3.01467 wall=0.88 busy_out=0.009
+[2026-11-26T00:10:55Z] timed rep=5 W9 split shim_generic 1:2 main rc=0 2.93055 wall=0.90 busy_out=0.015
+[2026-11-26T00:10:56Z] timed rep=5 W9 split shim_generic 1:2 main-aa rc=0 2.83639 wall=0.92 busy_out=0.018
+[2026-11-26T00:10:56Z] timed rep=5 W9 split shim_mpsc 1:1 pr rc=0 15.0833 wall=0.35 busy_out=0.018
+[2026-11-26T00:10:57Z] timed rep=5 W9 split shim_mpsc 1:1 main rc=0 15.2181 wall=0.34 busy_out=0.021
+[2026-11-26T00:10:57Z] timed rep=5 W9 split shim_mpsc 1:1 main-aa rc=0 15.3061 wall=0.34 busy_out=0.018
+[2026-11-26T00:10:58Z] timed rep=5 W9 split shim_mpsc 2:1 pr rc=0 8.15155 wall=0.70 busy_out=0.017
+[2026-11-26T00:10:58Z] timed rep=5 W9 split shim_mpsc 2:1 main rc=0 8.05062 wall=0.71 busy_out=0.005
+[2026-11-26T00:10:59Z] timed rep=5 W9 split shim_mpsc 2:1 main-aa rc=0 8.05152 wall=0.71 busy_out=0.007
+[2026-11-26T00:11:00Z] timed rep=5 W9 split shim_mpsc 4:1 pr rc=0 12.4112 wall=0.86 busy_out=0.002
+[2026-11-26T00:11:01Z] timed rep=5 W9 split shim_mpsc 4:1 main rc=0 12.585 wall=0.85 busy_out=0.006
+[2026-11-26T00:11:02Z] timed rep=5 W9 split shim_mpsc 4:1 main-aa rc=0 12.5106 wall=0.85 busy_out=0.002
+[2026-11-26T00:11:03Z] timed rep=5 W9 split shim_mpsc 8:1 pr rc=0 13.0261 wall=1.44 busy_out=0.003
+[2026-11-26T00:11:04Z] timed rep=5 W9 split shim_mpsc 8:1 main rc=0 13.0602 wall=1.44 busy_out=0.006
+[2026-11-26T00:11:06Z] timed rep=5 W9 split shim_mpsc 8:1 main-aa rc=0 13.3878 wall=1.41 busy_out=0.015
+[2026-11-26T00:11:07Z] timed rep=5 W9 split orig_mpsc 2:1 pr rc=0 3.21858 wall=1.45 busy_out=0.003
+[2026-11-26T00:11:09Z] timed rep=5 W9 split orig_mpsc 2:1 main rc=0 3.18316 wall=1.46 busy_out=0.004
+[2026-11-26T00:11:10Z] timed rep=5 W9 split orig_mpsc 2:1 main-aa rc=0 3.18028 wall=1.47 busy_out=0.014
+[2026-11-26T00:11:11Z] timed rep=5 W9 split shim_spmc 1:2 pr rc=0 12.4735 wall=0.37 busy_out=0.016
+[2026-11-26T00:11:11Z] timed rep=5 W9 split shim_spmc 1:2 main rc=0 13.0185 wall=0.37 busy_out=0.014
+[2026-11-26T00:11:11Z] timed rep=5 W9 split shim_spmc 1:2 main-aa rc=0 13.1427 wall=0.36 busy_out=0.009
+[2026-11-26T00:11:13Z] timed rep=5 W11 cell_mpmc E64 w1 pr rc=0 4.16052 wall=1.32 busy_out=0.002
+[2026-11-26T00:11:14Z] timed rep=5 W11 cell_mpmc E64 w1 main rc=0 4.34552 wall=1.32 busy_out=0.003
+[2026-11-26T00:11:15Z] timed rep=5 W11 cell_mpmc E64 w1 main-aa rc=0 4.30471 wall=1.32 busy_out=0.002
+[2026-11-26T00:11:17Z] timed rep=5 W11 cell_mpmc E64 w4 pr rc=0 3.16351 wall=1.32 busy_out=0.003
+[2026-11-26T00:11:18Z] timed rep=5 W11 cell_mpmc E64 w4 main rc=0 3.21084 wall=1.32 busy_out=0.010
+[2026-11-26T00:11:19Z] timed rep=5 W11 cell_mpmc E64 w4 main-aa rc=0 3.18755 wall=1.32 busy_out=0.002
+[2026-11-26T00:11:21Z] timed rep=5 W11 cell_spmc E64 w1 pr rc=0 37.8702 wall=1.35 busy_out=0.002
+[2026-11-26T00:11:22Z] timed rep=5 W11 cell_spmc E64 w1 main rc=0 39.0842 wall=1.35 busy_out=0.002
+[2026-11-26T00:11:23Z] timed rep=5 W11 cell_spmc E64 w1 main-aa rc=0 39.0323 wall=1.35 busy_out=0.002
+[2026-11-26T00:11:25Z] timed rep=5 WB split bounded_spsc 1:1 pr rc=0 3.45694 wall=1.37 busy_out=0.004
+[2026-11-26T00:11:26Z] timed rep=5 WB split bounded_spsc 1:1 main rc=0 4.38481 wall=1.12 busy_out=0.007
+[2026-11-26T00:11:27Z] timed rep=5 WB split bounded_spsc 1:1 main-aa rc=0 4.34025 wall=1.13 busy_out=0.007
+[2026-11-26T00:11:28Z] timed rep=5 WB split bounded_mpsc 2:1 pr rc=0 4.62575 wall=1.08 busy_out=0.008
+[2026-11-26T00:11:29Z] timed rep=5 WB split bounded_mpsc 2:1 main rc=0 4.70953 wall=1.06 busy_out=0.009
+[2026-11-26T00:11:30Z] timed rep=5 WB split bounded_mpsc 2:1 main-aa rc=0 4.19718 wall=1.16 busy_out=0.007
+[2026-11-26T00:11:31Z] timed rep=5 WB split bounded_spmc 1:2 pr rc=0 4.68458 wall=1.07 busy_out=0.012
+[2026-11-26T00:11:32Z] timed rep=5 WB split bounded_spmc 1:2 main rc=0 5.36329 wall=0.96 busy_out=0.010
+[2026-11-26T00:11:33Z] timed rep=5 WB split bounded_spmc 1:2 main-aa rc=0 7.62522 wall=0.74 busy_out=0.029
+[2026-11-26T00:11:34Z] timed rep=5 WB split bounded_spmc 1:4 pr rc=0 3.91034 wall=1.23 busy_out=0.010
+[2026-11-26T00:11:35Z] timed rep=5 WB split bounded_spmc 1:4 main rc=0 4.00489 wall=1.21 busy_out=0.009
+[2026-11-26T00:11:37Z] timed rep=5 WB split bounded_spmc 1:4 main-aa rc=0 2.32481 wall=1.93 busy_out=0.007
+[2026-11-26T00:11:39Z] timed rep=5 WB split bounded_generic 1:1 pr rc=0 3.43538 wall=1.37 busy_out=0.008
+[2026-11-26T00:11:40Z] timed rep=5 WB split bounded_generic 1:1 main rc=0 5.08484 wall=1.00 busy_out=0.006
+[2026-11-26T00:11:41Z] timed rep=5 WB split bounded_generic 1:1 main-aa rc=0 4.38199 wall=1.12 busy_out=0.005
+[2026-11-26T00:11:46Z] timed rep=6 W1 shim_generic E64 main rc=0 4.32468 wall=4.84 busy_out=0.008
+[2026-11-26T00:11:50Z] timed rep=6 W1 shim_generic E64 main-aa rc=0 4.39182 wall=4.77 busy_out=0.006
+[2026-11-26T00:11:55Z] timed rep=6 W1 shim_generic E64 pr rc=0 4.55073 wall=4.61 busy_out=0.005
+[2026-11-26T00:12:00Z] timed rep=6 W1 shim_generic_move E64 main rc=0 4.22494 wall=4.95 busy_out=0.005
+[2026-11-26T00:12:05Z] timed rep=6 W1 shim_generic_move E64 main-aa rc=0 4.45844 wall=4.70 busy_out=0.011
+[2026-11-26T00:12:09Z] timed rep=6 W1 shim_generic_move E64 pr rc=0 4.40294 wall=4.76 busy_out=0.003
+[2026-11-26T00:12:10Z] timed rep=6 W1 shim_spsc E64 main rc=0 32.6168 wall=0.83 busy_out=0.003
+[2026-11-26T00:12:11Z] timed rep=6 W1 shim_spsc E64 main-aa rc=0 32.7924 wall=0.82 busy_out=0.004
+[2026-11-26T00:12:12Z] timed rep=6 W1 shim_spsc E64 pr rc=0 34.8834 wall=0.79 busy_out=0.004
+[2026-11-26T00:12:21Z] timed rep=6 W10 mpmc_cell E64 main rc=0 4.54148 wall=9.02 busy_out=0.004
+[2026-11-26T00:12:30Z] timed rep=6 W10 mpmc_cell E64 main-aa rc=0 4.75722 wall=8.62 busy_out=0.003
+[2026-11-26T00:12:38Z] timed rep=6 W10 mpmc_cell E64 pr rc=0 4.61658 wall=8.88 busy_out=0.003
+[2026-11-26T00:12:39Z] timed rep=6 W10 spsc_cell E64 main rc=0 127.553 wall=1.00 busy_out=0.003
+[2026-11-26T00:12:40Z] timed rep=6 W10 spsc_cell E64 main-aa rc=0 126.744 wall=1.00 busy_out=0.005
+[2026-11-26T00:12:41Z] timed rep=6 W10 spsc_cell E64 pr rc=0 127.199 wall=1.00 busy_out=0.003
+[2026-11-26T00:12:42Z] timed rep=6 W9 split shim_generic 2:2 main rc=0 6.52618 wall=0.83 busy_out=0.005
+[2026-11-26T00:12:43Z] timed rep=6 W9 split shim_generic 2:2 main-aa rc=0 6.53075 wall=0.83 busy_out=0.003
+[2026-11-26T00:12:44Z] timed rep=6 W9 split shim_generic 2:2 pr rc=0 6.5876 wall=0.82 busy_out=0.002
+[2026-11-26T00:12:45Z] timed rep=6 W9 split shim_generic 4:4 main rc=0 8.71353 wall=1.13 busy_out=0.003
+[2026-11-26T00:12:46Z] timed rep=6 W9 split shim_generic 4:4 main-aa rc=0 8.51896 wall=1.15 busy_out=0.003
+[2026-11-26T00:12:47Z] timed rep=6 W9 split shim_generic 4:4 pr rc=0 8.54783 wall=1.15 busy_out=0.001
+[2026-11-26T00:12:48Z] timed rep=6 W9 split shim_generic 1:2 main rc=0 3.13939 wall=0.85 busy_out=0.001
+[2026-11-26T00:12:49Z] timed rep=6 W9 split shim_generic 1:2 main-aa rc=0 2.7645 wall=0.93 busy_out=0.002
+[2026-11-26T00:12:50Z] timed rep=6 W9 split shim_generic 1:2 pr rc=0 2.8881 wall=0.91 busy_out=0.003
+[2026-11-26T00:12:50Z] timed rep=6 W9 split shim_mpsc 1:1 main rc=0 15.2718 wall=0.34 busy_out=0.002
+[2026-11-26T00:12:51Z] timed rep=6 W9 split shim_mpsc 1:1 main-aa rc=0 15.2829 wall=0.34 busy_out=0.001
+[2026-11-26T00:12:51Z] timed rep=6 W9 split shim_mpsc 1:1 pr rc=0 15.004 wall=0.35 busy_out=0.003
+[2026-11-26T00:12:52Z] timed rep=6 W9 split shim_mpsc 2:1 main rc=0 7.99721 wall=0.71 busy_out=0.004
+[2026-11-26T00:12:53Z] timed rep=6 W9 split shim_mpsc 2:1 main-aa rc=0 7.94752 wall=0.72 busy_out=0.002
+[2026-11-26T00:12:53Z] timed rep=6 W9 split shim_mpsc 2:1 pr rc=0 8.08433 wall=0.71 busy_out=0.002
+[2026-11-26T00:12:54Z] timed rep=6 W9 split shim_mpsc 4:1 main rc=0 12.6669 wall=0.84 busy_out=0.001
+[2026-11-26T00:12:55Z] timed rep=6 W9 split shim_mpsc 4:1 main-aa rc=0 12.1788 wall=0.87 busy_out=0.003
+[2026-11-26T00:12:56Z] timed rep=6 W9 split shim_mpsc 4:1 pr rc=0 12.468 wall=0.85 busy_out=0.004
+[2026-11-26T00:12:57Z] timed rep=6 W9 split shim_mpsc 8:1 main rc=0 13.2145 wall=1.42 busy_out=0.003
+[2026-11-26T00:12:59Z] timed rep=6 W9 split shim_mpsc 8:1 main-aa rc=0 13.9351 wall=1.36 busy_out=0.002
+[2026-11-26T00:13:00Z] timed rep=6 W9 split shim_mpsc 8:1 pr rc=0 13.2974 wall=1.42 busy_out=0.003
+[2026-11-26T00:13:01Z] timed rep=6 W9 split orig_mpsc 2:1 main rc=0 3.1774 wall=1.46 busy_out=0.002
+[2026-11-26T00:13:03Z] timed rep=6 W9 split orig_mpsc 2:1 main-aa rc=0 3.0768 wall=1.51 busy_out=0.002
+[2026-11-26T00:13:04Z] timed rep=6 W9 split orig_mpsc 2:1 pr rc=0 3.12541 wall=1.49 busy_out=0.006
+[2026-11-26T00:13:05Z] timed rep=6 W9 split shim_spmc 1:2 main rc=0 12.6339 wall=0.37 busy_out=0.003
+[2026-11-26T00:13:05Z] timed rep=6 W9 split shim_spmc 1:2 main-aa rc=0 12.4605 wall=0.37 busy_out=0.003
+[2026-11-26T00:13:06Z] timed rep=6 W9 split shim_spmc 1:2 pr rc=0 12.2915 wall=0.37 busy_out=0.001
+[2026-11-26T00:13:07Z] timed rep=6 W11 cell_mpmc E64 w1 main rc=0 4.298 wall=1.32 busy_out=0.014
+[2026-11-26T00:13:08Z] timed rep=6 W11 cell_mpmc E64 w1 main-aa rc=0 4.53468 wall=1.32 busy_out=0.018
+[2026-11-26T00:13:10Z] timed rep=6 W11 cell_mpmc E64 w1 pr rc=0 4.27093 wall=1.32 busy_out=0.016
+[2026-11-26T00:13:11Z] timed rep=6 W11 cell_mpmc E64 w4 main rc=0 3.19978 wall=1.32 busy_out=0.016
+[2026-11-26T00:13:12Z] timed rep=6 W11 cell_mpmc E64 w4 main-aa rc=0 3.20655 wall=1.32 busy_out=0.018
+[2026-11-26T00:13:13Z] timed rep=6 W11 cell_mpmc E64 w4 pr rc=0 3.17893 wall=1.32 busy_out=0.017
+[2026-11-26T00:13:15Z] timed rep=6 W11 cell_spmc E64 w1 main rc=0 38.8826 wall=1.35 busy_out=0.016
+[2026-11-26T00:13:16Z] timed rep=6 W11 cell_spmc E64 w1 main-aa rc=0 39.0939 wall=1.35 busy_out=0.019
+[2026-11-26T00:13:18Z] timed rep=6 W11 cell_spmc E64 w1 pr rc=0 37.9732 wall=1.35 busy_out=0.017
+[2026-11-26T00:13:19Z] timed rep=6 WB split bounded_spsc 1:1 main rc=0 3.85895 wall=1.25 busy_out=0.017
+[2026-11-26T00:13:20Z] timed rep=6 WB split bounded_spsc 1:1 main-aa rc=0 5.08829 wall=1.00 busy_out=0.023
+[2026-11-26T00:13:21Z] timed rep=6 WB split bounded_spsc 1:1 pr rc=0 4.08026 wall=1.19 busy_out=0.019
+[2026-11-26T00:13:22Z] timed rep=6 WB split bounded_mpsc 2:1 main rc=0 3.87984 wall=1.24 busy_out=0.017
+[2026-11-26T00:13:24Z] timed rep=6 WB split bounded_mpsc 2:1 main-aa rc=0 3.53668 wall=1.34 busy_out=0.017
+[2026-11-26T00:13:25Z] timed rep=6 WB split bounded_mpsc 2:1 pr rc=0 3.49028 wall=1.35 busy_out=0.017
+[2026-11-26T00:13:26Z] timed rep=6 WB split bounded_spmc 1:2 main rc=0 5.74382 wall=0.91 busy_out=0.017
+[2026-11-26T00:13:27Z] timed rep=6 WB split bounded_spmc 1:2 main-aa rc=0 7.06235 wall=0.78 busy_out=0.017
+[2026-11-26T00:13:28Z] timed rep=6 WB split bounded_spmc 1:2 pr rc=0 5.44399 wall=0.95 busy_out=0.018
+[2026-11-26T00:13:29Z] timed rep=6 WB split bounded_spmc 1:4 main rc=0 3.96659 wall=1.22 busy_out=0.017
+[2026-11-26T00:13:30Z] timed rep=6 WB split bounded_spmc 1:4 main-aa rc=0 4.60117 wall=1.08 busy_out=0.019
+[2026-11-26T00:13:31Z] timed rep=6 WB split bounded_spmc 1:4 pr rc=0 4.28916 wall=1.14 busy_out=0.018
+[2026-11-26T00:13:32Z] timed rep=6 WB split bounded_generic 1:1 main rc=0 4.16111 wall=1.17 busy_out=0.012
+[2026-11-26T00:13:33Z] timed rep=6 WB split bounded_generic 1:1 main-aa rc=0 3.83474 wall=1.25 busy_out=0.011
+[2026-11-26T00:13:35Z] timed rep=6 WB split bounded_generic 1:1 pr rc=0 4.07667 wall=1.19 busy_out=0.012
+[2026-11-26T00:13:39Z] timed rep=7 W1 shim_generic E64 main-aa rc=0 4.75 wall=4.43 busy_out=0.018
+[2026-11-26T00:13:44Z] timed rep=7 W1 shim_generic E64 pr rc=0 4.30184 wall=4.86 busy_out=0.013
+[2026-11-26T00:13:49Z] timed rep=7 W1 shim_generic E64 main rc=0 4.47305 wall=4.68 busy_out=0.010
+[2026-11-26T00:13:53Z] timed rep=7 W1 shim_generic_move E64 main-aa rc=0 4.45236 wall=4.70 busy_out=0.014
+[2026-11-26T00:13:58Z] timed rep=7 W1 shim_generic_move E64 pr rc=0 4.39893 wall=4.76 busy_out=0.015
+[2026-11-26T00:14:03Z] timed rep=7 W1 shim_generic_move E64 main rc=0 4.18643 wall=4.99 busy_out=0.018
+[2026-11-26T00:14:04Z] timed rep=7 W1 shim_spsc E64 main-aa rc=0 32.5689 wall=0.83 busy_out=0.017
+[2026-11-26T00:14:05Z] timed rep=7 W1 shim_spsc E64 pr rc=0 35.1881 wall=0.78 busy_out=0.017
+[2026-11-26T00:14:05Z] timed rep=7 W1 shim_spsc E64 main rc=0 32.4418 wall=0.83 busy_out=0.019
+[2026-11-26T00:14:14Z] timed rep=7 W10 mpmc_cell E64 main-aa rc=0 4.56273 wall=8.99 busy_out=0.018
+[2026-11-26T00:14:24Z] timed rep=7 W10 mpmc_cell E64 pr rc=0 4.44185 wall=9.22 busy_out=0.006
+[2026-11-26T00:14:33Z] timed rep=7 W10 mpmc_cell E64 main rc=0 4.57949 wall=8.95 busy_out=0.002
+[2026-11-26T00:14:34Z] timed rep=7 W10 spsc_cell E64 main-aa rc=0 127.067 wall=1.00 busy_out=0.003
+[2026-11-26T00:14:35Z] timed rep=7 W10 spsc_cell E64 pr rc=0 122.293 wall=1.03 busy_out=0.002
+[2026-11-26T00:14:36Z] timed rep=7 W10 spsc_cell E64 main rc=0 131.463 wall=0.97 busy_out=0.003
+[2026-11-26T00:14:36Z] timed rep=7 W9 split shim_generic 2:2 main-aa rc=0 6.54652 wall=0.82 busy_out=0.002
+[2026-11-26T00:14:37Z] timed rep=7 W9 split shim_generic 2:2 pr rc=0 6.67091 wall=0.81 busy_out=0.004
+[2026-11-26T00:14:38Z] timed rep=7 W9 split shim_generic 2:2 main rc=0 6.50388 wall=0.83 busy_out=0.002
+[2026-11-26T00:14:39Z] timed rep=7 W9 split shim_generic 4:4 main-aa rc=0 8.38857 wall=1.17 busy_out=0.001
+[2026-11-26T00:14:40Z] timed rep=7 W9 split shim_generic 4:4 pr rc=0 8.86978 wall=1.11 busy_out=0.003
+[2026-11-26T00:14:42Z] timed rep=7 W9 split shim_generic 4:4 main rc=0 8.47233 wall=1.16 busy_out=0.003
+[2026-11-26T00:14:42Z] timed rep=7 W9 split shim_generic 1:2 main-aa rc=0 2.96189 wall=0.89 busy_out=0.001
+[2026-11-26T00:14:43Z] timed rep=7 W9 split shim_generic 1:2 pr rc=0 2.96738 wall=0.89 busy_out=0.002
+[2026-11-26T00:14:44Z] timed rep=7 W9 split shim_generic 1:2 main rc=0 2.97126 wall=0.89 busy_out=0.001
+[2026-11-26T00:14:45Z] timed rep=7 W9 split shim_mpsc 1:1 main-aa rc=0 15.3387 wall=0.34 busy_out=0.001
+[2026-11-26T00:14:45Z] timed rep=7 W9 split shim_mpsc 1:1 pr rc=0 15.1195 wall=0.35 busy_out=0.001
+[2026-11-26T00:14:45Z] timed rep=7 W9 split shim_mpsc 1:1 main rc=0 15.3296 wall=0.34 busy_out=0.001
+[2026-11-26T00:14:46Z] timed rep=7 W9 split shim_mpsc 2:1 main-aa rc=0 7.68774 wall=0.73 busy_out=0.002
+[2026-11-26T00:14:47Z] timed rep=7 W9 split shim_mpsc 2:1 pr rc=0 8.21566 wall=0.70 busy_out=0.002
+[2026-11-26T00:14:47Z] timed rep=7 W9 split shim_mpsc 2:1 main rc=0 7.98862 wall=0.71 busy_out=0.001
+[2026-11-26T00:14:48Z] timed rep=7 W9 split shim_mpsc 4:1 main-aa rc=0 12.4706 wall=0.85 busy_out=0.001
+[2026-11-26T00:14:49Z] timed rep=7 W9 split shim_mpsc 4:1 pr rc=0 12.6094 wall=0.85 busy_out=0.002
+[2026-11-26T00:14:50Z] timed rep=7 W9 split shim_mpsc 4:1 main rc=0 12.6092 wall=0.85 busy_out=0.003
+[2026-11-26T00:14:51Z] timed rep=7 W9 split shim_mpsc 8:1 main-aa rc=0 13.1799 wall=1.43 busy_out=0.002
+[2026-11-26T00:14:53Z] timed rep=7 W9 split shim_mpsc 8:1 pr rc=0 13.4165 wall=1.40 busy_out=0.001
+[2026-11-26T00:14:54Z] timed rep=7 W9 split shim_mpsc 8:1 main rc=0 12.9946 wall=1.44 busy_out=0.002
+[2026-11-26T00:14:56Z] timed rep=7 W9 split orig_mpsc 2:1 main-aa rc=0 3.00906 wall=1.53 busy_out=0.002
+[2026-11-26T00:14:57Z] timed rep=7 W9 split orig_mpsc 2:1 pr rc=0 3.21044 wall=1.45 busy_out=0.002
+[2026-11-26T00:14:59Z] timed rep=7 W9 split orig_mpsc 2:1 main rc=0 3.16708 wall=1.47 busy_out=0.002
+[2026-11-26T00:14:59Z] timed rep=7 W9 split shim_spmc 1:2 main-aa rc=0 12.837 wall=0.37 busy_out=0.001
+[2026-11-26T00:14:59Z] timed rep=7 W9 split shim_spmc 1:2 pr rc=0 12.8395 wall=0.37 busy_out=0.004
+[2026-11-26T00:15:00Z] timed rep=7 W9 split shim_spmc 1:2 main rc=0 13.1399 wall=0.36 busy_out=0.000
+[2026-11-26T00:15:01Z] timed rep=7 W11 cell_mpmc E64 w1 main-aa rc=0 4.12862 wall=1.32 busy_out=0.003
+[2026-11-26T00:15:02Z] timed rep=7 W11 cell_mpmc E64 w1 pr rc=0 4.22694 wall=1.32 busy_out=0.001
+[2026-11-26T00:15:04Z] timed rep=7 W11 cell_mpmc E64 w1 main rc=0 4.21878 wall=1.32 busy_out=0.001
+[2026-11-26T00:15:05Z] timed rep=7 W11 cell_mpmc E64 w4 main-aa rc=0 3.22566 wall=1.32 busy_out=0.003
+[2026-11-26T00:15:06Z] timed rep=7 W11 cell_mpmc E64 w4 pr rc=0 3.13185 wall=1.32 busy_out=0.001
+[2026-11-26T00:15:08Z] timed rep=7 W11 cell_mpmc E64 w4 main rc=0 3.22271 wall=1.32 busy_out=0.001
+[2026-11-26T00:15:09Z] timed rep=7 W11 cell_spmc E64 w1 main-aa rc=0 39.0851 wall=1.35 busy_out=0.004
+[2026-11-26T00:15:10Z] timed rep=7 W11 cell_spmc E64 w1 pr rc=0 38.1573 wall=1.35 busy_out=0.002
+[2026-11-26T00:15:12Z] timed rep=7 W11 cell_spmc E64 w1 main rc=0 38.9691 wall=1.35 busy_out=0.002
+[2026-11-26T00:15:13Z] timed rep=7 WB split bounded_spsc 1:1 main-aa rc=0 3.95544 wall=1.22 busy_out=0.002
+[2026-11-26T00:15:14Z] timed rep=7 WB split bounded_spsc 1:1 pr rc=0 5.12123 wall=0.99 busy_out=0.002
+[2026-11-26T00:15:15Z] timed rep=7 WB split bounded_spsc 1:1 main rc=0 4.07258 wall=1.19 busy_out=0.002
+[2026-11-26T00:15:16Z] timed rep=7 WB split bounded_mpsc 2:1 main-aa rc=0 3.52823 wall=1.34 busy_out=0.002
+[2026-11-26T00:15:18Z] timed rep=7 WB split bounded_mpsc 2:1 pr rc=0 3.54059 wall=1.34 busy_out=0.001
+[2026-11-26T00:15:19Z] timed rep=7 WB split bounded_mpsc 2:1 main rc=0 5.99568 wall=0.88 busy_out=0.001
+[2026-11-26T00:15:19Z] timed rep=7 WB split bounded_spmc 1:2 main-aa rc=0 6.93134 wall=0.79 busy_out=0.001
+[2026-11-26T00:15:20Z] timed rep=7 WB split bounded_spmc 1:2 pr rc=0 5.86714 wall=0.89 busy_out=0.004
+[2026-11-26T00:15:21Z] timed rep=7 WB split bounded_spmc 1:2 main rc=0 4.78337 wall=1.05 busy_out=0.006
+[2026-11-26T00:15:23Z] timed rep=7 WB split bounded_spmc 1:4 main-aa rc=0 3.88923 wall=1.24 busy_out=0.003
+[2026-11-26T00:15:24Z] timed rep=7 WB split bounded_spmc 1:4 pr rc=0 4.28246 wall=1.15 busy_out=0.001
+[2026-11-26T00:15:25Z] timed rep=7 WB split bounded_spmc 1:4 main rc=0 4.71022 wall=1.06 busy_out=0.000
+[2026-11-26T00:15:26Z] timed rep=7 WB split bounded_generic 1:1 main-aa rc=0 5.20205 wall=0.98 busy_out=0.002
+[2026-11-26T00:15:27Z] timed rep=7 WB split bounded_generic 1:1 pr rc=0 3.5222 wall=1.35 busy_out=0.001
+[2026-11-26T00:15:28Z] timed rep=7 WB split bounded_generic 1:1 main rc=0 4.29327 wall=1.14 busy_out=0.004
+[2026-11-26T00:15:33Z] timed rep=8 W1 shim_generic E64 pr rc=0 4.42397 wall=4.73 busy_out=0.002
+[2026-11-26T00:15:38Z] timed rep=8 W1 shim_generic E64 main rc=0 4.64067 wall=4.52 busy_out=0.001
+[2026-11-26T00:15:42Z] timed rep=8 W1 shim_generic E64 main-aa rc=0 4.59958 wall=4.56 busy_out=0.003
+[2026-11-26T00:15:47Z] timed rep=8 W1 shim_generic_move E64 pr rc=0 4.47331 wall=4.68 busy_out=0.002
+[2026-11-26T00:15:52Z] timed rep=8 W1 shim_generic_move E64 main rc=0 4.4054 wall=4.75 busy_out=0.001
+[2026-11-26T00:15:56Z] timed rep=8 W1 shim_generic_move E64 main-aa rc=0 4.58611 wall=4.57 busy_out=0.002
+[2026-11-26T00:15:57Z] timed rep=8 W1 shim_spsc E64 pr rc=0 34.2916 wall=0.80 busy_out=0.002
+[2026-11-26T00:15:58Z] timed rep=8 W1 shim_spsc E64 main rc=0 32.7221 wall=0.82 busy_out=0.001
+[2026-11-26T00:15:59Z] timed rep=8 W1 shim_spsc E64 main-aa rc=0 32.7742 wall=0.82 busy_out=0.002
+[2026-11-26T00:16:08Z] timed rep=8 W10 mpmc_cell E64 pr rc=0 4.18624 wall=9.77 busy_out=0.002
+[2026-11-26T00:16:18Z] timed rep=8 W10 mpmc_cell E64 main rc=0 4.37667 wall=9.35 busy_out=0.002
+[2026-11-26T00:16:27Z] timed rep=8 W10 mpmc_cell E64 main-aa rc=0 4.44151 wall=9.22 busy_out=0.002
+[2026-11-26T00:16:28Z] timed rep=8 W10 spsc_cell E64 pr rc=0 123.752 wall=1.02 busy_out=0.001
+[2026-11-26T00:16:29Z] timed rep=8 W10 spsc_cell E64 main rc=0 127.001 wall=1.00 busy_out=0.003
+[2026-11-26T00:16:30Z] timed rep=8 W10 spsc_cell E64 main-aa rc=0 127.348 wall=1.00 busy_out=0.003
+[2026-11-26T00:16:31Z] timed rep=8 W9 split shim_generic 2:2 pr rc=0 6.53033 wall=0.83 busy_out=0.001
+[2026-11-26T00:16:32Z] timed rep=8 W9 split shim_generic 2:2 main rc=0 6.58906 wall=0.82 busy_out=0.002
+[2026-11-26T00:16:32Z] timed rep=8 W9 split shim_generic 2:2 main-aa rc=0 6.46707 wall=0.83 busy_out=0.002
+[2026-11-26T00:16:34Z] timed rep=8 W9 split shim_generic 4:4 pr rc=0 8.5899 wall=1.14 busy_out=0.003
+[2026-11-26T00:16:35Z] timed rep=8 W9 split shim_generic 4:4 main rc=0 8.7104 wall=1.13 busy_out=0.001
+[2026-11-26T00:16:36Z] timed rep=8 W9 split shim_generic 4:4 main-aa rc=0 8.67885 wall=1.13 busy_out=0.002
+[2026-11-26T00:16:37Z] timed rep=8 W9 split shim_generic 1:2 pr rc=0 2.9656 wall=0.89 busy_out=0.000
+[2026-11-26T00:16:38Z] timed rep=8 W9 split shim_generic 1:2 main rc=0 2.84487 wall=0.92 busy_out=0.001
+[2026-11-26T00:16:39Z] timed rep=8 W9 split shim_generic 1:2 main-aa rc=0 2.81084 wall=0.92 busy_out=0.001
+[2026-11-26T00:16:39Z] timed rep=8 W9 split shim_mpsc 1:1 pr rc=0 15.0725 wall=0.35 busy_out=0.001
+[2026-11-26T00:16:39Z] timed rep=8 W9 split shim_mpsc 1:1 main rc=0 15.2164 wall=0.34 busy_out=0.001
+[2026-11-26T00:16:40Z] timed rep=8 W9 split shim_mpsc 1:1 main-aa rc=0 15.2866 wall=0.34 busy_out=0.000
+[2026-11-26T00:16:40Z] timed rep=8 W9 split shim_mpsc 2:1 pr rc=0 8.11807 wall=0.71 busy_out=0.001
+[2026-11-26T00:16:41Z] timed rep=8 W9 split shim_mpsc 2:1 main rc=0 8.00079 wall=0.71 busy_out=0.009
+[2026-11-26T00:16:42Z] timed rep=8 W9 split shim_mpsc 2:1 main-aa rc=0 8.04226 wall=0.71 busy_out=0.002
+[2026-11-26T00:16:43Z] timed rep=8 W9 split shim_mpsc 4:1 pr rc=0 12.4662 wall=0.85 busy_out=0.002
+[2026-11-26T00:16:43Z] timed rep=8 W9 split shim_mpsc 4:1 main rc=0 12.4733 wall=0.85 busy_out=0.005
+[2026-11-26T00:16:44Z] timed rep=8 W9 split shim_mpsc 4:1 main-aa rc=0 12.6022 wall=0.85 busy_out=0.001
+[2026-11-26T00:16:46Z] timed rep=8 W9 split shim_mpsc 8:1 pr rc=0 13.3495 wall=1.41 busy_out=0.002
+[2026-11-26T00:16:47Z] timed rep=8 W9 split shim_mpsc 8:1 main rc=0 13.4542 wall=1.40 busy_out=0.001
+[2026-11-26T00:16:49Z] timed rep=8 W9 split shim_mpsc 8:1 main-aa rc=0 13.0149 wall=1.44 busy_out=0.001
+[2026-11-26T00:16:50Z] timed rep=8 W9 split orig_mpsc 2:1 pr rc=0 3.30726 wall=1.42 busy_out=0.001
+[2026-11-26T00:16:52Z] timed rep=8 W9 split orig_mpsc 2:1 main rc=0 3.03408 wall=1.52 busy_out=0.002
+[2026-11-26T00:16:53Z] timed rep=8 W9 split orig_mpsc 2:1 main-aa rc=0 3.01519 wall=1.53 busy_out=0.002
+[2026-11-26T00:16:53Z] timed rep=8 W9 split shim_spmc 1:2 pr rc=0 13.0759 wall=0.36 busy_out=0.003
+[2026-11-26T00:16:54Z] timed rep=8 W9 split shim_spmc 1:2 main rc=0 12.5323 wall=0.37 busy_out=0.004
+[2026-11-26T00:16:54Z] timed rep=8 W9 split shim_spmc 1:2 main-aa rc=0 12.6234 wall=0.37 busy_out=0.003
+[2026-11-26T00:16:55Z] timed rep=8 W11 cell_mpmc E64 w1 pr rc=0 4.1863 wall=1.32 busy_out=0.001
+[2026-11-26T00:16:57Z] timed rep=8 W11 cell_mpmc E64 w1 main rc=0 4.28254 wall=1.32 busy_out=0.002
+[2026-11-26T00:16:58Z] timed rep=8 W11 cell_mpmc E64 w1 main-aa rc=0 4.22335 wall=1.32 busy_out=0.001
+[2026-11-26T00:16:59Z] timed rep=8 W11 cell_mpmc E64 w4 pr rc=0 3.18379 wall=1.32 busy_out=0.002
+[2026-11-26T00:17:01Z] timed rep=8 W11 cell_mpmc E64 w4 main rc=0 3.19732 wall=1.32 busy_out=0.002
+[2026-11-26T00:17:02Z] timed rep=8 W11 cell_mpmc E64 w4 main-aa rc=0 3.22322 wall=1.32 busy_out=0.001
+[2026-11-26T00:17:03Z] timed rep=8 W11 cell_spmc E64 w1 pr rc=0 37.9158 wall=1.35 busy_out=0.003
+[2026-11-26T00:17:05Z] timed rep=8 W11 cell_spmc E64 w1 main rc=0 38.9233 wall=1.35 busy_out=0.002
+[2026-11-26T00:17:06Z] timed rep=8 W11 cell_spmc E64 w1 main-aa rc=0 38.9574 wall=1.35 busy_out=0.004
+[2026-11-26T00:17:07Z] timed rep=8 WB split bounded_spsc 1:1 pr rc=0 5.04506 wall=1.00 busy_out=0.001
+[2026-11-26T00:17:08Z] timed rep=8 WB split bounded_spsc 1:1 main rc=0 3.58916 wall=1.32 busy_out=0.000
+[2026-11-26T00:17:10Z] timed rep=8 WB split bounded_spsc 1:1 main-aa rc=0 3.51745 wall=1.35 busy_out=0.001
+[2026-11-26T00:17:11Z] timed rep=8 WB split bounded_mpsc 2:1 pr rc=0 4.4206 wall=1.11 busy_out=0.002
+[2026-11-26T00:17:12Z] timed rep=8 WB split bounded_mpsc 2:1 main rc=0 4.61838 wall=1.08 busy_out=0.003
+[2026-11-26T00:17:13Z] timed rep=8 WB split bounded_mpsc 2:1 main-aa rc=0 4.50306 wall=1.10 busy_out=0.002
+[2026-11-26T00:17:14Z] timed rep=8 WB split bounded_spmc 1:2 pr rc=0 4.9617 wall=1.02 busy_out=0.004
+[2026-11-26T00:17:15Z] timed rep=8 WB split bounded_spmc 1:2 main rc=0 7.0516 wall=0.78 busy_out=0.001
+[2026-11-26T00:17:16Z] timed rep=8 WB split bounded_spmc 1:2 main-aa rc=0 5.82578 wall=0.90 busy_out=0.003
+[2026-11-26T00:17:17Z] timed rep=8 WB split bounded_spmc 1:4 pr rc=0 3.87626 wall=1.24 busy_out=0.002
+[2026-11-26T00:17:18Z] timed rep=8 WB split bounded_spmc 1:4 main rc=0 4.9056 wall=1.03 busy_out=0.002
+[2026-11-26T00:17:19Z] timed rep=8 WB split bounded_spmc 1:4 main-aa rc=0 3.88551 wall=1.24 busy_out=0.001
+[2026-11-26T00:17:20Z] timed rep=8 WB split bounded_generic 1:1 pr rc=0 5.10282 wall=0.99 busy_out=0.003
+[2026-11-26T00:17:21Z] timed rep=8 WB split bounded_generic 1:1 main rc=0 4.27138 wall=1.15 busy_out=0.001
+[2026-11-26T00:17:23Z] timed rep=8 WB split bounded_generic 1:1 main-aa rc=0 4.14466 wall=1.18 busy_out=0.001
+[2026-11-26T00:17:27Z] timed rep=9 W1 shim_generic E64 main rc=0 4.4365 wall=4.72 busy_out=0.003
+[2026-11-26T00:17:32Z] timed rep=9 W1 shim_generic E64 main-aa rc=0 4.55746 wall=4.60 busy_out=0.002
+[2026-11-26T00:17:37Z] timed rep=9 W1 shim_generic E64 pr rc=0 4.41944 wall=4.74 busy_out=0.002
+[2026-11-26T00:17:41Z] timed rep=9 W1 shim_generic_move E64 main rc=0 4.47002 wall=4.69 busy_out=0.002
+[2026-11-26T00:17:46Z] timed rep=9 W1 shim_generic_move E64 main-aa rc=0 4.34155 wall=4.82 busy_out=0.003
+[2026-11-26T00:17:51Z] timed rep=9 W1 shim_generic_move E64 pr rc=0 4.2748 wall=4.89 busy_out=0.002
+[2026-11-26T00:17:52Z] timed rep=9 W1 shim_spsc E64 main rc=0 31.6719 wall=0.84 busy_out=0.001
+[2026-11-26T00:17:53Z] timed rep=9 W1 shim_spsc E64 main-aa rc=0 32.6142 wall=0.83 busy_out=0.002
+[2026-11-26T00:17:54Z] timed rep=9 W1 shim_spsc E64 pr rc=0 34.4581 wall=0.79 busy_out=0.003
+[2026-11-26T00:18:02Z] timed rep=9 W10 mpmc_cell E64 main rc=0 4.65011 wall=8.81 busy_out=0.002
+[2026-11-26T00:18:11Z] timed rep=9 W10 mpmc_cell E64 main-aa rc=0 4.61162 wall=8.89 busy_out=0.001
+[2026-11-26T00:18:21Z] timed rep=9 W10 mpmc_cell E64 pr rc=0 4.38514 wall=9.33 busy_out=0.002
+[2026-11-26T00:18:22Z] timed rep=9 W10 spsc_cell E64 main rc=0 124.242 wall=1.02 busy_out=0.001
+[2026-11-26T00:18:23Z] timed rep=9 W10 spsc_cell E64 main-aa rc=0 127.434 wall=1.00 busy_out=0.001
+[2026-11-26T00:18:24Z] timed rep=9 W10 spsc_cell E64 pr rc=0 122.713 wall=1.03 busy_out=0.002
+[2026-11-26T00:18:24Z] timed rep=9 W9 split shim_generic 2:2 main rc=0 6.68011 wall=0.81 busy_out=0.008
+[2026-11-26T00:18:25Z] timed rep=9 W9 split shim_generic 2:2 main-aa rc=0 6.38924 wall=0.84 busy_out=0.001
+[2026-11-26T00:18:26Z] timed rep=9 W9 split shim_generic 2:2 pr rc=0 6.31539 wall=0.85 busy_out=0.004
+[2026-11-26T00:18:27Z] timed rep=9 W9 split shim_generic 4:4 main rc=0 8.62423 wall=1.14 busy_out=0.002
+[2026-11-26T00:18:28Z] timed rep=9 W9 split shim_generic 4:4 main-aa rc=0 8.59972 wall=1.14 busy_out=0.001
+[2026-11-26T00:18:30Z] timed rep=9 W9 split shim_generic 4:4 pr rc=0 8.4565 wall=1.16 busy_out=0.003
+[2026-11-26T00:18:30Z] timed rep=9 W9 split shim_generic 1:2 main rc=0 3.02361 wall=0.87 busy_out=0.003
+[2026-11-26T00:18:31Z] timed rep=9 W9 split shim_generic 1:2 main-aa rc=0 3.07499 wall=0.86 busy_out=0.003
+[2026-11-26T00:18:32Z] timed rep=9 W9 split shim_generic 1:2 pr rc=0 2.95463 wall=0.89 busy_out=0.001
+[2026-11-26T00:18:33Z] timed rep=9 W9 split shim_mpsc 1:1 main rc=0 15.3037 wall=0.34 busy_out=0.000
+[2026-11-26T00:18:33Z] timed rep=9 W9 split shim_mpsc 1:1 main-aa rc=0 15.342 wall=0.34 busy_out=0.001
+[2026-11-26T00:18:33Z] timed rep=9 W9 split shim_mpsc 1:1 pr rc=0 15.1171 wall=0.35 busy_out=0.002
+[2026-11-26T00:18:34Z] timed rep=9 W9 split shim_mpsc 2:1 main rc=0 7.80415 wall=0.72 busy_out=0.001
+[2026-11-26T00:18:35Z] timed rep=9 W9 split shim_mpsc 2:1 main-aa rc=0 8.27804 wall=0.70 busy_out=0.004
+[2026-11-26T00:18:35Z] timed rep=9 W9 split shim_mpsc 2:1 pr rc=0 8.32553 wall=0.69 busy_out=0.001
+[2026-11-26T00:18:36Z] timed rep=9 W9 split shim_mpsc 4:1 main rc=0 12.3054 wall=0.86 busy_out=0.001
+[2026-11-26T00:18:37Z] timed rep=9 W9 split shim_mpsc 4:1 main-aa rc=0 12.2305 wall=0.87 busy_out=0.001
+[2026-11-26T00:18:38Z] timed rep=9 W9 split shim_mpsc 4:1 pr rc=0 12.6284 wall=0.85 busy_out=0.001
+[2026-11-26T00:18:39Z] timed rep=9 W9 split shim_mpsc 8:1 main rc=0 13.5388 wall=1.39 busy_out=0.001
+[2026-11-26T00:18:41Z] timed rep=9 W9 split shim_mpsc 8:1 main-aa rc=0 14.1116 wall=1.35 busy_out=0.002
+[2026-11-26T00:18:42Z] timed rep=9 W9 split shim_mpsc 8:1 pr rc=0 13.1741 wall=1.43 busy_out=0.003
+[2026-11-26T00:18:44Z] timed rep=9 W9 split orig_mpsc 2:1 main rc=0 3.11185 wall=1.49 busy_out=0.001
+[2026-11-26T00:18:45Z] timed rep=9 W9 split orig_mpsc 2:1 main-aa rc=0 3.05598 wall=1.51 busy_out=0.004
+[2026-11-26T00:18:47Z] timed rep=9 W9 split orig_mpsc 2:1 pr rc=0 3.30235 wall=1.42 busy_out=0.002
+[2026-11-26T00:18:47Z] timed rep=9 W9 split shim_spmc 1:2 main rc=0 12.9051 wall=0.37 busy_out=0.000
+[2026-11-26T00:18:47Z] timed rep=9 W9 split shim_spmc 1:2 main-aa rc=0 12.2791 wall=0.37 busy_out=0.004
+[2026-11-26T00:18:48Z] timed rep=9 W9 split shim_spmc 1:2 pr rc=0 12.8084 wall=0.37 busy_out=0.003
+[2026-11-26T00:18:49Z] timed rep=9 W11 cell_mpmc E64 w1 main rc=0 4.25537 wall=1.32 busy_out=0.001
+[2026-11-26T00:18:50Z] timed rep=9 W11 cell_mpmc E64 w1 main-aa rc=0 4.36214 wall=1.32 busy_out=0.002
+[2026-11-26T00:18:52Z] timed rep=9 W11 cell_mpmc E64 w1 pr rc=0 4.19527 wall=1.32 busy_out=0.002
+[2026-11-26T00:18:53Z] timed rep=9 W11 cell_mpmc E64 w4 main rc=0 3.19074 wall=1.32 busy_out=0.001
+[2026-11-26T00:18:54Z] timed rep=9 W11 cell_mpmc E64 w4 main-aa rc=0 3.23069 wall=1.32 busy_out=0.002
+[2026-11-26T00:18:56Z] timed rep=9 W11 cell_mpmc E64 w4 pr rc=0 3.19187 wall=1.32 busy_out=0.001
+[2026-11-26T00:18:57Z] timed rep=9 W11 cell_spmc E64 w1 main rc=0 39.117 wall=1.35 busy_out=0.002
+[2026-11-26T00:18:58Z] timed rep=9 W11 cell_spmc E64 w1 main-aa rc=0 38.9514 wall=1.35 busy_out=0.003
+[2026-11-26T00:19:00Z] timed rep=9 W11 cell_spmc E64 w1 pr rc=0 38.0185 wall=1.35 busy_out=0.003
+[2026-11-26T00:19:01Z] timed rep=9 WB split bounded_spsc 1:1 main rc=0 4.40539 wall=1.12 busy_out=0.003
+[2026-11-26T00:19:02Z] timed rep=9 WB split bounded_spsc 1:1 main-aa rc=0 3.46871 wall=1.36 busy_out=0.001
+[2026-11-26T00:19:03Z] timed rep=9 WB split bounded_spsc 1:1 pr rc=0 4.28413 wall=1.14 busy_out=0.002
+[2026-11-26T00:19:04Z] timed rep=9 WB split bounded_mpsc 2:1 main rc=0 4.42707 wall=1.12 busy_out=0.001
+[2026-11-26T00:19:05Z] timed rep=9 WB split bounded_mpsc 2:1 main-aa rc=0 4.54348 wall=1.07 busy_out=0.003
+[2026-11-26T00:19:06Z] timed rep=9 WB split bounded_mpsc 2:1 pr rc=0 4.666 wall=1.07 busy_out=0.001
+[2026-11-26T00:19:07Z] timed rep=9 WB split bounded_spmc 1:2 main rc=0 5.53847 wall=0.93 busy_out=0.000
+[2026-11-26T00:19:08Z] timed rep=9 WB split bounded_spmc 1:2 main-aa rc=0 4.74257 wall=1.05 busy_out=0.002
+[2026-11-26T00:19:09Z] timed rep=9 WB split bounded_spmc 1:2 pr rc=0 4.97855 wall=1.01 busy_out=0.001
+[2026-11-26T00:19:11Z] timed rep=9 WB split bounded_spmc 1:4 main rc=0 2.35 wall=1.91 busy_out=0.003
+[2026-11-26T00:19:12Z] timed rep=9 WB split bounded_spmc 1:4 main-aa rc=0 4.70728 wall=1.06 busy_out=0.001
+[2026-11-26T00:19:14Z] timed rep=9 WB split bounded_spmc 1:4 pr rc=0 4.28703 wall=1.14 busy_out=0.001
+[2026-11-26T00:19:15Z] timed rep=9 WB split bounded_generic 1:1 main rc=0 3.88696 wall=1.24 busy_out=0.003
+[2026-11-26T00:19:16Z] timed rep=9 WB split bounded_generic 1:1 main-aa rc=0 3.89308 wall=1.24 busy_out=0.005
+[2026-11-26T00:19:17Z] timed rep=9 WB split bounded_generic 1:1 pr rc=0 3.41976 wall=1.38 busy_out=0.001
+[2026-11-26T00:19:22Z] control-end rep=901 W1 shim_generic E64 main rc=0 4.42525 wall=4.73 busy_out=0.002
+[2026-11-26T00:19:27Z] control-end rep=901 W1 shim_generic E64 main rc=0 4.56482 wall=4.59 busy_out=0.003
+[2026-11-26T00:19:32Z] control-end rep=901 W1 shim_generic E64 main rc=0 4.29494 wall=4.87 busy_out=0.002
+=== end 2026-11-26T00:19:32Z
