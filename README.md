@@ -527,6 +527,26 @@ The threshold between the two, an average wait of 750 ns a section, was
 set from untimed runs of this program on this host; another mutex or
 processor is not measured.
 
+### Progress guarantees on demand
+
+A queue's default implementation stays the fastest one for its
+topology. Where a program requires that a push or pop not wait for
+another thread, the runtime offers implementations that guarantee it,
+each chosen by its own tag: a bounded ring whose single side finishes its
+cell before it publishes its index, so the other side never waits for
+it (both sides wait-free with one thread each), a wait-free push
+for many producers in the style of Jiffy, and bounded rings of indices
+that are lock-free (SCQ) or wait-free within a thread bound (wCQ)
+([`runtime/README.md`](runtime/README.md),
+[`decisions/0004`](decisions/0004-progress-of-wtc-operations.md)). The
+guarantee costs only where it is asked for: the rings of indices run at
+0.06–0.79× the bounded ring up to four threads a side (untimed). Timed
+on focs (26 Nov 2026, reserved cores, median of ten), adding them left
+the defaults where they were: 19 of 22 queue cells are within the
+spread of main against itself, W1's single-producer ring is 1.08×, and
+a thread pool with one worker is 0.97–0.98×, which is not explained
+([`2026-11-26-progress-rt`](benchmarks/results/2026-11-26-progress-rt/NOTE.md)).
+
 ### Cost and safety
 
 | | |
