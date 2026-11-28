@@ -37,7 +37,11 @@ compiler reaches.
 cores with their SMT siblings offline, governor `performance`, turbo off,
 nothing else running anywhere on the host for the leg's duration;
 `benchmarks/scripts/check_env.sh` refuses otherwise. Placements across
-sockets need a second, two-socket host and are a separate leg.
+sockets need a second, two-socket host and are a separate leg. The
+November legs (below) are timed on the same host, a Xeon w9-3495X, in a
+wider reservation: 24 cores (processors 4 to 27), the frequency fixed at
+1.90 GHz on every run, every run gated on the processors outside the
+reservation staying idle (mean busy share under 0.10).
 
 **Protocol** (`benchmarks/README.md`). Every run is a fresh process; ten
 repetitions, interleaved round-robin across variants so that drift falls
@@ -102,7 +106,12 @@ with an array of queues counted as one queue, every element together:
 dedup's 8 refusals become 2 exact and 6 conservative verdicts, the latter
 for the other-file cause alone, and two new dedup builds with `main` in the
 file and the queues still in arrays are exact on all 8 queues; 43 queues,
-31 exact, 10 conservative, 2 refused, none wrong. The
+31 exact, 10 conservative, 2 refused, none wrong. Rerun on 30 Oct
+(`benchmarks/results/2026-10-30-reach`) with the lifted ferret's five
+queues added: 48 queues, 36 exact, 12 conservative, 0 refused, 0 wrong;
+19 of the 25 single-producer single-consumer queues proved so, 10 with
+the tag chosen when the queue is built; ferret's loader queue, refused
+before for the recursive scan, is exact. The
 census of the corpus finds, besides, far more mutexes than library queues
 in unported code: 518 lines naming `pthread_mutex_t` and 3571 naming a
 `std::mutex` type, against six lines using a library queue outside DPDK's
@@ -337,6 +346,27 @@ with four and eight threads (0.77 and 0.80 at 100 ns), against 200–500 on
 the timed leg's host, and the default class's thresholds, which are not
 that host's, batched there: the thresholds belong to a host, and that
 host has a class of its own. Pushes get no model: W7 shows no loss to avoid.
+
+**The November legs.** Five timed legs measure what November added:
+the delegation of a mutex's critical sections, the lifting of a wait,
+and the progress runtime. Each ran on the reservation described under
+Machines (24 cores, processors 4 to 27, SMT siblings offline, governor
+`performance`, turbo off, 1.90 GHz on every run), ten repetitions,
+variants rotated by repetition, every run a fresh process; no run was
+retired by the gate in any of them.
+
+| leg | what | class | result |
+|---|---|---|---|
+| `2026-11-24-d4-delegate` | LevelDB `db_bench readrandom`, `DBImpl::Get`'s two sections and `GetSnapshot`'s delegated, every section handed over (PR #68), 1 to 23 threads, against the original, the same program through ClangIR with nothing delegated, a hand delegation and three LiTL locks | timed | from 8 threads on 1.43–1.73× the ClangIR build without delegation, 1.43–1.79× the original, 1.10–1.15× the hand delegation, 0.96–1.10× the best LiTL lock (MCS); below 8 a loss, 0.51× the original at one thread and 0.82× at four |
+| `2026-11-24-d4-adapt` | the same, delegating only while the mutex is contended (PR #71) | timed | against the ClangIR build without delegation 0.95–1.00× at 1 to 4 threads and 1.47–2.00× from 8, at 6.79 against 8.30 CPU seconds per million reads at 8 threads; against the original 1.02–1.08× and 1.54–2.00× (the ClangIR build alone is 1.11× and 1.12× the original at 1 and 2 threads); 1.01–1.06× the delegation of every section and 0.98–1.26× LiTL's MCS from 8 threads on |
+| `2026-11-24-d5-wait` | CTPL's worker wait lifted off its condition variable onto the eventcount (PR #69), against the original and a hand patch, and the yield budget where threads outnumber processors | timed | 1.28–1.51× the original with one submitter, 1.02–1.66× with four, trailing the hand patch by 13–16% with four submitters at 8 and 16 workers; where oversubscribed, only at 4 workers on 4 processors does any yield budget beat the hand patch's spin_then_park (64 us, 1.40× the original against 1.25×), and with 8 processors every budget loses to the original |
+| `2026-11-24-d5-wait-releg` | the same after the oversubscribed branch parks after the pause | timed | where oversubscribed 1.18–1.72× the original in throughput and 2.7× in round trip, 0.98–1.16× the hand patch with the same policy |
+| `2026-11-26-progress-rt` | PR #72's runtime against main (83270b5) on 22 cells of W1, W9, W10, W11 and the bounded queue, with an A/A arm | timed | two cells moved by the leg's rule: W1's single-producer ring 1.08×, W11's general queue with one worker 0.97×; W11's queue for one producer with one worker 0.975×, unmarked but below every run of main; the bounded queue's cells too noisy to show a change under about 20% |
+
+The delegation's threshold (750 ns of average wait) was set from untimed
+runs of LevelDB on this host; another mutex or processor is not
+measured. The CTPL legs' A/A arm spreads 0.95–1.06, so differences of 5%
+or less there are not resolved.
 
 Each leg's NOTE.md, beside its summary, gives the setup, the controls and
 what the numbers can and cannot carry.

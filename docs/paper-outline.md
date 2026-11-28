@@ -7,8 +7,10 @@ implementation and where the element lives. What each section argues,
 which result carries it, then the experiments the outline needs and the
 claims nothing measures yet. Numbers below are from `README.md`,
 `docs/evaluation.md` and the leg notes under `benchmarks/results/`
-(updated 28 October 2026 to the 26 and 27 October legs); figures from
-untimed probes are marked "untimed" and are not the paper's.
+(updated 28 October 2026 to the 26 and 27 October legs, and 28 November
+2026 to the 30 October reach table and the 24 and 26 November legs);
+figures from untimed probes are marked "untimed" and are not the
+paper's.
 
 ## 1. Introduction
 
@@ -31,6 +33,16 @@ implementation by topology, element placement by ownership, the tag chosen
 at construction, and a check of declared tags; (v) the evaluation, with an
 ablation separating the two facts, five allocators, the lock-free
 literature's queues, a grain sweep and an application read as written.
+Since November three more, each with a timed leg: (vi) the delegation
+of a named mutex's critical sections, each proved unable to tell which
+thread runs it, to a server the runtime starts only while the mutex is
+contended (LevelDB, `2026-11-24-d4-adapt`); (vii) the lifting of a
+class's own condition-variable wait onto the runtime's eventcount, with
+a spin-or-park policy read from the threads at its two ends (CTPL,
+`2026-11-24-d5-wait`, `-releg`); (viii) implementations that guarantee
+the progress a path requires, lock-free and wait-free, bounded and
+unbounded (the runtime, in main since 26 Nov, `2026-11-26-progress-rt`),
+with the analysis that would check and choose them still open (PR #70).
 
 ## 2. Motivation: where the cost is
 
@@ -178,6 +190,20 @@ lemma now has its test.
   it, and none of 10 in real code.
 - **Batching and coarsening** (`eval-w7`, `eval-w8`): one paragraph, as
   known techniques with their crossover; legality is not profitability.
+- **Delegation** (`2026-11-24-d4-delegate`, `-d4-adapt`, LevelDB
+  readrandom): against the same ClangIR build without delegation
+  0.95–1.00× at one to four threads and 1.47–2.00× from eight, at 6.79
+  against 8.30 CPU seconds per million reads at eight; 0.98–1.26× the
+  best LiTL lock from eight threads on. The ClangIR build alone is 1.11×
+  and 1.12× the original at one and two threads, which ratios to the
+  original include.
+- **Wait lifting** (`2026-11-24-d5-wait`, `-releg`, CTPL): 1.28–1.51× the
+  original with one submitter, 1.02–1.66× with four, 1.18–1.72× where
+  threads outnumber processors.
+- **Progress runtime** (`2026-11-26-progress-rt`): with the guarantees
+  added, the default queues are where they were on 19 of 22 cells; W1's
+  ring is 1.08×, and a thread pool with one worker 0.97× on the general
+  queue and 0.975× on the queue for one producer.
 
 ## 8. Related work
 
@@ -229,6 +255,9 @@ repeat on the current runtime are listed below.
 | 7 two uses | `two_uses.sh` | run 28 Oct on the current runtime and the shared blocking query |
 | 7 cost | `compile_cost.sh` | run 21 Oct; repeat after the analysis changes |
 | 7 batching | `eval-w7`, `eval-w8` | W7 26 Oct; W8 21 Oct, against the two-lock list |
+| 7 delegation | `leg_d4.py`, `leg_d4a.py` (in the leg directories) | run 24 Nov on focs, timed |
+| 7 wait lifting | `leg_d5.py`, `leg_d5b.py` (in the leg directories) | run 24 Nov on focs, timed |
+| 7 progress runtime | `benchmarks/scripts/progress_rt_leg/` | run 26 Nov on focs, timed; the selection it serves is PR #70 |
 | 9 cross-socket | the L8 leg | not run |
 
 ## Claims not yet supported by a measurement
