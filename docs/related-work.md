@@ -3,7 +3,9 @@
 What the compiler does, claim by claim, against where each technique was
 done before and what is different here. Every entry below was checked
 against the paper's own page, its publisher's record or the project's
-repository on 23 Oct 2026; the list at the end carries the links. Papers
+repository on 23 Oct 2026, and those of sections 8 and 9 and the
+paragraph closing section 1 on 28 Nov 2026; the list at the end carries
+the links. Papers
 collected earlier are under `related-works/` and are not listed here
 unless one of the sections needs them.
 
@@ -31,6 +33,21 @@ the topology of a particular object and choosing for it has not been done.
 | One channel algorithm for every topology, on an infinite array with fetch-and-add counters | Fast and Scalable Channels in Kotlin Coroutines (PPoPP 2023) | the general-purpose queue here is of that family (a segmented fetch-and-add queue); WTC adds the step the library cannot take, replacing it with a single-producer ring where the program allows |
 | Proposal to make filling a buffered channel from a slice one bulk copy, with batched sends offered as the alternative; a comment adds that a send on a channel that has not escaped could be inlined without its lock | Go issue 51553 (`cmd/compile,runtime: optimize channel filling idiom`) | the observation in the comment, that escape decides the synchronisation, carried through for every queue and both sides, rather than for one idiom |
 | The standard channel's implementation replaced wholesale by a multi-producer multi-consumer one | Rust `std::sync::mpsc` on `crossbeam-channel` (rust-lang/rust PR 93563, 2022) | Rust's `Receiver` is single-consumer by type, so the library knows one side; WTC proves both sides and the ownership of the element, which no type states |
+
+The profile-driven selectors decide from measurements what to use, and
+what they may switch between is fixed in advance: implementations of one
+interface, equivalent by construction. WTC's choice of a queue's
+implementation is the other way round: legality proved first, and no
+measurement decides it. Measurements enter WTC elsewhere as fixed inputs
+or inside an implementation: coarsening's cost model uses thresholds
+measured per class of host (`decisions/0006`), and the ring's gate reads
+the producer's rate as it runs (`runtime/stream_gate.hpp`). The
+delegation of critical sections (section 8) is the one place where a
+run-time measurement of the program decides whether a transformation
+applies: the runtime moves a mutex's sections to a server only while the
+measured wait for the mutex says it pays (PR #71), and it chooses only
+between two executions the compiler has already proved equivalent, a
+section run by its own thread or by the server.
 
 ## 2. Removing or weakening synchronisation by a proof of confinement
 
@@ -112,6 +129,33 @@ that the thread walk already has the owners. On memcached no pair was found.
 | C raised to MLIR for polyhedral transformation; CUDA raised and retargeted to CPU threads, beating handwritten OpenMP by 58% on Rodinia | Polygeist (PACT 2021); High-Performance GPU-to-CPU Transpilation and Optimization via High-Level Parallel Constructs (PPoPP 2023) | WTC raises through ClangIR and lifts calls into a shim into dialect operations; its subject is shared-memory communication, which neither covers |
 | SYCL modelled in MLIR dialects to analyse host and device together: up to 4.3x | Experiences Building an MLIR-Based SYCL Compiler (CGO 2024) | a model of the paper's shape: a dialect that lets the compiler see what the library hid |
 | Static analyses in LLVM remove redundant ThreadSanitizer instrumentation on Memcached, Redis, SQLite and MySQL | Compiling Away the Overhead of Race Detection (arXiv 2512.05555, 2025) | the same facts about threads and synchronisation serve a different end; a WTC analysis that proves confinement could feed that instrumentation (idea 18 of the audit) |
+
+## 8. Delegation and combining
+
+Where it was done: as locks and data-structure constructions that run
+other threads' critical sections on one thread, written for by hand, or
+with a tool or a lock interposed under unchanged code. What WTC adds is
+the proof, per section, that the section may run on another thread
+(`docs/delegation.md`): it cannot tell which thread runs it, waits for
+no other thread but by locks it lets go, takes no recursive mutex and
+lets no exception out, and every refusal names its reason; the build
+names the mutex, and the runtime decides when to delegate from the
+measured wait.
+
+| Technique | Where | What it decides, and from what | What WTC does differently |
+|---|---|---|---|
+| Delegation: operations on shared data run by a server thread | ffwd: Delegation is (Much) Faster Than You Think (SOSP 2017) | nothing per program: the programmer rewrites each operation on the shared data as a request the server thread runs, through the library's interface | the sections are the program's own, found and outlined by the compiler and proved movable one by one; the server runs only while the mutex is contended, and a cold mutex gives its server up |
+| Critical sections run as remote calls on a server core (its section 2.1) | Remote Core Locking (USENIX ATC 2012) | a profiler reports each lock's share of time in critical sections (its section 2.2); the developer chooses the locks, and a tool built with Coccinelle extracts their sections into functions, the values they need passed in a structure and a flag returned for which unlock ends a section, and generates a header in which the developer marks which locks become remote (its section 2.3) | the extraction is the same shape (the `wtc.delegate` operation's environment and exit number), but which sections may move is proved per section rather than chosen per lock by a person, and when they move is decided at run time |
+| The thread that takes the lock combines the requests other threads published, running them for them | Flat Combining and the Synchronization-Parallelism Tradeoff (SPAA 2010); CC-Synch, Revisiting the Combining Synchronization Technique (PPoPP 2012) | nothing about programs: they are ways to build a concurrent object whose operations are requests | WTC starts from a mutex and the sections a program already has, and delegates to a server thread rather than to a combining client |
+| Transparent delegation: a waiter's critical section run by the combiner, which switches to the waiter's stack, under unchanged lock calls (its section 3.1) | TCLocks, Ship your Critical Section, Not Your Data (OSDI 2023): the Linux kernel's spinlocks, mutexes and readers-writer semaphores, and in user space LiTL's `LD_PRELOAD` interposition (its section 5), measured on LevelDB's readrandom (its section 6.4) | combining is enabled only when more than two waiters are queued (its section 7, "Overhead at two–four cores"); it applies to the critical sections of every lock it replaces, unchanged | switching to the waiter's stack keeps the section's own stack and registers without a proof, but its section 7 ("TCLock vs 'current'") notes that the section runs on the combiner with Linux's `current` naming the combiner's task, so a permission check inside it reads the combiner's credentials; WTC refuses a section that can tell which thread runs it. Its LevelDB benchmark is the one WTC's delegation legs run, with LiTL's locks among the baselines (`benchmarks/results/2026-11-24-d4-delegate`) |
+
+## 9. Waiting: eventcounts and wait conditions
+
+| Technique | Where | What it decides, and from what | What WTC does differently |
+|---|---|---|---|
+| An eventcount: a waiter announces itself, checks its condition again, and sleeps only if it still fails; a notifier wakes only when someone is announced | Synchronization with Eventcounts and Sequencers (CACM 1979); folly's `EventCount` (`folly/synchronization/EventCount.h`), "a condition variable for lock free algorithms" | nothing: a primitive the programmer builds a wait with | `runtime/waiter.hpp` is this primitive; WTC lifts a program's own `cv.wait(lock, pred)` onto it, proved legal from the class's members and their clients (the predicate pops an atomic queue on its own and reads atomic flags), and chooses spin or park from the threads at the wait's two ends and the affinity mask (`docs/lifting.md`, "Lifting a wait") |
+| Implicit-signal monitors: the programmer writes the condition (`waituntil`), and the runtime decides which waiter to signal by tagging predicates | AutoSynch: An Automatic-Signal Monitor Based on Predicate Tagging (PLDI 2013) | whom to wake, at run time, from the predicates' tags | the program keeps its explicit condition variable; WTC recognises the wait and replaces it, and the waiter no longer takes the mutex |
+| Signals placed statically in an implicit-signal monitor by symbolic reasoning, equivalent to the monitor as written | Expresso, Symbolic Reasoning for Automatic Signal Placement (PLDI 2018) | where to signal or broadcast, at compile time, from verification conditions over the monitor's predicates | the same direction, a wait made explicit and cheap by the compiler, from the opposite end: the input is a hand-built C++ object with its own mutex and condition variable, and what is proved is that the eventcount's wait is faithful to it for the program's clients, not that signals are placed minimally |
 
 ## What is open
 
@@ -198,3 +242,15 @@ Checked on 23 Oct 2026 against the pages linked.
 - High-Performance GPU-to-CPU Transpilation and Optimization via High-Level Parallel Constructs. PPoPP 2023. <https://ppopp23.sigplan.org/details/PPoPP-2023-papers/10/High-Performance-GPU-to-CPU-Transpilation-and-Optimization-via-High-Level-Parallel-Co>
 - Experiences Building an MLIR-Based SYCL Compiler. CGO 2024. <https://arxiv.org/abs/2312.13170>
 - Compiling Away the Overhead of Race Detection. arXiv 2512.05555, 2025. <https://arxiv.org/abs/2512.05555>
+
+Added on 28 Nov 2026, checked that day:
+
+- ffwd: Delegation is (Much) Faster Than You Think. SOSP 2017. <https://doi.org/10.1145/3132747.3132771>
+- Remote Core Locking: Migrating Critical-Section Execution to Improve the Performance of Multithreaded Applications. USENIX ATC 2012. <https://www.usenix.org/system/files/conference/atc12/atc12-final237.pdf>
+- Flat Combining and the Synchronization-Parallelism Tradeoff. SPAA 2010. <https://doi.org/10.1145/1810479.1810540>
+- Revisiting the Combining Synchronization Technique. PPoPP 2012. <https://doi.org/10.1145/2145816.2145849>
+- Ship your Critical Section, Not Your Data: Enabling Transparent Delegation with TCLocks. OSDI 2023. <https://rs3lab.github.io/TCLocks>; code <https://github.com/rs3lab/TCLocks>
+- Synchronization with Eventcounts and Sequencers. CACM 22(2), 1979. <https://doi.org/10.1145/359060.359076>
+- folly `EventCount`. <https://github.com/facebook/folly/blob/main/folly/synchronization/EventCount.h>
+- AutoSynch: An Automatic-Signal Monitor Based on Predicate Tagging. PLDI 2013. <https://doi.org/10.1145/2491956.2462175>
+- Symbolic Reasoning for Automatic Signal Placement. PLDI 2018. <https://doi.org/10.1145/3192366.3192395>

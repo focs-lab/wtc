@@ -186,7 +186,10 @@ and successors) versus by proof; confinement proofs for Java locks and for
 reference counts, and why C++ has none; message memory crossing threads
 (snmalloc, the exchange heap, pool allocation) and the queue ceilings
 (FastForward, B-Queue, LCRQ/LPRQ); stream compilers; false sharing stated
-as not novel; progress checks; raising to a dialect.
+as not novel; progress checks; raising to a dialect; delegation and
+combining (ffwd, RCL, flat combining, CC-Synch, TCLocks) against a
+delegation proved per section; eventcounts and wait conditions
+(AutoSynch, Expresso) against lifting a hand-built wait.
 
 ## 9. Threats to validity
 
