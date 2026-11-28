@@ -482,7 +482,16 @@ private:
                 auto pt = dyn_cast<cir::PointerType>(cp.getDst().getType());
                 if (pt && holdsByValue(pt.getPointee(), w.rec)) w.v.refuse("(l) " + where + " copies an object of " + cls + " whole");
             }
-            if (isa<cir::MemCpyOp, cir::MemMoveOp, cir::MemSetOp>(op))
+            // The front end emits std::memcpy, and __builtin_memcpy too, as a
+            // call of the C library's function, not as cir.libc.memcpy.
+            auto bytesCall = [](Operation *o) {
+                auto call = dyn_cast<cir::CallOp>(o);
+                cir::FuncOp g = call ? lookupCallee(call) : cir::FuncOp();
+                if (!g || !g.getBody().empty()) return false;
+                StringRef n = g.getSymName();
+                return n == "memcpy" || n == "memmove" || n == "memset";
+            };
+            if (isa<cir::MemCpyOp, cir::MemMoveOp, cir::MemSetOp>(op) || bytesCall(op))
                 for (Value v : op->getOperands())
                     if (auto c = v.getDefiningOp<cir::CastOp>())
                         if (auto pt = dyn_cast<cir::PointerType>(c.getSrc().getType()); pt && holdsByValue(pt.getPointee(), w.rec))
