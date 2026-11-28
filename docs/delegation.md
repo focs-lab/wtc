@@ -10,16 +10,21 @@ LevelDB's DB mutex (`DBImpl::Get`, readrandom), and memcached's set path,
 split over four small locks, lost outright. The timed leg of 24 Nov 2026
 (`benchmarks/results/2026-11-24-d4-delegate/`, 24 processors at a fixed
 1.90 GHz, median of 10) measured the compiler's build: from eight threads
-on it runs 1.43-1.79x the original and 1.10-1.15x the hand-delegated
-patch, but only 0.96-1.10x the best LiTL lock (MCS), which the untimed
-probe had at 1.45x. Below eight threads it lost: 0.51x the original at
-one thread, 0.82x at four, since every section was handed over, the mutex
-free or not. The runtime now delegates a section only while its mutex is
-contended (below, "Where a section runs"), and the leg of the same day at
-the new runtime (`benchmarks/results/2026-11-24-d4-adapt/`) has it at
-1.02-1.08x the original at one to four threads, with no extra core, and
-at 1.01-1.06x the delegation of every section from eight threads on
-(1.54-2.00x the original).
+on it runs 1.43-1.73x the same ClangIR build without delegation, 1.43-1.79x
+the original and 1.10-1.15x the hand-delegated patch, but only 0.96-1.10x
+the best LiTL lock (MCS), which the untimed probe had at 1.45x. Below eight
+threads it lost: 0.51x the original at one thread, 0.82x at four, since
+every section was handed over, the mutex free or not. The runtime now
+delegates a section only while its mutex is contended (below, "Where a
+section runs"), and the leg of the same day at the new runtime
+(`benchmarks/results/2026-11-24-d4-adapt/`) has it, against the same
+ClangIR build without delegation, at 0.95-1.00x at one to four threads and
+1.47-2.00x from eight threads on, with 6.79 CPU seconds per million reads
+against 8.30 at eight threads. The ClangIR build alone is 1.11x and 1.12x
+the original at one and two threads, so against the original the adaptive
+build is 1.02-1.08x at one to four threads, with no extra core, and
+1.54-2.00x from eight threads on, where it is 1.01-1.06x the delegation of
+every section.
 
 `--wtc-delegate-sections` (`mlir/lib/WTC/Transforms/DelegateSections.cpp`)
 does it in the compiler: for one mutex the build names, it finds the
@@ -605,5 +610,13 @@ runs every section on its client, no server started, and at four it did
 in nine runs of ten; it is 1.02-1.08x the original there, at the
 original's CPU time. From eight threads on 97-98% of the sections are
 delegated, and it is 1.01-1.06x the delegation of every section, at its
-CPU time or a little less. Against MCS, the best library lock from eight
+CPU time or a little less. The same program through the same compiler
+with nothing delegated is the comparison that isolates the delegation:
+against it the adaptive build is 0.95-1.00x at one to four threads, the
+cost of the gate (two atomic read-modify-writes a free section, and the
+timing of the contended ones), and 1.47-2.00x from eight threads on, at
+6.79 against 8.30 CPU seconds per million reads at eight threads. The
+ClangIR build is itself 1.11x and 1.12x the original at one and two
+threads and 1.00-1.07x from four, and that is part of every ratio to the
+original. Against MCS, the best library lock from eight
 threads on, it is 0.98x at eight and 1.11-1.26x from twelve.
