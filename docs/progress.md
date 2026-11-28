@@ -428,3 +428,25 @@ queue types that announce them, and
 spsc_settled, mpsc_settled and scq on the shim's runtime, built and run,
 with the remarks where nothing meets the requirement. A program's own tag
 is left alone, as before.
+
+## What a requirement refuses
+
+- **Delegation** (`--wtc-delegate-sections`): a section reached from a
+  path with any requirement (a declared one, a handler, a real-time
+  thread) is not delegated, with the chain in the refusal: the client
+  would wait for the server thread, which runs other clients' sections
+  first, at the priority of the client that started it. No section of a
+  mutex that may use priority inheritance is delegated: a protocol other
+  than `PTHREAD_PRIO_NONE` (or one that is not a constant) set on any
+  attributes object that may reach the mutex's `pthread_mutex_init`.
+- **Batching pushes** (`--wtc-batch-pushes`): not when a consumer of a
+  queue of the same type is progress-critical, declared wait-free within
+  k steps, or on a real-time thread, whichever other requirements reach it
+  too. The pass runs before queues are told apart, hence the type.
+- **Batching locks** (`--wtc-batch-locks`): not when a thread with a
+  requirement takes the same mutex, or one that may be the same, the
+  loop's own lock included: another thread may run the same loop under a
+  requirement. Mutexes are told apart by what they are: a global by its
+  name, a member by its record and field (a mutex is held by value, so
+  members of different records or fields are different objects); one
+  reached through a pointer may be any.

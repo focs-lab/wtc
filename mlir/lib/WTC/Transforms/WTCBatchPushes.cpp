@@ -1,5 +1,6 @@
 #include "WTC/Transforms/Blocking.h"
 #include "WTC/Transforms/Passes.h"
+#include "WTC/Transforms/ProgressRequirements.h"
 #include "WTC/Transforms/ThreadInstances.h"
 #include "WTC/Transforms/Utils.h"
 #include "WTC/Transforms/WorkEstimate.h"
@@ -253,6 +254,7 @@ public:
     void runOnOperation() override {
         ModuleOp module = getOperation();
         LegalityChecker legal(module);
+        RequirementRoots requirements(module);
         llvm::SmallVector<std::pair<cir::LoopOpInterface, QueuePushOp>, 4> todo;
 
         module.walk([&](cir::FuncOp f) {
@@ -267,7 +269,7 @@ public:
                 if (wtcOps.empty()) return;
                 auto push = dyn_cast<QueuePushOp>(wtcOps.front());
                 if (push && enclosingLoop(push) != loop.getOperation()) return;
-                if (auto r = check(loop, wtcOps, legal)) {
+                if (auto r = check(loop, wtcOps, legal); r || (r = latencyCritical(push, requirements))) {
                     InFlightDiagnostic d = loop->emitRemark() << "wtc: pushes in this loop not batched: " << r->why;
                     if (r->at != loop.getOperation()) d.attachNote(r->at->getLoc()) << "here";
                     return;
@@ -284,6 +286,35 @@ private:
         for (Operation *p = op->getParentOp(); p; p = p->getParentOp())
             if (isa<cir::LoopOpInterface>(p)) return p;
         return nullptr;
+    }
+
+    // Batching delays an element by up to WTC_BATCH_K - 1 pushes, which is
+    // what a latency-critical consumer, or one on a real-time thread, is
+    // promised it will not pay (docs/progress.md). The pass runs before the
+    // queues are told apart, so a pop of any queue of the push's type
+    // counts.
+    static std::optional<Refusal> latencyCritical(QueuePushOp push, const RequirementRoots &requirements) {
+        if (!push) return std::nullopt;
+        const Type queueType = push.getQueue().getType();
+        std::optional<Refusal> found;
+        push->getParentOfType<ModuleOp>().walk([&](QueuePopOp pop) {
+            if (found || pop.getQueue().getType() != queueType) return;
+            // Every requirement that reaches the consumer counts, not only
+            // the first: a function both declared lock-free and reached
+            // from a progress-critical one is the latter's too.
+            const RequirementRoot *r = requirements.reaching(
+                pop->getParentOfType<cir::FuncOp>(), nullptr, [](const RequirementRoot &q) {
+                    return q.req.kind == Requirement::Kind::critical || q.req.within.has_value() ||
+                           q.source == RequirementRoot::Source::realtime;
+                });
+            if (!r) return;
+            cir::FuncOp rf = r->func;
+            found = Refusal{pop, "a consumer of this queue's type is reached from " +
+                                     llvm::demangle(rf.getSymName().str()) + ", " + r->why +
+                                     ": a batch delays each element by up to WTC_BATCH_K - 1 pushes, the latency that "
+                                     "consumer must not pay"};
+        });
+        return found;
     }
 
     // The value the push's handle was cast from, if the loop cannot change
@@ -551,6 +582,7 @@ public:
             return signalPassFailure();
         }
         LegalityChecker legal(module, /*strict=*/true);
+        RequirementRoots requirements(module);
         WorkEstimator estimator(module);
         llvm::StringMap<std::optional<unsigned>> counted;
         llvm::SmallVector<std::tuple<cir::LoopOpInterface, LockOp, UnlockOp, std::string>, 4> todo;
@@ -569,6 +601,12 @@ public:
                     if (auto l = dyn_cast<LockOp>(o)) { lock = l; break; }
                 if (!lock || enclosingLoop(lock) != loop.getOperation()) return;
                 UnlockOp unlock;
+                if (auto r = requiredElsewhere(lock, requirements)) {
+                    InFlightDiagnostic d = loop->emitRemark()
+                                           << "wtc: critical sections in this loop not batched: " << r->why;
+                    d.attachNote(r->at->getLoc()) << "here";
+                    return;
+                }
                 if (auto r = check(loop, wtcOps, legal, unlock)) {
                     InFlightDiagnostic d = loop->emitRemark()
                                            << "wtc: critical sections in this loop not batched: " << r->why;
@@ -595,6 +633,50 @@ public:
 
 private:
     const HostClass *hostClass = nullptr;
+
+    // The object a mutex operation's handle was cast from, as far as it
+    // can be told apart from others: a global by its name, a member by its
+    // record type and field (two members of different records or fields
+    // are different objects, a mutex being held by value), anything else
+    // by nothing, which may be any mutex.
+    static std::optional<std::string> mutexKey(LockOp lock) {
+        Value v = lock.getMutex();
+        if (auto cast = v.getDefiningOp<UnrealizedConversionCastOp>()) v = cast.getInputs().front();
+        Value r = traceToRoot(v);
+        if (auto gg = r.getDefiningOp<cir::GetGlobalOp>()) return "global " + gg.getName().str();
+        if (auto m = r.getDefiningOp<cir::GetMemberOp>()) {
+            std::string ty;
+            llvm::raw_string_ostream os(ty);
+            os << m.getAddr().getType();
+            return "member " + std::to_string(m.getIndex()) + " of " + ty;
+        }
+        return std::nullopt;
+    }
+
+    // A batch holds the mutex for up to WTC_LOCK_BATCH_K sections, which
+    // another thread that takes it waits through. A thread with a
+    // requirement of progress must not be that thread (docs/progress.md):
+    // a lock of the same mutex, or of one that may be, on a path with a
+    // requirement refuses the batch. Two mutexes are told apart by mutexKey;
+    // one it cannot name may be any.
+    static std::optional<Refusal> requiredElsewhere(LockOp lock, const RequirementRoots &requirements) {
+        const auto mine = mutexKey(lock);
+        std::optional<Refusal> found;
+        lock->getParentOfType<ModuleOp>().walk([&](LockOp other) {
+            // The lock the batch decides about counts as well: another
+            // thread may run the same loop under a requirement.
+            if (found) return;
+            const auto theirs = mutexKey(other);
+            if (mine && theirs && *mine != *theirs) return;
+            const RequirementRoot *r = requirements.reaching(other->getParentOfType<cir::FuncOp>());
+            if (!r) return;
+            cir::FuncOp rf = r->func;
+            found = Refusal{other, std::string(other == lock ? "a thread that runs this loop" : "another thread that takes this mutex") + " is reached from " +
+                                       llvm::demangle(rf.getSymName().str()) + ", " + r->why +
+                                       ": a batch makes it wait for up to WTC_LOCK_BATCH_K sections"};
+        });
+        return found;
+    }
 
     static Operation *enclosingLoop(Operation *op) {
         for (Operation *p = op->getParentOp(); p; p = p->getParentOp())

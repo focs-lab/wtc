@@ -18,8 +18,10 @@
 // function's own atomic accesses), a number the compiler must be able to
 // compute from the counts it proves. WTC_PROGRESS_CRITICAL marks a
 // latency-critical path: wait-free with a worst case that is a polynomial
-// in the counts (not only an amortised bound), and no effect on first use
-// (a thread-local registration, a static-initialisation guard).
+// in the counts (not only an amortised bound), no effect on first use (a
+// per-thread record, a static-initialisation guard), and nothing
+// that delays the elements it waits for: the pushes of a queue it pops are
+// not batched.
 //
 // WTC_BATCH on a function allows the compiler to batch the pushes of its
 // loops (--wtc-batch-pushes): elements are then published every WTC_BATCH_K

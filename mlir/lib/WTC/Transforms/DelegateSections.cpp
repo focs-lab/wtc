@@ -67,6 +67,7 @@
 #include "WTC/Transforms/CriticalSections.h"
 #include "WTC/Transforms/LiftNames.h"
 #include "WTC/Transforms/Passes.h"
+#include "WTC/Transforms/ProgressRequirements.h"
 #include "WTC/Transforms/Refusal.h"
 #include "WTC/Transforms/Utils.h"
 #include "WTC/WTCDialect.h"
@@ -96,6 +97,7 @@
 #include "llvm/Support/Regex.h"
 
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -966,6 +968,13 @@ public:
 private:
     ModuleOp module;
     unsigned outlined = 0;
+    // The requirements of progress the program states or implies
+    // (ProgressRequirements.h), read before any function is flattened.
+    std::unique_ptr<RequirementRoots> requirements;
+    // Why the named mutex may use priority inheritance; empty when it
+    // cannot.
+    std::string inheritanceWhy;
+    std::string priorityInheritance(const MutexSpec &spec);
 
     struct LockSite {
         Operation *op;
@@ -1194,6 +1203,7 @@ void DelegateSectionsPass::runOnOperation() {
 
     LockSummaries locks;
     CodeCheck check(module, locks, uniformThreads, wholeProgram);
+    requirements = std::make_unique<RequirementRoots>(module);
     recursiveWhy = recursionRisk(wholeProgram);
     llvm::SmallVector<StringRef, 2> names;
     StringRef(mutexOpt).split(names, ',', -1, false);
@@ -1219,8 +1229,50 @@ void DelegateSectionsPass::runOnOperation() {
             emitRemark(module.getLoc()) << "wtc: " << kIdiom << " mutex " << spec->text << " has no section here";
             continue;
         }
+        inheritanceWhy = priorityInheritance(*spec);
         for (cir::FuncOp f : fs) handle(f, *spec, locks, check);
     }
+}
+
+// A mutex initialised with priority inheritance (or protection) promises
+// that a waiter of high priority lifts its holder; the server, which runs
+// at the priority of the client that started it, would break that. A
+// mutex is taken to use it when the module sets a protocol other than
+// PTHREAD_PRIO_NONE (or one it cannot read) on any attributes object
+// handed to a pthread_mutex_init that may initialise the named mutex:
+// any, for a member, and those whose mutex is not another global, for a
+// global.
+std::string DelegateSectionsPass::priorityInheritance(const MutexSpec &spec) {
+    llvm::SmallVector<Value, 2> protocolAttrs;
+    module.walk([&](cir::CallOp call) {
+        cir::FuncOp callee = lookupCallee(call);
+        if (!callee || callee.getSymName() != "pthread_mutexattr_setprotocol" || call.getNumOperands() < 2) return;
+        auto k = call.getOperand(1).getDefiningOp<cir::ConstantOp>();
+        auto v = k ? dyn_cast<cir::IntAttr>(k.getValue()) : cir::IntAttr();
+        if (v && v.getSInt() == 0) return;  // PTHREAD_PRIO_NONE
+        protocolAttrs.push_back(traceToLocalRoot(call.getOperand(0)));
+    });
+    if (protocolAttrs.empty()) return "";
+    std::string why;
+    module.walk([&](cir::CallOp call) {
+        cir::FuncOp callee = lookupCallee(call);
+        if (!why.empty() || !callee || callee.getSymName() != "pthread_mutex_init" || call.getNumOperands() < 2) return;
+        Value attr = traceToLocalRoot(call.getOperand(1));
+        if (attr.getDefiningOp<cir::ConstantOp>()) return;  // null: the default attributes
+        // The same attributes object, or one that may be.
+        const bool mayHave = llvm::any_of(protocolAttrs, [&](Value p) {
+            return p == attr || !attr.getDefiningOp<cir::AllocaOp>() || !p.getDefiningOp<cir::AllocaOp>();
+        });
+        if (!mayHave) return;
+        if (!spec.global.empty())
+            if (auto gg = traceToLocalRoot(call.getOperand(0)).getDefiningOp<cir::GetGlobalOp>();
+                gg && gg.getName() != spec.global)
+                return;
+        why = "the mutex may use priority inheritance (pthread_mutexattr_setprotocol, then pthread_mutex_init): a "
+              "waiter of high priority lifts the holder, and the server, at the priority of the client that started "
+              "it, would invert it";
+    });
+    return why;
 }
 
 void DelegateSectionsPass::handle(cir::FuncOp f, const MutexSpec &spec, LockSummaries &locks, CodeCheck &check) {
@@ -1258,6 +1310,25 @@ void DelegateSectionsPass::handle(cir::FuncOp f, const MutexSpec &spec, LockSumm
         Verdict v;
         v.idiom = kIdiom.str();
         v.label = shortName(f) + " #" + std::to_string(++number) + " on " + spec.text;
+
+        // Progress (docs/progress.md, "What a requirement refuses"): a
+        // delegated section makes its client wait for the server thread,
+        // which runs other clients' sections first, at the priority of the
+        // client that started it (runtime/delegate.hpp). The original's
+        // lock was blocking too; what changes is whom the client waits for.
+        {
+            llvm::SmallVector<cir::CallOp, 4> chain;
+            if (const RequirementRoot *r = requirements->reaching(f, &chain)) {
+                std::string via;
+                for (cir::CallOp c : chain)
+                    if (cir::FuncOp t = lookupCallee(c)) via += (via.empty() ? " through " : ", ") + shortName(t);
+                cir::FuncOp rf = r->func;
+                v.refuse("the section is reached from " + shortName(rf) + via + ", " + r->why +
+                         ": a delegated section waits for the server thread, which runs other clients' sections first "
+                         "at the priority of the client that started it");
+            }
+            if (!inheritanceWhy.empty()) v.refuse(inheritanceWhy);
+        }
 
         // A lock reached with the mutex already held, inside an earlier
         // section of this function: the caller would wait for itself.
