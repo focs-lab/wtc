@@ -250,8 +250,10 @@ prefixed by the condition it fails.
 - **(a) Confinement.** The container is touched only by the constructor,
   the destructor and member functions each of which is one of the five
   operations. A function that is not a member (a friend, a free function
-  over a public member), a member function of another shape, and a copy of
-  the object refuse.
+  over a public member), a member function of another shape, a copy of
+  the object, and a step into a union that holds the object to another of
+  its members (which reads the object's storage as that member's type)
+  refuse.
 - **(b) The mutex is held.** Every touch is inside a critical section of
   the class's mutex, and one operation's touches are all inside one: a
   check that lets the mutex go before it acts refuses.
@@ -632,7 +634,8 @@ these shapes is expected, not a finding:
   is narrower than 32 bits and the slot count, a ring whose indices are
   bit-fields (the evaluator does not read `set_bitfield`), a channel of
   channels handed as `void *`;
-- a C++ class in a union (not checked: the union rule is the C pass's);
+- C++: a class in a union read through another member, as for C (since
+  28 Nov 2026; until then the union rule was the C pass's alone);
 - several files: a static whose name another file has and that the
   file's inline assembly names (the link stops), an alias of a static the
   front end did not emit (the link stops), the runtime's unit meaning a

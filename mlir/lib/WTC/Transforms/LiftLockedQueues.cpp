@@ -1690,6 +1690,19 @@ void LiftLockedQueuesPass::analyse(Candidate &c) {
         if (cp.getDst().getType().getPointee() == c.rec)
             c.refuse("(a) " + shortName(cp->getParentOfType<cir::FuncOp>()) + " copies the object whole");
     });
+    // A union that holds the object shares its storage with its other
+    // members: a step into one of those reads the object's storage as
+    // another type, with no member step on the class that the walk above
+    // sees (the C pass's rule, ClosedWorld::confineStruct).
+    module.walk([&](cir::GetMemberOp gm) {
+        auto pt = dyn_cast<cir::PointerType>(gm.getAddr().getType());
+        auto u = pt ? dyn_cast<cir::RecordType>(pt.getPointee()) : cir::RecordType();
+        if (!u || !u.isUnion() || u.isIncomplete() || gm.getIndex() >= u.getMembers().size()) return;
+        if (!holdsByValue(u, c.rec) || holdsByValue(u.getMembers()[gm.getIndex()], c.rec)) return;
+        auto f = gm->getParentOfType<cir::FuncOp>();
+        c.refuse("(a) " + (f ? shortName(f) : std::string("a global")) + " reads a union that holds " +
+                 recordName(c.rec) + " through another of its members");
+    });
 
     llvm::SmallVector<cir::FuncOp, 4> lambdas;
     for (cir::FuncOp f : touching) {
