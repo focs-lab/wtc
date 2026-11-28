@@ -104,19 +104,23 @@ RQ2), the ferret run-time tags, the declared-topology tests.
 
 ## 6. Correctness
 
-Point to `docs/correctness.md`: each implementation is a contract queue
-under its precondition; the precondition follows from the analyses'
-over-approximation; the run-time tag's precondition follows from the loop
-shape; what is not claimed (progress, destructor timing, ordering across
-objects). The soundness obligations are listed so a reviewer sees where a
-wrong verdict would break which lemma. Carried by: the lemma list, a deterministic test on the
-interleaving each lemma relies on (`runtime/test/lemma_*`), the negative
-tests (a ring forced on a two-producer queue is reported by
-ThreadSanitizer and refused by `WTC_CHECK`). Testing the lemmas found two
-defects the proofs had passed over, both fixed on 26 October: the
-single-consumer queue's empty answer was not linearisable, and the queue
-for one producer could make a consumer wait for another; the section
-should say so, as the reason every lemma now has its test.
+Point to `docs/correctness.md`: each implementation the specialisation
+substitutes for the general-purpose queue (spsc, spsc_inline, spmc, mpsc)
+is a contract queue under its precondition, and the document lists what
+has no lemma (the one-counter push, the bounded and index rings, the
+eventcount, delegation, lifting); the precondition follows from the
+analyses' over-approximation; the run-time tag's precondition follows
+from the loop shape; what is not claimed (progress, destructor timing,
+ordering across objects). The soundness obligations are listed so a
+reviewer sees where a wrong verdict would break which lemma. Carried by:
+the lemma list, a deterministic test on the interleaving each lemma
+relies on (`runtime/test/lemma_*`), the negative tests (a ring forced on
+a two-producer queue is reported by ThreadSanitizer and refused by
+`WTC_CHECK`). Testing the lemmas found two defects the proofs had passed
+over, both fixed on 26 October: the single-consumer queue's empty answer
+was not linearisable, and the queue for one producer could make a
+consumer wait for another; the section should say so, as the reason every
+lemma now has its test.
 
 ## 7. Evaluation
 

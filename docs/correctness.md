@@ -207,7 +207,10 @@ returns, and one held on the last cell of a segment that another drains
 and retires) and `lemma_segment_test.cpp` for
 the multi-consumer form (a held push is waited for, pushes ordered by the
 cell they take, a pop that returns a push which took its cell after it
-did, a segment kept for a held reader, a batch split by a skip), each with
+did, a segment kept for a held reader, a batch split by a skip) and the
+single-consumer form (`head_moves_past_taken`: a push held in its cell
+while the consumer takes the cells of many segments after it out of
+order, then the head moved past every taken cell at once), each with
 a stress run in which every empty answer is checked against the pushes
 that had finished before the pop began, the single-consumer form's
 included.
@@ -233,7 +236,14 @@ such element is the general condition's witness.) Elements are distinct
 here (each lives in its own cell). The first condition holds because a pop
 returns only a cell it saw marked full and takes each cell once: it moves
 its head past a cell it takes in order and marks taken a cell it takes out
-of order, and steps over taken cells. The other two follow from one fact:
+of order, and when it takes the earliest of the cells it passed, the head
+moves at once to the next such cell or to where its walk stopped
+(`move_head`), so the head never rests on a taken cell and no taken cell
+is looked at again (in main since 26 Nov 2026, PR #72; before, the pop
+stepped over the taken cells one by one). A cell whose push threw and
+gave it up (`kSkipped`, also PR #72, `runtime/test/throw_test.cpp`) is
+passed without an element: that push pushed nothing, so passing it
+returns no value that was not pushed and leaves none behind. The other two follow from one fact:
 if a push finished before a look at its cell began, the look sees the cell
 full, since the push's fetch-and-add and mark are ordered before the pop's
 acquire loads of the count and the mark. Hence an empty answer is given
@@ -252,7 +262,9 @@ program as written never gives
 Segments are freed through hazard pointers (`runtime/hazard.hpp`): a
 thread protects the segment it reads with a sequentially consistent store
 and a reload, and a segment is retired only after the tail and the head
-have moved past it, so no thread frees a segment another may still read.
+have moved past it (the single consumer retires at most one a pop,
+moving the tail past it first, `retire_one`), so no thread frees a
+segment another may still read.
 The elements themselves are moved into cells and out of them, so the
 element's memory never crosses threads except as the queue's own.
 
@@ -262,26 +274,67 @@ Lemma 4 with `many`.
 ## 4. The substitution preserves the program
 
 **Theorem 1.** Let `P` be the program as written and `P'` the program with
-some objects' tags changed by the compiler. If every changed object's new
-implementation has its precondition satisfied in every execution of `P'`,
-then every observable behaviour of `P'` is an observable behaviour of `P`.
+some objects' tags changed by the compiler to implementations Lemmas 1
+to 4 cover: `spsc` (`spsc_ring`), `spsc_inline`, `spmc` (`spmc_queue`) and
+`mpsc` (`segment_queue` in its single-consumer form, its push the
+fetch-and-add on the segment's counter that Lemma 4 describes), from the
+general-purpose queue. If every changed object's new implementation has
+its precondition satisfied in every execution of `P'`, then every
+observable behaviour of `P'` is an observable behaviour of `P`.
 
 *Sketch.* The programs differ only in the implementation behind each
-changed object's operations, and every implementation is a contract queue
-under its precondition (Lemmas 1 to 5), as is the general-purpose queue
-without one (Lemma 5). Take an execution of `P'`. For each changed object,
-C2 gives a linearisation of its operations consistent with a sequential
-FIFO queue; replacing the implementation's internal steps by those of the
-general-purpose queue with the same linearisation yields an execution in
-which every pop returns the same value or the same empty answer (C1 to
-C3), and in which every push still happens-before the pop of its element
-(C4). The program's own accesses are unchanged, and no ordering between
-objects was relied on in `P` beyond what C5 withholds from every
+changed object's operations, and each of these implementations is a
+contract queue under its precondition (Lemmas 1 to 4), as is the
+general-purpose queue without one (Lemma 5). Take an execution of `P'`. For
+each changed object, C2 gives a linearisation of its operations consistent
+with a sequential FIFO queue; replacing the implementation's internal steps
+by those of the general-purpose queue with the same linearisation yields an
+execution in which every pop returns the same value or the same empty
+answer (C1 to C3), and in which every push still happens-before the pop of
+its element (C4). The program's own accesses are unchanged, and no ordering
+between objects was relied on in `P` beyond what C5 withholds from every
 implementation including the general-purpose one, so the happens-before
 relation restricted to the program's accesses is preserved. Hence the
 execution of `P'` is, in its observable behaviour, an execution of `P`.
 
 The proof needs the precondition, which is where the analyses come in.
+
+**Not covered by a lemma.** The theorem says nothing about the
+implementations and mechanisms below; each has tests (`runtime/test`,
+`test/`), some an argument written elsewhere, and none a lemma here:
+
+- the one-counter mpsc push (the `jiffy` tag, `segment_queue` built with
+  `kOneCounter`), which takes its index from one counter for the whole
+  queue and then finds the segment that holds it (`decisions/0004`), a
+  push Lemma 4 does not describe;
+- the bounded ring (`runtime/bounded_ring.hpp`, `wtc::bounded`), whose tag
+  the specialisation rewrites as it does `wtc::queue`'s
+  (`shim/bounded.hpp`), its settled forms (`spsc_settled`, `mpsc_settled`,
+  `spmc_settled`) and the runtime of the lifted C queues built on it
+  (`shim/c_queue.h`): the header states the ring's linearisability, and
+  `docs/lifting.md` ("The contract", "What the bound guarantees", "C
+  queues") what a lifted queue is faithful to;
+- the rings of indices (`runtime/index_ring.hpp`, the `scq` and `wcq`
+  tags): their pops and accepted pushes are linearisable, but a refused
+  push may be justified by places that operations in flight still hold,
+  which is not linearisable as a bounded queue (`runtime/README.md`), so
+  they are not contract queues in the sense of Definition 2 when full;
+  the wait-free ring departs from its paper's figures in places the
+  header lists, and that paper's proof is of its own algorithm;
+- the eventcount (`runtime/waiter.hpp`), for the waiting pops and for a
+  wait lifted off a condition variable: its no-lost-wake-up argument is
+  the two-fence argument in the header (`runtime/waiter.hpp`, "The lost
+  wake-up, and the two fences that rule it out"), tested by forcing the
+  window (`runtime/test/waiter_test.cpp`), not a lemma;
+- the hazard pointers (`runtime/hazard.hpp`) beyond the reclamation rule
+  Lemmas 3 and 4 use: the record pool, a slot per nested push, the
+  records given back after a fork;
+- the delegation of critical sections (`runtime/delegate.hpp`, the
+  `wtc.delegate` operation), whose contract and legality proof are in
+  `docs/delegation.md`;
+- the lifting of a program's own queue classes and waits (`wtc::lifted`,
+  `shim/lifted.hpp`), whose contract and legality proof are in
+  `docs/lifting.md`.
 
 **Lemma 6 (the precondition holds).** If Fact T gives one thread on a side
 of an object, every execution of `P'` has at most one thread on that side;
