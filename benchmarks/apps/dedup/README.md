@@ -48,8 +48,9 @@ two stages into one, becomes the shim's list for many producers.
 ## The original, lifted
 
 `build.sh` also builds PARSEC's own sources, unedited, through `wtc-cc --lift`:
-the encoder, the queue and `dedup.c`'s main as one unit (`--unity`), the
-other files as PARSEC builds them. The queue is read as a C queue
+the encoder, the queue and `dedup.c`'s main, each compiled to its CIR
+module and linked into one (`tools/wtc-link`), the other files as PARSEC
+builds them. The queue is read as a C queue
 (`--wtc-lift-c-queues`, docs/lifting.md "C queues") whose pops and
 pushes are batched, and is refused: its operations assert on the queue's
 state and on the elements (no more terminations than producers, no push

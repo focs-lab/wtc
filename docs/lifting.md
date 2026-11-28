@@ -1505,12 +1505,12 @@ not reach the other files. Until 6 Nov 2026 `--unity` concatenated the
 files into one translation unit, which had to check that each file meant
 the same there and could not see every way it did not (a header's static
 behind an include guard, two files' tentative definitions of one name,
-"Findings of 1 Nov 2026"); `--unity` is still accepted and changes
-nothing. For the lifting of C++ classes, the explicit instantiation of the
-runtime for a class's container goes after the first file in which it
-compiles, the file that defines the container's type; the runtime's
-header goes before the file, so that no macro of the program's reaches
-it. The benchmark
+"Findings of 1 Nov 2026"); `--unity` is still accepted, changes
+nothing, and says so in a warning. For the lifting of C++ classes, the
+explicit instantiation of the runtime for a class's container goes after
+the first file in which it compiles, the file that defines the
+container's type; the runtime's header goes before the file, so that no
+macro of the program's reaches it. The benchmark
 scripts take the original files that hold the queue, the threads and
 `main` this way, and link the rest as PARSEC builds it (for ferret, its
 library without `queue.o` and `tpool.o`, whose functions the module now

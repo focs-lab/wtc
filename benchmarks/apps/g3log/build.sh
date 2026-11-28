@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Unlicense
 #
-# Builds the g3log leg's program (bench.cpp) with g3log's sources, as one
-# translation unit (wtc-cc --unity), so that the analysis sees the logger,
-# its worker and the program together:
+# Builds the g3log leg's program (bench.cpp) with g3log's sources, each
+# compiled to its CIR module and linked into one (wtc-cc, tools/wtc-link),
+# so that the analysis sees the logger, its worker and the program together:
 #
 #   g3log-orig       the sources as released, clang++-18 -O2, one unit
 #   g3log-generic    the same through wtc-cc --lift --no-specialize: the queue
@@ -43,7 +43,7 @@ INC=(-I"$S/src" -I"$W/cmake/include")
 clang++-18 -O2 -DNDEBUG -std=c++17 "${INC[@]}" orig.unity.cpp -lpthread -o bin/g3log-orig
 build() { # name, wtc-cc flags...
   local name=$1; shift
-  "$WTC/tools/wtc-cc" --toolchain "$WTC/build-llvm" -O2 -DNDEBUG "$@" "${INC[@]}" --unity "${UNIT[@]}" -lpthread \
+  "$WTC/tools/wtc-cc" --toolchain "$WTC/build-llvm" -O2 -DNDEBUG "$@" "${INC[@]}" "${UNIT[@]}" -lpthread \
     -o "bin/g3log-$name" 2>"bin/g3log-$name.log" || { echo "$name: FAILED"; tail -5 "bin/g3log-$name.log"; return 1; }
   echo "== $name"
   grep -oE 'wtc: (queue .*: (spsc|spmc|mpsc|mpmc|unknown) \([^)]*\)|specialised.*|queue .* is declared .*|queue access is unresolvable.*)' \

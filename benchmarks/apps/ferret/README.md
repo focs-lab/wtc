@@ -45,8 +45,8 @@ for many producers, and the others keep the general implementation.
 
 `build.sh` also builds PARSEC's own sources, unedited, through `wtc-cc --lift`:
 `ferret-pthreads.c`, the queue (`src/queue.c`) and the thread pool
-(`src/tpool.c`) as one unit (`--unity`), the rest from ferret's
-libraries. The queue lifts (`--wtc-lift-c-queues`, docs/lifting.md "C
+(`src/tpool.c`), each compiled to its CIR module and linked into one
+(`tools/wtc-link`), the rest from ferret's libraries. The queue lifts (`--wtc-lift-c-queues`, docs/lifting.md "C
 queues"): the five queues run on the bounded ring with ferret's capacity
 and the counted close. Their verdicts are unknown, so they keep the
 general implementation: the stages start through `tpool_create`, whose

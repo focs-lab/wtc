@@ -9,7 +9,7 @@
 
    RUN: %clang -O1 -DPACK %S/Inputs/unity_pack.c %s -o %t.pack.exe
    RUN: %t.pack.exe | FileCheck %s --check-prefix=PACK-OUT
-   RUN: %wtc_cc --lift --unity -O1 -DPACK %S/Inputs/unity_pack.c %s -o %t.u1.exe
+   RUN: %wtc_cc --lift -O1 -DPACK %S/Inputs/unity_pack.c %s -o %t.u1.exe
    RUN: %t.u1.exe | FileCheck %s --check-prefix=PACK-OUT
    RUN: %clang -O1 -DSTATIC %S/Inputs/unity_static.c %s %S/Inputs/unity_limit.c -o %t.static.exe
    RUN: %t.static.exe | FileCheck %s --check-prefix=STATIC-OUT

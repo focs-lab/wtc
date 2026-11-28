@@ -16,8 +16,8 @@
 #                        --no-specialize, under ThreadSanitizer
 #   ferret-orig-tsan     PARSEC's own pthreads build under ThreadSanitizer
 #   ferret-lifted        PARSEC's own sources through wtc-cc --lift, unedited: the
-#                        pipeline, the queue and the thread pool as one unit
-#                        (--unity), the queue's functions lifted
+#                        pipeline, the queue and the thread pool linked as
+#                        CIR modules, the queue's functions lifted
 #                        (--wtc-lift-c-queues, docs/lifting.md "C queues")
 #   ferret-lifted-generic  the same with --no-specialize: lifted, every
 #                        queue the general-purpose one, so that lifted
@@ -92,7 +92,7 @@ FSRC="$P/pkgs/apps/ferret/src"
 UNIT="$FSRC/benchmark/ferret-pthreads.c $FSRC/src/queue.c $FSRC/src/tpool.c"
 lifted() { # name, wtc-cc flags...
   local name=$1; shift
-  "$WTC/tools/wtc-cc" --toolchain "$WTC/build-llvm" $OLDC $INC -I"$W/gsl/include" --lift "$@" --unity $UNIT $ULIBS \
+  "$WTC/tools/wtc-cc" --toolchain "$WTC/build-llvm" $OLDC $INC -I"$W/gsl/include" --lift "$@" $UNIT $ULIBS \
     -o "bin/ferret-$name" 2>"bin/ferret-$name.log" || { echo "$name: FAILED"; tail -5 "bin/ferret-$name.log"; return 1; }
   echo "== $name"
   grep -oE 'wtc: (C queue [^:(]+ (lifted|not lifted: .*)|queue @[a-z_]+[^:]*: [a-z_ ]+\([^)]*\)|specialised[^;]*)' \

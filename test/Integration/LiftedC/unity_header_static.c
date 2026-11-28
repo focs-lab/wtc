@@ -9,8 +9,6 @@
 
    RUN: %wtc_cc -O1 %S/Inputs/unity_header_static_a.c %s -o %t.exe
    RUN: %t.exe | FileCheck %s --match-full-lines
-   RUN: %wtc_cc --unity -O1 %S/Inputs/unity_header_static_a.c %s -o %t.u.exe
-   RUN: %t.u.exe | FileCheck %s --match-full-lines
 
    CHECK: a 1 2 b 1
 */

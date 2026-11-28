@@ -22,8 +22,8 @@
 #                            encoder's translation unit: the arrays alone
 #   dedup-compiler-one-unity the same with one spawn per stage
 #   dedup-lifted             PARSEC's own sources through wtc-cc --lift, unedited:
-#                            the encoder, the queue and dedup's main as one
-#                            unit (--unity), the queue's functions lifted
+#                            the encoder, the queue and dedup's main linked
+#                            as CIR modules, the queue's functions lifted
 #                            where the proof allows (docs/lifting.md, "C
 #                            queues"), its batches included
 #   dedup-lifted-generic     the same with --no-specialize: lifted, every
@@ -96,11 +96,11 @@ OBJS=${OTHERS/obj\/dedup.o /} build compiler-unity -DDEDUP_UNITY
 OBJS=${OTHERS/obj\/dedup.o /} build compiler-one-unity -DDEDUP_ONE -DDEDUP_UNITY
 
 # The original sources, unedited: the files with the queues, the threads
-# and main as one unit; the others as PARSEC builds them.
+# and main linked as CIR modules; the others as PARSEC builds them.
 lifted() { # name, objects, wtc-cc flags...
   local name=$1 objs=$2; shift 2
   "$WTC/tools/wtc-cc" --toolchain "$WTC/build-llvm" -O2 -fno-strict-aliasing -fcommon $DEFS -DOPENSSL_NO_INLINE_ASM \
-    -I"$SRC" -w --lift "$@" --unity "$SRC/encoder.c" "$SRC/queue.c" "$SRC/dedup.c" $objs -lz -lm -o "bin/dedup-$name" \
+    -I"$SRC" -w --lift "$@" "$SRC/encoder.c" "$SRC/queue.c" "$SRC/dedup.c" $objs -lz -lm -o "bin/dedup-$name" \
     2>"bin/dedup-$name.log" || { echo "$name: FAILED"; tail -5 "bin/dedup-$name.log"; return 1; }
   echo "== $name"
   grep -oE 'wtc: (C queue [^:(]+ (lifted|not lifted: \([a-e]\) [^,;]*)|queue [^:]+: [a-z_ ]+\([^)]*\)|specialised[^;]*)' \

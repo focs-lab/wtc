@@ -33,7 +33,7 @@
 #                      Off by default until that analysis has been reviewed
 #                      (docs/lifting.md, "Opt-in")
 #   --no-lift          leave those queues as written (the default)
-#   --unity            accepted and ignored: several source files of one
+#   --unity            ignored, with a warning: several source files of one
 #                      language are always compiled apart, each to its CIR
 #                      module, and linked into one module (tools: wtc-link),
 #                      so that the analysis sees the whole program while each
@@ -122,7 +122,7 @@ while [ $# -gt 0 ]; do
     --no-specialize) SPECIALIZE=0; shift ;;
     --lift) LIFT=1; shift ;;
     --no-lift) LIFT=0; shift ;;
-    --unity) shift ;;
+    --unity) echo "wtc-cc: warning: --unity is ignored: the source files are compiled apart and linked (tools/wtc-link)" >&2; shift ;;
     --force-spsc) FORCE=$2; shift 2 ;;
     --force-inline) FORCE_INLINE=$2; shift 2 ;;
     --toolchain) TOOLCHAIN=$2; shift 2 ;;

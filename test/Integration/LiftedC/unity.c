@@ -1,21 +1,21 @@
 /* A program whose channel is in another file (Inputs/unity_chan.c), as
    ferret's queue is in its library. wtc-cc compiles each source file to
    its CIR module and links them into one (wtc-link), so that the analysis
-   sees both; --unity, the concatenation it replaced, is accepted and
-   changes nothing. With the channel's file built apart and linked as an
-   object, its functions are not in the module and nothing lifts; given as
-   a source, the channel lifts, and with one thread on each side it is
-   proved spsc.
+   sees both; --unity, the concatenation it replaced, is accepted with a
+   warning that it is ignored. With the channel's file built apart and
+   linked as an object, its functions are not in the module and nothing
+   lifts; given as a source, the channel lifts, and with one thread on
+   each side it is proved spsc.
 
    RUN: %wtc_cc --lift -O1 -DWTC_CHECK -I%S/Inputs %s %S/Inputs/unity_chan.c -o %t.many.exe 2>&1 | FileCheck %s
    RUN: %t.many.exe | FileCheck %s --check-prefix=OUT
    RUN: %clang -O1 -c %S/Inputs/unity_chan.c -o %t.q.o
    RUN: %wtc_cc --lift -O1 -I%S/Inputs %s %t.q.o -o %t.apart.exe 2>&1 | FileCheck %s --check-prefix=APART --allow-empty
    RUN: %t.apart.exe | FileCheck %s --check-prefix=OUT
-   RUN: %wtc_cc --lift --unity -O1 -DWTC_CHECK -I%S/Inputs %s %S/Inputs/unity_chan.c -o %t.exe 2>&1 | FileCheck %s
-   RUN: %t.exe | FileCheck %s --check-prefix=OUT
+   RUN: %wtc_cc --unity -O1 -I%S/Inputs %s %S/Inputs/unity_chan.c -o %t.unity.exe 2>&1 | FileCheck %s --check-prefix=UNITY
 
    APART-NOT: C queue
+   UNITY: wtc-cc: warning: --unity is ignored: the source files are compiled apart and linked (tools/wtc-link)
    CHECK: C queue struct chan lifted
    CHECK: queue @jobs: spsc (producers: 1, consumers: 1)
    CHECK: specialised: constructor tag rewritten to spsc

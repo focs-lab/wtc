@@ -7,7 +7,7 @@
 //
 // RUN: %clangxx -O1 -w %S/Inputs/unity_overload_a.cpp %s -o %t.exe
 // RUN: %t.exe | FileCheck %s --check-prefix=OUT
-// RUN: %wtc_cc --lift --unity -O1 -w %S/Inputs/unity_overload_a.cpp %s -o %t.u.exe
+// RUN: %wtc_cc --lift -O1 -w %S/Inputs/unity_overload_a.cpp %s -o %t.u.exe
 // RUN: %t.u.exe | FileCheck %s --check-prefix=OUT
 //
 // OUT: double 1.5

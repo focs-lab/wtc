@@ -7,7 +7,7 @@
    the file and the others stopped the build; linked, all three build and
    print what they print built apart.
 
-   RUN: %wtc_cc --lift --unity -O1 %s %S/Inputs/unity_macro_user.c -o %t.exe
+   RUN: %wtc_cc --lift -O1 %s %S/Inputs/unity_macro_user.c -o %t.exe
    RUN: %t.exe | FileCheck %s
    RUN: %wtc_cc --lift -O1 -DIN_HEADER -I%S/Inputs %s %S/Inputs/unity_macro_user.c -o %t.h.exe
    RUN: %t.h.exe | FileCheck %s
