@@ -42,7 +42,9 @@ a spin-or-park policy read from the threads at its two ends (CTPL,
 `2026-11-24-d5-wait`, `-releg`); (viii) implementations that guarantee
 the progress a path requires, lock-free and wait-free, bounded and
 unbounded (the runtime, in main since 26 Nov, `2026-11-26-progress-rt`),
-with the analysis that would check and choose them still open (PR #70).
+with the analysis that checks a path's requirement and chooses the
+settled rings and scq for it (`docs/progress.md`; jiffy and wcq are
+chosen for no requirement today).
 
 ## 2. Motivation: where the cost is
 

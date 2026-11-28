@@ -351,3 +351,80 @@ reported); the requirement of a thread that raises its own priority holds
 from its start routine; the Linux values of `SCHED_FIFO`, `SCHED_RR` and
 `PTHREAD_EXPLICIT_SCHED`; a handler that runs on a thread which blocks
 its signal is still checked.
+
+## Choosing for a requirement
+
+The specialisation pass gains one input: the requirements on the paths
+that reach a queue's operations (`RequirementRoots::allReaching`). An
+implementation meets them when every operation of the queue on a
+requiring path passes, under every requirement that reaches it and the
+counts proved, what the progress check holds that operation to on its
+own: the level (lock-free, or wait-free for a declared wait-free
+requirement and a real-time thread), no wait for data (but a real-time
+thread's), no allocation, no first-use effect, a worst case of at most k
+steps for `WTC_WAIT_FREE_WITHIN(k)` and a polynomial one for
+`WTC_PROGRESS_CRITICAL`, and for a signal handler's push a consumer that
+looks past a cell a push holds. Every operation counts, not only the one
+that asked: the consumer of a queue whose producer is the requiring path
+keeps its own requirement. These criteria are necessary, per
+operation: the pass does not compose the requiring path (k bounds one
+operation's worst case, not the path's sum of steps) and does not read a
+queue's wait policy for a real-time thread's wait for data, so the
+progress check, which does both, can still fail the build after a tag is
+rewritten. When the implementation chosen for the topology does not meet
+them, the pass picks the first of its candidates that does, in order of
+cost:
+
+| queue | candidates, in order | what each needs |
+|---|---|---|
+| unbounded, one consumer | jiffy | none chosen today: every push of an unbounded queue may allocate, and jiffy's takes a per-thread record on first use |
+| unbounded, many consumers | none: the remark suggests a capacity | |
+| bounded, one producer and one consumer | spsc_settled, scq, wcq | the settled ring nothing; the rings of indices their thread bound |
+| bounded, many producers, one consumer | mpsc_settled (its push), scq, wcq | as above |
+| bounded, one producer, many consumers | spmc_settled (its pop), scq, wcq | as above |
+| bounded, many on both sides | scq, wcq | as above |
+| bounded, built to overrun or taking batches | none: the ring is kept whatever the tag | |
+
+Since every requirement refuses the allocator and first-use effects, as
+the check does, jiffy (whose push may allocate and takes a per-thread
+record) and wcq (whose first operation takes a hazard record and a
+thread slot) meet none today: the remark names them with the reason.
+What is chosen is a settled ring or scq. A queue built by more than one
+constructor call is not specialised for a requirement, and a remark says
+so.
+
+The settled ring comes first: it costs less throughput than the rings of
+indices (its spsc and spmc forms ran at 0.62 and 0.73 of the plain ring's,
+`bounded_ring.hpp`; the queues over the SCQ and wCQ rings at 0.24 to 0.78
+and 0.06 to 0.79 of it, `runtime/README.md`) and needs no bound on
+threads. It suffices only for its single side and for a many side asked
+to be lock-free; a single side's wait for a many side remains, so an
+mpsc consumer with a requirement gets a ring of indices.
+
+A ring of indices is chosen only when its count is shown within the
+bound its marker states (the shim's 128): the producers and consumers
+proved, summed, must be a number (a thread on both sides counts twice,
+which overstates), and no operation of the queue may run the element's
+own code, since an operation that code starts on the same queue is one
+more in flight and the bound counts it apart. A count with no number, a
+symbolic one included, is not shown within any bound, and the remark
+says so with the count.
+
+An implementation is chosen only when the runtime the program is built
+with announces it: the queue's constructor calls a marker annotated
+`wtc_queue_impl_<name>` with the tag that selects it, and for a ring of
+indices its bound on threads, so the tag written is the runtime's own
+number. The shim announces jiffy on the unbounded queue, and the settled
+rings and scq on the bounded one; wcq only where the build's
+double-width compare-and-swap is one instruction (`-mcx16` on x86-64).
+ClangIR cannot yet compile that builtin (`__sync_bool_compare_and_swap_16`
+is not implemented in its code generation), so a wtc-cc build never
+announces wcq. Every choice that fails names the requirement and, for
+the current implementation and each candidate, the first operation it
+fails and why.
+`test/Transforms/Specialize/requirements.cpp` shows each choice against
+queue types that announce them, and
+`test/Integration/Lifted/requirement_bounded.cpp` the choices of
+spsc_settled, mpsc_settled and scq on the shim's runtime, built and run,
+with the remarks where nothing meets the requirement. A program's own tag
+is left alone, as before.

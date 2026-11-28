@@ -1,4 +1,7 @@
+#include "WTC/ProgressTable.h"
+#include "WTC/Transforms/Blocking.h"
 #include "WTC/Transforms/Passes.h"
+#include "WTC/Transforms/ProgressRequirements.h"
 #include "WTC/Transforms/Utils.h"
 #include "WTC/WTCAttrs.h"
 #include "WTC/WTCOps.h"
@@ -18,6 +21,8 @@ using namespace mlir::wtc;
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Pass/Pass.h"
 
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/Demangle/Demangle.h"
 #include "llvm/Support/Path.h"
 
 // The substitution. For each queue object the analysis marked spsc, find
@@ -208,7 +213,309 @@ public:
             ++rewritten;
         });
         (void)rewritten;
+        if (rewrite) meetRequirements(module, ctorsOf);
         recordImplementations(module, ctorsOf);
+    }
+
+    // The implementations the runtime the program is built with announces,
+    // beyond the five every runtime has: its queue's constructor calls a
+    // marker annotated wtc_queue_impl_<name> with the tag that selects it,
+    // a constant (the runtime's numbering, not the compiler's), and for an
+    // implementation built for a number of threads that number as a second
+    // constant (shim/bounded.hpp: the rings of indices). Read from the
+    // constructor and the functions it calls directly. A runtime that has
+    // no such marker offers nothing more, and nothing more is chosen.
+    struct Offer {
+        Impl impl;
+        int64_t tag;
+        // The most threads it may serve: operations in flight at once, and
+        // for wcq threads alive at once that have operated on it. None
+        // when the marker states no bound.
+        std::optional<uint64_t> threads;
+    };
+    static llvm::SmallVector<Offer, 6> runtimeOffers(cir::FuncOp ctor) {
+        llvm::SmallVector<Offer, 6> out;
+        if (!ctor || ctor.getBody().empty()) return out;
+        // A constant, or a load of a constant global with an integer
+        // initialiser (a static constexpr member passed by value, as the
+        // shim's kIndexThreads is).
+        auto constant = [](Value v) -> std::optional<int64_t> {
+            if (auto ld = v.getDefiningOp<cir::LoadOp>()) {
+                auto gg = ld.getAddr().getDefiningOp<cir::GetGlobalOp>();
+                auto g = gg ? SymbolTable::lookupNearestSymbolFrom<cir::GlobalOp>(gg, gg.getNameAttr())
+                            : cir::GlobalOp();
+                if (!g || !g.getConstant() || !g.getInitialValue()) return std::nullopt;
+                if (auto i = dyn_cast<cir::IntAttr>(*g.getInitialValue())) return i.getSInt();
+                return std::nullopt;
+            }
+            auto k = v.getDefiningOp<cir::ConstantOp>();
+            auto i = k ? dyn_cast<cir::IntAttr>(k.getValue()) : cir::IntAttr();
+            if (!i) return std::nullopt;
+            return i.getSInt();
+        };
+        auto scan = [&](cir::FuncOp f) {
+            f.walk([&](cir::CallOp call) {
+                cir::FuncOp callee = lookupCallee(call);
+                auto annotations = callee ? callee.getAnnotationsAttr() : ArrayAttr();
+                if (!annotations || call.getNumOperands() < 1) return;
+                for (Attribute a : annotations) {
+                    auto ann = dyn_cast<cir::AnnotationAttr>(a);
+                    llvm::StringRef name = ann ? ann.getName().getValue() : llvm::StringRef();
+                    if (!name.consume_front("wtc_queue_impl_")) continue;
+                    auto impl = symbolizeImpl(name);
+                    auto tag = constant(call.getOperand(0));
+                    if (!impl || !tag || static_cast<uint32_t>(*impl) <= static_cast<uint32_t>(Impl::spmc)) continue;
+                    Offer o{*impl, *tag, std::nullopt};
+                    // A bound that is not a constant, or not positive, is no
+                    // bound the compiler can meet: nothing is offered.
+                    if (call.getNumOperands() >= 2) {
+                        auto n = constant(call.getOperand(1));
+                        if (!n || *n <= 0) continue;
+                        o.threads = static_cast<uint64_t>(*n);
+                    }
+                    if (llvm::none_of(out, [&](const Offer &x) { return x.impl == o.impl && x.tag == o.tag; }))
+                        out.push_back(o);
+                }
+            });
+        };
+        scan(ctor);
+        ctor.walk([&](cir::CallOp call) {
+            if (cir::FuncOp callee = lookupCallee(call); callee && !callee.getBody().empty()) scan(callee);
+        });
+        return out;
+    }
+
+    // The implementation a constructor's tag selects: one of the five by
+    // its number, one the runtime announces by the tag it announced, and
+    // otherwise the general-purpose one.
+    static Impl implOfTag(std::optional<int64_t> tag, cir::CallOp ctor) {
+        if (!tag || *tag < 0) return Impl::generic;
+        for (const Offer &o : runtimeOffers(lookupCallee(ctor)))
+            if (o.tag == *tag) return o.impl;
+        if (*tag <= static_cast<int64_t>(Impl::spmc))
+            if (auto known = symbolizeImpl(static_cast<uint32_t>(*tag))) return *known;
+        return Impl::generic;
+    }
+
+    static std::optional<OpForm> formOf(Operation *op) {
+        if (auto p = dyn_cast<QueuePushOp>(op)) return p.getForm();
+        if (auto p = dyn_cast<QueuePopOp>(op)) return p.getForm();
+        if (isa<QueueBatchBeginOp>(op)) return OpForm::batch_begin;
+        if (isa<QueuePushDeferredOp>(op)) return OpForm::push_deferred;
+        if (isa<QueueBatchEndOp>(op)) return OpForm::batch_end;
+        return std::nullopt;
+    }
+
+    // Why an operation's row does not meet a requirement, in words after
+    // "its <form>", or nothing: the criteria the progress check applies to
+    // the operation alone (WTCCheckProgress.cpp), which a path through it
+    // cannot do better than. Every requirement refuses a wait for data
+    // (a real-time thread's apart, whose waits the check holds to parking),
+    // the allocator and a first-use effect; a real-time thread and a
+    // declared wait-free one need wait-freedom; within k a worst case of at
+    // most k steps under the counts proved; progress-critical a worst case
+    // that is a polynomial in the counts.
+    static std::optional<std::string> unmet(const ProgressSpec &s, const RequirementRoot &r,
+                                            const ThreadCounts &counts, OpForm form, Impl impl) {
+        const bool realtime = r.source == RequirementRoot::Source::realtime;
+        // A handler's push may interrupt a push of its own thread that holds
+        // a cell; only a consumer that looks past such a cell gets past it
+        // (WTCCheckProgress.cpp, the handler's push).
+        const bool pushes = form == OpForm::push || form == OpForm::push_deferred || form == OpForm::batch_end ||
+                            form == OpForm::bounded_try_push || form == OpForm::bounded_push_wait ||
+                            form == OpForm::bounded_push_overrun || form == OpForm::bounded_push_batch;
+        if (r.source == RequirementRoot::Source::handler && pushes) {
+            const bool looksPast = isBoundedForm(form) ? impl == Impl::scq || impl == Impl::wcq
+                                                       : impl == Impl::mpsc || impl == Impl::jiffy;
+            if (!looksPast) return std::string("leaves the consumer waiting for a push the handler may interrupt");
+        }
+        const Level need = realtime || r.req.kind >= Requirement::Kind::wait_free ? Level::wait_free : Level::lock_free;
+        if (s.partial && !realtime) return std::string("waits for data");
+        if (s.level < need) return "is " + describeLevel(s.level).str();
+        if (s.allocates()) return std::string("may call the allocator");
+        if (s.firstUse) return "takes, on first use, a " + describeFirstUse(s.firstUse);
+        if (r.req.within) {
+            auto v = s.bound.instantiate(counts);
+            if (!v) return "has a worst case that is not a number here: " + s.bound.str();
+            if (*v > *r.req.within) return "may take " + std::to_string(*v) + " steps";
+        }
+        if (r.req.kind == Requirement::Kind::critical && !s.bound.isPoly())
+            return "has a worst case " + s.bound.str();
+        return std::nullopt;
+    }
+
+    // Why an implementation built for a number of threads may not serve
+    // this queue, or none: the producers and consumers proved, summed, must
+    // be a number within the marker's (a thread on both sides counts
+    // twice, which overstates), and no operation of the queue may run the
+    // element's own code, since an operation that code starts on the same
+    // queue is one more in flight (shim/bounded.hpp).
+    static std::optional<std::string> beyondBound(const Offer &o, const ThreadCounts &counts,
+                                                  llvm::ArrayRef<Operation *> ops, ElementMembers &elements) {
+        const Count total = counts.producers + counts.consumers;
+        const auto n = total.value();
+        if (!n || *n > *o.threads)
+            return "needs at most " + std::to_string(*o.threads) +
+                   " threads operating on the queue, and the producers and consumers proved are " + total.str();
+        for (Operation *op : ops) {
+            ElementMembers::Found found =
+                elements.of(op, element_copy_ctor | element_move_ctor | element_move_assign | element_dtor);
+            if (found.unknown) return std::string("counts operations in flight, and the element type is not known here");
+            if (!found.funcs.empty())
+                return "counts operations in flight, and the element's own " +
+                       llvm::demangle(found.funcs.front().getSymName().str()) +
+                       " runs inside each, which may start another on the same queue";
+        }
+        return std::nullopt;
+    }
+
+    // A queue whose operations sit on a path with a requirement
+    // (ProgressRequirements.h) gets the cheapest implementation that meets
+    // it under the counts proved, when the one chosen above does not: for
+    // one consumer and no capacity jiffy, wait-free; for a capacity the
+    // settled ring of the queue's topology, whose single side does not wait
+    // for the other and which needs no bound on threads, then scq,
+    // lock-free, then wcq, wait-free (docs/progress.md, "Choosing for a
+    // requirement"). A ring of indices is chosen only when the producers
+    // and consumers proved are within the threads its marker states and
+    // the element runs no code of its own inside an operation, which could
+    // start another on the same queue and which the bound counts apart.
+    // Only an implementation the runtime announces is chosen; otherwise a
+    // remark says what is missing. A real-time thread's wait for data
+    // counts by the level of the step that takes the element.
+    void meetRequirements(ModuleOp module, llvm::DenseMap<Operation *, llvm::SmallVector<cir::CallOp, 2>> &ctorsOf) {
+        RequirementRoots requirements(module);
+        if (requirements.roots().empty()) return;
+        ElementMembers elements(module);
+        llvm::DenseMap<int64_t, llvm::SmallVector<Operation *, 4>> opsOf;
+        module.walk([&](Operation *op) {
+            if (!formOf(op)) return;
+            if (auto id = op->getAttrOfType<IntegerAttr>("queue_id")) opsOf[id.getInt()].push_back(op);
+        });
+        MLIRContext *ctx = module.getContext();
+        for (auto &[root, ctors] : ctorsOf) {
+            auto id = root->getAttrOfType<IntegerAttr>(kQueueIdAttrName);
+            auto topo = root->getAttrOfType<TopologyAttr>(kTopologyAttrName);
+            if (!id || !topo || topo.getValue() == Topology::unknown) continue;
+            // Every operation of the queue on a path with a requirement, with
+            // every requirement that reaches it: an implementation is chosen
+            // only if each of them still holds for each of these
+            // operations, co-located ones included (jiffy's pop is not
+            // bounded in the counts where the mpsc pop is).
+            struct Need {
+                Operation *op;
+                llvm::SmallVector<const RequirementRoot *, 2> by;
+            };
+            llvm::SmallVector<Need, 4> needs;
+            bool bounded = false, keepsRing = false;
+            for (Operation *op : opsOf.lookup(id.getInt())) {
+                const OpForm form = *formOf(op);
+                bounded |= isBoundedForm(form);
+                keepsRing |= form == OpForm::bounded_push_overrun || form == OpForm::bounded_push_batch ||
+                             form == OpForm::bounded_pop_batch;
+                auto by = requirements.allReaching(op->getParentOfType<cir::FuncOp>());
+                if (!by.empty()) needs.push_back({op, {by.begin(), by.end()}});
+            }
+            if (needs.empty()) continue;
+            if (ctors.size() != 1) {
+                root->emitRemark() << "wtc: not specialised for a requirement: the queue is built by "
+                                   << ctors.size() << " constructor calls, and a tag is chosen for one";
+                continue;
+            }
+            ThreadCounts counts;
+            if (auto p = root->getAttrOfType<StringAttr>(kProducersCountAttrName)) counts.producers = Count::parse(p);
+            if (auto c = root->getAttrOfType<StringAttr>(kConsumersCountAttrName)) counts.consumers = Count::parse(c);
+            // The first operation and requirement an implementation fails,
+            // and why, in words.
+            struct Miss {
+                const Need *need = nullptr;
+                const RequirementRoot *by = nullptr;
+                std::string why;
+            };
+            auto missOf = [&](Impl impl) -> std::optional<Miss> {
+                for (const Need &n : needs) {
+                    const ProgressSpec spec = progressSpecFor(*formOf(n.op), impl, counts);
+                    for (const RequirementRoot *r : n.by)
+                        if (auto why = unmet(spec, *r, counts, *formOf(n.op), impl))
+                            return Miss{&n, r, "its " + stringifyOpForm(*formOf(n.op)).str() + " " + *why};
+                }
+                return std::nullopt;
+            };
+            cir::CallOp ctor = ctors.front();
+            const Impl current = implOfTag(constructorTag(ctors), ctor);
+            auto currentMiss = missOf(current);
+            if (!currentMiss) continue;
+            const Miss first = *currentMiss;
+            // A tag the program states itself is left alone, as the
+            // topology's is.
+            auto tagConst = takesTopologyTag(ctor) ? ctor.getOperand(1).getDefiningOp<cir::ConstantOp>()
+                                                   : cir::ConstantOp();
+            auto tagVal = tagConst ? dyn_cast<cir::IntAttr>(tagConst.getValue()) : cir::IntAttr();
+            if (!tagVal || (tagVal.getSInt() != 0 && !root->hasAttr(kSpecializedAttrName))) {
+                ctor.emitRemark() << "wtc: not specialised for a requirement: the topology tag is "
+                                  << (tagVal ? "the program's own" : "not a constant") << "; "
+                                  << llvm::demangle(cir::FuncOp(first.by->func).getSymName().str()) << ", "
+                                  << first.by->why << ": " << stringifyImpl(current) << ": " << first.why;
+                continue;
+            }
+            const bool oneConsumer = topo.getValue() == Topology::spsc || topo.getValue() == Topology::mpsc;
+            llvm::SmallVector<Impl, 3> candidates;
+            if (bounded && !keepsRing) {
+                switch (topo.getValue()) {
+                case Topology::spsc: candidates.push_back(Impl::spsc_settled); break;
+                case Topology::mpsc: candidates.push_back(Impl::mpsc_settled); break;
+                case Topology::spmc: candidates.push_back(Impl::spmc_settled); break;
+                default: break;
+                }
+                candidates.append({Impl::scq, Impl::wcq});
+            } else if (!bounded && oneConsumer) {
+                candidates = {Impl::jiffy};
+            }
+            auto offers = runtimeOffers(lookupCallee(ctor));
+            llvm::SmallVector<std::string, 4> refused;
+            bool done = false;
+            for (Impl c : candidates) {
+                if (c == current) continue;
+                const std::string name = stringifyImpl(c).str();
+                if (auto m = missOf(c)) {
+                    refused.push_back(name + ": " + m->why);
+                    continue;
+                }
+                auto it = llvm::find_if(offers, [&](const Offer &o) { return o.impl == c; });
+                if (it == offers.end()) {
+                    refused.push_back(name + ": the runtime here does not offer it");
+                    continue;
+                }
+                if (it->threads) {
+                    if (auto why = beyondBound(*it, counts, opsOf.lookup(id.getInt()), elements)) {
+                        refused.push_back(name + ": it " + *why);
+                        continue;
+                    }
+                }
+                OpBuilder b(ctor);
+                auto tag = cir::ConstantOp::create(b, ctor.getLoc(), tagConst.getType(),
+                                                   cir::IntAttr::get(tagConst.getType(), it->tag));
+                ctor->setOperand(1, tag.getResult());
+                root->setAttr(kSpecializedAttrName, TopologyAttr::get(ctx, topo.getValue()));
+                ctor.emitRemark() << "wtc: specialised: constructor tag rewritten to " << name << ", for "
+                                  << llvm::demangle(cir::FuncOp(first.by->func).getSymName().str()) << ", "
+                                  << first.by->why;
+                done = true;
+                break;
+            }
+            if (done) continue;
+            InFlightDiagnostic d = ctor.emitRemark()
+                                   << "wtc: no implementation meets a requirement: "
+                                   << llvm::demangle(cir::FuncOp(first.by->func).getSymName().str()) << ", "
+                                   << first.by->why << ": " << stringifyImpl(current) << ": " << first.why;
+            if (candidates.empty() && bounded)
+                d << "; a queue built to overrun or to take batches keeps its ring whatever the tag";
+            else if (candidates.empty())
+                d << "; an unbounded queue with many consumers has no other implementation here, and a capacity "
+                     "would allow a ring of indices";
+            for (const std::string &r : refused) d << "; " << r;
+            d.attachNote(first.need->op->getLoc()) << "the operation";
+        }
     }
 
     using CtorMap = llvm::DenseMap<Operation *, llvm::SmallVector<cir::CallOp, 2>>;
@@ -587,13 +894,7 @@ public:
         for (auto &[root, ctors] : ctorsOf) {
             auto id = root->getAttrOfType<IntegerAttr>(kQueueIdAttrName);
             if (!id) continue;
-            Impl impl = Impl::generic;
-            // Only the five every runtime has are read by their number: a
-            // tag beyond them is the runtime's own, whatever the compiler's
-            // enumeration says (WTC/ProgressTable.h).
-            if (auto tag = constructorTag(ctors); tag && *tag >= 0 && *tag <= static_cast<int64_t>(Impl::spmc))
-                if (auto known = symbolizeImpl(static_cast<uint32_t>(*tag))) impl = *known;
-            implOf[id.getInt()] = impl;
+            implOf[id.getInt()] = ctors.size() == 1 ? implOfTag(constructorTag(ctors), ctors.front()) : Impl::generic;
         }
         auto implFor = [&](IntegerAttr id) {
             if (!id) return Impl::generic;

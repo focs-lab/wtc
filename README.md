@@ -562,11 +562,19 @@ for many producers in the style of Jiffy, and bounded rings of indices
 that are lock-free (SCQ) or wait-free within a thread bound (wCQ)
 ([`runtime/README.md`](runtime/README.md),
 [`decisions/0004`](decisions/0004-progress-of-wtc-operations.md)). The
-compiler does not choose these tags yet: the shim announces them to it
-(`wtc_queue_impl_*` markers), and the analysis that would choose one
-where a path requires its guarantee is PR #70, still open; until then a
-program selects them by hand. The guarantee costs only where it is asked
-for: the rings of indices run at
+shim announces them to the compiler (`wtc_queue_impl_*` markers), and the
+compiler chooses one where a path requires its guarantee
+([`docs/progress.md`](docs/progress.md), "Choosing for a requirement";
+[`decisions/0007`](decisions/0007-progress-as-levels-and-bounds.md)): for a
+bounded queue, the settled ring of its topology, then scq, each only where
+every operation of the queue on a requiring path then passes the progress
+check and, for scq, where the threads proved are within its bound. jiffy
+and wcq are never chosen today: every push of an unbounded queue may
+allocate, and both take a per-thread record on a thread's first
+operation, which the check counts as blocking for every requirement; wcq
+is also announced only with a double-width compare-and-swap that ClangIR
+cannot yet compile. A program may still state a tag itself. The
+guarantee costs only where it is asked for: the rings of indices run at
 0.06–0.79× the bounded ring up to four threads a side (untimed). Timed
 on focs (26 Nov 2026, reserved cores, median of ten), adding them left
 the defaults where they were: 19 of 22 queue cells are within the
