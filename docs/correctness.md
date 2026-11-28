@@ -363,9 +363,11 @@ A reviewer should see each soundness obligation and the lemma it serves.
 ## 7. What is not claimed
 
 - **Progress.** The substitution does not preserve progress properties in
-  the strict sense and does not claim to: every implementation allocates
-  when it grows, the general-purpose pop waits for a reserved cell, the
-  spmc pop retries when another consumer claimed its cell.
+  the strict sense and does not claim to: every unbounded implementation
+  allocates when it grows (the rings of indices allocate nothing after
+  construction, `runtime/README.md`), the general-purpose pop waits for a
+  reserved cell, the spmc pop retries when another consumer claimed its
+  cell.
   `decisions/0004` answers, per operation, what each implementation can
   wait for, and the lock-free check reports it. What is claimed is that a
   substitution never introduces a wait the general-purpose queue would not

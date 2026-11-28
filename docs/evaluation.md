@@ -378,12 +378,20 @@ push instead (`2026-10-28-two-uses`, "spdlog's CIR").
 - **Frequency not fixed on the second host.** Its legs are paired within a
   repetition and report ratios; absolute rates are not compared across
   hosts.
-  Not repeated on the current runtime (the single consumer's pop and the
-  lock-free queue for one producer of 26 October, the ring's gated wait
-  of 27 October): the queue on SMT siblings (W1smt, 21 October), fusion
-  (its pipeline is the ring, built before the gate), batching (W7, the
-  rings before the gate), PARSEC's ferret and dedup, the compile cost,
-  and coarsening (W8).
+- **The October legs predate the runtime of 26 November.** Every push
+  and batch publish notifies the queue's waiter since PR #59 (30 Oct),
+  and PR #72 (26 Nov) changed the hazard records, retiring, the single
+  consumer's step over cells taken out of order and nested pushes; PR
+  #68, #69 and #71 add the delegation server and a wait whose loop is
+  the caller's. `2026-11-26-progress-rt` measured #72 against main on 22
+  cells of W1, W9, W10, W11 and the bounded queue; no timed leg
+  compares the queues before and after #59, and the October legs were
+  not rerun. Not repeated even on the runtime of 28 October (the single
+  consumer's pop and the lock-free queue for one producer of 26 October,
+  the ring's gated wait of 27 October): the queue on SMT siblings
+  (W1smt, 21 October), fusion (its pipeline is the ring, built before the
+  gate), batching (W7, the rings before the gate), PARSEC's ferret and
+  dedup, the compile cost, and coarsening (W8).
 - **The ports change waiting.** PARSEC's queues block on condition
   variables; every ported build spins on `try_pop`, threads never
   outnumbering cores. PARSEC's own build is reported beside them as the

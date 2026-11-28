@@ -171,6 +171,13 @@ The shim's queues have no blocking pop yet; PR #59 adds one (`pop_wait`,
 `pop_wait_for` and `close`, with spinning, parking and spin-then-park
 policies), after which the ports can sleep the way the libraries do.
 
+*Note of 28 Nov 2026.* PR #59 was merged on 30 Oct: `wtc::queue`
+(`shim/queue.hpp`) and `wtc::bounded` (`shim/bounded.hpp`) have
+`pop_wait`, `pop_wait_for` and `close`. The ports in
+`benchmarks/apps/threadpool` and `benchmarks/apps/bs-thread-pool` do not
+use them yet (their workers still `try_pop`, spin and yield), and this
+leg has not been rerun; the figures above are of the ports as they were.
+
 ## How noisy
 
 The leg reserved nothing and fixed no frequency (governor `powersave`,

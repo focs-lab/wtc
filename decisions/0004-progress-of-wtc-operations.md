@@ -34,6 +34,14 @@ blocking. The answers, by the implementation recorded on the operation
 | waiting pop | blocks: waits for a push or a close; frees drained segments | blocks: waits for a push or a close | blocks: waits for a push or a close | blocks: waits for a push or a close; frees and may allocate as the pop above | blocks: waits for a push or a close; frees and may allocate as the pop above | blocks: waits for a push or a close; frees the segments it moves past |
 | lock, unlock | blocks |  |  |  |  |  |
 
+The table covers the unbounded queues: the general-purpose one, the
+implementations the compiler substitutes for it (spsc, spsc_inline, mpsc,
+spmc) and the one-counter mpsc form (jiffy). The bounded ring, its
+settled forms (spsc_settled, mpsc_settled, spmc_settled) and the rings of
+indices (scq, wcq) are described, with what each operation can wait for,
+in `runtime/README.md`; the full table is to move to `decisions/0007`
+with PR #70.
+
 The generic and mpsc columns are as of 22 Oct 2026, when both became the
 segmented queue (`runtime/segment_queue.hpp`); until then the general-purpose
 queue blocked on its mutexes on both sides and the mpsc list's push was one

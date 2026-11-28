@@ -226,12 +226,21 @@ repeat on the current runtime are listed below.
 
 ## Claims not yet supported by a measurement
 
-- Not repeated on the current runtime (the single consumer's pop and the
-  lock-free queue for one producer of 26 October, the ring's gated wait
-  of 27 October): the queue on SMT siblings (W1smt, 21 October), fusion
-  (its pipeline is the ring, built before the gate), batching (W7, the
-  rings before the gate), PARSEC's ferret and dedup, the compile cost,
-  and coarsening (W8).
+- The October legs predate the runtime changes of 30 October to
+  26 November: every push and batch publish notifies the queue's waiter
+  since PR #59, and PR #72 changed the hazard records, retiring, the
+  single consumer's step over cells taken out of order and nested
+  pushes (PR #68, #69 and #71 add the delegation server and a wait whose
+  loop is the caller's). `2026-11-26-progress-rt` measured #72 against
+  main on 22 cells of W1, W9, W10, W11 and the bounded queue; no timed
+  leg compares the queues before and after #59, and the October legs
+  were not rerun.
+- Not repeated even on the runtime of 28 October (the single consumer's
+  pop and the lock-free queue for one producer of 26 October, the ring's
+  gated wait of 27 October): the queue on SMT siblings (W1smt,
+  21 October), fusion (its pipeline is the ring, built before the gate),
+  batching (W7, the rings before the gate), PARSEC's ferret and dedup,
+  the compile cost, and coarsening (W8).
 - Of the transformations whose profitability crosses over, coarsening
   has a cost model (`decisions/0006`), whose thresholds belong to the host
   they were measured on; delegation decides as the program runs, from the

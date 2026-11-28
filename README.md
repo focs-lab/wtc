@@ -111,7 +111,7 @@ for the mutex while it is contended, and leaves the others as written
 
 ## Results
 
-The numbers come from four sets of legs. The 21 October legs are timed:
+The numbers come from six sets of legs. The 21 October legs are timed:
 reserved cores of one Xeon w9-3495X, their SMT siblings offline, turbo off,
 the rest of the machine quiet, ten repetitions, medians with bootstrap 95%
 intervals; their program as written is the retired two-lock list. The
@@ -129,16 +129,32 @@ In them the allocator is a factor: each variant under glibc and jemalloc,
 in W1 and the ablation also under tcmalloc, mimalloc and snmalloc, in W9
 also under mimalloc and in the thread pool also under snmalloc,
 since a queue that hands its elements over through the heap is measuring
-the allocator as much as itself. Each figure below names the leg it is
+the allocator as much as itself. The 24 and 26 November legs are timed
+on the same Xeon as the 21 October ones: a reservation of 24 cores
+(processors 4 to 27), their SMT siblings offline, turbo off, 1.90 GHz on
+every run, ten repetitions, each run a fresh process; they measure the
+delegation of LevelDB's mutex, CTPL's lifted wait, and the progress
+runtime against main. Each figure below names the leg it is
 drawn from: the queue alone from the 28 October leg, batching from the
 26 October one, latency, the pipeline, its grain and many threads from the
-27 October ones (under glibc), coarsening from the 21 October one.
-Not repeated on the current runtime (the single consumer's pop and the
-lock-free queue for one producer of 26 October, the ring's gated wait of
-27 October): the queue on SMT siblings (W1smt, 21 October), fusion (its
-pipeline is the ring, built before the gate), batching (W7, the rings
-before the gate), PARSEC's ferret and dedup, the compile cost, and
-coarsening (W8).
+27 October ones (under glibc), coarsening from the 21 October one,
+delegation and the lifted wait from the 24 November ones, the progress
+runtime from the 26 November one.
+The October legs ran before the runtime changes of 30 October to
+26 November: since PR #59 every push and every batch's publish notifies
+the queue's waiter, and PR #72 changed the hazard records, retiring, the
+single consumer's step over cells taken out of order and nested pushes;
+PR #68, #69 and #71 add the delegation server and a wait whose loop is
+the caller's. The 26 November leg measured #72 against main of
+25 November on 22 cells of W1, W9, W10, W11 and the bounded queue
+([`2026-11-26-progress-rt`](benchmarks/results/2026-11-26-progress-rt/NOTE.md));
+no timed leg compares the queues before and after #59, and the other
+October figures were not rerun. Older still, not repeated since the
+single consumer's pop and the lock-free queue for one producer of
+26 October and the ring's gated wait of 27 October: the queue on SMT
+siblings (W1smt, 21 October), fusion (its pipeline is the ring, built
+before the gate), batching (W7, the rings before the gate), PARSEC's
+ferret and dedup, the compile cost, and coarsening (W8).
 The baselines are the ones the concurrent-queue literature measures
 against:
 
@@ -272,9 +288,10 @@ Against the two-lock list (21 October) it was 9.0×.
 
 <p align="center"><img src="docs/figures/grain.svg" alt="Speed-up against the grain" width="100%"></p>
 
-The same pipeline with each stage's work swept from nothing to a
-millisecond. The program as written pays an almost constant extra per
-record for its two general-purpose queues, so the speed-up follows
+The same pipeline with each stage's work swept from nothing to 16384
+rounds, about 0.32 ms a record. The program as written pays an almost
+constant extra per record for its two general-purpose queues, so the
+speed-up follows
 (t + c) / t. With the current general-purpose queue c is about 0.04 µs:
 1.90-2.06× with no work, 1.16-1.19× at 0.27 µs a record, 1.04× at 1.1 µs,
 nothing measurable from about 5 µs; the gain is above 10% only while a
@@ -539,7 +556,11 @@ for many producers in the style of Jiffy, and bounded rings of indices
 that are lock-free (SCQ) or wait-free within a thread bound (wCQ)
 ([`runtime/README.md`](runtime/README.md),
 [`decisions/0004`](decisions/0004-progress-of-wtc-operations.md)). The
-guarantee costs only where it is asked for: the rings of indices run at
+compiler does not choose these tags yet: the shim announces them to it
+(`wtc_queue_impl_*` markers), and the analysis that would choose one
+where a path requires its guarantee is PR #70, still open; until then a
+program selects them by hand. The guarantee costs only where it is asked
+for: the rings of indices run at
 0.06–0.79× the bounded ring up to four threads a side (untimed). Timed
 on focs (26 Nov 2026, reserved cores, median of ten), adding them left
 the defaults where they were: 19 of 22 queue cells are within the
