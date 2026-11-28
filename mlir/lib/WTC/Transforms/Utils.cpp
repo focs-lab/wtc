@@ -9,6 +9,7 @@
 #include "llvm/Demangle/Demangle.h"
 
 #include <cstdlib>
+#include <functional>
 
 namespace mlir::wtc {
 
@@ -44,6 +45,22 @@ static bool liftedRuntimeFunction(cir::FuncOp f) {
 
 bool insideLiftedRuntime(cir::CallOp op) {
     return liftedRuntimeFunction(op->getParentOfType<cir::FuncOp>()) && !liftedRuntimeFunction(lookupCallee(op));
+}
+
+bool holdsByValue(mlir::Type t, mlir::Type of) {
+    // Memoised within the question: the system's headers' types share much
+    // of their structure, which a plain walk would visit once per path.
+    llvm::DenseMap<mlir::Type, bool> memo;
+    std::function<bool(mlir::Type)> walk = [&](mlir::Type x) -> bool {
+        if (x == of) return true;
+        if (auto it = memo.find(x); it != memo.end()) return it->second;
+        bool r = false;
+        if (auto a = mlir::dyn_cast<cir::ArrayType>(x)) r = walk(a.getElementType());
+        else if (auto rec = mlir::dyn_cast<cir::RecordType>(x); rec && !rec.isIncomplete())
+            r = llvm::any_of(rec.getMembers(), walk);
+        return memo[x] = r;
+    };
+    return walk(t);
 }
 
 bool hasAnnotation(cir::FuncOp funcOp, StringRef annotation) {

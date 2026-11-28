@@ -61,6 +61,14 @@ bool insideLiftedRuntime(cir::CallOp op);
 
 bool hasAnnotation(cir::FuncOp funcOp, StringRef annotation);
 
+// Whether a value of type `t` holds an object of type `of` by value: is
+// one, or has one as a member, a base or an element, at any depth. Holding
+// by value is acyclic and an incomplete record ends the walk, so no depth
+// limit is needed, and none is applied: a limit would answer one way or
+// the other for a type nested deeper than it, and either answer is wrong
+// for some question asked of it.
+bool holdsByValue(mlir::Type t, mlir::Type of);
+
 SemanticOpKind getSemanticKind(cir::FuncOp funcOp);
 
 // Queues of libraries the analysis has a model of, read from the callee's

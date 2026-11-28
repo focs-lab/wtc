@@ -301,15 +301,7 @@ bool ClosedWorld::confineStruct(cir::RecordType rec, const llvm::DenseSet<Operat
     // pointer to one goes only to member and element steps (whose pointers
     // to the queue the walk above checks), comparisons, loads and stores
     // of its own type, functions with a body here, and free.
-    std::function<bool(Type, unsigned)> holds = [&](Type t, unsigned depth) -> bool {
-        if (depth > 32) return true;  // too deep to tell: as if it did
-        if (t == Type(rec)) return depth > 0;
-        if (auto a = dyn_cast<cir::ArrayType>(t)) return holds(a.getElementType(), depth + 1);
-        if (auto r = dyn_cast<cir::RecordType>(t); r && !r.isIncomplete())
-            for (Type m : r.getMembers())
-                if (m == Type(rec) || holds(m, depth + 1)) return true;
-        return false;
-    };
+    auto holds = [&](Type t, unsigned) { return t != Type(rec) && holdsByValue(t, rec); };
     auto toHolder = [&](Type t) {
         auto p = dyn_cast<cir::PointerType>(t);
         return p && holds(p.getPointee(), 0);

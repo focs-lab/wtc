@@ -77,26 +77,6 @@ Value baseOfAddress(Value v) {
     }
 }
 
-bool holds(Type t, cir::RecordType rec, unsigned depth = 0) {
-    if (t == Type(rec)) return true;
-    if (depth > 8) return true;
-    if (auto a = dyn_cast<cir::ArrayType>(t)) return holds(a.getElementType(), rec, depth + 1);
-    if (auto r = dyn_cast<cir::RecordType>(t); r && !r.isIncomplete())
-        return llvm::any_of(r.getMembers(), [&](Type m) { return holds(m, rec, depth + 1); });
-    return false;
-}
-
-// Whether a class may derive from another: it holds it at some depth of
-// its members (a base subobject is one; so, over-approximating, is a
-// member).
-bool derives(Type t, cir::RecordType base, unsigned depth = 0) {
-    if (t == Type(base)) return true;
-    if (depth > 32) return false;
-    if (auto r = dyn_cast<cir::RecordType>(t); r && !r.isIncomplete())
-        return llvm::any_of(r.getMembers(), [&](Type m) { return derives(m, base, depth + 1); });
-    return false;
-}
-
 bool atomicBoolType(StringRef ctx) { return ctx == "std::atomic<bool>" || ctx == "std::__atomic_base<bool>"; }
 bool atomicType(StringRef ctx) { return ctx.starts_with("std::atomic<") || ctx.starts_with("std::__atomic_base<"); }
 bool atomicRead(StringRef base) { return base == "load" || base == "operatorbool" || base == "operator bool"; }
@@ -500,12 +480,12 @@ private:
             const std::string where = f ? shortName(f) : std::string("a global");
             if (auto cp = dyn_cast<cir::CopyOp>(op)) {
                 auto pt = dyn_cast<cir::PointerType>(cp.getDst().getType());
-                if (pt && holds(pt.getPointee(), w.rec)) w.v.refuse("(l) " + where + " copies an object of " + cls + " whole");
+                if (pt && holdsByValue(pt.getPointee(), w.rec)) w.v.refuse("(l) " + where + " copies an object of " + cls + " whole");
             }
             if (isa<cir::MemCpyOp, cir::MemMoveOp, cir::MemSetOp>(op))
                 for (Value v : op->getOperands())
                     if (auto c = v.getDefiningOp<cir::CastOp>())
-                        if (auto pt = dyn_cast<cir::PointerType>(c.getSrc().getType()); pt && holds(pt.getPointee(), w.rec))
+                        if (auto pt = dyn_cast<cir::PointerType>(c.getSrc().getType()); pt && holdsByValue(pt.getPointee(), w.rec))
                             w.v.refuse("(l) " + where + " copies or clears an object of " + cls + " as bytes");
             if (auto c = dyn_cast<cir::CastOp>(op)) {
                 auto from = dyn_cast<cir::PointerType>(c.getSrc().getType());
@@ -810,8 +790,7 @@ private:
                     auto m = memberOf(call.getOperand(0), w.rec);
                     auto pt = dyn_cast<cir::PointerType>(call.getOperand(0).getType());
                     const bool aliased = pt && llvm::any_of(w.predAtomicTypes, [&](Type t) {
-                        return derives(t, cast<cir::RecordType>(pt.getPointee())) ||
-                               derives(pt.getPointee(), cast<cir::RecordType>(t));
+                        return holdsByValue(t, pt.getPointee()) || holdsByValue(pt.getPointee(), t);
                     });
                     if (!m) {
                         why = "changes an atomic that is not a member of " + recordName(w.rec).str();
@@ -980,7 +959,9 @@ private:
         if (!pp || !pa) return false;
         if (isa<cir::VoidType>(pa.getPointee())) return true;
         auto rp = dyn_cast<cir::RecordType>(pp.getPointee()), ra = dyn_cast<cir::RecordType>(pa.getPointee());
-        return rp && ra && derives(rp, ra);
+        // A class may derive from another when it holds it by value (a base
+        // subobject is held; so, over-approximating, is a member).
+        return rp && ra && holdsByValue(rp, ra);
     }
     llvm::SmallVector<cir::FuncOp, 4> targets(cir::CallOp call) {
         llvm::SmallVector<cir::FuncOp, 4> out;
