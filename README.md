@@ -589,9 +589,11 @@ fields that different threads repeatedly touch in one cache line, and
 [`docs/corpus.md`](docs/corpus.md) says how it was tested, with a census of
 what seventeen codebases pad by hand.
 
-The analysis sees one translation unit. A queue handed to code it cannot
-see, or that other files of the program may name, keeps the
-general-purpose implementation; a file with `main` linked with nothing
+The analysis sees one module: a translation unit, or several source
+files that `wtc-cc` compiles apart and links into one CIR module with
+`wtc-link` (in main since 23 Nov 2026, PR #67). A queue handed to code it cannot
+see, or that files of the program it was not given may name, keeps the
+general-purpose implementation; a module with `main` linked with nothing
 else is taken for the whole program (`docs/audit.md`). An array of queues gets one
 verdict for all its elements, which is exact only when every element has
 the same threads, and a queue whose constructor call also builds another
@@ -601,7 +603,8 @@ one. Specialisation is chosen from what is legal, not from what pays. Of
 the two measured crossovers, coarsening's (about 100–500 ns between
 sections on one host, 50–180 on another) has a cost model, whose
 thresholds belong to the host it was measured on; fusion's (about 18 ns a
-stage) has a cost condition written down and no pass.
+stage) has a cost condition written down and no pass. Delegation decides
+as the program runs, from the measured wait for the mutex (above).
 [`docs/audit.md`](docs/audit.md) records what is closed and what is not.
 
 </details>

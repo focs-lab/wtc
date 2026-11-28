@@ -250,6 +250,11 @@ in direction and magnitude with the open-loop figures.
 
 ## What is not proved
 
+This section and the next are the record of the gate (21 Sep 2026, the
+translation-unit entry brought to 29 Oct). Where an item has changed
+since, a note dated 28 Nov 2026 says what holds now; the text above each
+note is what was true when it was written.
+
 **One translation unit.** The analysis sees one file. A second file touching
 the same global queue is invisible to it. Since 29 October part of the
 assumption is checked: a queue handed to a function with no body here
@@ -259,19 +264,44 @@ escapes and a function they may call counts many threads. A file with
 `main` linked with nothing else is still taken for the whole program
 (`docs/audit.md`, "Still open").
 
+*28 Nov 2026:* in main since 23 Nov, `wtc-cc a.cpp b.cpp ...` compiles each source
+file apart and links the CIR modules into one with `wtc-link` (PR #67,
+`docs/lifting.md`, "Several files"), so the analysis sees every file it
+is given; a unit with `main` linked with nothing it was not given is
+still taken for the whole program.
+
 **Queues reached through a member or the heap are refused.** Tracing stops at
 a load that is not from a stack slot written once. That is the safe
 direction, and it is also why the benchmark adapters, which hold their queue
 as a struct member, cannot be the workload that demonstrates the compiler's
 decision. A large class of real programs is in that refused set today.
 
+*28 Nov 2026:* no longer refused. A queue pointer loaded from a field, or
+from a slot or global written more than once, is resolved from every
+write of it, and a queue may be a member of a struct or a heap object,
+whose verdict is kept on the one constructor call that builds it
+(README, "What is there", the queue ownership analysis; `docs/audit.md`).
+
 **One machine, one shape.** A single socket, one memory node, two or three
 cores per measurement, a pipeline and a microbenchmark. Nothing here says
 anything about many queues, many cores, or another processor.
 
+*28 Nov 2026:* the November legs on the same host ran on a reservation of
+24 cores (processors 4 to 27) at a fixed 1.90 GHz, up to 23 client
+threads and a server (`benchmarks/results/2026-11-24-d4-delegate`,
+`2026-11-24-d4-adapt`); the 26 to 28 October legs ran on a second,
+two-socket host, each within one socket. Placement across sockets is
+still unmeasured.
+
 **The dialect still expresses nothing the input did not.** The topology
 attribute is the first fact in it that ClangIR did not already carry. The
 static checks the project describes need the rest, and none of them exists.
+
+*28 Nov 2026:* two exist. A topology the program declares is checked
+against the threads the analysis proves, and one it certainly breaks
+fails the build; a function marked `WTC_LOCK_FREE` that can reach a
+blocking operation fails the build with the call chain (README, "What is
+there"; `decisions/0004`).
 
 ## What to do next, in order
 
@@ -289,3 +319,10 @@ static checks the project describes need the rest, and none of them exists.
 
 The order is the measurements' order, not a plan's: the first two are where
 the remaining time is, and the third is where the remaining programs are.
+
+*28 Nov 2026:* the first is done: every implementation holds the element
+by value in its cell since 24 Oct, and `spsc_inline` lends it where the
+borrow analysis proves the consumer keeps nothing past its next pop
+(`decisions/0004`, README "What is there"). The second was built as
+PR #66 and closed unmerged on 23 Nov, out of scope. The third is done
+(above). The fourth has not been built.

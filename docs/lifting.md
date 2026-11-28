@@ -32,8 +32,8 @@ substitution's faithfulness kept finding programs that reach the object by
 a path the types do not show: a pointer made an integer, a pointer to a
 function that returns the object, storage another file hands over. Each
 finding was closed by another refusal, and the next review found more of
-the same kind (20, then 11, then 9). Since 6 Nov 2026 the rule is an
-escape analysis that follows the object's address instead
+the same kind (20, then 11, then 9). In main since 23 Nov 2026 (PR #67)
+the rule is an escape analysis that follows the object's address instead
 (`mlir/include/WTC/Transforms/EscapeAnalysis.h`; condition (f) below), and
 the findings of the last review are closed ("Findings of 1 Nov 2026",
 below). The substitution stays a choice a build makes until the analysis
@@ -129,7 +129,7 @@ version lifted unfaithfully:
 | (a) G is initialised statically, not by init | the same struct holding the queue, initialised statically (`= { 1, { 0, 0, buf, ... } }`) | init never built the queue inside it, and the lifted program crashed (31 Oct) |
 | none: the ring is built with no room | a C ring of zero slots, its count read at run time | the substitute, built with the slots minus one places, ended the program at init, where the original's pops answer "finished" (31 Oct) |
 | (d) F wakes one pop at the last termination, with a signal, where the substitute wakes them all | a C termination that signals the pops' variable | with two pops asleep and a pop that does not pass the wake-up on, the original leaves one asleep for ever; the substitute's close woke both, and the program finished (31 Oct) |
-| `wtc-cc --unity`: a file means something else in the unity than compiled apart | an earlier file that leaves `#pragma pack` open, has a static of a name a later file declares `extern`, or adds an overload a later file's call prefers | the unit was compiled as one, and printed another size, another variable, another overload's output (31 Oct; the build stopped. Since 6 Nov 2026 the files are compiled apart and linked as CIR modules, "Several files", and each means what it means alone) |
+| `wtc-cc --unity`: a file means something else in the unity than compiled apart | an earlier file that leaves `#pragma pack` open, has a static of a name a later file declares `extern`, or adds an overload a later file's call prefers | the unit was compiled as one, and printed another size, another variable, another overload's output (31 Oct; the build stopped. In main since 23 Nov 2026 (PR #67) the files are compiled apart and linked as CIR modules, "Several files", and each means what it means alone) |
 
 A move-only element (`std::unique_ptr<T>`, the common task) lifts: the
 runtime's copying push is compiled for it but never called. A push of
@@ -145,11 +145,11 @@ programs, built with `--lift` (the last, with `--unity`), behaved otherwise
 than as written. Each is a test under `test/Integration/` that states the
 program's output as written; it was marked `XFAIL: *` while the finding
 was open. The first six were holes in the closed-world rule of conditions
-(f) and, for C, (a), which the escape analysis closes (since 6 Nov 2026,
-"Opt-in"): the class or struct is now refused, and the test checks the
-remark that says why. The others are closed by rules of their own, and the
-last by linking several files' CIR modules in place of concatenating
-their sources ("Several files"); none is open.
+(f) and, for C, (a), which the escape analysis closes (in main since 23
+Nov 2026, PR #67; "Opt-in"): the class or struct is now refused, and the
+test checks the remark that says why. The others are closed by rules of
+their own, and the last by linking several files' CIR modules in place of
+concatenating their sources ("Several files"); none is open.
 
 | finding | the shape | what lifting it did | closed by | test |
 |---|---|---|---|---|
@@ -312,24 +312,24 @@ prefixed by the condition it fails.
   and results of calls of functions with no body here; the indirect calls
   whose callee may be the outside's; the parameters and results of a
   function whose address reaches it; inline assembly; and a thrown
-  exception. The library models are deny-by-default (since 6 Nov 2026): a
-  short, audited list of the C library's and libstdc++'s functions says
-  what each does with its pointers (allocation, deallocation, the mutexes
-  and condition variables, the string and memory functions, formatted
-  output and input by the conversions of a literal format, files read and
-  written, `pthread_join`'s result, a callback's argument), and any other
-  function with no body here, or one a linked file defines under a name on
-  the list, may keep and hand on what it is handed. The analysis runs
-  whether or not a file is linked: with none, the system's libraries may
-  still hand the object back. The class's own operations, whose bodies
-  the rewrite replaces, are left out: a call of one hands it the object.
-  The class is refused when the class of a value handed to one of them as
-  the object reaches the outside, and the remark names the root that made
-  it so. Within the module, a cast of a value that may point to the
-  object to a pointer to another type (its first member, by
-  `reinterpret_cast`), and a pointer to one of its members, read its
-  storage without a member step the confinement sees, and refuse it under
-  (a).
+  exception. The library models are deny-by-default (in main since 23 Nov
+  2026, PR #67): a short, audited list of the C library's and libstdc++'s
+  functions says what each does with its pointers (allocation,
+  deallocation, the mutexes and condition variables, the string and memory
+  functions, formatted output and input by the conversions of a literal
+  format, files read and written, `pthread_join`'s result, a callback's
+  argument), and any other function with no body here, or one a linked
+  file defines under a name on the list, may keep and hand on what it is
+  handed. The analysis runs whether or not a file is linked: with none,
+  the system's libraries may still hand the object back. The class's own
+  operations, whose bodies the rewrite replaces, are left out: a call of
+  one hands it the object. The class is refused when the class of a value
+  handed to one of them as the object reaches the outside, and the remark
+  names the root that made it so. Within the module, a cast of a value
+  that may point to the object to a pointer to another type (its first
+  member, by `reinterpret_cast`), and a pointer to one of its members,
+  read its storage without a member step the confinement sees, and refuse
+  it under (a).
 
 The pass also counts, per class, every container operation and wait form
 it saw (the "uses" remark), so that a refusal says what a class would need.
@@ -1530,16 +1530,16 @@ system linker links their objects:
 
 Since each file is compiled alone, it means what it means alone: its
 macros, its `#pragma`s, its feature-test macros and its declarations do
-not reach the other files. Until 6 Nov 2026 `--unity` concatenated the
-files into one translation unit, which had to check that each file meant
-the same there and could not see every way it did not (a header's static
-behind an include guard, two files' tentative definitions of one name,
-"Findings of 1 Nov 2026"); `--unity` is still accepted, changes
-nothing, and says so in a warning. For the lifting of C++ classes, the
-explicit instantiation of the runtime for a class's container goes after
-the first file in which it compiles, the file that defines the
-container's type; the runtime's header goes before the file, so that no
-macro of the program's reaches it. The benchmark
+not reach the other files. Until PR #67 (in main since 23 Nov 2026)
+`--unity` concatenated the files into one translation unit, which had to
+check that each file meant the same there and could not see every way it
+did not (a header's static behind an include guard, two files' tentative
+definitions of one name, "Findings of 1 Nov 2026"); `--unity` is still
+accepted, changes nothing, and says so in a warning. For the lifting of
+C++ classes, the explicit instantiation of the runtime for a class's
+container goes after the first file in which it compiles, the file that
+defines the container's type; the runtime's header goes before the file,
+so that no macro of the program's reaches it. The benchmark
 scripts take the original files that hold the queue, the threads and
 `main` this way, and link the rest as PARSEC builds it (for ferret, its
 library without `queue.o` and `tpool.o`, whose functions the module now

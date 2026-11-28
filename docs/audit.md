@@ -3,7 +3,7 @@
 State as of September 2026 for the queue analysis, and October 2026 for the
 layout passes (the section after "Still open"); the closed table and the
 array entry below are updated to 28 October 2026, the translation-unit
-entry to 29 October. The first review was of the
+entry to 29 October and, for the linking of several files, 28 November. The first review was of the
 prototype before it moved into this repository; the sections below have since been worked
 through, and each one now says what became of it. A defect is only marked
 closed where a test would fail if it came back.
@@ -38,9 +38,13 @@ not compile under any compiler because its move constructor was written
 
 ## Still open
 
-**One translation unit is seen; the rest of the program is assumed, and
-partly checked (29 Oct).** The analysis sees one file. What it assumes of
-the others, and what it now enforces
+**One module is seen; the rest of the program is assumed, and partly
+checked (29 Oct; several files in main since 23 Nov).** The analysis sees one
+module: one translation unit, or several source files that `wtc-cc`
+compiles apart and links into one CIR module with `wtc-link` (PR #67,
+`docs/lifting.md`, "Several files"). Below, "this unit" is that module and
+"other units" are the files of the program it was not given. What it
+assumes of the others, and what it now enforces
 (`test/Transforms/QueueOwnershipAnalysis/escapes.cpp`, `other-units.cpp`,
 `test/Integration/wtc_cc_other_files.cpp`):
 
@@ -269,6 +273,13 @@ CIR did not already say.
 
 Typing is inconsistent: the queue operations constrain their operand to the
 queue type, while `lock` and `unlock` accept anything.
+
+*28 Nov 2026:* the dialect has eleven operations (`WTCOps.td`); each
+declares its memory effects and `ProgressOpInterface`, carries the
+contract of `decisions/0003` and answers its progress per implementation
+(`decisions/0004`); a `fallback_impl`, where present, is checked against
+the function it names; `lock` and `unlock` take the `mutex` type. There
+is still no memory-ordering attribute ("Still open").
 
 ## Lowering crashes on hand-written IR
 

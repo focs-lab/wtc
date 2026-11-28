@@ -478,7 +478,9 @@ instead, which is what the check knew.
 - **Multi-file reach.** Every DPDK verdict crosses files: the ring is
   created in `init.c` and used in `main.c` or `app_thread.c`; the launch is
   in `main`. The analysis is one translation unit today (R3 in
-  `docs/mvp.md`).
+  `docs/mvp.md`). (28 Nov 2026: in main since 23 Nov `wtc-cc` compiles several
+  source files apart and links them into one module with `wtc-link`,
+  PR #67; the DPDK examples have not been run through it.)
 - **A model of the EAL's launch.** `rte_eal_remote_launch(f, arg, lcore)` is
   one thread running `f`; `rte_eal_mp_remote_launch(f, ...)` is one per
   worker lcore; a loop over `RTE_LCORE_FOREACH_WORKER` around the first is

@@ -57,7 +57,8 @@ using namespace mlir::wtc;
 // each one's pops and is checked for each: what it does with its element
 // does not depend on which queue it came from.
 //
-// Assumes one translation unit, as the ownership analysis does: a function
+// Assumes the module is the program, as the ownership analysis does (a
+// translation unit, or several linked into one by wtc-link): a function
 // without a body here cannot pop a queue this module defines.
 
 namespace {
@@ -150,7 +151,7 @@ bool BorrowChecker::popsSameQueue(QueuePopOp other) const {
 }
 
 bool BorrowChecker::mayPop(cir::FuncOp f) {
-    if (!f || f.getBody().empty()) return false;  // one translation unit
+    if (!f || f.getBody().empty()) return false;  // the module is the program
     if (auto it = popMemo.find(f); it != popMemo.end()) return it->second;
     popMemo[f] = false;  // a cycle adds nothing the other paths do not
     bool result = false;

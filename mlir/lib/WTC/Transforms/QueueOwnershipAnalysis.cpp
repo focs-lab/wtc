@@ -61,8 +61,10 @@ using namespace mlir::wtc;
 // the analysis cannot tell, a warning says why; when it agrees, a remark
 // says the declaration is verified.
 //
-// The analysis sees one translation unit. What it assumes of the rest of
-// the program, and what it checks (docs/audit.md, "Still open"): a unit
+// The analysis sees one module: a translation unit, or several that
+// wtc-cc compiles apart and links into one with wtc-link; "unit" below is
+// that module. What it assumes of the rest of the program, and what it
+// checks (docs/audit.md, "Still open"): a unit
 // that defines main is the program, apart from libraries, which reach the
 // program's queues only through what they are handed. A unit without
 // main, or one built to be linked with other files of the program

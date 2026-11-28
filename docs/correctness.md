@@ -289,7 +289,7 @@ if Fact O gives O-borrow or O-transfer for every pop, the obligations of
 Lemma 2 hold.
 
 *Sketch.* Fact T is an over-approximation of the set of threads reaching
-each operation, computed on the whole translation unit under the
+each operation, computed on the whole module under the
 assumptions of section 6; the implementations' preconditions ask for
 nothing finer than "one thread on this side", and the tag rewrite is
 applied only where the walk gave "one" on every side the chosen
@@ -330,16 +330,19 @@ A reviewer should see each soundness obligation and the lemma it serves.
   constructor builds, and `_M_run`'s address in the vtable is exempt from
   the address-taken rule only because its one caller is the library's
   native start, which the walk models.
-- **One translation unit.** A function with external linkage nothing here
-  calls is a root for any number of threads, which is sound and what
-  dedup's `Encode` shows (`benchmarks/apps/dedup`). Until 29 October that
-  was all: a function this unit also calls, a queue another unit could
-  name, and a queue handed to a function with no body here were counted
-  from what was in sight, and a missed thread there breaks Lemma 6 as any
-  other does. Now the last always escapes, and where other units may name
-  this one's symbols the first is a root as well and the second escapes;
-  a unit with `main` linked with nothing else is still taken for the
-  whole program (`docs/audit.md`, "Still open").
+- **One module.** The walk sees the module it is given: a translation unit,
+  or, in main since 23 Nov, several source files compiled apart and linked
+  into one CIR module by `wtc-link` (PR #67, `docs/lifting.md`, "Several
+  files"); "here" and "this unit" below are that module. A function with
+  external linkage nothing here calls is a root for any number of threads,
+  which is sound and what dedup's `Encode` shows (`benchmarks/apps/dedup`).
+  Until 29 October that was all: a function this unit also calls, a queue
+  another unit could name, and a queue handed to a function with no body
+  here were counted from what was in sight, and a missed thread there
+  breaks Lemma 6 as any other does. Now the last always escapes, and where
+  other units may name this one's symbols the first is a root as well and
+  the second escapes; a unit with `main` linked with nothing else is still
+  taken for the whole program (`docs/audit.md`, "Still open").
 - **Objects the walk cannot place.** A queue member reached through a
   pointer the walk cannot follow is keyed by its record type and offset,
   and its verdict is the union of the threads of every object the one

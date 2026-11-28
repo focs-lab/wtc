@@ -205,20 +205,30 @@ practical and what previous attempts lacked.
 
 ## What exists today
 
-One slice, and it now runs end to end. The dialect has four operations, two
-types and a topology attribute. Lifting reads what the compiler actually
-emits. The ownership analysis counts threads rather than spawn sites, resolves
-parameters by index through the call site, and answers `unknown` wherever it
-cannot be sure. A specialisation pass acts on that verdict by rewriting one
-constant: the topology tag a queue's constructor receives. `runtime/` holds
-the first specialised implementation, an unbounded wait-free ring, and the
-tests compile the original prototype program through the whole pipeline and
-run it.
+One slice, and it runs end to end. The dialect has two types (`mutex` and
+`queue<T>`) and eleven operations: lock and unlock, push and pop, three
+batch operations each for the mutex and for pushes, and a critical section
+run on its mutex's delegation server (`mlir/include/WTC/WTCOps.td`); a
+topology attribute and an implementation attribute
+(`mlir/include/WTC/WTCAttrs.td`); and an interface by which each operation
+answers what it guarantees about progress (`decisions/0004`). Lifting reads
+what the compiler actually emits. The ownership analysis counts threads
+rather than spawn sites, resolves parameters by index through the call
+site, and answers `unknown` wherever it cannot be sure. A specialisation
+pass acts on that verdict by rewriting one constant: the topology tag a
+queue's constructor receives. `runtime/` holds the specialised
+implementations, and the tests compile the original prototype program
+through the whole pipeline and run it.
 
 The unsound cases `audit.md` listed are closed, each with a test that would
 fail if it came back. What remains is written down there too, and the shape of
-it is that the analysis gives up safely rather than often: one translation
-unit, and a queue reached through a member or the heap is `unknown`.
+it is that the analysis gives up safely rather than often. It was first one
+translation unit, with a queue reached through a member or the heap
+`unknown`; a queue that is a member of a struct or a heap object is now
+resolved (README, "What is there"), and in main since 23 Nov several source files
+are compiled apart and linked into one CIR module by `wtc-link` (PR #67),
+so the analysis sees every file it is given. What it assumes of code
+outside that module is in `audit.md`, "Still open".
 
 The next honest step was never another pass. It was to write the ring by hand
 and find out how large the prize is. That measurement was made, and `gate.md` reports it under the

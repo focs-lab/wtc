@@ -52,15 +52,18 @@ document's bug list.
 
 ## 3. The dialect and its contract
 
-The `wtc` dialect: queue and mutex types, ten operations lifted from the
-shim's calls (lock, unlock, push, pop, and three batch operations each for
-the mutex and for pushes), each carrying the implementation chosen and answering what
-it guarantees about progress. The contract (`decisions/0003`): per-item
-happens-before, linearisability per object, FIFO per producer, nothing
-across objects, no timing. The contract is what makes "is this
-substitution correct" a question with a written answer, and what the
-runtime headers promise. Carried by: the dialect's op descriptions, the
-verifier that checks each op against the call it lowers to.
+The `wtc` dialect: queue and mutex types and eleven operations, ten
+lifted from the shim's calls (lock, unlock, push, pop, and three batch
+operations each for the mutex and for pushes) and one the delegation pass
+builds (a critical section run on its mutex's server), each queue
+operation carrying the implementation chosen and every operation
+answering what it guarantees about progress. The contract
+(`decisions/0003`): per-item happens-before, linearisability per object,
+FIFO per producer, nothing across objects, no timing. The contract is
+what makes "is this substitution correct" a question with a written
+answer, and what the runtime headers promise. Carried by: the dialect's
+op descriptions, the verifier that checks each op against the call it
+lowers to.
 
 ## 4. The analyses
 
@@ -75,11 +78,16 @@ with the union of its objects' threads. Borrow analysis: the three ways a
 consumer owns an element (transfer, share, borrow) and the proof that a
 pop borrows. Arrays of queues are one queue, every element together; threads on the
 two arms of one branch count as one unless the function can return twice.
-The reach table (RQ1, `2026-10-26-reach`: 43 queues, 31 exact, 10
-conservative, 2 refused, none wrong; 18 of the 25 a reader calls
-single-producer single-consumer proved so) and spdlog's verdict carry this
-section; what stays inexact is explained by cause (a recursive scan,
-threads started from another translation unit).
+The reach table (RQ1, `2026-10-30-reach`: 48 queues, 36 exact, 12
+conservative, 0 refused, 0 wrong; 19 of the 25 a reader calls
+single-producer single-consumer proved so, 10 with the tag chosen when the
+queue is built) and spdlog's verdict carry this section; what stays
+inexact is explained by cause (a thread pool's loop counted once per
+iteration where the program never raises its count from 1, threads
+started from a function only another file calls). That table ran before
+`wtc-link` (23 Nov), with the lifted ferret's files concatenated by
+`--unity` and dedup's queue file analysed without the file that holds
+`main`; it has not been rerun since.
 
 ## 5. The transformations
 
@@ -181,12 +189,14 @@ as not novel; progress checks; raising to a dialect.
 One socket per leg (the timed host has one; the second host's legs run
 within one socket, frequency not fixed, reporting paired ratios); the
 shim's API (a program must use `wtc::queue`, or a locked queue class of
-the shape `docs/lifting.md` lifts; the spdlog port replaces one
-member, adds its bound and routes the pool's calls through a small
-adapter); one translation unit; the port's departures from spdlog (bound,
-spin); the grain model's reach (stages under about 0.5 µs); no cost model
-for the transformations whose profitability is measured to cross over;
-allocator and placement sensitivity, reported rather than hidden.
+the shape `docs/lifting.md` lifts; the spdlog port replaces one member,
+adds its bound and routes the pool's calls through a small adapter); one
+module, the files `wtc-cc` is given and links with `wtc-link`, taken for
+the whole program when it has `main`; the port's departures from spdlog
+(bound, spin); the grain model's reach (stages under about 0.5 µs); no
+cost model for fusion, coarsening's thresholds measured per class of
+host and delegation's threshold on one program and host; allocator and
+placement sensitivity, reported rather than hidden.
 
 ## Venue
 
@@ -222,8 +232,11 @@ repeat on the current runtime are listed below.
   (its pipeline is the ring, built before the gate), batching (W7, the
   rings before the gate), PARSEC's ferret and dedup, the compile cost,
   and coarsening (W8).
-- The profitability of coarsening and fusion has crossovers but no model;
-  nothing in the compiler decides by cost yet.
+- Of the transformations whose profitability crosses over, coarsening
+  has a cost model (`decisions/0006`), whose thresholds belong to the host
+  they were measured on; delegation decides as the program runs, from the
+  measured wait for the mutex (PR #71, threshold set from untimed runs of
+  LevelDB on one host); fusion has none.
 - The declared-topology check has caught no wrong declaration that shipped.
   Of the three DPDK history fixes, the two mempools are now modelled and
   still missed: their threads are in another process or in other files.
