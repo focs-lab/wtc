@@ -4,7 +4,8 @@
 // What a lifting pass decided about one candidate, and why, in one form for
 // every idiom it lifts (docs/lifting.md). A candidate lifts when no reason
 // refuses it; each reason names the condition of the proof it fails, (a)
-// to (f), and says what the program does that the substitute would not.
+// to (f) for a queue, (g) to (l) for a wait, and says what the program
+// does that the substitute would not.
 // Every reason found is kept, so that a refusal says everything a program
 // would have to change, not only the first thing the pass met.
 //
@@ -13,8 +14,9 @@
 //   wtc: <idiom> <label> uses <feature> <count>, ...
 //   wtc: <idiom> <label> not lifted: (<cond>) <text>        one per reason
 //
-// with idiom "locked queue" for a C++ class (LiftLockedQueues.cpp) and "C
-// queue" for a C struct (LiftCQueues.cpp).
+// with idiom "locked queue" for a C++ class (LiftLockedQueues.cpp), "C
+// queue" for a C struct (LiftCQueues.cpp) and "locked wait" for a class's
+// wait on its condition variable (LiftWaits.cpp).
 
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Location.h"
@@ -30,7 +32,7 @@
 namespace mlir::wtc {
 
 struct Reason {
-    // The condition's letter, "a" to "f", or empty for a reason outside
+    // The condition's letter, "a" to "l", or empty for a reason outside
     // the conditions (a container type that cannot be named, say).
     std::string cond;
     std::string text;
@@ -40,7 +42,7 @@ struct Reason {
 };
 
 struct Verdict {
-    std::string idiom;  // "locked queue", "C queue"
+    std::string idiom;  // "locked queue", "C queue", "locked wait"
     std::string label;  // "q_ in LQ<int>", "struct queue"
     std::vector<Reason> reasons;
     // What the candidate was seen to use, counted: container operations,
@@ -54,7 +56,7 @@ struct Verdict {
     void refuse(const llvm::Twine &why) {
         std::string s = why.str();
         Reason r;
-        if (s.size() > 4 && s[0] == '(' && s[2] == ')' && s[3] == ' ' && s[1] >= 'a' && s[1] <= 'f') {
+        if (s.size() > 4 && s[0] == '(' && s[2] == ')' && s[3] == ' ' && s[1] >= 'a' && s[1] <= 'l') {
             r.cond = s.substr(1, 1);
             r.text = s.substr(4);
         } else {

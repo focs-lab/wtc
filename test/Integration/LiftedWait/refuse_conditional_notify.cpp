@@ -10,7 +10,7 @@
 // RUN: %t.exe | FileCheck %s --check-prefix=OUT
 //
 // CHECK: locked wait cv in Pool not lifted: (k) the section of mutex in Pool::push touches nWaiting, which the waiting section changes, which it no longer excludes once lifted
-// CHECK: locked wait cv in Pool not lifted: (h) Pool::push, which notifies cv, touches nWaiting, which the waiting section changes: a notification decided on it may miss a waiter once lifted
+// CHECK: locked wait cv in Pool not lifted: (k) Pool::push, which notifies cv, touches nWaiting, which the waiting section changes: a notification decided on it may miss a waiter once lifted
 // OUT: tasks 30000 sum 450015000
 
 #include "Inputs/pool.h"

@@ -927,7 +927,7 @@ private:
             std::optional<std::string> t = touchesWaitState(f);
             std::string r = t ? *t : reaches(f.getBody(), touches, notifies, false);
             if (!r.empty())
-                w.v.refuse("(h) " + shortName(f) + ", which notifies " + w.cvName + ", " + r +
+                w.v.refuse("(k) " + shortName(f) + ", which notifies " + w.cvName + ", " + r +
                            ": a notification decided on it may miss a waiter once lifted");
         }
     }
