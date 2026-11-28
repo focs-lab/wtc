@@ -1736,7 +1736,7 @@ bool LiftCQueuesPass::classify(Candidate &c, Fn &fn) {
             fn.role = Role::PopBatch;
             fn.ring = t->dst;
         } else {
-            return no("(e) " + fname + " moves elements within the queue");
+            return no("(e) " + fname + " moves elements between two rings, neither of them the queue's");
         }
         Ring r;
         const Event::Ring &q = fn.role == Role::PushBatch ? t->dst : t->src;
