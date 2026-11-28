@@ -61,8 +61,6 @@ bool insideLiftedRuntime(cir::CallOp op);
 
 bool hasAnnotation(cir::FuncOp funcOp, StringRef annotation);
 
-bool isWTCAnnotatedCall(cir::CallOp op, StringRef annotation);
-
 SemanticOpKind getSemanticKind(cir::FuncOp funcOp);
 
 // Queues of libraries the analysis has a model of, read from the callee's
@@ -140,7 +138,6 @@ struct LibraryQueueCall {
 };
 LibraryQueueCall libraryQueueCall(cir::CallOp call, const LibraryQueueFunction &callee);
 LibraryQueueCall libraryQueueCall(cir::CallOp call);
-bool isLibraryQueueFunction(cir::FuncOp f);
 // DPDK's mbuf calls that make one mbuf reach another's pool: a chain
 // (rte_pktmbuf_chain) or an indirect mbuf (rte_pktmbuf_attach,
 // rte_pktmbuf_attach_extbuf, rte_pktmbuf_clone). A free then puts into

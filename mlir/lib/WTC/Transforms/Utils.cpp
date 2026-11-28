@@ -62,10 +62,6 @@ bool hasAnnotation(cir::FuncOp funcOp, StringRef annotation) {
     return false;
 }
 
-bool isWTCAnnotatedCall(cir::CallOp op, StringRef annotation) {
-    return hasAnnotation(lookupCallee(op), annotation);
-}
-
 // Standard entry points that mean what the shim's annotations mean. Only
 // names with a settled meaning belong here: pthread_create starts a thread
 // in every C program that has one, and a program that defines its own
@@ -416,8 +412,6 @@ LibraryQueueCall libraryQueueCall(cir::CallOp call, const LibraryQueueFunction &
 LibraryQueueCall libraryQueueCall(cir::CallOp call) {
     return libraryQueueCall(call, libraryQueueFunction(lookupCallee(call)));
 }
-
-bool isLibraryQueueFunction(cir::FuncOp f) { return libraryQueueFunction(f).member; }
 
 bool isMbufLinkFunction(StringRef n) {
     return n == "rte_pktmbuf_chain" || n == "rte_pktmbuf_attach" || n == "rte_pktmbuf_attach_extbuf" ||
