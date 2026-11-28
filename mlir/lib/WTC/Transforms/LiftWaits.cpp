@@ -45,7 +45,10 @@ using namespace mlir::wtc;
 //       other section of the mutex, which keeps it, changes nothing the
 //       predicate reads, at any depth of the calls it makes;
 //   (l) no object of the class is copied whole or read as another type,
-//       and no pointer to a member of it is formed.
+//       and no pointer to a member of it is formed; no pointer to an
+//       object that holds one is converted to another type or handed to
+//       a function with no body here, and no union that holds one is
+//       read through another member.
 
 namespace {
 
@@ -75,6 +78,26 @@ Value baseOfAddress(Value v) {
         else if (auto c = v.getDefiningOp<cir::CastOp>(); c && c.getKind() == cir::CastKind::bitcast) v = c.getSrc();
         else return v;
     }
+}
+
+// For a remark: "Holder, which holds Pool," or the class's own name.
+std::string holderName(Type t, cir::RecordType rec, const std::string &cls) {
+    if (t == Type(rec)) return cls;
+    if (auto r = dyn_cast<cir::RecordType>(t); r && r.getName())
+        return recordName(r).str() + ", which holds " + cls + ",";
+    return "an object that holds " + cls + ",";
+}
+
+// Whether a pointer goes only to free and operator delete: an object
+// destroyed and its storage given back, not read.
+bool onlyFreed(Value v) {
+    return !v.use_empty() && llvm::all_of(v.getUses(), [](OpOperand &u) {
+        auto call = dyn_cast<cir::CallOp>(u.getOwner());
+        cir::FuncOp g = call ? lookupCallee(call) : cir::FuncOp();
+        if (!g) return false;
+        StringRef n = g.getSymName();
+        return n == "free" || n.starts_with("_ZdlPv") || n.starts_with("_ZdaPv");
+    });
 }
 
 bool atomicBoolType(StringRef ctx) { return ctx == "std::atomic<bool>" || ctx == "std::__atomic_base<bool>"; }
@@ -496,11 +519,58 @@ private:
                     if (auto c = v.getDefiningOp<cir::CastOp>())
                         if (auto pt = dyn_cast<cir::PointerType>(c.getSrc().getType()); pt && holdsByValue(pt.getPointee(), w.rec))
                             w.v.refuse("(l) " + where + " copies or clears an object of " + cls + " as bytes");
-            if (auto c = dyn_cast<cir::CastOp>(op)) {
+            // An object of the class, or one that holds it, outside the
+            // class: its address made a pointer to a type that does not
+            // hold the class, or handed to a function with no body here,
+            // directly or through a pointer that may reach one, or a union
+            // that holds it read through another member, reaches the lifted
+            // condition variable's storage where the pass does not follow
+            // it. The module has no file linked (g), so code with no body
+            // here is the system's. A pointer given only to free or
+            // operator delete is the object's storage given back. The rule
+            // sees the conversion, the call and the member step, not what a
+            // pointer becomes after (docs/lifting.md, "Known limitations").
+            // The escape analysis would follow it, but, field-insensitive,
+            // it takes the pool for one class with whatever its workers'
+            // captures reach, and refuses every pool whose program prints a
+            // count, CTPL's included.
+            if (auto c = dyn_cast<cir::CastOp>(op); c && c.getKind() != cir::CastKind::ptr_to_bool) {
                 auto from = dyn_cast<cir::PointerType>(c.getSrc().getType());
                 auto to = dyn_cast<cir::PointerType>(c.getResult().getType());
-                if (from && from.getPointee() == Type(w.rec) && (!to || to.getPointee() != Type(w.rec)))
-                    w.v.refuse("(l) " + where + " converts a pointer to " + cls + " to another type");
+                if (from && holdsByValue(from.getPointee(), w.rec) && (!to || !holdsByValue(to.getPointee(), w.rec)) &&
+                    !onlyFreed(c.getResult()))
+                    w.v.refuse("(l) " + where + " converts a pointer to " + holderName(from.getPointee(), w.rec, cls) +
+                               " to another type");
+            }
+            if (auto call = dyn_cast<cir::CallOp>(op)) {
+                std::optional<std::string> to;  // where the call may go that has no body here
+                if (!call.isIndirect()) {
+                    cir::FuncOp g = lookupCallee(call);
+                    if (g && g.getBody().empty()) to = shortName(g) + ", which has no body here";
+                } else {
+                    if (!graphDone) buildGraph();
+                    llvm::SmallVector<cir::FuncOp, 4> ts = targets(call);
+                    if (ts.empty()) to = "a call through a pointer the pass cannot resolve";
+                    for (cir::FuncOp g : ts)
+                        if (!to && g.getBody().empty())
+                            to = shortName(g) + " through a pointer, which has no body here";
+                }
+                if (to)
+                    for (Value a : call.getArgOperands())
+                        if (auto pt = dyn_cast<cir::PointerType>(a.getType()); pt && holdsByValue(pt.getPointee(), w.rec)) {
+                            w.v.refuse("(l) " + where + " hands a pointer to " + holderName(pt.getPointee(), w.rec, cls) +
+                                       " to " + *to);
+                            break;
+                        }
+            }
+            // A step into another member of a union that holds the class
+            // reaches its storage as that member's type.
+            if (auto gm = dyn_cast<cir::GetMemberOp>(op)) {
+                auto pt = dyn_cast<cir::PointerType>(gm.getAddr().getType());
+                auto u = pt ? dyn_cast<cir::RecordType>(pt.getPointee()) : cir::RecordType();
+                if (u && u.isUnion() && !u.isIncomplete() && gm.getIndex() < u.getMembers().size() &&
+                    holdsByValue(u, w.rec) && !holdsByValue(u.getMembers()[gm.getIndex()], w.rec))
+                    w.v.refuse("(l) " + where + " reads a union that holds " + cls + " through another of its members");
             }
             for (NamedAttribute a : op->getAttrs())
                 a.getValue().walk([&](cir::DataMemberAttr dm) {

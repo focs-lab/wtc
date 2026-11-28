@@ -636,6 +636,19 @@ these shapes is expected, not a finding:
   channels handed as `void *`;
 - C++: a class in a union read through another member, as for C (since
   28 Nov 2026; until then the union rule was the C pass's alone);
+- a wait (condition (l)): the object of the class, or one that holds it,
+  reached as another type other than at a conversion of a pointer to it,
+  a call handed such a pointer or a member step into a union: not
+  checked. A pointer kept in a slot and read back as another type (a
+  `void **`, `std::bit_cast` to `uintptr_t`, a union of a `Holder *` and
+  a `void *`), the object built by placement new into a byte buffer (or a
+  `std::variant`, which keeps it in an `__aligned_membuf`), the address of
+  a holder's other member used for the whole (`fwrite(&h.tag,
+  sizeof h, ...)`). The queue pass's escape analysis closes the slot and
+  placement-new families for a queue; the wait pass does not run it (see
+  (l) under "Lifting a wait"). `dynamic_cast<void *>` reaches the pass as
+  a conversion and is refused; a `std::optional` of the class lifts, its
+  empty member built with no step into it;
 - several files: a static whose name another file has and that the
   file's inline assembly names (the link stops), an alias of a static the
   front end did not emit (the link stops), the runtime's unit meaning a
@@ -1084,7 +1097,20 @@ As for a queue, every doubt refuses and the remark names the condition
 - **(l) The object stays whole.** No object of the class is copied whole
   or as bytes, no pointer to it is converted to another type, and no
   pointer to one of its members is formed: a copy of the lifted condition
-  variable is a copy of a pointer to its waiter.
+  variable is a copy of a pointer to its waiter. Since 28 Nov 2026 the
+  same holds for an object that holds one by value, at any depth: no
+  pointer to the object or to such a holder is converted to a pointer to
+  a type that does not hold the class (but for one given only to `free`
+  or `operator delete`, which gives the storage back), or handed to a
+  function with no body here, directly or through a pointer that may
+  reach one, and a union that holds the class is not read through
+  another member. With nothing linked (g), the code with no body here is
+  the system's libraries. The rule sees the conversion, the call and the
+  member step, not what a pointer becomes after them; the shapes it
+  misses are under "Known limitations". The escape analysis of the
+  queue's (f) follows the values, but, field-insensitive, it puts a pool
+  in one class with whatever its workers' captures reach, and refuses
+  every pool whose program prints a count, CTPL's among them.
 
 Calls through a pointer, in (k), reach every function whose address the
 module takes (a vtable's entry, a function made a pointer, a pointer to a
